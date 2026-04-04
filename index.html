@@ -238,8 +238,19 @@ async function playSong(idx) {
     if (!resp.ok) throw new Error('HTTP ' + resp.status)
     showLoadingText('Decoding...')
     const arrBuf = await resp.arrayBuffer()
-    showLoadingText('Decoding ' + Math.round(arrBuf.byteLength/1024) + 'kb...')
-    audioBuffer = await audioCtx.decodeAudioData(arrBuf)
+
+    // Decode with a fresh AudioContext — Tone's context fails decodeAudioData on WebKit
+    const decodeCtx = new AudioContext()
+    const decoded = await decodeCtx.decodeAudioData(arrBuf)
+    decodeCtx.close()
+
+    // Copy buffer data into Tone's context so PitchShift can connect
+    const toneCtx = Tone.getContext().rawContext
+    audioBuffer = toneCtx.createBuffer(decoded.numberOfChannels, decoded.length, decoded.sampleRate)
+    for (let i = 0; i < decoded.numberOfChannels; i++) {
+      audioBuffer.copyToChannel(decoded.getChannelData(i), i)
+    }
+
     showPlayer(song)
     beginPlayback(0)
   } catch(e) {

@@ -168,8 +168,7 @@ let songs = []
 let currentIdx = -1
 let audioEl = null       // HTML5 <audio> element
 let audioCtx = null      // raw Web Audio API context
-let sourceNode = null    // MediaElementSource
-let pitchNode = null     // Tone.PitchShift (still used for pitch)
+let pitchNode = null     // Tone.PitchShift
 let gainNode = null
 let isPlaying = false
 let progressTimer = null
@@ -290,25 +289,15 @@ async function playSong(idx) {
   try {
     // Create hidden <audio> element — iOS natively handles WAV/M4A/MP3
     audioEl = new Audio()
-    audioEl.crossOrigin = 'anonymous'
     audioEl.preload = 'auto'
 
-    // Wire through Web Audio API for pitch shifting
-    sourceNode = audioCtx.createMediaElementSource(audioEl)
+    // Wire audio — direct playback (pitch via Tone without MediaElementSource)
+    // Note: MediaElementSource requires crossOrigin which blocks Dropbox CORS
     gainNode = audioCtx.createGain()
-
-    // Use Tone's PitchShift connected to raw audioCtx destination
-    pitchNode = new Tone.PitchShift(currentPitch)
-    pitchNode.toDestination()
-
-    // Connect: source → Tone input → speakers
-    const toneInput = Tone.getDestination().input
-    sourceNode.connect(gainNode)
-    gainNode.connect(pitchNode.input || toneInput)
 
     audioEl.addEventListener('canplay', () => {
       renderPlayerReady(song)
-      audioEl.play().catch(e => { console.error('play() failed:', e); renderPlayerError('Playback failed') })
+      audioEl.play().catch(e => { console.error('play() failed:', e); renderPlayerError('Playback blocked — tap first') })
       isPlaying = true
       startProgress()
     }, { once: true })
@@ -346,13 +335,7 @@ function togglePlay() {
 
 function stopAll() {
   stopProgress()
-  if (audioEl) {
-    audioEl.pause()
-    audioEl.src = ''
-    audioEl.remove()
-    audioEl = null
-  }
-  if (sourceNode) { try { sourceNode.disconnect() } catch(e) {} sourceNode = null }
+  if (audioEl) { audioEl.pause(); audioEl.src = ''; audioEl = null }
   if (gainNode) { try { gainNode.disconnect() } catch(e) {} gainNode = null }
   if (pitchNode) { try { pitchNode.dispose() } catch(e) {} pitchNode = null }
   isPlaying = false
@@ -387,6 +370,8 @@ function setPitch(v) {
   currentPitch = parseInt(v)
   const label = document.getElementById('pitch-value')
   if (label) label.textContent = currentPitch > 0 ? '+' + currentPitch : currentPitch
+  // Convert semitones to playbackRate: rate = 2^(semitones/12)
+  if (audioEl) audioEl.playbackRate = Math.pow(2, currentPitch / 12)
   if (pitchNode) pitchNode.pitch = currentPitch
 }
 function resetPitch() {

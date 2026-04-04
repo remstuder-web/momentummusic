@@ -1,36 +1,41 @@
-export const config = { runtime: 'edge' }
+// Vercel Serverless Function (Node.js) — proper streaming for audio elements
+export default async function handler(req, res) {
+  const audioUrl = req.query.url
+  
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type')
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
 
-export default async function handler(req) {
-  const url = new URL(req.url)
-  const audioUrl = url.searchParams.get('url')
+  if (req.method === 'OPTIONS') { res.status(204).end(); return }
+  if (!audioUrl) { res.status(400).end('Missing url'); return }
 
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Range, Content-Type',
-    }})
+  const fetchHeaders = { 'User-Agent': 'Mozilla/5.0' }
+  if (req.headers.range) fetchHeaders['Range'] = req.headers.range
+
+  try {
+    const upstream = await fetch(audioUrl, { headers: fetchHeaders })
+    
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Accept-Ranges', 'bytes')
+    
+    const forward = ['content-type','content-length','content-range','accept-ranges']
+    for (const h of forward) {
+      const v = upstream.headers.get(h)
+      if (v) res.setHeader(h, v)
+    }
+
+    res.status(upstream.status)
+    
+    // Pipe the response body
+    const reader = upstream.body.getReader()
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      res.write(Buffer.from(value))
+    }
+    res.end()
+  } catch(e) {
+    res.status(502).end('Error: ' + e.message)
   }
-
-  if (!audioUrl) return new Response('Missing url param', { status: 400 })
-
-  const upstreamHeaders = {}
-  const range = req.headers.get('range')
-  if (range) upstreamHeaders['Range'] = range
-
-  const upstream = await fetch(audioUrl, { headers: upstreamHeaders })
-
-  const headers = new Headers()
-  headers.set('Access-Control-Allow-Origin', '*')
-  headers.set('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
-  headers.set('Accept-Ranges', 'bytes')
-
-  const ct = upstream.headers.get('content-type')
-  if (ct) headers.set('Content-Type', ct)
-  const cr = upstream.headers.get('content-range')
-  if (cr) headers.set('Content-Range', cr)
-  const cl = upstream.headers.get('content-length')
-  if (cl) headers.set('Content-Length', cl)
-
-  return new Response(upstream.body, { status: upstream.status, headers })
 }

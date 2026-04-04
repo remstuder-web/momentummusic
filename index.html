@@ -237,12 +237,14 @@ async function playSong(idx) {
     const resp = await fetch(toFetchUrl(song.shareUrl))
     if (!resp.ok) throw new Error('HTTP ' + resp.status)
     showLoadingText('Decoding...')
-    audioBuffer = await audioCtx.decodeAudioData(await resp.arrayBuffer())
+    const arrBuf = await resp.arrayBuffer()
+    showLoadingText('Decoding ' + Math.round(arrBuf.byteLength/1024) + 'kb...')
+    audioBuffer = await audioCtx.decodeAudioData(arrBuf)
     showPlayer(song)
     beginPlayback(0)
   } catch(e) {
-    console.error('playSong:', e)
-    showErr('Could not load — generate a new link from Momentum')
+    console.error('playSong error:', e)
+    showErr(e.name + ': ' + (e.message || 'unknown') + ' — try generating a new link')
   }
 }
 

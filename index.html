@@ -1,501 +1,1476 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LISTEN</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    :root{
-      --bg:#0a0a0a;--surface:#1c1c1c;--surface2:#252525;
-      --gold:#c9a84c;--text:#f5f1ea;--dim:#9e9690;--mid:#cec9c1;
-      --border:#303030;--green:#4caf82;--red:#e05a4a;
+<script module>
+  // Module-level maps — survive component unmount/remount when switching tabs
+  const blobUrls = {}   // song.id -> blob URL (only for same-session drops)
+  const gainMap  = {}
+
+  const AUDIO_SERVER = 'http://localhost:4242/audio'
+
+  function audioSrc(song) {
+    if (blobUrls[song.id]) return blobUrls[song.id]
+    if (song.audio_path) return `${AUDIO_SERVER}/${encodeURIComponent(song.audio_path)}`
+    return null
+  }
+
+  async function saveToDropbox(file, code, oldFilename) {
+    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'mp3'
+    const filename = code + '_v00.' + ext
+
+    try {
+      // Post binary to watcher — it saves to Demos folder, deletes old file if different name
+      const buf = await file.arrayBuffer()
+      await fetch(
+        `http://localhost:4242/save-audio?dir=demo&filename=${encodeURIComponent(filename)}&oldfile=${encodeURIComponent(oldFilename || '')}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf }
+      )
+    } catch(e) {
+      // Fallback: browser download (watcher picks it up)
+      const url = URL.createObjectURL(file)
+      const a = document.createElement('a')
+      a.href = url; a.download = filename
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 3000)
     }
-    body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:300;min-height:100vh;display:flex;flex-direction:column}
-    a{color:inherit;text-decoration:none}
-
-    /* ── Nav ── */
-    nav{display:flex;align-items:center;padding:14px 28px;border-bottom:1px solid #1a1a1a;gap:16px;background:var(--bg);position:sticky;top:0;z-index:10}
-    .nav-logo{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.16em;color:var(--gold)}
-    .nav-sep{color:#333;font-size:12px}
-    .nav-title{font-family:'Space Mono',monospace;font-size:11px;color:var(--dim);letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-    .nav-expiry{font-family:'Space Mono',monospace;font-size:10px;color:#444;flex-shrink:0}
-
-    /* ── Layout ── */
-    .app{display:flex;flex:1;overflow:hidden}
-
-    /* ── Sidebar ── */
-    .sidebar{width:260px;flex-shrink:0;border-right:1px solid #1a1a1a;overflow-y:auto;padding:8px 0}
-    .sidebar-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.14em;color:rgba(201,168,76,.5);padding:12px 16px 6px;border-bottom:1px solid #111}
-    .song-item{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;border-bottom:1px solid #0f0f0f;transition:background .1s}
-    .song-item:hover{background:#111}
-    .song-item.active{background:rgba(201,168,76,.07);border-left:2px solid var(--gold)}
-    .song-num{font-family:'Space Mono',monospace;font-size:10px;color:#333;width:18px;flex-shrink:0}
-    .song-info{flex:1;min-width:0}
-    .song-title{font-size:13px;color:var(--mid);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .song-code{font-family:'Space Mono',monospace;font-size:10px;color:#444;margin-top:2px}
-    .song-status{width:6px;height:6px;border-radius:50%;background:#222;flex-shrink:0}
-    .song-status.playing{background:var(--green);box-shadow:0 0 6px var(--green)}
-    .song-status.loaded{background:#2d4a3e}
-
-    /* ── Player ── */
-    .player-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 48px;gap:32px}
-
-    /* Song info */
-    .now-playing{text-align:center}
-    .now-code{font-family:'Space Mono',monospace;font-size:10px;color:#444;letter-spacing:.1em;margin-bottom:8px}
-    .now-title{font-size:24px;font-weight:400;color:var(--text);margin-bottom:4px}
-    .now-artist{font-family:'Space Mono',monospace;font-size:12px;color:var(--gold);letter-spacing:.08em}
-
-    /* Loading state */
-    .loading-ring{width:40px;height:40px;border:2px solid #1c1c1c;border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
-    .loading-text{font-family:'Space Mono',monospace;font-size:11px;color:#444;text-align:center;margin-top:10px}
-    @keyframes spin{to{transform:rotate(360deg)}}
-
-    /* Progress */
-    .progress-wrap{width:100%;max-width:520px}
-    .progress-bar-outer{width:100%;height:3px;background:#1c1c1c;border-radius:2px;cursor:pointer;position:relative;margin-bottom:8px}
-    .progress-bar-fill{height:100%;background:var(--gold);border-radius:2px;transition:width .1s linear;pointer-events:none}
-    .progress-times{display:flex;justify-content:space-between;font-family:'Space Mono',monospace;font-size:10px;color:#444}
-
-    /* Controls */
-    .controls{display:flex;align-items:center;gap:28px}
-    .prev-btn,.next-btn{background:transparent;border:none;color:#444;font-size:18px;cursor:pointer;padding:4px;transition:color .15s}
-    .prev-btn:hover,.next-btn:hover{color:var(--mid)}
-    .play-btn{width:60px;height:60px;border-radius:50%;background:var(--surface);border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--text);transition:all .15s}
-    .play-btn:hover{border-color:var(--gold);color:var(--gold)}
-    .play-btn:active{transform:scale(.96)}
-
-    /* Pitch */
-    .pitch-section{width:100%;max-width:520px}
-    .pitch-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.14em;color:rgba(201,168,76,.5);margin-bottom:12px;text-align:center}
-    .pitch-control{display:flex;align-items:center;gap:16px}
-    .pitch-value{font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--gold);width:40px;text-align:center;flex-shrink:0}
-    .pitch-slider{flex:1;-webkit-appearance:none;appearance:none;height:3px;background:linear-gradient(to right,#1c1c1c 0%,var(--gold) 50%,#1c1c1c 100%);border-radius:2px;outline:none;cursor:pointer}
-    .pitch-slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold);cursor:pointer;box-shadow:0 0 8px rgba(201,168,76,.4)}
-    .pitch-slider::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--gold);cursor:pointer;border:none}
-    .pitch-reset{font-family:'Space Mono',monospace;font-size:10px;padding:4px 10px;background:transparent;border:1px solid #252525;color:#444;border-radius:2px;cursor:pointer;flex-shrink:0;transition:all .15s}
-    .pitch-reset:hover{border-color:var(--gold);color:var(--gold)}
-    .pitch-extremes{display:flex;justify-content:space-between;font-family:'Space Mono',monospace;font-size:9px;color:#333;margin-top:6px;padding:0 28px}
-
-    /* States */
-    .state-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:40px}
-    .state-icon{font-size:40px;opacity:.4}
-    .state-title{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.12em;color:var(--dim)}
-    .state-sub{font-size:13px;color:#444;text-align:center;line-height:1.7}
-
-    /* Interact overlay */
-    .interact-overlay{position:fixed;inset:0;background:rgba(10,10,10,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;z-index:100;cursor:pointer}
-    .interact-logo{font-family:'Space Mono',monospace;font-size:20px;font-weight:700;letter-spacing:.2em;color:var(--gold)}
-    .interact-hint{font-family:'Space Mono',monospace;font-size:11px;color:#555;letter-spacing:.1em}
-    .interact-btn{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;padding:12px 32px;border:1px solid rgba(201,168,76,.5);color:var(--gold);background:transparent;border-radius:3px;cursor:pointer;letter-spacing:.1em;transition:all .2s}
-    .interact-btn:hover{background:rgba(201,168,76,.08)}
-
-    /* Empty player */
-    .empty-player{text-align:center}
-    .empty-player-icon{font-size:48px;opacity:.15;margin-bottom:16px}
-    .empty-player-text{font-family:'Space Mono',monospace;font-size:11px;color:#333;letter-spacing:.08em}
-
-    .player-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 48px;gap:32px;min-width:0;overflow:hidden;width:100%}
-
-    @media(max-width:640px){
-      /* Stack: sidebar on top as horizontal scroll row, player below */
-      .app{flex-direction:column}
-      .sidebar{width:100%;height:auto;max-height:140px;border-right:none;border-bottom:1px solid #1a1a1a;overflow-x:auto;overflow-y:hidden;display:flex;flex-direction:row;padding:0}
-      .sidebar-label{display:none}
-      .song-item{flex-direction:column;align-items:center;padding:10px 12px;gap:4px;min-width:90px;border-bottom:none;border-right:1px solid #0f0f0f;white-space:nowrap}
-      .song-info{min-width:0;text-align:center}
-      .song-title{font-size:11px}
-      .song-code{display:none}
-      .song-num{display:none}
-      .player-area{padding:20px 16px;gap:18px}
-      .now-title{font-size:17px}
-      .controls{gap:20px}
-      .play-btn{width:52px;height:52px;font-size:20px}
-      .pitch-slider{height:4px}
-      .nav-expiry{display:none}
-    }
-    @media(max-width:380px){
-      .song-item{min-width:70px;padding:8px}
-      .player-area{padding:14px 10px;gap:14px}
-      .now-title{font-size:15px}
-    }
-  </style>
-</head>
-<body>
-
-<div id="interact-overlay" class="interact-overlay">
-  <div class="interact-logo">LISTEN</div>
-  <div class="interact-hint">PRIVATE DEMO SESSION</div>
-  <button class="interact-btn" id="start-btn">▶ TAP TO START</button>
-</div>
-
-<nav>
-  <span class="nav-logo">LISTEN</span>
-  <span class="nav-sep">·</span>
-  <span class="nav-title" id="nav-title">Loading...</span>
-  <span class="nav-expiry" id="nav-expiry"></span>
-</nav>
-
-<div class="app" id="app" style="display:none">
-  <!-- Sidebar: song list -->
-  <div class="sidebar">
-    <div class="sidebar-label">DEMOS</div>
-    <div id="song-list"></div>
-  </div>
-
-  <!-- Player area -->
-  <div class="player-area" id="player-area">
-    <div class="empty-player">
-      <div class="empty-player-icon">♪</div>
-      <div class="empty-player-text">← SELECT A DEMO</div>
-    </div>
-  </div>
-</div>
-
-<div id="state-screen" class="state-screen" style="display:none"></div>
+    return filename
+  }
+</script>
 
 <script>
-const SUPABASE_URL = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
-const SUPABASE_ANON = 'sb_publishable_4yMwlAo6OLpgGPN_6yWvIw_g5bnjnWS'
-const { createClient } = window.supabase
-const db = createClient(SUPABASE_URL, SUPABASE_ANON)
+  import { supabase } from './supabase.js'
+  import { onMount } from 'svelte'
 
-let songs = []
-let currentIdx = -1
-let audioEl = null
-let audioCtx = null
-let sourceNode = null
-let pitchNode = null
-let isPlaying = false
-let progressTimer = null
-let audioReady = false
-let currentPitch = 0
+  let view = $state('demos')
+  let songs = $state([])
+  let projectSongsAll = $state([])
+  let patches = $state([])
+  let connections = $state([])
+  let loading = $state(true)
+  let expandedId = $state(null)
+  let tagInput = $state({})
+  let refInput = $state({})
+  let genreSearch = $state({})   // song.id → search string in genre picker
+  let showGenrePicker = $state({}) // song.id → boolean
 
-// URLs stored as dl.dropboxusercontent.com — proxy for CORS
-function toProxiedUrl(shareUrl) {
-  if (!shareUrl) return null
-  // Handle both www. and dl. formats just in case
-  let u = shareUrl.replace('www.dropbox.com', 'dl.dropboxusercontent.com')
-  u = u.includes('dl=') ? u.replace(/dl=\d/, 'dl=1') : u + (u.includes('?') ? '&dl=1' : '?dl=1')
-  return '/api/audio?url=' + encodeURIComponent(u)
-}
+  const GENRES = ['afro','alternative','electro','ambient','dance pop','electronic','funk','indie pop','rap','hiphop','latin','pop','pop rock','techno','rnb','house','electro house','edm','pop rap']
+  let audioTick = $state(0) // increment to force player re-render after drop
 
-// ── Init Audio Context on user interaction ──────────────────────────────────
-const startBtn = document.getElementById('start-btn')
-startBtn.addEventListener('touchend', handleStart, { passive: false })
-startBtn.addEventListener('click', handleStart)
+  let showMoveModal = $state(false)
+  let movingSong = $state(null)
+  let projects = $state([])
+  let newProjectName = $state('')
+  let newProjectArtist = $state('')
 
-async function handleStart(e) {
-  e.preventDefault()
-  await ensureAudio()
-  document.getElementById('interact-overlay').style.display = 'none'
-}
+  let showPatchModal = $state(false)
+  let newPatchName = $state('')
+  let newPatchArtist = $state('')
+  let newPatchArtistId = $state('')  // selected artist connection id (second picker)
+  let showPatchArtistPicker = $state(false)
+  let newPatchContact = $state('')
+  let showPatchContactPicker = $state(false)
+  let isArtistSelected = $derived(
+    connections.find(x => x.id == newPatchContact)
+      ? (connections.find(x => x.id == newPatchContact)?.group_types?.length
+          ? connections.find(x => x.id == newPatchContact).group_types
+          : connections.find(x => x.id == newPatchContact)?.group_type
+          ? [connections.find(x => x.id == newPatchContact).group_type]
+          : []
+        ).includes('ARTISTS')
+      : false
+  )
+  let expandedPatchId = $state(null)
 
-async function ensureAudio() {
-  if (audioReady) return
-  try {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)()
-    if (audioCtx.state === 'suspended') await audioCtx.resume()
-    await Tone.start()
-  } catch(e) { console.warn('Audio init:', e) }
-  audioReady = true
-}
-
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && audioCtx) {
-    audioCtx.resume().catch(() => {})
-  }
-})
-
-// ── Load session immediately on page load — no audio needed ─────────────────
-loadSession()
-
-async function loadSession() {
-  const params = new URLSearchParams(location.search)
-  const id = params.get('s')
-  if (!id) { showState('🔒', 'NO SESSION', 'Paste your full listen link in the browser.'); return }
-
-  const { data, error } = await db.from('share_sessions').select('*').eq('id', id).maybeSingle()
-  if (error || !data) { showState('🔍', 'NOT FOUND', 'This link is invalid or has been removed.'); return }
-
-  const now = new Date()
-  if (data.expires_at && new Date(data.expires_at) < now) {
-    showState('⏱', 'LINK EXPIRED', 'This demo link is no longer active.\nContact the producer for a new link.'); return
+  const STATUS = {
+    demo: { label: 'DEMO', color: '#c9a84c' },
+    sent: { label: 'SENT', color: '#4a9fd4' },
+    placed: { label: 'PLACED', color: '#4caf82' },
   }
 
-  songs = data.songs || []
-  document.getElementById('nav-title').textContent = data.patch_name || 'Demo Session'
+  const KEYS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','Cm','C#m','Dm','D#m','Em','Fm','F#m','Gm','G#m','Am','A#m','Bm']
 
-  const exp = data.expires_at ? new Date(data.expires_at) : null
-  if (exp) {
-    const days = Math.ceil((exp - now) / 86400000)
-    document.getElementById('nav-expiry').textContent = `Expires in ${days}d`
+  let tagSearch = $state('')
+  let headerGenre = $state('')       // genre filter in header
+  let showHeaderGenrePicker = $state(false)
+
+  async function renameDemoAudio(song, newTitle) {
+    if (!song.audio_path) return
+    const ext = song.audio_path.slice(song.audio_path.lastIndexOf('.'))
+      const safe = s => (s||'').replace(/[<>:"/\\|?*]/g,'').trim()
+    const newName = newTitle ? safe(song.code) + '_' + safe(newTitle) + '_v00' + ext : song.code + '_v00' + ext
+    if (newName === song.audio_path) return
+    try {
+      await fetch(`http://localhost:4242/rename-audio?dir=demo&oldfile=${encodeURIComponent(song.audio_path)}&newfile=${encodeURIComponent(newName)}`, {
+        method: 'POST'
+      })
+    } catch(e) {}
+    await updateField(song, 'audio_path', newName)
   }
 
-  document.title = `LISTEN — ${data.patch_name || 'Demo'}`
-  renderSongList()
-  document.getElementById('app').style.display = 'flex'
-}
+  async function load() {
+    const [songsRes, patchesRes, connectionsRes, projSongsRes] = await Promise.all([
+      supabase.from('songs').select('*').is('project_id', null).order('created_at', { ascending: false }),      supabase.from('patches').select('*, patch_songs(song_id)').order('created_at', { ascending: false }),
+      supabase.from('connections').select('id, name, folder_link, sent_history, group_type, group_types').order('name'),
+      supabase.from('songs').select('id, title, code, project_id, tags, status').not('project_id', 'is', null).order('created_at', { ascending: false }),
+    ])
+    songs = songsRes.data || []
+    connections = connectionsRes.data || []
+    projectSongsAll = projSongsRes.data || []
+    if (connectionsRes.error) console.error('Connections load error:', connectionsRes.error)
 
-// ── Render song list ────────────────────────────────────────────────────────
-function renderSongList() {
-  const list = document.getElementById('song-list')
-  list.innerHTML = songs.map((s, i) => `
-    <div class="song-item" id="song-${i}" onclick="playSong(${i})">
-      <span class="song-num">${String(i+1).padStart(2,'0')}</span>
-      <div class="song-info">
-        <div class="song-title">${esc(s.title || s.code)}</div>
-        <div class="song-code">${esc(s.code || '')}</div>
-      </div>
-      <div class="song-status" id="status-${i}"></div>
-    </div>
-  `).join('')
-}
+    const allPatchSongIds = (patchesRes.data || []).flatMap(p => p.patch_songs.map(ps => ps.song_id))
+    let patchSongsData = []
+    if (allPatchSongIds.length) {
+      const { data } = await supabase.from('songs').select('*').in('id', allPatchSongIds)
+      patchSongsData = data || []
+    }
 
-function setActiveSong(idx) {
-  document.querySelectorAll('.song-item').forEach(el => el.classList.remove('active'))
-  document.querySelectorAll('.song-status').forEach(el => { el.classList.remove('playing','loaded') })
-  if (idx >= 0) {
-    document.getElementById(`song-${idx}`)?.classList.add('active')
-    document.getElementById(`status-${idx}`)?.classList.add('playing')
+    patches = (patchesRes.data || []).map(p => ({
+      ...p,
+      songs: p.patch_songs
+        .map(ps => patchSongsData.find(s => s.id === ps.song_id))
+        .filter(Boolean)
+        .sort((a, b) => (b.created_at || '') > (a.created_at || '') ? 1 : -1)
+    }))
+
+    loading = false
   }
-}
 
-// ── Player — HTML5 <audio> + Web Audio API ──────────────────────────────────
-async function playSong(idx) {
-  if (idx === currentIdx && audioEl) { togglePlay(); return }
+  async function addSong() {
+    const code = await generateCode()
+    const { data } = await supabase
+      .from('songs')
+      .insert({ code, status: 'demo', tags: [], reference_links: [] })
+      .select().single()
+    songs = [data, ...songs]
+    expandedId = data.id
+  }
 
-  // Init audio context on first song tap (user gesture)
-  await ensureAudio()
-  document.getElementById('interact-overlay').style.display = 'none'
+  async function updateField(song, field, value) {
+    song[field] = value
+    songs = [...songs]
+    await supabase.from('songs').update({ [field]: value }).eq('id', song.id)
+  }
 
-  stopAll()
-  currentIdx = idx
-  setActiveSong(idx)
-  const song = songs[idx]
-  renderPlayerLoading(song)
+  async function handleAudioDrop(e, song) {
+    e.preventDefault()
+    song._dragging = false
+    const file = e.dataTransfer.files[0]
+    if (!file) { songs = [...songs]; return }
 
-  // Resume context on iOS
-  if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume()
+    // Download renamed file → watcher moves it to Dropbox
+    const savedName = await saveToDropbox(file, song.code, song.audio_path || '')
 
-  const url = toProxiedUrl(song.shareUrl)
-  if (!url) { renderPlayerError('No audio URL'); return }
+    // Blob URL for immediate playback this session
+    if (blobUrls[song.id]) URL.revokeObjectURL(blobUrls[song.id])
+    blobUrls[song.id] = URL.createObjectURL(file)
 
-  try {
-    // Create hidden <audio> element
-    audioEl = new Audio()
-    audioEl.crossOrigin = 'anonymous'  // OK with proxy (same domain)
-    audioEl.preload = 'auto'
+    // 14 LUFS normalization
+    gainMap[song.id] = 1.0
+    try {
+      const buf = await file.arrayBuffer()
+      const offCtx = new OfflineAudioContext(1, 44100, 44100)
+      const decoded = await offCtx.decodeAudioData(buf.slice(0))
+      let sum = 0; const ch = decoded.getChannelData(0)
+      for (let i = 0; i < ch.length; i++) sum += ch[i] * ch[i]
+      const rmsDB = 10 * Math.log10(sum / ch.length + 1e-12)
+      gainMap[song.id] = Math.min(1.0, Math.pow(10, (-14 - rmsDB) / 20))
+    } catch(err) {}
 
-    // Wire through Web Audio for pitch shifting
-    sourceNode = audioCtx.createMediaElementSource(audioEl)
-    pitchNode = new Tone.PitchShift(currentPitch)
-    pitchNode.toDestination()
-    sourceNode.connect(pitchNode.input)
+    song.audio_path = savedName
+    await supabase.from('songs').update({ audio_path: savedName, lufs_gain: gainMap[song.id] }).eq('id', song.id)
+    songs = [...songs]
+    audioTick++
+  }
 
-    // Show loading progress
-    audioEl.addEventListener('progress', () => {
-      if (!audioEl.buffered.length || !audioEl.duration) return
-      const pct = Math.round((audioEl.buffered.end(0) / audioEl.duration) * 100)
-      const hint = document.getElementById('loading-hint')
-      if (hint) hint.textContent = `Loading... ${pct}%`
+  function clearAudio(song) {
+    if (blobUrls[song.id]) { URL.revokeObjectURL(blobUrls[song.id]); delete blobUrls[song.id] }
+    delete gainMap[song.id]
+    song.audio_path = ''
+    songs = [...songs]
+    audioTick++
+    supabase.from('songs').update({ audio_path: '' }).eq('id', song.id)
+  }
+
+  // On mount: increment audioTick so audio server URLs render for existing songs
+  onMount(() => { audioTick++ })
+  function openInPreview(song) {
+    if (!song.audio_path) return
+    // Write a trigger JSON to Downloads — watcher opens the file in QuickTime
+    const trigger = JSON.stringify({ file: song.audio_path })
+    const blob = new Blob([trigger], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = '__momentum_open__.json'
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 2000)
+  }
+
+  // Simple gain: just set volume on the audio element
+  // Web Audio createMediaElementSource() hijacks the audio routing causing silence
+  function applyGain(node, id) {
+    const g = gainMap[id] ?? 1.0
+    node.volume = g
+    return { update(newId) { node.volume = gainMap[newId] ?? 1.0 } }
+  }
+
+  async function addTag(song) {
+    const val = (tagInput[song.id] || '').trim()
+    if (!val) return
+    const tags = [...(song.tags || []), val]
+    await updateField(song, 'tags', tags)
+    tagInput[song.id] = ''
+  }
+
+  async function removeTag(song, tag) {
+    await updateField(song, 'tags', (song.tags || []).filter(t => t !== tag))
+  }
+
+  async function addRef(song) {
+    const val = (refInput[song.id] || '').trim()
+    if (!val) return
+    refInput[song.id] = ''
+
+    // Try to fetch name from Spotify oEmbed (no auth needed)
+    let name = ''
+    if (val.includes('spotify')) {
+      try {
+        const r = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(val)}`)
+        if (r.ok) {
+          const d = await r.json()
+          name = d.title || ''
+        }
+      } catch(e) {}
+    }
+
+    const entry = { url: val, name }
+    const reference_links = [...(song.reference_links || []), entry]
+    await updateField(song, 'reference_links', reference_links)
+  }
+
+  async function removeRef(song, url) {
+    const reference_links = (song.reference_links || []).filter(r => {
+      const u = typeof r === 'string' ? r : r.url
+      return u !== url
     })
-
-    audioEl.addEventListener('canplay', () => {
-      renderPlayerReady(song)
-      audioEl.play().catch(e => { console.error('play() failed:', e); renderPlayerError('Tap again to play') })
-      isPlaying = true
-      startProgress()
-    }, { once: true })
-
-    audioEl.addEventListener('ended', () => { isPlaying = false; stopProgress(); updatePlayBtn(); playNext() })
-    audioEl.addEventListener('error', (e) => {
-      console.error('audio error:', e, audioEl.error)
-      renderPlayerError('Could not load audio')
-    })
-
-    audioEl.src = url
-    audioEl.load()
-
-  } catch(e) {
-    console.error('[audio] error:', e)
-    renderPlayerError(e.message)
+    await updateField(song, 'reference_links', reference_links)
   }
-}
 
-function togglePlay() {
-  if (!audioEl) return
-  if (isPlaying) {
-    audioEl.pause()
-    isPlaying = false
-    stopProgress()
-    updatePlayBtn()
-  } else {
-    audioCtx?.resume()
-    audioEl.play().catch(() => {})
-    isPlaying = true
-    startProgress()
-    updatePlayBtn()
+  // Normalize refs — support old plain strings and new {url,name} objects
+  function normRef(r) {
+    if (typeof r === 'string') return { url: r, name: '' }
+    return r
   }
-}
 
-function stopAll() {
-  stopProgress()
-  if (audioEl) { audioEl.pause(); audioEl.src = ''; audioEl = null }
-  if (sourceNode) { try { sourceNode.disconnect() } catch(e) {} sourceNode = null }
-  if (pitchNode) { try { pitchNode.dispose() } catch(e) {} pitchNode = null }
-  isPlaying = false
-}
+  async function remove(id) {
+    if (!confirm('Delete this demo?')) return
+    const song = songs.find(s => s.id === id)
+    // Delete audio file from Demos folder
+    if (song?.audio_path) {
+      fetch(`http://localhost:4242/delete-audio?dir=demo&filename=${encodeURIComponent(song.audio_path)}`, {
+        method: 'POST'
+      }).catch(() => {})
+    }
+    await supabase.from('songs').delete().eq('id', id)
+    songs = songs.filter(s => s.id !== id)
+  }
 
-function playNext() { if (currentIdx < songs.length - 1) playSong(currentIdx + 1) }
-function playPrev() { if (currentIdx > 0) playSong(currentIdx - 1) }
+  async function generateTags(song) {
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    if (!apiKey) { alert('Add your Anthropic API key in Settings first.'); return }
+    if (!song.key && !song.tempo && !song.notes) { alert('Add key, tempo or notes first.'); return }
+    song._generating = true
+    songs = [...songs]
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514', max_tokens: 200,
+          messages: [{ role: 'user', content: `Generate 5-8 concise style tags for a music demo. Key: ${song.key}. Tempo: ${song.tempo} BPM. Notes: ${song.notes}. Return ONLY a JSON array of short tag strings (2-3 words max). No explanation.` }]
+        })
+      })
+      const result = await res.json()
+      if (result.usage && typeof window.trackTokens === 'function') window.trackTokens(result.usage.input_tokens, result.usage.output_tokens)
+      const generated = JSON.parse(result.content?.[0]?.text.replace(/```json|```/g, '').trim() || '[]')
+      await updateField(song, 'tags', [...new Set([...(song.tags || []), ...generated])])
+    } catch(e) { alert('Claude error: ' + e.message) }
+    song._generating = false
+    songs = [...songs]
+  }
 
-// ── Progress ─────────────────────────────────────────────────────────────────
-function startProgress() {
-  stopProgress()
-  progressTimer = setInterval(updateProgress, 250)
-}
-function stopProgress() { if (progressTimer) { clearInterval(progressTimer); progressTimer = null } }
+  function randomTitle() {
+    const adj = ['DARK','COLD','LOST','DEEP','WILD','SOFT','LOUD','SLOW','NUMB','ALIVE','FADED','HEAVY','GOLDEN','SILENT','BROKEN','HOLLOW','BLURRY','ECHOED','STOLEN','WASTED','BURNING','DISTANT','ANCIENT','DREAMING','FLOATING','SUNKEN','SHAKING','CRAVING','MISSING','RUSHING']
+    const noun = ['WAVE','LIGHT','FIRE','GHOST','RAIN','DREAM','BLADE','VOICE','SHADE','PULSE','BLOOM','STORM','SMOKE','DRIFT','THREAD','MIRROR','SIGNAL','SPIRAL','BRIDGE','VESSEL','CURRENT','SHADOW','VALLEY','CHAMBER','CANYON','SILENCE','CURRENT','WINDOW','MOTION','ECHO']
+    const structure = Math.random()
+    if (structure < 0.33) return adj[Math.floor(Math.random()*adj.length)] + ' ' + noun[Math.floor(Math.random()*noun.length)]
+    if (structure < 0.66) return noun[Math.floor(Math.random()*noun.length)] + ' ' + noun[Math.floor(Math.random()*noun.length)]
+    return adj[Math.floor(Math.random()*adj.length)] + ' ' + adj[Math.floor(Math.random()*adj.length)] + ' ' + noun[Math.floor(Math.random()*noun.length)]
+  }
 
-function updateProgress() {
-  if (!audioEl) return
-  const elapsed = audioEl.currentTime
-  const dur = audioEl.duration || 0
-  if (!dur) return
-  const pct = Math.min(elapsed / dur, 1) * 100
-  const fill = document.getElementById('progress-fill')
-  if (fill) fill.style.width = pct + '%'
-  const cur = document.getElementById('time-current')
-  if (cur) cur.textContent = fmtTime(elapsed)
-  const tot = document.getElementById('time-total')
-  if (tot) tot.textContent = fmtTime(dur)
-}
+  async function openMoveModal(song) {
+    // Check if already in a project
+    if (song.project_id) {
+      const { data: proj } = await supabase.from('projects').select('name, artist').eq('id', song.project_id).single()
+      const label = proj ? (proj.artist ? proj.artist + ' — ' + proj.name : proj.name) : 'another project'
+      if (!confirm(`⚠ This song is already in "${label}".\nMove it to a different project anyway?`)) return
+    }
+    movingSong = song
+    const { data } = await supabase.from('projects').select('id, name, artist, color').order('position')
+    projects = data || []
+    showMoveModal = true
+  }
 
-// ── Pitch ────────────────────────────────────────────────────────────────────
-function setPitch(v) {
-  currentPitch = parseInt(v)
-  const label = document.getElementById('pitch-value')
-  if (label) label.textContent = currentPitch > 0 ? '+' + currentPitch : currentPitch
-  if (pitchNode) pitchNode.pitch = currentPitch
-}
-function resetPitch() {
-  currentPitch = 0
-  const slider = document.getElementById('pitch-slider')
-  if (slider) slider.value = 0
-  setPitch(0)
-}
+  async function moveToExisting(projectId) {
+    const song = movingSong
+    const project = projects.find(p => p.id === projectId)
+    const work_data = { ...(song.work_data || {}) }
+    work_data.current_stage = 'production'
 
-// ── Render states ─────────────────────────────────────────────────────────────
-function renderPlayerLoading(song) {
-  const isFlac = song.shareUrl?.toLowerCase().includes('.flac')
-  document.getElementById('player-area').innerHTML = `
-    <div class="now-playing">
-      <div class="now-code">${esc(song.code||'')}</div>
-      <div class="now-title">${esc(song.title || song.code)}</div>
-    </div>
-    <div>
-      <div class="loading-ring"></div>
-      <div class="loading-text" id="loading-hint">${isFlac ? 'Loading FLAC — may take a moment...' : 'Loading...'}</div>
-    </div>
-    ${pitchHtml()}
-  `
-  bindPitch()
-}
+    if (song.audio_path) {
+      const ext = song.audio_path.slice(song.audio_path.lastIndexOf('.'))
+      const safe = s => (s||'').replace(/[<>:"/\\|?*]/g,'').trim()
+      const parts = [safe(song.code), safe(project?.artist||''), safe(song.title||''), 'v00'].filter(Boolean)
+      const v00File = parts.join('_') + ext
+      const v00id = 'v00_' + Date.now()
+      if (!work_data.versions) work_data.versions = []
+      work_data.prod_audio = v00File
+      work_data.active_version_id = v00id
+      work_data.versions = [{
+        id: v00id, name: 'v00', version_type: 'production',
+        audio_path: v00File, sent_to_artist: false, feedback: [],
+        created_at: new Date().toISOString()
+      }, ...work_data.versions.filter(v => v.name !== 'v00')]
+      try {
+        await fetch('http://localhost:4242/copy-demo-to-production', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ demoFile: song.audio_path, outFile: v00File })
+        })
+      } catch(e) { console.warn('Watcher not running — audio copy failed:', e.message) }
+    }
 
-function renderPlayerReady(song) {
-  const dur = audioEl?.duration || 0
-  document.getElementById('player-area').innerHTML = `
-    <div class="now-playing">
-      <div class="now-code">${esc(song.code||'')}</div>
-      <div class="now-title">${esc(song.title || song.code)}</div>
-    </div>
-    <div class="progress-wrap">
-      <div class="progress-bar-outer" onclick="seekClick(event, this)">
-        <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
-      </div>
-      <div class="progress-times">
-        <span id="time-current">0:00</span>
-        <span id="time-total">${fmtTime(dur)}</span>
-      </div>
-    </div>
-    <div class="controls">
-      <button class="prev-btn" onclick="playPrev()" title="Previous">◀◀</button>
-      <button class="play-btn" id="play-btn" onclick="togglePlay()">⏸</button>
-      <button class="next-btn" onclick="playNext()" title="Next">▶▶</button>
-    </div>
-    ${pitchHtml()}
-  `
-  bindPitch()
-}
+    // Remove from all patches (but don't delete history)
+    await supabase.from('patch_songs').delete().eq('song_id', song.id)
+    patches = patches.map(p => ({ ...p, songs: p.songs.filter(s => s.id !== song.id) }))
 
-function renderPlayerError(msg) {
-  document.getElementById('player-area').innerHTML = `
-    <div class="empty-player">
-      <div class="empty-player-icon" style="opacity:.3">⚠</div>
-      <div class="empty-player-text" style="color:#e05a4a">COULD NOT LOAD AUDIO</div>
-      <div class="empty-player-text" style="margin-top:8px">${msg || 'Link may have expired'}</div>
-    </div>
-    ${pitchHtml()}
-  `
-  bindPitch()
-}
+    await supabase.from('songs').update({ project_id: projectId, work_data, tags: song.tags||[] }).eq('id', song.id)
+    songs = songs.filter(s => s.id !== song.id)
+    showMoveModal = false
+    movingSong = null
+  }
 
-function pitchHtml() {
-  return `
-    <div class="pitch-section">
-      <div class="pitch-label">KEY</div>
-      <div class="pitch-control">
-        <button class="pitch-reset" onclick="resetPitch()">Reset</button>
-        <input class="pitch-slider" id="pitch-slider" type="range" min="-12" max="12" step="1"
-          value="${currentPitch}" oninput="setPitch(this.value)">
-        <div class="pitch-value" id="pitch-value">${currentPitch > 0 ? '+'+currentPitch : currentPitch}</div>
-      </div>
-      <div class="pitch-extremes"><span>-12</span><span>0</span><span>+12</span></div>
-    </div>
-  `
-}
+  async function moveToNew() {
+    if (!newProjectName.trim()) return
+    const song = movingSong
+    const { data: proj } = await supabase.from('projects')
+      .insert({ name: newProjectName.trim(), artist: newProjectArtist.trim(), color: '#9b6fd4', status: 'active', position: 0, songs: [], deadlines: [], tasks: [] })
+      .select().single()
+    const work_data = { ...(song.work_data || {}) }
+    work_data.current_stage = 'production'
 
-function bindPitch() {
-  const slider = document.getElementById('pitch-slider')
-  if (slider) slider.value = currentPitch
-}
+    if (song.audio_path) {
+      const ext = song.audio_path.slice(song.audio_path.lastIndexOf('.'))
+      const safe = s => (s||'').replace(/[<>:"/\\|?*]/g,'').trim()
+      const parts = [safe(song.code), safe(newProjectArtist.trim()||''), safe(song.title||''), 'v00'].filter(Boolean)
+      const v00File = parts.join('_') + ext
+      const v00id = 'v00_' + Date.now()
 
-function updatePlayBtn() {
-  const btn = document.getElementById('play-btn')
-  if (btn) btn.textContent = isPlaying ? '⏸' : '▶'
-}
+      if (!work_data.versions) work_data.versions = []
+      work_data.prod_audio = v00File
+      work_data.active_version_id = v00id
+      work_data.versions = [{
+        id: v00id, name: 'v00', version_type: 'production',
+        audio_path: v00File, sent_to_artist: false, feedback: [],
+        created_at: new Date().toISOString()
+      }, ...work_data.versions.filter(v => v.name !== 'v00')]
 
-function seekClick(e, el) {
-  if (!audioEl || !audioEl.duration) return
-  const rect = el.getBoundingClientRect()
-  const pct = (e.clientX - rect.left) / rect.width
-  audioEl.currentTime = pct * audioEl.duration
-}
+      try {
+        await fetch('http://localhost:4242/copy-demo-to-production', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ demoFile: song.audio_path, outFile: v00File })
+        })
+      } catch(e) { console.warn('Watcher not running — audio copy failed:', e.message) }
+    }
 
-function showState(icon, title, msg) {
-  document.getElementById('app').style.display = 'none'
-  const s = document.getElementById('state-screen')
-  s.style.display = 'flex'
-  s.innerHTML = `
-    <div class="state-icon">${icon}</div>
-    <div class="state-title">${title}</div>
-    <div class="state-sub">${msg.replace(/\n/g,'<br>')}</div>
-  `
-  document.getElementById('nav-title').textContent = title
-}
+    await supabase.from('patch_songs').delete().eq('song_id', song.id)
+    patches = patches.map(p => ({ ...p, songs: p.songs.filter(s => s.id !== song.id) }))
+    await supabase.from('songs').update({ project_id: proj.id, work_data, tags: song.tags||[] }).eq('id', song.id)
+    songs = songs.filter(s => s.id !== song.id)
+    showMoveModal = false
+    movingSong = null
+    newProjectName = ''
+    newProjectArtist = ''
+  }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-function fmtTime(s) {
-  const sec = Math.max(0, Math.floor(s))
-  return Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0')
-}
-function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-}
+  async function createShareSession(patch) {
+    const filenames = patch.songs.filter(s => s.audio_path).map(s => s.audio_path)
+    if (!filenames.length) { alert('No audio files in this submission yet.'); return }
+
+    let shareLinks = []
+    try {
+      const res = await fetch('http://localhost:4242/get-share-links', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filenames })
+      })
+      const data = await res.json()
+      shareLinks = data.results || []
+    } catch(e) { alert('Start the watcher first (node momentum-watcher.js)'); return }
+
+    const linkMap = Object.fromEntries(shareLinks.map(r => [r.filename, r.shareUrl]))
+    const songList = patch.songs.filter(s => s.audio_path).map(s => ({
+      code: s.code,
+      title: s.title || s.code,
+      shareUrl: linkMap[s.audio_path] || null  // Dropbox temporary link
+    })).filter(s => s.shareUrl)
+
+    if (!songList.length) { alert('Could not get Dropbox links — make sure Dropbox is connected.'); return }
+
+    const id = Math.random().toString(36).slice(2, 10).toUpperCase()
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    await supabase.from('share_sessions').insert({ id, songs: songList, patch_name: patch.name, expires_at: expiresAt })
+
+    const LISTEN_URL = 'https://momentummusic.vercel.app'
+    const url = `${LISTEN_URL}?s=${id}`
+    navigator.clipboard.writeText(url)
+    alert(`✓ Listen link copied!\n${url}\n\nExpires in 7 days.`)
+  }
+
+  async function createPatch() {
+    const contact = connections.find(c => String(c.id) === String(newPatchContact))
+    const artistConn = connections.find(c => String(c.id) === String(newPatchArtistId))
+    const datePrefix = new Date().toISOString().slice(0,10).replace(/-/g,'')
+    const connectionPart = contact?.name || ''
+
+    // Artist connection → DEMOS always. Non-artist → use selected artist name or DEMOS
+    const artistPart = isArtistSelected ? 'DEMOS' : (artistConn?.name || 'DEMOS')
+    const baseName = [datePrefix, connectionPart, artistPart].filter(Boolean).join('_')
+
+    // Auto-number if same base exists
+    let fullName = baseName
+    const existing = patches.filter(p => p.name === baseName || p.name.startsWith(baseName + ' '))
+    if (existing.length > 0) fullName = baseName + ' ' + (existing.length + 1)
+
+    const { data } = await supabase.from('patches')
+      .insert({ name: fullName, artist: artistConn?.name || null, contact_id: contact?.id || null, status: 'open' })
+      .select().single()
+    patches = [{ ...data, songs: [] }, ...patches]
+    newPatchName = ''
+    newPatchArtist = ''
+    newPatchArtistId = ''
+    newPatchContact = ''
+    showPatchContactPicker = false
+    showPatchArtistPicker = false
+    showPatchModal = false
+    expandedPatchId = data.id
+  }
+
+  async function addSongToPatch(patch, song) {
+    const already = patch.songs.find(s => s.id === song.id)
+    if (already) return
+
+    // Warn if already in a project
+    if (song.project_id) {
+      const proj = projects.find(p => p.id === song.project_id)
+      if (!confirm(`⚠ This song is already in project "${proj?.name || song.project_id}".\nAdd to submission anyway?`)) return
+    }
+
+    // Check if already sent to this contact via active patches in memory
+    if (patch.contact_id) {
+      const code = song.code || song.title || ''
+      const warnings = []
+
+      // Check active sent patches
+      const sentToContact = patches.filter(p => p.id !== patch.id && String(p.contact_id) === String(patch.contact_id) && p.status === 'sent')
+      for (const sp of sentToContact) {
+        if (sp.songs?.some(s => s.id === song.id)) {
+          warnings.push(`"${sp.name}" (sent ${sp.sent_at?.slice(0,10)||'?'})`)
+        }
+      }
+
+      // Also check sent_history on the connection
+      if (!warnings.length) {
+        const { data: conn } = await supabase.from('connections').select('sent_history').eq('id', patch.contact_id).single()
+        const history = conn?.sent_history || []
+        const prevEntry = history.find(e => e.song_codes?.includes(code))
+        if (prevEntry) warnings.push(`"${prevEntry.patch_name}" (${prevEntry.sent_at?.slice(0,10)||'?'})`)
+      }
+
+      if (warnings.length) {
+        alert(`ℹ️ "${code}" was already sent to this contact in ${warnings.join(', ')}.\nAdding anyway.`)
+      }
+    }
+
+    await supabase.from('patch_songs').insert({ patch_id: patch.id, song_id: song.id })
+    patch.songs = [...patch.songs, song]
+    patches = [...patches]
+  }
+
+  async function removeSongFromPatch(patch, songId) {
+    await supabase.from('patch_songs').delete().eq('patch_id', patch.id).eq('song_id', songId)
+    patch.songs = patch.songs.filter(s => s.id !== songId)
+    patches = [...patches]
+  }
+
+  async function sendPatch(patch) {
+    if (!patch.contact_id) { alert('Select a contact first.'); return }
+    if (!patch.songs.length) { alert('Add songs first.'); return }
+    if (!confirm(`Create submission "${patch.name}" with ${patch.songs.length} songs and copy Dropbox link to clipboard?`)) return
+
+    const audioFiles = patch.songs.map(s => s.audio_path).filter(Boolean)
+    const missingSongs = patch.songs.filter(s => !s.audio_path).map(s => s.title || s.code)
+    if (missingSongs.length) {
+      if (!confirm(`${missingSongs.length} song(s) have no audio file: ${missingSongs.join(', ')}.\nContinue anyway?`)) return
+    }
+
+    try {
+      const res = await fetch('http://localhost:4242/create-submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patchName: patch.name, artist: patch.artist || '', audioFiles })
+      })
+      const result = await res.json()
+      if (!result.ok) throw new Error(result.error)
+
+      const linkToSave = result.shareLink || result.folderPath
+
+      // Copy Dropbox link to clipboard
+      if (linkToSave) {
+        navigator.clipboard.writeText(linkToSave).catch(() => {})
+      }
+
+      // Save link to patch
+      await supabase.from('patches').update({ folder_link: linkToSave }).eq('id', patch.id)
+      patch.folder_link = linkToSave
+
+      // Save link to connection's folder_link (most recent submission)
+      if (patch.contact_id && linkToSave) {
+        await supabase.from('connections').update({ folder_link: linkToSave }).eq('id', patch.contact_id)
+        const conn = connections.find(c => c.id == patch.contact_id)
+        if (conn) { conn.folder_link = linkToSave; connections = [...connections] }
+      }
+
+      // Mark patch as sent + save song codes
+      const songCodes = patch.songs.map(s => ({ code: s.code, title: s.title || '' }))
+      await supabase.from('patches').update({
+        status: 'sent', sent_at: new Date().toISOString(),
+        song_codes: songCodes
+      }).eq('id', patch.id)
+      const songIds = patch.songs.map(s => s.id)
+      await supabase.from('songs').update({ status: 'sent' }).in('id', songIds)
+      patch.status = 'sent'
+      patch.songs = patch.songs.map(s => ({ ...s, status: 'sent' }))
+      songs = songs.map(s => songIds.includes(s.id) ? { ...s, status: 'sent' } : s)
+      patches = [...patches]
+
+      alert(`✓ Submission sent!\nDropbox link copied to clipboard.${result.missing?.length ? '\n⚠ Missing: ' + result.missing.join(', ') : ''}`)
+    } catch(err) {
+      alert('Error: ' + err.message + '\nMake sure the watcher is running.')
+    }
+  }
+
+  function getLatestOpenSub() {
+    return patches.filter(p => p.status !== 'sent' && p.status !== 'deleted').at(-1) || null
+  }
+  let patchSort = $state('date')
+  let archiveOpen = $state(false)
+
+  let sortedPatches = $derived([...patches].filter(p => p.status !== 'deleted').sort((a, b) => {
+    if (patchSort === 'az') return (a.name||'').localeCompare(b.name||'')
+    return (b.created_at || b.id) > (a.created_at || a.id) ? 1 : -1
+  }))
+
+  let archivePatches = $derived([...patches].filter(p => p.status === 'deleted').sort((a, b) =>
+    (b.created_at || b.id) > (a.created_at || a.id) ? 1 : -1
+  ))
+
+  async function releaseSong(song) {
+    if (!confirm('Release this song? It will become free to send again.')) return
+
+    // Find which patch/folder this song is in
+    const patch = patches.find(p => p.songs.some(s => s.id === song.id))
+
+    // Delete song's audio file from the submission Dropbox folder
+    if (patch?.name) {
+      try {
+        await fetch('http://localhost:4242/delete-from-submission', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patchName: patch.name, audioFile: song.audio_path, songCode: song.code })
+        })
+      } catch(e) {}
+    }
+
+    await supabase.from('songs').update({ status: 'demo' }).eq('id', song.id)
+    song.status = 'demo'
+    await supabase.from('patch_songs').delete().eq('song_id', song.id)
+    patches = patches.map(p => ({ ...p, songs: p.songs.filter(s => s.id !== song.id) }))
+    songs = songs.map(s => s.id === song.id ? { ...s, status: 'demo' } : s)
+  }
+
+  async function deletePatch(id) {
+    if (!confirm('Delete this submission?\nDropbox folder will be deleted. Info stays in database.')) return
+    const patch = patches.find(p => p.id === id)
+
+    // Delete the Dropbox submission folder
+    if (patch?.name) {
+      fetch('http://localhost:4242/delete-submission-folder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patchName: patch.name })
+      }).catch(() => {})
+    }
+
+    // Save song codes to connection's sent_history
+    if (patch?.contact_id && patch?.songs?.length) {
+      const songCodes = (patch.songs||[]).map(s => s.code || s.title || s.id)
+      const { data: conn } = await supabase.from('connections').select('sent_history').eq('id', patch.contact_id).single()
+      const existing = conn?.sent_history || []
+      const already = existing.find(e => e.patch_name === patch.name)
+      if (!already) {
+        await supabase.from('connections').update({
+          sent_history: [...existing, { patch_name: patch.name, sent_at: patch.sent_at, song_codes: songCodes, deleted_at: new Date().toISOString() }]
+        }).eq('id', patch.contact_id)
+      }
+    }
+
+    // Mark deleted in DB — keep row with all info intact
+    await supabase.from('patches').update({ status: 'deleted' }).eq('id', id)
+    patches = patches.filter(p => p.id !== id)
+  }
+
+  async function generateCode() {
+    const now = new Date()
+    const yy = String(now.getFullYear()).slice(2)
+    const mm = String(now.getMonth()+1).padStart(2,'0')
+    const dd = String(now.getDate()).padStart(2,'0')
+    const prefix = yy+mm+dd
+    const { data } = await supabase.from('songs').select('code').like('code', prefix+'%')
+    const existing = (data||[]).map(s => parseInt(s.code.slice(6)) || 0)
+    const max = existing.length ? Math.max(...existing) : 0
+    return prefix + String(max + 1).padStart(2,'0')
+  }
+
+  async function updatePatchField(patch, field, value) {
+    patch[field] = value
+    patches = [...patches]
+    await supabase.from('patches').update({ [field]: value }).eq('id', patch.id)
+  }
+
+  function openLink(url) {
+    if (!url) return
+    if (url.startsWith('/') || url.startsWith('~')) {
+      window.open('file://' + url.replace(/^~/, '/Users/' + (navigator.userAgent.includes('Mac') ? '' : '')), '_blank')
+    } else {
+      window.open(url, '_blank')
+    }
+  }
+
+  // Count how many active (non-deleted, non-sent) patches each song is in
+  let songBatchCount = $derived((() => {
+    const counts = {}
+    patches
+      .filter(p => p.status !== 'deleted')
+      .forEach(p => p.songs.forEach(s => { counts[s.id] = (counts[s.id] || 0) + 1 }))
+    return counts
+  })())
+  let songsInBatches = $derived(new Set(Object.keys(songBatchCount).map(Number)))
+  let freeSongs = $derived(songs.filter(s => !songsInBatches.has(s.id)))
+  let projectSongsForBatch = $derived(projectSongsAll.filter(s => !songsInBatches.has(s.id)))
+  let showBatchPicker = $state({})
+  let showContactPicker = $state({})
+  let filteredSongs = $derived((() => {
+    let list = songs
+    if (tagSearch.trim()) {
+      const q = tagSearch.toLowerCase()
+      list = list.filter(s => (s.tags||[]).some(t => t.toLowerCase().includes(q)))
+    }
+    if (headerGenre) {
+      list = list.filter(s => (s.tags||[]).includes(headerGenre))
+    }
+    return list
+  })())
+
+  function openSpotifyPopup(url) {
+    window.open(url, 'spotify_preview', 'width=400,height=600,left=100,top=100,toolbar=no,menubar=no')
+  }
+
+  // Mozart
+  let aiInput = $state('')
+  let aiMessages = $state([])
+  let aiLoading = $state(false)
+
+  async function sendAI() {
+    if (!aiInput.trim() || aiLoading) return
+    const msg = aiInput.trim(); aiInput = ''
+    aiMessages = [...aiMessages, { role: 'user', content: msg }]
+    aiLoading = true
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    if (!apiKey) { aiMessages = [...aiMessages, { role: 'assistant', content: 'No API key set — add it in Settings ⚙.' }]; aiLoading = false; return }
+    const ctx = 'You are Mozart, a music production AI. The producer is in the DEMO tab managing demos and patches. Be concise and helpful about demo selection, A&R decisions, and sending to contacts.'
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, system: ctx, messages: aiMessages.slice(-10) })
+      })
+      const d = await res.json()
+      if (d.usage && typeof window.trackTokens === 'function') window.trackTokens(d.usage.input_tokens, d.usage.output_tokens)
+      aiMessages = [...aiMessages, { role: 'assistant', content: d.content?.[0]?.text || 'No response.' }]
+    } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
+    aiLoading = false
+  }
+
+  load()
 </script>
-</body>
-</html>
+
+<svelte:window onclick={() => { if (Object.values(showBatchPicker).some(Boolean)) showBatchPicker = {}; if (showPatchArtistPicker) showPatchArtistPicker = false; if (Object.values(showGenrePicker).some(Boolean)) showGenrePicker = {}; if (showHeaderGenrePicker) showHeaderGenrePicker = false }} />
+<div class="demo-layout">
+<div class="demo-main">
+
+<div class="header">
+  <span class="title">DEMOS</span>
+  <div class="view-tabs">
+    <button class="vtab {view === 'demos' ? 'on' : ''}" onclick={() => view = 'demos'}>DEMOS</button>
+    <button class="vtab {view === 'patches' ? 'on' : ''}" onclick={() => view = 'patches'}>SUBMISSIONS</button>
+  </div>
+  {#if view === 'demos'}
+    <div class="header-genre-wrap" onclick={e => e.stopPropagation()}>
+      <input class="tag-search-inp" placeholder="Genre..." readonly
+        value={headerGenre}
+        onclick={() => { showHeaderGenrePicker = !showHeaderGenrePicker }}
+        style={headerGenre ? 'color:#c9a84c;border-color:rgba(201,168,76,.4)' : ''} />
+      {#if showHeaderGenrePicker}
+        <div class="header-genre-dropdown">
+          {#if headerGenre}
+            <button class="genre-opt" style="color:#555;font-style:italic" onclick={() => { headerGenre = ''; showHeaderGenrePicker = false }}>— Clear —</button>
+          {/if}
+          {#each GENRES as g}
+            <button class="genre-opt {headerGenre === g ? 'sel' : ''}" onclick={() => { headerGenre = g; showHeaderGenrePicker = false }}>{g}</button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+    <input class="tag-search-inp" bind:value={tagSearch} placeholder="Search tags..." />
+    <button class="btn-gold" onclick={addSong}>+ New Demo</button>
+  {:else}
+    <div class="patch-sort-row">
+      <button class="sort-sm {patchSort==='date'?'on':''}" onclick={() => patchSort='date'}>DATE</button>
+      <button class="sort-sm {patchSort==='az'?'on':''}" onclick={() => patchSort='az'}>A–Z</button>
+    </div>
+    <button class="btn-gold" onclick={() => showPatchModal = true}>+ New Submission</button>
+  {/if}
+</div>
+
+{#if loading}
+  <p class="empty">Loading...</p>
+
+{:else if view === 'demos'}
+  {#if !songs.length}
+    <p class="empty">No demos yet. Hit + New Demo to start.</p>
+  {:else}
+    <div class="list">
+      {#each filteredSongs as song (song.id)}
+        {@const isExpanded = expandedId === song.id}
+        <div class="card {isExpanded ? 'exp' : ''}">
+
+          <!-- CARD HEADER -->
+          <div class="card-head" onclick={() => { if (isExpanded) renameDemoAudio(song, song.title); expandedId = isExpanded ? null : song.id; showBatchPicker = {} }}>
+            <div class="head-left">
+              <div class="code-wrap">
+                <div class="code-stars-row">
+                  <span class="code">{song.code}</span>
+                  <div class="stars" onclick={e => e.stopPropagation()}>
+                    {#each [1,2,3] as n}
+                      <button class="star {(song.rating||0) >= n ? 'on' : ''}"
+                        onclick={() => { updateField(song, 'rating', (song.rating||0) === n ? 0 : n) }}>★</button>
+                    {/each}
+                  </div>
+                </div>
+                {#if song.title}<span class="song-title">{song.title}</span>{/if}
+              </div>
+              <div class="head-meta">
+                {#each (song.tags || []).slice(0,3) as tag}
+                  <span class="tag-sm">{tag}</span>
+                {/each}
+                {#if song.key}<span class="meta-pill">{song.key}</span>{/if}
+                {#if song.tempo}<span class="meta-pill">{song.tempo} BPM</span>{/if}
+                {#if song.notes}
+                  <span class="notes-preview">{song.notes.slice(0,60)}{song.notes.length>60?'…':''}</span>
+                {/if}
+              </div>
+            </div>
+
+            <div class="head-right" onclick={e => e.stopPropagation()}>
+              <div class="head-badges" onclick={e => e.stopPropagation()}>
+                <div class="s-wrap">
+                  {#if showBatchPicker[song.id]}
+                    {@const openSubs = [...patches]
+                      .filter(p => p.status !== 'sent' && p.status !== 'deleted')
+                      .sort((a,b) => (a.songs.length === 0 ? -1 : 1) - (b.songs.length === 0 ? -1 : 1) || (a.created_at > b.created_at ? -1 : 1))}
+                    <div class="s-picker-above" onclick={e => e.stopPropagation()}>
+                      {#if openSubs.length}
+                        <div class="s-pick-list">
+                          {#each openSubs as sub}
+                            {@const bContact = connections.find(c => c.id == sub.contact_id)}
+                            <button class="s-pick-opt" onclick={() => { addSongToPatch(sub, song); showBatchPicker = {...showBatchPicker, [song.id]: false} }}>
+                              <span class="s-pick-name">{sub.name}</span>
+                              {#if bContact}<span class="s-pick-contact">→ {bContact.name}</span>{/if}
+                              <span class="s-pick-count">{sub.songs.length} songs</span>
+                            </button>
+                          {/each}
+                        </div>
+                      {:else}
+                        <div class="s-pick-empty">No open submissions — create one first</div>
+                      {/if}
+                    </div>
+                  {/if}
+                  <button class="s-btn {songBatchCount[song.id] >= 2 ? 'multi-batch' : songBatchCount[song.id] === 1 ? 'in-batch' : ''}"
+                    onclick={e => { e.stopPropagation(); showBatchPicker = {...showBatchPicker, [song.id]: !showBatchPicker[song.id]} }}>S</button>
+                </div>
+              </div>
+              {#key audioTick}
+                {@const src = audioSrc(song)}
+                <div class="player-slot">
+                  {#if src}
+                    <div class="player-wrap" onpointerdown={e => e.stopPropagation()}>
+                      <audio class="mini-player" controls preload="auto"
+                        src={src}
+                        use:applyGain={song.id}></audio>
+                      <button class="open-preview-btn" onclick={e => { e.stopPropagation(); openInPreview(song) }} title="Open in QuickTime">▶︎</button>
+                    </div>
+                  {:else if song.audio_path}
+                    <button class="audio-ref clickable" onclick={e => { e.stopPropagation(); openInPreview(song) }} title="Open in QuickTime">🎵 {song.audio_path}</button>
+                  {/if}
+                </div>
+              {/key}
+            </div>
+            <span class="arr" onclick={() => { if (expandedId === song.id) renameDemoAudio(song, song.title); expandedId = expandedId === song.id ? null : song.id }}>▶</span>
+          </div>
+
+          <!-- CARD BODY -->
+          {#if expandedId === song.id}
+            <div class="card-body">
+              <!-- Title row with inline audio drop -->
+              <div class="title-audio-row">
+                <div class="field" style="flex:0 0 130px">
+                  <label>CODE</label>
+                  <input class="inp-sm" value={song.code} onchange={e => updateField(song, 'code', e.target.value)} />
+                </div>
+                <div class="field" style="flex:2">
+                  <label style="display:flex;align-items:center;gap:6px">
+                    TITLE
+                    <button class="btn-rand-title" onclick={() => updateField(song, 'title', randomTitle())} title="Random title">✦</button>
+                  </label>
+                  <input class="inp-sm" placeholder="Working title..." value={song.title || ''} onchange={e => updateField(song, 'title', e.target.value)} />
+                </div>
+                <div class="field" style="flex:2">
+                  <label>AUDIO</label>
+                  <div class="drop-zone-inline {song._dragging ? 'drag-over' : ''}"
+                    ondragover={e => { e.preventDefault(); song._dragging = true; songs = [...songs] }}
+                    ondragleave={() => { song._dragging = false; songs = [...songs] }}
+                    ondrop={e => handleAudioDrop(e, song)}>
+                    {#if song.audio_path}
+                      <span class="drop-path">🎵 {song.audio_path}</span>
+                      <button class="drop-clear" onclick={() => clearAudio(song)}>×</button>
+                    {:else}
+                      <span class="drop-hint-sm">↓ Drop audio</span>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+              <div class="key-tempo-row">
+                <div class="field" style="flex:0 0 130px">
+                  <label>KEY</label>
+                  <select class="inp-sm" value={song.key || ''} onchange={e => updateField(song, 'key', e.target.value)}>
+                    <option value="">—</option>
+                    {#each KEYS as k}<option value={k}>{k}</option>{/each}
+                  </select>
+                </div>
+                <div class="field">
+                  <label>TEMPO</label>
+                  <input class="inp-sm" type="number" placeholder="120" value={song.tempo || ''} onchange={e => updateField(song, 'tempo', parseInt(e.target.value))} />
+                </div>
+              </div>
+              <div class="field">
+                <label>TAGS</label>
+                <div class="tags-input-row" onclick={e => e.stopPropagation()}>
+                  <!-- Genre dropdown - same width as KEY box -->
+                  <div class="genre-picker-wrap" style="flex:0 0 130px">
+                    <input class="inp-sm genre-search-inp" placeholder="+ Genre..."
+                      value={genreSearch[song.id]||''}
+                      oninput={e => { genreSearch = {...genreSearch, [song.id]: e.target.value}; showGenrePicker = {...showGenrePicker, [song.id]: true} }}
+                      onfocus={() => { showGenrePicker = {...showGenrePicker, [song.id]: true} }} />
+                    {#if showGenrePicker[song.id]}
+                      {#each [GENRES.filter(g => (!(genreSearch[song.id]||'') || g.includes((genreSearch[song.id]||'').toLowerCase())) && !(song.tags||[]).includes(g))] as filtered}
+                        {#if filtered.length}
+                          <div class="genre-dropdown">
+                            {#each filtered as g}
+                              <button class="genre-opt" onclick={() => {
+                                updateField(song, 'tags', [...(song.tags||[]), g])
+                                genreSearch = {...genreSearch, [song.id]: ''}
+                                showGenrePicker = {...showGenrePicker, [song.id]: false}
+                              }}>{g}</button>
+                            {/each}
+                          </div>
+                        {/if}
+                      {/each}
+                    {/if}
+                  </div>
+                  <!-- Custom tag input - same width -->
+                  <div style="flex:0 0 130px">
+                    <input class="inp-sm" placeholder="Custom tag..." value={tagInput[song.id]||''}
+                      oninput={e => tagInput = {...tagInput, [song.id]: e.target.value}}
+                      onkeydown={e => e.key === 'Enter' && addTag(song)} />
+                  </div>
+                  <!-- Tags on same line -->
+                  <div class="tags-inline">
+                    {#each (song.tags || []) as tag}
+                      <span class="tag">{tag}<button class="tag-del" onclick={() => removeTag(song, tag)}>×</button></span>
+                    {/each}
+                  </div>
+                  <button class="btn-ghost-sm {song._generating ? 'dim' : ''}" style="margin-left:auto;flex-shrink:0" onclick={() => generateTags(song)}>
+                    {song._generating ? '...' : '✦ Claude'}
+                  </button>
+                </div>
+              </div>
+              <div class="field">
+                <label>REFERENCE LINKS</label>
+                <div class="refs-wrap">
+                  <div class="refs-inline">
+                    {#each (song.reference_links || []) as ref}
+                      {@const r = normRef(ref)}
+                      {@const isSpotify = r.url.includes('spotify')}
+                      <span class="ref-chip">
+                        {#if isSpotify}
+                          <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(r.url); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
+                          <button class="spotify-play-btn" onclick={() => openSpotifyPopup(r.url)}>▶</button>
+                        {:else}
+                          <a href={r.url} target="_blank" rel="noopener" class="ref-link-open">↗</a>
+                        {/if}
+                        <span class="ref-chip-name">{r.name || r.url}</span>
+                        <button class="tag-del" onclick={() => removeRef(song, r.url)}>×</button>
+                      </span>
+                    {/each}
+                  </div>
+                  <div class="ref-add">
+                    <input class="inp-sm" placeholder="Spotify / YouTube URL..." bind:value={refInput[song.id]} onkeydown={e => e.key === 'Enter' && addRef(song)} />
+                    <button class="btn-ghost-sm" onclick={() => addRef(song)}>+ Add</button>
+                  </div>
+                </div>
+              </div>
+              <div class="row2">
+                <div class="field">
+                  <label>NOTES</label>
+                  <textarea class="ta" placeholder="Production notes..." value={song.notes || ''} oninput={e => updateField(song, 'notes', e.target.value)}></textarea>
+                </div>
+                <div class="field">
+                  <label>FEEDBACK</label>
+                  <textarea class="ta" placeholder="Feedback received..." value={song.feedback || ''} oninput={e => updateField(song, 'feedback', e.target.value)}></textarea>
+                </div>
+              </div>
+              <div class="card-footer">
+                <button class="btn-move" onclick={() => openMoveModal(song)}>→ Move to Project</button>
+                <button class="btn-delete" onclick={() => remove(song.id)}>Delete</button>
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {/if}
+
+{:else}
+  {#if !patches.length}
+    <p class="empty">No submissions yet. Create one to group demos for sending.</p>
+  {:else}
+    <div class="list">
+      {#each sortedPatches as patch (patch.id)}
+        {@const contact = connections.find(c => c.id == patch.contact_id)}
+        <div class="patch-card {expandedPatchId === patch.id ? 'exp' : ''}">
+          <div class="patch-head" onclick={() => expandedPatchId = expandedPatchId === patch.id ? null : patch.id}>
+            <div class="patch-info">
+              <span class="patch-name">{patch.name}</span>
+              {#if contact}
+                <span class="patch-contact">→ {contact.name}</span>
+              {:else}
+                <span class="patch-no-contact">⚠ no contact</span>
+              {/if}
+            </div>
+            {#if patch.folder_link}
+              <button class="patch-link-btn" onclick={e => { e.stopPropagation(); openLink(patch.folder_link) }} title={patch.folder_link}>📁</button>
+            {/if}
+            <button class="patch-listen-btn" onclick={e => { e.stopPropagation(); createShareSession(patch) }} title="Generate listen link">↗</button>
+            <span class="patch-count">{patch.songs.length} songs</span>
+            <span class="patch-status {patch.status} {patch.feedback ? 'has-feedback' : ''}">{patch.status.toUpperCase()}</span>
+            <button class="del" onclick={e => { e.stopPropagation(); deletePatch(patch.id) }}>×</button>
+            <span class="arr">▶</span>
+          </div>
+
+          {#if expandedPatchId === patch.id}
+            <div class="patch-body">
+
+              <!-- Contact picker — buttons, no <select> binding issues -->
+              <div class="patch-contact-row">
+                <div class="field" style="flex:1">
+                  <label>CONTACT</label>
+                  <div class="contact-current" onclick={() => { showContactPicker[patch.id] = !showContactPicker[patch.id]; showContactPicker = {...showContactPicker} }}>
+                    {#if contact}
+                      <span class="contact-chosen">{contact.name}</span>
+                    {:else}
+                      <span class="contact-none">— choose contact —</span>
+                    {/if}
+                    <span class="contact-arr">▶</span>
+                  </div>
+                  {#if showContactPicker[patch.id]}
+                    <div class="contact-list">
+                      {#if !connections.length}
+                        <div class="contact-opt" style="color:#e05a4a;cursor:default">No connections loaded — check console</div>
+                      {:else}
+                        <button class="contact-opt {!patch.contact_id?'sel':''}" onclick={() => { updatePatchField(patch,'contact_id',null); showContactPicker={...showContactPicker,[patch.id]:false} }}>— None —</button>
+                        {#each connections as c}
+                          <button class="contact-opt {patch.contact_id == c.id ? 'sel' : ''}" onclick={() => { updatePatchField(patch,'contact_id',c.id); showContactPicker={...showContactPicker,[patch.id]:false} }}>
+                            {c.name}
+                          </button>
+                        {/each}
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              </div>
+
+              {#if patch.songs.length}
+                <div class="patch-songs">
+                  {#each patch.songs as song}
+                    <div class="patch-song-row">
+                      <span class="code">{song.code}</span>
+                      {#if song.title}<span class="song-title">{song.title}</span>{/if}
+                      <div class="head-meta" style="flex:1">
+                        {#each (song.tags || []).slice(0,2) as tag}
+                          <span class="tag-sm">{tag}</span>
+                        {/each}
+                      </div>
+                      {#if song.project_id}
+                        <span class="proj-badge">PROJECT</span>
+                      {/if}
+                      {#if patch.status !== 'sent'}
+                        <button class="del" onclick={() => removeSongFromPatch(patch, song.id)}>×</button>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <p class="empty-sm">No songs yet — add from demo cards (footer).</p>
+              {/if}
+
+              {#if patch.status !== 'sent'}
+                <div class="patch-footer">
+                  {#if patch.contact_id}
+                    <button class="btn-send" onclick={() => sendPatch(patch)}>→ Send Submission ({patch.songs.length} songs)</button>
+                  {:else}
+                    <button class="btn-send-blocked" disabled>→ Select contact first</button>
+                  {/if}
+                </div>
+              {:else}
+                <div class="sent-info">
+                  <span>Sent {patch.sent_at ? new Date(patch.sent_at).toLocaleDateString('de-CH') : ''}{contact ? ' to '+contact.name : ''}</span>
+                  {#if patch.folder_link}
+                    <button class="link-open-btn" onclick={() => openLink(patch.folder_link)}>📁 {patch.folder_link.length > 40 ? '…'+patch.folder_link.slice(-38) : patch.folder_link}</button>
+                  {/if}
+                </div>
+                <div class="field" style="padding:0 0 4px">
+                  <label>FEEDBACK RECEIVED</label>
+                  <textarea class="ta-sm" placeholder="Paste feedback from the artist / label here..." value={patch.feedback||''} oninput={e => updatePatchField(patch, 'feedback', e.target.value)}></textarea>
+                </div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {/if}
+{/if}
+
+</div><!-- end demo-main -->
+
+<!-- Right panel: Mozart -->
+<div class="demo-right">
+  <div class="mozart-block">
+    <div class="mozart-title-row">
+      <div class="mozart-title">ASK MOZART</div>
+      {#if aiMessages.length}
+        <button class="clear-chat" onclick={() => aiMessages = []}>Clear</button>
+      {/if}
+    </div>
+    <div class="chat-input-row">
+      <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
+      <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
+    </div>
+    <div class="chat-out">
+      {#each aiMessages as msg}
+        <div class="chat-msg {msg.role}">
+          <div class="chat-who">{msg.role==='user'?'You':'Mozart'}</div>
+          <div class="chat-text">{msg.content}</div>
+        </div>
+      {/each}
+      {#if aiLoading}
+        <div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>
+      {/if}
+    </div>
+  </div>
+</div>
+
+</div><!-- end demo-layout -->
+
+{#if showMoveModal}
+  <div class="modal-bg" onclick={() => showMoveModal = false}>
+    <div class="modal" onclick={e => e.stopPropagation()}>
+      <div class="modal-title">Move <span class="gold">{movingSong?.code}</span> to Project</div>
+      {#if movingSong?.tags?.length}
+        <div class="move-tags-preview">
+          {#each movingSong.tags as tag}<span class="tag">{tag}</span>{/each}
+        </div>
+      {/if}
+      {#if projects.length}
+        <div class="modal-section">EXISTING PROJECTS</div>
+        {#each projects as p}
+          <div class="modal-proj-row" onclick={() => moveToExisting(p.id)}>
+            <div class="dot" style="background:{p.color}"></div>
+            <div class="modal-proj-info">
+              <span class="modal-proj-artist" style="color:{p.color||'#cec9c1'}">{p.artist||p.name}</span>
+              {#if p.artist}<span class="modal-proj-name">{p.name}</span>{/if}
+            </div>
+          </div>
+        {/each}
+      {/if}
+      <div class="modal-section" style="margin-top:16px">NEW PROJECT</div>
+      <input class="inp-sm" bind:value={newProjectArtist} placeholder="Artist..." />
+      <input class="inp-sm" bind:value={newProjectName} placeholder="Project name..." style="margin-top:6px" />
+      <button class="btn-gold-full" onclick={moveToNew}>Create & Move</button>
+      <button class="modal-cancel" onclick={() => showMoveModal = false}>Cancel</button>
+    </div>
+  </div>
+{/if}
+
+{#if showPatchModal}
+  <div class="modal-bg" onclick={() => { showPatchModal = false; showPatchContactPicker = false; showPatchArtistPicker = false }}>
+    <div class="modal" onclick={e => e.stopPropagation()}>
+      <div class="modal-title">New Submission</div>
+
+      <div class="field">
+        <label>SEND TO <span style="color:#333;font-size:10px">— optional</span></label>
+        <div class="contact-current" onclick={() => { showPatchContactPicker = !showPatchContactPicker; showPatchArtistPicker = false }}>
+          {#if newPatchContact}
+            <span class="contact-chosen">{connections.find(c => c.id == newPatchContact)?.name || '—'}</span>
+          {:else}
+            <span class="contact-none">— No contact yet —</span>
+          {/if}
+          <span class="contact-arr">▶</span>
+        </div>
+        {#if showPatchContactPicker}
+          <div class="contact-list">
+            <button class="contact-opt" onclick={() => { newPatchContact = ''; newPatchArtistId = ''; showPatchContactPicker = false }}>— None —</button>
+            {#each ['ARTISTS', 'PRODUCERS', 'MUSIC INDUSTRY'] as grp}
+              {@const grpConns = connections
+                .filter(c => (c.group_types?.length ? c.group_types : c.group_type ? [c.group_type] : ['MUSIC INDUSTRY']).includes(grp))
+                .slice().sort((a,b) => (a.name||'').localeCompare(b.name||''))}
+              {#if grpConns.length}
+                <div class="contact-group-label">{grp}</div>
+                {#each grpConns as c}
+                  <button class="contact-opt {newPatchContact == c.id ? 'sel' : ''}" onclick={() => { newPatchContact = c.id; newPatchArtistId = ''; showPatchContactPicker = false }}>{c.name}</button>
+                {/each}
+              {/if}
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <!-- Second picker: ARTIST — only for non-artist connections -->
+      {#if newPatchContact && !isArtistSelected}
+        {#each [connections.filter(c => (c.group_types?.length ? c.group_types : c.group_type ? [c.group_type] : ['MUSIC INDUSTRY']).includes('ARTISTS')).sort((a,b) => (a.name||'').localeCompare(b.name||''))] as artistConns}
+          {#if artistConns.length}
+            <div class="field" style="margin-top:8px">
+              <label>ARTIST <span style="color:#555;font-size:10px">— leave empty for DEMOS</span></label>
+              <div class="contact-current" onclick={() => { showPatchArtistPicker = !showPatchArtistPicker; showPatchContactPicker = false }}>
+                {#if newPatchArtistId}
+                  <span class="contact-chosen">{connections.find(c => c.id == newPatchArtistId)?.name || '—'}</span>
+                {:else}
+                  <span class="contact-none">— DEMOS —</span>
+                {/if}
+                <span class="contact-arr">▶</span>
+              </div>
+              {#if showPatchArtistPicker}
+                <div class="contact-list">
+                  <button class="contact-opt {!newPatchArtistId ? 'sel' : ''}" onclick={() => { newPatchArtistId = ''; showPatchArtistPicker = false }}>— DEMOS —</button>
+                  {#each artistConns as c}
+                    <button class="contact-opt {newPatchArtistId == c.id ? 'sel' : ''}" onclick={() => { newPatchArtistId = c.id; showPatchArtistPicker = false }}>{c.name}</button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+        {/each}
+      {/if}
+
+      <div class="patch-name-preview">
+        {#each [connections.find(c => c.id == newPatchArtistId)] as selArtist}
+          {new Date().toISOString().slice(0,10).replace(/-/g,'')}_{connections.find(c => c.id == newPatchContact)?.name || ''}_{isArtistSelected ? 'DEMOS' : (selArtist?.name || 'DEMOS')}
+        {/each}
+      </div>
+
+      <button class="btn-gold-full" style="margin-top:10px" onclick={createPatch}>Create Submission</button>
+      <button class="modal-cancel" onclick={() => { showPatchModal = false; showPatchContactPicker = false; showPatchArtistPicker = false }}>Cancel</button>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .demo-layout { display: grid; grid-template-columns: 1fr 320px; gap: 32px; min-height: calc(100vh - 100px); }
+  .demo-main { display: flex; flex-direction: column; min-width: 0; }
+  .demo-right { border-left: 1px solid #1c1c1c; padding-left: 24px; display: flex; flex-direction: column; }
+  .mozart-block { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .mozart-title-row { display: flex; align-items: center; justify-content: space-between; }
+  .mozart-title { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; }
+  .clear-chat { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
+  .clear-chat:hover { border-color: #555; color: #9e9690; }
+  .chat-input-row { display: flex; gap: 6px; }
+  .chat-inp { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 8px 11px; outline: none; border-radius: 3px; }
+  .chat-inp:focus { border-color: rgba(201,168,76,.4); }
+  .chat-out { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+  .chat-msg { display: flex; flex-direction: column; gap: 2px; }
+  .chat-who { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; }
+  .chat-msg.assistant .chat-who { color: #7a6230; }
+  .chat-text { font-size: 14px; color: #cec9c1; line-height: 1.6; }
+  .chat-text.dim { color: #444; }
+  .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 7px 13px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+  .header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+  .title { font-family: 'Space Mono', monospace; font-size: 17px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #c9a84c; }
+  .view-tabs { display: flex; border: 1px solid #303030; border-radius: 3px; overflow: hidden; }
+  .vtab { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .1em; padding: 6px 14px; background: transparent; border: none; color: #555; cursor: pointer; transition: all .15s; }
+  .vtab.on { background: #c9a84c; color: #0a0a0a; }
+  .btn-gold { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 8px 16px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; margin-left: auto; }
+  .empty { font-family: 'Space Mono', monospace; font-size: 12px; color: #9e9690; padding: 32px 0; text-align: center; }
+  .empty-sm { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; padding: 8px 0; }
+  .list { display: flex; flex-direction: column; gap: 8px; }
+
+  .card { border: 1px solid #303030; border-radius: 4px; overflow: visible; }
+  .card.exp { border-color: rgba(201,168,76,.5); }
+  .card-head { padding: 0 14px; height: 52px; display: flex; align-items: center; gap: 10px; cursor: pointer; background: #1c1c1c; user-select: none; transition: background .15s; overflow: visible; position: relative; }
+  .card-head:hover { background: #252525; }
+  .card.exp .card-head { background: #252525; }
+  .head-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; overflow: hidden; }
+  .head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; width: 420px; justify-content: flex-end; }
+  .player-slot { width: 250px; flex-shrink: 0; display: flex; align-items: center; }
+  .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; width: 150px; justify-content: flex-end; }
+  .notes-preview { font-size: 10px; color: #444; font-style: italic; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
+  .code-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 90px; flex-shrink: 0; }
+  .code-stars-row { display: flex; align-items: center; gap: 6px; }
+  .stars { display: flex; gap: 1px; }
+  .star { background: transparent; border: none; font-size: 11px; color: #2a2a2a; cursor: pointer; padding: 0; line-height: 1; }
+  .star.on { color: #4caf82; }
+  .star:hover { color: #4caf82; }
+  .code { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; color: #c9a84c; }
+  .song-title { font-size: 12px; color: #9e9690; }
+  .head-meta { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; align-items: center; min-width: 0; overflow: hidden; }
+  .tag-sm { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 2px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.2); color: #c9a84c; }
+  .meta-pill { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 2px; background: #252525; border: 1px solid #303030; color: #9e9690; }
+  .status-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .1em; padding: 3px 8px; border-radius: 2px; border: 1px solid; flex-shrink: 0; }
+  .arr { font-size: 11px; color: #9e9690; transition: transform .2s; flex-shrink: 0; }
+  .card.exp .arr { transform: rotate(90deg); }
+  .patch-card.exp .arr { transform: rotate(90deg); }
+  .s-wrap { position: relative; display: flex; align-items: center; }
+  .s-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 2px 7px; background: transparent; border: 1px solid rgba(76,175,130,.5); color: #4caf82; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .s-btn:hover { background: rgba(76,175,130,.1); }
+  .s-btn.in-batch { border-color: rgba(74,159,212,.6); color: #4a9fd4; }
+  .s-btn.in-batch:hover { background: rgba(74,159,212,.1); }
+  .s-btn.multi-batch { border-color: rgba(224,90,74,.6); color: #e05a4a; }
+  .s-btn.multi-batch:hover { background: rgba(224,90,74,.1); }
+  .tag-search-inp { font-family: 'Space Mono', monospace; font-size: 11px; padding: 5px 10px; background: #1c1c1c; border: 1px solid #252525; color: #cec9c1; border-radius: 3px; outline: none; width: 140px; cursor: pointer; }
+  .tag-search-inp:focus { border-color: rgba(201,168,76,.4); }
+  .tag-search-inp::placeholder { color: #333; }
+  .header-genre-wrap { position: relative; }
+  .header-genre-dropdown { position: absolute; top: calc(100% + 4px); left: 0; min-width: 160px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; z-index: 999; max-height: 220px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,.6); }
+  .genre-opt.sel { color: #c9a84c; background: rgba(201,168,76,.06); }
+  .s-picker-above { position: absolute; bottom: calc(100% + 6px); right: 0; background: #1c1c1c; border: 1px solid #303030; border-radius: 4px; min-width: 240px; z-index: 99; overflow: hidden; box-shadow: 0 -4px 20px rgba(0,0,0,.5); }
+  .s-pick-list { max-height: 220px; overflow-y: auto; }
+  .s-pick-opt { display: flex; align-items: center; gap: 6px; width: 100%; font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px 12px; background: transparent; border: none; border-bottom: 1px solid #252525; color: #9e9690; cursor: pointer; text-align: left; }
+  .s-pick-opt:last-child { border-bottom: none; }
+  .s-pick-opt:hover { background: #252525; color: #c9a84c; }
+  .s-pick-name { font-weight: 700; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .s-pick-contact { color: #4caf82; font-size: 10px; flex-shrink: 0; }
+  .s-pick-count { color: #444; font-size: 10px; flex-shrink: 0; }
+  .s-pick-empty { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; padding: 8px 12px; }
+  .s-picker { position: absolute; top: 100%; right: 0; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; min-width: 200px; z-index: 99; box-shadow: 0 4px 20px rgba(0,0,0,.5); overflow: hidden; margin-top: 2px; }
+  .s-pick-opt { display: block; width: 100%; font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px 12px; background: transparent; border: none; border-bottom: 1px solid #252525; color: #9e9690; cursor: pointer; text-align: left; }
+  .s-pick-opt:last-child { border-bottom: none; }
+  .s-pick-opt:hover { background: #252525; color: #c9a84c; }
+  .s-pick-empty { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; padding: 8px 12px; }
+  .patch-sort-row { display: flex; gap: 4px; }
+  .sort-sm { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 4px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
+  .sort-sm.on { border-color: rgba(201,168,76,.4); color: #c9a84c; }
+  .btn-release { font-family: 'Space Mono', monospace; font-size: 10px; padding: 3px 8px; background: transparent; border: 1px solid rgba(224,90,74,.4); color: #e05a4a; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .btn-release:hover { background: rgba(224,90,74,.08); }
+
+  .mini-player { height: 40px; flex-shrink: 0; max-width: 220px; accent-color: #c9a84c; }
+  .audio-ref { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+  .audio-ref.clickable { background: transparent; border: none; cursor: pointer; padding: 0; color: #4a9fd4; }
+  .audio-ref.clickable:hover { color: #c9a84c; }
+  .open-preview-btn { font-family: 'Space Mono', monospace; font-size: 11px; padding: 3px 7px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; margin-left: 4px; }
+  .open-preview-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+
+  .card-body { padding: 16px; border-top: 1px solid #303030; display: flex; flex-direction: column; gap: 14px; background: #0a0a0a; }
+  .key-tempo-row { display: flex; gap: 8px; }
+  .key-tempo-row .field { width: 80px; flex-shrink: 0; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field-head { display: flex; align-items: center; justify-content: space-between; }
+  label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #9e9690; }
+  .inp-sm { background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; outline: none; border-radius: 3px; width: 100%; }
+  .inp-sm:focus { border-color: rgba(201,168,76,.5); }
+  .ta { background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; padding: 8px 10px; outline: none; resize: vertical; border-radius: 3px; width: 100%; min-height: 80px; line-height: 1.6; }
+  .ta:focus { border-color: rgba(201,168,76,.5); }
+
+  .drop-zone { border: 1px dashed #3c3c3c; border-radius: 3px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; transition: all .15s; min-height: 42px; justify-content: center; }
+  .drop-zone.drag-over { border-color: #c9a84c; background: rgba(201,168,76,.06); }
+  .drop-file-row { display: flex; align-items: center; gap: 8px; }
+  .drop-path { font-family: 'Space Mono', monospace; font-size: 11px; color: #4caf82; word-break: break-all; flex: 1; }
+  .drop-hint { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; text-align: center; }
+  .drop-rehint { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; }
+  .drop-clear { background: transparent; border: none; color: #555; font-size: 16px; cursor: pointer; flex-shrink: 0; padding: 0; }
+  .drop-clear:hover { color: #e05a4a; }
+
+  .move-tags-preview { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 12px; }
+  .move-tags-preview .tag { pointer-events: none; }
+  .tags-input-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .tags-inline { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; flex: 1; }
+  .genre-picker-wrap { position: relative; }
+  .genre-search-inp { width: 100%; }
+  .genre-dropdown { position: absolute; top: calc(100% + 2px); left: 0; min-width: 160px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; z-index: 99; max-height: 160px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+  .genre-opt { display: block; width: 100%; font-family: 'Space Mono', monospace; font-size: 11px; padding: 6px 10px; background: transparent; border: none; border-bottom: 1px solid #1a1a1a; color: #9e9690; cursor: pointer; text-align: left; }
+  .genre-opt:last-child { border-bottom: none; }
+  .genre-opt:hover { background: #252525; color: #c9a84c; }
+  .tag { font-family: 'Space Mono', monospace; font-size: 11px; padding: 3px 8px; border-radius: 2px; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.3); color: #c9a84c; display: flex; align-items: center; gap: 4px; }
+  .tag-del { background: none; border: none; color: inherit; cursor: pointer; padding: 0; font-size: 14px; opacity: .6; }
+  .tag-del:hover { opacity: 1; }
+  .tag-inp { background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 3px 8px; outline: none; border-radius: 3px; width: 120px; }
+  .refs-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .refs-inline { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .ref-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; }
+  .ref-chip-name { font-size: 13px; color: #cec9c1; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref-row { display: flex; align-items: center; gap: 8px; }
+  .ref-label { font-size: 13px; color: #cec9c1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref-link-open { font-family: 'Space Mono', monospace; font-size: 10px; color: #4a9fd4; text-decoration: none; flex-shrink: 0; }
+  .ref-link-open:hover { text-decoration: underline; }
+  .spotidown-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 3px 7px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .spotidown-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+  .spotify-play-btn { font-family: 'Space Mono', monospace; font-size: 10px; padding: 3px 9px; background: rgba(30,215,96,.08); border: 1px solid rgba(30,215,96,.4); color: #1ed760; border-radius: 2px; cursor: pointer; flex-shrink: 0; font-weight: 700; }
+  .spotify-play-btn:hover { background: rgba(30,215,96,.15); }
+  .spotify-embed-wrap { margin: 4px 0 6px; border-radius: 8px; overflow: hidden; }
+
+  .ref-add { display: flex; gap: 8px; align-items: center; }
+  .btn-ghost-sm { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 4px 10px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 2px; cursor: pointer; white-space: nowrap; }
+  .btn-ghost-sm:hover { border-color: #c9a84c; color: #c9a84c; }
+  .btn-ghost-sm.dim { opacity: .5; pointer-events: none; }
+  .title-audio-row { display: flex; gap: 8px; align-items: flex-end; }
+  .drop-zone-inline { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #0d0d0d; border: 1px dashed #252525; border-radius: 3px; min-height: 36px; transition: border-color .15s; cursor: copy; }
+  .drop-zone-inline.drag-over { border-color: #c9a84c; background: rgba(201,168,76,.04); }
+  .drop-zone-inline:hover { border-color: #303030; }
+  .drop-hint-sm { font-family: 'Space Mono', monospace; font-size: 11px; color: #333; }
+  .drop-path { font-family: 'Space Mono', monospace; font-size: 11px; color: #4caf82; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn-rand-title { background: transparent; border: 1px solid #303030; color: #555; font-size: 10px; padding: 1px 5px; border-radius: 2px; cursor: pointer; font-family: 'Space Mono', monospace; line-height: 1; }
+  .btn-rand-title:hover { border-color: #c9a84c; color: #c9a84c; }
+  .card-footer { display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid #1c1c1c; }
+  .archive-section { margin-top: 16px; border: 1px solid #1c1c1c; border-radius: 4px; overflow: hidden; }
+  .archive-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; background: #111; border: none; cursor: pointer; }
+  .archive-toggle:hover { background: #1c1c1c; }
+  .archive-title { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .1em; color: #444; }
+  .archive-arr { font-size: 9px; color: #444; transition: transform .2s; }
+  .archive-arr.open { transform: rotate(90deg); }
+  .archive-list { display: flex; flex-direction: column; }
+  .archive-row { display: flex; align-items: center; gap: 10px; padding: 7px 14px; border-top: 1px solid #1a1a1a; background: #0a0a0a; }
+  .archive-name { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; flex-shrink: 0; }
+  .archive-contact { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; flex-shrink: 0; }
+  .archive-date { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; flex-shrink: 0; }
+  .archive-codes { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .batch-pick-list { position: absolute; bottom: calc(100% + 4px); left: 0; background: #1c1c1c; border: 1px solid #303030; border-radius: 4px; min-width: 220px; z-index: 99; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,.5); }
+  .batch-pick-opt { display: block; width: 100%; font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 9px 14px; background: transparent; border: none; border-bottom: 1px solid #252525; color: #9e9690; cursor: pointer; text-align: left; }
+  .batch-pick-opt:last-child { border-bottom: none; }
+  .batch-pick-opt:hover { background: #252525; color: #c9a84c; }
+  .batch-pick-empty { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; padding: 10px 14px; }
+  .btn-delete { font-family: 'Space Mono', monospace; font-size: 11px; padding: 6px 12px; background: transparent; border: 1px solid rgba(224,90,74,.3); color: #e05a4a; border-radius: 3px; cursor: pointer; }
+  .btn-move { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 14px; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.4); color: #c9a84c; border-radius: 3px; cursor: pointer; }
+
+  .patch-card { border: 1px solid #303030; border-radius: 4px; overflow: hidden; }
+  .patch-card.exp { border-color: rgba(74,159,212,.4); }
+  .patch-head { padding: 12px 16px; display: flex; align-items: center; gap: 10px; cursor: pointer; background: #1c1c1c; user-select: none; transition: background .15s; overflow: hidden; }
+  .patch-head:hover { background: #252525; }
+  .patch-card.exp .patch-head { background: #252525; }
+  .patch-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; overflow: hidden; }
+  .patch-name { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; color: #cec9c1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .patch-card.exp .patch-name { color: #4a9fd4; }
+  .patch-contact { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: #4a9fd4; }
+  .patch-no-contact { font-family: 'Space Mono', monospace; font-size: 11px; color: #e05a4a; }
+  .patch-link-btn { background: transparent; border: none; font-size: 16px; cursor: pointer; padding: 0 4px; flex-shrink: 0; line-height: 1; }
+  .patch-listen-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 2px 7px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; transition: all .15s; }
+  .patch-listen-btn:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
+  .patch-notes-row { padding: 12px 14px; border-bottom: 1px solid #1c1c1c; }
+  .audio-ok { font-size: 12px; flex-shrink: 0; }
+  .audio-missing { font-family: 'Space Mono', monospace; font-size: 10px; color: #e05a4a; flex-shrink: 0; }
+  .ta-sm { background: #111; border: 1px solid #252525; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; resize: vertical; border-radius: 3px; width: 100%; min-height: 55px; line-height: 1.5; }
+  .ta-sm:focus { border-color: rgba(201,168,76,.4); }
+  .label-hint { font-size: 10px; color: #444; letter-spacing: .04em; text-transform: none; font-weight: 300; font-family: 'DM Sans', sans-serif; }
+  .link-drop-zone { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: #080808; border: 1px dashed #252525; border-radius: 3px; min-height: 36px; transition: border-color .15s; margin-bottom: 5px; }
+  .link-drop-zone.drag-over { border-color: #c9a84c; background: rgba(201,168,76,.04); }
+  .link-hint { font-family: 'Space Mono', monospace; font-size: 11px; color: #333; flex: 1; }
+  .link-open-btn { font-family: 'Space Mono', monospace; font-size: 11px; color: #4a9fd4; background: transparent; border: none; cursor: pointer; text-align: left; flex: 1; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .link-open-btn:hover { text-decoration: underline; }
+  .in-batch-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 2px; color: #9b6fd4; border: 1px solid rgba(155,111,212,.4); background: rgba(155,111,212,.06); flex-shrink: 0; }
+  .proj-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 2px; color: #c9a84c; border: 1px solid rgba(201,168,76,.3); background: rgba(201,168,76,.06); flex-shrink: 0; }
+  .contact-current { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: #111; border: 1px solid #303030; border-radius: 3px; cursor: pointer; transition: border-color .15s; }
+  .contact-current:hover { border-color: #c9a84c; }
+  .contact-chosen { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; color: #4a9fd4; flex: 1; }
+  .contact-none { font-family: 'Space Mono', monospace; font-size: 12px; color: #444; flex: 1; }
+  .contact-arr { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
+  .contact-list { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; max-height: 200px; overflow-y: auto; border: 1px solid #303030; border-radius: 3px; background: #0a0a0a; }
+  .contact-opt { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; padding: 8px 12px; background: transparent; border: none; color: #9e9690; cursor: pointer; text-align: left; border-bottom: 1px solid #111; transition: all .1s; }
+  .contact-opt:last-child { border-bottom: none; }
+  .contact-opt:hover { background: #1c1c1c; color: #c9a84c; }
+  .contact-group-label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .12em; color: #4caf82; padding: 10px 12px 5px; text-transform: uppercase; border-bottom: 1px solid #252525; border-top: 1px solid #1a1a1a; background: #0f0f0f; margin-top: 2px; }
+  .contact-opt.sel { color: #4a9fd4; background: rgba(74,159,212,.06); }
+  .player-wrap { display: flex; align-items: center; flex-shrink: 0; min-width: 220px; }
+  .mini-player { height: 40px; width: 100%; max-width: 220px; accent-color: #c9a84c; }
+  .btn-send-blocked { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; padding: 10px 20px; background: #0d0d0d; border: 1px solid #252525; color: #444; border-radius: 3px; cursor: not-allowed; width: 100%; }
+  .btn-send { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; padding: 10px 20px; background: rgba(74,159,212,.1); border: 1px solid rgba(74,159,212,.4); color: #4a9fd4; border-radius: 3px; cursor: pointer; width: 100%; }
+  .btn-send:hover { background: rgba(74,159,212,.18); }
+  .patch-count { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; }
+  .patch-status { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 2px; border: 1px solid; }
+  .patch-status.open { color: #c9a84c; border-color: rgba(201,168,76,.3); background: rgba(201,168,76,.06); }
+  .patch-status.sent { color: #4a9fd4; border-color: rgba(74,159,212,.3); background: rgba(74,159,212,.06); }
+  .patch-status.sent.has-feedback { color: #4caf82; border-color: rgba(76,175,130,.4); background: rgba(76,175,130,.08); }
+  .del { background: transparent; border: none; color: #555; font-size: 18px; cursor: pointer; padding: 0 4px; flex-shrink: 0; }
+  .del:hover { color: #e05a4a; }
+  .patch-body { padding: 16px; border-top: 1px solid #303030; display: flex; flex-direction: column; gap: 12px; background: #0a0a0a; }
+  .patch-songs { display: flex; flex-direction: column; gap: 4px; }
+  .patch-song-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #1c1c1c; border-radius: 3px; border: 1px solid #252525; }
+  .patch-add-section { border-top: 1px solid #1c1c1c; padding-top: 12px; }
+  .sh-sm { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #555; margin-bottom: 8px; }
+  .free-songs { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+  .free-song-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #111; border-radius: 3px; border: 1px solid #1c1c1c; cursor: pointer; transition: all .15s; }
+  .free-song-row:hover { background: #1c1c1c; border-color: rgba(201,168,76,.3); }
+  .add-icon { font-family: 'Space Mono', monospace; font-size: 16px; color: #c9a84c; flex-shrink: 0; }
+  .patch-footer { border-top: 1px solid #1c1c1c; padding-top: 12px; }
+  .sent-info { display: flex; flex-direction: column; gap: 4px; }
+  .sent-info span { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; }
+  .sent-hint { font-size: 10px !important; color: #333 !important; }
+
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 999; display: flex; align-items: center; justify-content: center; }
+  .modal { background: #1c1c1c; border: 1px solid #303030; border-radius: 6px; padding: 24px; width: 380px; display: flex; flex-direction: column; gap: 8px; }
+  .modal-title { font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 700; color: #f5f1ea; margin-bottom: 8px; }
+  .gold { color: #c9a84c; }
+  .modal-section { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; color: #555; text-transform: uppercase; }
+  .modal-proj-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 3px; cursor: pointer; border: 1px solid #252525; transition: all .15s; }
+  .modal-proj-row:hover { background: #252525; border-color: rgba(201,168,76,.3); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .modal-proj-info { display: flex; flex-direction: column; gap: 1px; flex: 1; }
+  .modal-proj-artist { font-family: "Space Mono", monospace; font-size: 14px; font-weight: 700; letter-spacing: .05em; }
+  .modal-proj-name { font-size: 11px; color: #555; }
+  .btn-gold-full { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 10px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; margin-top: 4px; }
+  .patch-name-preview { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; padding: 7px 0 2px; border-top: 1px solid #1c1c1c; margin-top: 10px; letter-spacing: .04em; }
+  .modal-cancel { font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 3px; cursor: pointer; }
+  .modal-cancel:hover { color: #9e9690; }
+</style>

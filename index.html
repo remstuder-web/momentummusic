@@ -9,72 +9,77 @@
 <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0a0a0a;color:#f5f1ea;font-family:'DM Sans',sans-serif;font-weight:300;min-height:100vh;display:flex;flex-direction:column}
-nav{display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid #1a1a1a;gap:12px;position:sticky;top:0;z-index:10;background:#0a0a0a}
+html,body{height:100%}
+body{background:#000;color:#f5f1ea;font-family:'DM Sans',sans-serif;font-weight:300;min-height:100vh;display:flex;flex-direction:column;overflow:hidden}
+#space{position:fixed;inset:0;z-index:0;pointer-events:none}
+nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14px 20px;gap:12px;background:rgba(0,0,0,.7);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.06)}
 .logo{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.16em;color:#c9a84c}
 .nav-sep{color:#333}
 .nav-title{font-family:'Space Mono',monospace;font-size:10px;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav-exp{font-family:'Space Mono',monospace;font-size:10px;color:#333}
-.app{display:flex;flex:1;overflow:hidden}
-.sidebar{width:220px;flex-shrink:0;border-right:1px solid #1a1a1a;overflow-y:auto}
-.sb-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.4);padding:10px 14px 6px;border-bottom:1px solid #111}
-.song-item{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;border-bottom:1px solid #0f0f0f}
-.song-item:hover{background:#111}
-.song-item.active{background:rgba(201,168,76,.06);border-left:2px solid #c9a84c}
+.app{position:relative;z-index:1;display:flex;flex:1;overflow:hidden;height:calc(100vh - 49px)}
+.sidebar{width:220px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.06);overflow-y:auto;background:rgba(0,0,0,.5);backdrop-filter:blur(8px)}
+.sb-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.4);padding:10px 14px 6px;border-bottom:1px solid rgba(255,255,255,.05)}
+.song-item{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);transition:background .15s}
+.song-item:hover{background:rgba(255,255,255,.04)}
+.song-item.active{background:rgba(201,168,76,.08);border-left:2px solid #c9a84c}
 .song-num{font-family:'Space Mono',monospace;font-size:10px;color:#333;width:18px;flex-shrink:0}
-.song-title{font-size:13px;color:#cec9c1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.song-dot{width:6px;height:6px;border-radius:50%;background:#1a1a1a;flex-shrink:0}
-.song-dot.on{background:#4caf82;box-shadow:0 0 5px #4caf82}
-.song-dl{font-family:'Space Mono',monospace;font-size:10px;color:#4caf82;flex-shrink:0;display:none}
-.song-dl.visible{display:block}
-.player-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 40px;gap:24px;min-width:0}
-.now-code{font-family:'Space Mono',monospace;font-size:10px;color:#444;text-align:center;margin-bottom:6px}
-.now-title{font-size:22px;text-align:center;color:#f5f1ea}
-.progress-outer{width:100%;max-width:480px;height:3px;background:#1c1c1c;border-radius:2px;cursor:pointer}
-.progress-fill{height:100%;background:#c9a84c;border-radius:2px;transition:width .1s linear}
-.times{display:flex;justify-content:space-between;font-family:'Space Mono',monospace;font-size:10px;color:#444;width:100%;max-width:480px;margin-top:5px}
-.controls{display:flex;align-items:center;gap:24px}
-.ctrl-btn{background:transparent;border:none;color:#555;font-size:16px;cursor:pointer}
+.song-title-text{font-size:13px;color:#cec9c1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.song-dl-dot{font-family:'Space Mono',monospace;font-size:9px;color:#4caf82;flex-shrink:0;opacity:0;transition:opacity .3s}
+.song-dl-dot.visible{opacity:1}
+.song-dot{width:6px;height:6px;border-radius:50%;background:#1a1a1a;flex-shrink:0;transition:all .3s}
+.song-dot.on{background:#4caf82;box-shadow:0 0 8px #4caf82}
+.player-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 40px;gap:24px;min-width:0;background:rgba(0,0,0,.3);backdrop-filter:blur(4px)}
+.now-code{font-family:'Space Mono',monospace;font-size:10px;color:#444;text-align:center;margin-bottom:4px}
+.now-title{font-size:24px;text-align:center;color:#f5f1ea;font-weight:300}
+.progress-outer{width:100%;max-width:480px;height:2px;background:rgba(255,255,255,.08);border-radius:2px;cursor:pointer;position:relative}
+.progress-outer:hover{height:4px;margin:-1px 0}
+.progress-fill{height:100%;background:#c9a84c;border-radius:2px;transition:width .15s linear;pointer-events:none}
+.times{display:flex;justify-content:space-between;font-family:'Space Mono',monospace;font-size:10px;color:#444;width:100%;max-width:480px;margin-top:6px}
+.controls{display:flex;align-items:center;gap:28px}
+.ctrl-btn{background:transparent;border:none;color:#444;font-size:16px;cursor:pointer;transition:color .15s;padding:4px}
 .ctrl-btn:hover{color:#cec9c1}
-.play-btn{width:56px;height:56px;border-radius:50%;background:#1c1c1c;border:1px solid #303030;font-size:20px;cursor:pointer;color:#f5f1ea;display:flex;align-items:center;justify-content:center}
-.play-btn:hover{border-color:#c9a84c;color:#c9a84c}
-.dl-btn{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:8px 20px;background:transparent;border:1px solid rgba(76,175,130,.5);color:#4caf82;border-radius:3px;cursor:pointer;letter-spacing:.08em;display:flex;align-items:center;gap:8px;transition:all .2s}
-.dl-btn:hover{background:rgba(76,175,130,.1);border-color:#4caf82}
-.dl-btn.loading{opacity:.5;cursor:default}
-.dl-btn.done{border-color:rgba(76,175,130,.3);color:rgba(76,175,130,.5)}
+.play-btn{width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);font-size:22px;cursor:pointer;color:#f5f1ea;display:flex;align-items:center;justify-content:center;transition:all .2s;backdrop-filter:blur(4px)}
+.play-btn:hover{border-color:#c9a84c;color:#c9a84c;background:rgba(201,168,76,.08)}
+.dl-btn{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:10px 24px;background:rgba(76,175,130,.08);border:1px solid rgba(76,175,130,.4);color:#4caf82;border-radius:4px;cursor:pointer;letter-spacing:.08em;display:flex;align-items:center;gap:10px;transition:all .2s}
+.dl-btn:hover{background:rgba(76,175,130,.15);border-color:#4caf82}
+.dl-btn.loading{opacity:.5;cursor:default;pointer-events:none}
+.dl-btn.done{border-color:rgba(76,175,130,.25);color:rgba(76,175,130,.5);background:transparent}
 .pitch-wrap{width:100%;max-width:480px}
-.pitch-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.5);text-align:center;margin-bottom:10px}
-.pitch-row{display:flex;align-items:center;gap:14px}
-.pitch-val{font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#c9a84c;width:36px;text-align:center}
-.pitch-slider{flex:1;-webkit-appearance:none;appearance:none;height:3px;background:linear-gradient(to right,#1c1c1c 0%,#c9a84c 50%,#1c1c1c 100%);outline:none;cursor:pointer;border-radius:2px}
-.pitch-slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#c9a84c;cursor:pointer}
-.pitch-slider::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#c9a84c;cursor:pointer;border:none}
-.pitch-reset{font-family:'Space Mono',monospace;font-size:10px;padding:3px 8px;background:transparent;border:1px solid #252525;color:#444;border-radius:2px;cursor:pointer}
+.pitch-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.5);text-align:center;margin-bottom:12px}
+.pitch-row{display:flex;align-items:center;gap:16px}
+.pitch-val{font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:#c9a84c;width:40px;text-align:center}
+.pitch-slider{flex:1;-webkit-appearance:none;appearance:none;height:2px;background:rgba(255,255,255,.1);outline:none;cursor:pointer;border-radius:2px}
+.pitch-slider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#c9a84c;cursor:pointer;box-shadow:0 0 8px rgba(201,168,76,.5)}
+.pitch-slider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#c9a84c;cursor:pointer;border:none}
+.pitch-reset{font-family:'Space Mono',monospace;font-size:10px;padding:4px 10px;background:transparent;border:1px solid rgba(255,255,255,.1);color:#444;border-radius:2px;cursor:pointer;transition:all .15s}
 .pitch-reset:hover{border-color:#c9a84c;color:#c9a84c}
-.pitch-note{font-family:'Space Mono',monospace;font-size:9px;color:#333;text-align:center;margin-top:6px}
-.loading-ring{width:36px;height:36px;border:2px solid #1c1c1c;border-top-color:#c9a84c;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
+.pitch-note{font-family:'Space Mono',monospace;font-size:9px;color:#333;text-align:center;margin-top:8px}
+.loading-ring{width:36px;height:36px;border:2px solid rgba(255,255,255,.08);border-top-color:#c9a84c;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
 @keyframes spin{to{transform:rotate(360deg)}}
-.loading-text{font-family:'Space Mono',monospace;font-size:11px;color:#444;text-align:center;margin-top:8px}
-.err-icon{font-size:36px;opacity:.25;text-align:center}
+.loading-text{font-family:'Space Mono',monospace;font-size:11px;color:#555;text-align:center;margin-top:10px;letter-spacing:.06em}
+.err-icon{font-size:36px;opacity:.2;text-align:center}
 .err-text{font-family:'Space Mono',monospace;font-size:12px;color:#e05a4a;text-align:center}
-.empty-hint{font-family:'Space Mono',monospace;font-size:11px;color:#333;text-align:center}
-.state{flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px}
+.empty-hint{font-family:'Space Mono',monospace;font-size:11px;color:#333;text-align:center;letter-spacing:.08em}
+.state{flex:1;position:relative;z-index:1;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px}
 .state-icon{font-size:36px;opacity:.3}
 .state-title{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#555}
 .state-sub{font-size:13px;color:#333;text-align:center}
 @media(max-width:640px){
   .app{flex-direction:column}
-  .sidebar{width:100%;max-height:130px;overflow-x:auto;overflow-y:hidden;display:flex;flex-direction:row;border-right:none;border-bottom:1px solid #1a1a1a}
+  .sidebar{width:100%;height:120px;max-height:120px;overflow-x:auto;overflow-y:hidden;display:flex;flex-direction:row;border-right:none;border-bottom:1px solid rgba(255,255,255,.06)}
   .sb-label{display:none}
-  .song-item{flex-direction:column;min-width:80px;padding:8px 10px;gap:4px;border-bottom:none;border-right:1px solid #0f0f0f;white-space:nowrap}
-  .song-title{font-size:11px}
+  .song-item{flex-direction:column;min-width:80px;padding:8px 10px;gap:4px;border-bottom:none;border-right:1px solid rgba(255,255,255,.04)}
+  .song-title-text{font-size:11px}
   .song-num{display:none}
   .player-area{padding:20px 16px;gap:18px}
   .now-title{font-size:18px}
+  .dl-btn{padding:8px 16px;font-size:10px}
 }
 </style>
 </head>
 <body>
+<canvas id="space"></canvas>
 <nav>
   <span class="logo">LISTEN</span>
   <span class="nav-sep">·</span>
@@ -91,19 +96,67 @@ nav{display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid #1
   </div>
 </div>
 <div class="state" id="state"></div>
-<audio id="audio-el" preload="auto"></audio>
 
 <script>
+// ── Starfield ────────────────────────────────────────────────────────────────
+(function() {
+  const c = document.getElementById('space')
+  const ctx = c.getContext('2d')
+  let W, H, stars = []
+  const N = 200, SPEED = 0.4
+
+  function resize() {
+    W = c.width = window.innerWidth
+    H = c.height = window.innerHeight
+  }
+  function makeStar() {
+    return {
+      x: (Math.random() - 0.5) * 2,
+      y: (Math.random() - 0.5) * 2,
+      z: Math.random(),
+      pz: 0
+    }
+  }
+  function init() { resize(); stars = Array.from({length:N}, makeStar) }
+  function draw() {
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'
+    ctx.fillRect(0, 0, W, H)
+    const cx = W / 2, cy = H / 2
+    stars.forEach(s => {
+      s.pz = s.z
+      s.z -= SPEED * 0.01
+      if (s.z <= 0) { Object.assign(s, makeStar()); s.z = 1; s.pz = 1 }
+      const sx = (s.x / s.z) * W + cx
+      const sy = (s.y / s.z) * H + cy
+      const px = (s.x / s.pz) * W + cx
+      const py = (s.y / s.pz) * H + cy
+      const size = Math.max(0.3, (1 - s.z) * 2.5)
+      const bright = Math.min(255, Math.floor((1 - s.z) * 280))
+      if (sx < 0 || sx > W || sy < 0 || sy > H) { Object.assign(s, makeStar()); return }
+      ctx.beginPath()
+      ctx.moveTo(px, py)
+      ctx.lineTo(sx, sy)
+      ctx.strokeStyle = `rgba(${bright},${bright},${bright+20},${0.4 + (1-s.z)*0.6})`
+      ctx.lineWidth = size
+      ctx.stroke()
+    })
+    requestAnimationFrame(draw)
+  }
+  window.addEventListener('resize', resize)
+  init(); draw()
+})()
+
+// ── Audio ────────────────────────────────────────────────────────────────────
 const SB_URL = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
 const SB_KEY = 'sb_publishable_4yMwlAo6OLpgGPN_6yWvIw_g5bnjnWS'
 const { createClient } = window.supabase
 const db = createClient(SB_URL, SB_KEY)
 
-const audioEl = document.getElementById('audio-el')
 let songs = [], sessionId = null, currentIdx = -1
 let isPlaying = false, progressTimer = null, currentPitch = 0
-let audioCtx = null, pitchNode = null, sourceNode = null, audioBuffer = null
-let downloads = {}  // songCode → true
+let audioCtx = null, pitchNode = null, sourceNode = null
+let audioBuffer = null, playStartCtxTime = 0, playStartOffset = 0
+let downloads = {}
 
 function toDirectUrl(u) {
   if (!u) return null
@@ -118,7 +171,7 @@ async function init() {
   sessionId = id
   const { data } = await db.from('share_sessions').select('*').eq('id', id).maybeSingle()
   if (!data) { showState('🔍','NOT FOUND','This link is invalid or expired.'); return }
-  if (data.expires_at && new Date(data.expires_at) < new Date()) { showState('⏱','EXPIRED','Ask the producer for a new link.'); return }
+  if (data.expires_at && new Date(data.expires_at) < new Date()) { showState('⏱','EXPIRED','Contact the producer for a new link.'); return }
   songs = data.songs || []
   downloads = data.downloads || {}
   document.getElementById('nav-title').textContent = data.patch_name || 'Demo Session'
@@ -130,15 +183,13 @@ async function init() {
 }
 
 function buildList() {
-  document.getElementById('song-list').innerHTML = songs.map((s,i) => {
-    const dl = downloads[s.code] ? '<span class="song-dl visible">↓</span>' : '<span class="song-dl"></span>'
-    return `<div class="song-item" id="si${i}" onclick="playSong(${i})">
+  document.getElementById('song-list').innerHTML = songs.map((s,i) => `
+    <div class="song-item" id="si${i}" onclick="playSong(${i})">
       <span class="song-num">${String(i+1).padStart(2,'0')}</span>
-      <div class="song-title">${esc(s.title||s.code)}</div>
-      ${dl}
+      <div class="song-title-text">${esc(s.title||s.code)}</div>
+      <span class="song-dl-dot ${downloads[s.code]?'visible':''}" title="Downloaded">↓</span>
       <div class="song-dot" id="sd${i}"></div>
-    </div>`
-  }).join('')
+    </div>`).join('')
 }
 
 function setActive(idx) {
@@ -147,8 +198,8 @@ function setActive(idx) {
   if(idx>=0){ document.getElementById('si'+idx)?.classList.add('active'); document.getElementById('sd'+idx)?.classList.add('on') }
 }
 
-// ── Pitch-correct playback via Web Audio API ─────────────────────────────────
-async function ensureAudioCtx() {
+// ── Pitch-correct playback: fetch → decode → AudioBufferSource → PitchShift ──
+async function ensureCtx() {
   if (audioCtx) return
   audioCtx = new (window.AudioContext || window.webkitAudioContext)()
   await Tone.start()
@@ -156,7 +207,7 @@ async function ensureAudioCtx() {
 
 async function playSong(idx) {
   if (idx === currentIdx && audioBuffer) { togglePlay(); return }
-  stopAudio()
+  stopAll()
   currentIdx = idx
   setActive(idx)
   const song = songs[idx]
@@ -166,47 +217,40 @@ async function playSong(idx) {
   if (!url) { showErr('No audio URL'); return }
 
   try {
-    await ensureAudioCtx()
+    await ensureCtx()
     if (audioCtx.state === 'suspended') await audioCtx.resume()
-
-    // Fetch audio as blob — avoids crossOrigin CORS issues, enables true pitch shift
-    showLoadingText('Fetching audio...')
+    showLoadingText('Loading audio...')
     const resp = await fetch(url)
     if (!resp.ok) throw new Error('HTTP ' + resp.status)
     showLoadingText('Decoding...')
-    const arrayBuf = await resp.arrayBuffer()
-    audioBuffer = await audioCtx.decodeAudioData(arrayBuf)
-
+    const buf = await resp.arrayBuffer()
+    audioBuffer = await audioCtx.decodeAudioData(buf)
     showPlayer(song)
-    startPitchPlayback()
+    startPlayback(0)
   } catch(e) {
-    console.error('load error:', e)
-    // Fallback: plain <audio> element (no pitch shift)
-    audioBuffer = null
-    audioEl.src = url
-    audioEl.oncanplay = () => {
-      showPlayer(song)
-      audioEl.play().catch(()=>showErr('Tap play to start'))
-      isPlaying = true; startProgress()
-    }
-    audioEl.onerror = () => showErr('Could not load — generate a new link')
-    audioEl.load()
+    console.error(e)
+    showErr('Could not load — generate a new link from Momentum')
   }
 }
 
-function startPitchPlayback(startAt = 0) {
-  if (!audioBuffer || !audioCtx) return
+function startPlayback(offset) {
   stopSourceNode()
-
+  if (!audioBuffer || !audioCtx) return
   pitchNode = new Tone.PitchShift(currentPitch)
   pitchNode.toDestination()
-
   sourceNode = audioCtx.createBufferSource()
   sourceNode.buffer = audioBuffer
   sourceNode.connect(pitchNode.input)
-  sourceNode.start(0, startAt)
-  sourceNode.onended = () => { if(isPlaying){ isPlaying=false; stopProgress(); updateBtn(); if(currentIdx<songs.length-1) playSong(currentIdx+1) } }
-
+  playStartCtxTime = audioCtx.currentTime
+  playStartOffset = offset
+  sourceNode.start(0, offset)
+  sourceNode.onended = () => {
+    const elapsed = audioCtx.currentTime - playStartCtxTime + playStartOffset
+    if (elapsed >= audioBuffer.duration - 0.3) {
+      isPlaying = false; stopProgress(); updateBtn()
+      if (currentIdx < songs.length - 1) playSong(currentIdx + 1)
+    }
+  }
   isPlaying = true
   startProgress()
   updateBtn()
@@ -217,32 +261,34 @@ function stopSourceNode() {
   if (pitchNode) { try { pitchNode.dispose() } catch(e){} pitchNode = null }
 }
 
-function stopAudio() {
-  stopProgress()
-  stopSourceNode()
-  audioEl.pause(); audioEl.src = ''; audioEl.oncanplay = null; audioEl.onerror = null
-  audioBuffer = null; isPlaying = false
+function stopAll() {
+  stopProgress(); stopSourceNode()
+  audioBuffer = null; isPlaying = false; playStartOffset = 0
 }
 
 function togglePlay() {
-  if (audioBuffer) {
-    if (isPlaying) {
-      // Store current time for resume
-      if (sourceNode) { try { sourceNode.stop() } catch(e){} }
-      isPlaying = false; stopProgress(); updateBtn()
-    } else {
-      startPitchPlayback(audioEl.currentTime || 0)
-    }
-  } else if (audioEl.src) {
-    if (isPlaying) { audioEl.pause(); isPlaying=false; stopProgress(); updateBtn() }
-    else { audioEl.play().then(()=>{isPlaying=true;startProgress();updateBtn()}).catch(()=>{}) }
+  if (!audioBuffer) return
+  if (isPlaying) {
+    const elapsed = audioCtx.currentTime - playStartCtxTime + playStartOffset
+    stopSourceNode()
+    playStartOffset = elapsed
+    isPlaying = false; stopProgress(); updateBtn()
+  } else {
+    if (audioCtx.state === 'suspended') audioCtx.resume()
+    startPlayback(playStartOffset)
   }
 }
 
 function setPitch(v) {
   currentPitch = parseInt(v)
-  const l = document.getElementById('pv'); if(l) l.textContent = currentPitch>0?'+'+currentPitch:currentPitch
-  if (pitchNode) pitchNode.pitch = currentPitch
+  const el = document.getElementById('pv'); if (el) el.textContent = currentPitch>0?'+'+currentPitch:currentPitch
+  if (isPlaying && audioBuffer) {
+    // Restart playback at current position with new pitch
+    const elapsed = audioCtx.currentTime - playStartCtxTime + playStartOffset
+    startPlayback(Math.min(elapsed, audioBuffer.duration - 0.1))
+  } else if (pitchNode) {
+    pitchNode.pitch = currentPitch
+  }
 }
 function resetPitch() { currentPitch=0; const s=document.getElementById('ps'); if(s)s.value=0; setPitch(0) }
 
@@ -250,71 +296,48 @@ function resetPitch() { currentPitch=0; const s=document.getElementById('ps'); i
 async function downloadSong(idx) {
   const song = songs[idx]
   const url = toDirectUrl(song.shareUrl)
-  const btn = document.getElementById('dl-btn-'+idx)
+  const btn = document.getElementById(`dlb${idx}`)
   if (!btn || btn.classList.contains('loading')) return
-
-  btn.classList.add('loading')
-  btn.textContent = '↓ Downloading...'
-
+  btn.classList.add('loading'); btn.innerHTML = '<span>↓</span> Downloading...'
   try {
     const resp = await fetch(url)
     const blob = await resp.blob()
     const ext = url.match(/\.(mp3|wav|m4a|flac|aiff|ogg)/i)?.[1] || 'mp3'
-    const filename = (song.title || song.code) + '.' + ext
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = filename
+    a.download = (song.title || song.code) + '.' + ext
     a.click()
     URL.revokeObjectURL(a.href)
-
-    btn.classList.remove('loading')
-    btn.classList.add('done')
-    btn.textContent = '✓ Downloaded'
-
-    // Mark as downloaded in sidebar
-    const dl = document.querySelector(`#si${idx} .song-dl`)
-    if (dl) dl.classList.add('visible')
-
-    // Save download to DB
+    btn.classList.remove('loading'); btn.classList.add('done'); btn.innerHTML = '✓ Downloaded'
+    // Mark in sidebar
+    document.querySelector(`#si${idx} .song-dl-dot`)?.classList.add('visible')
+    // Save to DB
     downloads[song.code] = new Date().toISOString()
     await db.from('share_sessions').update({ downloads }).eq('id', sessionId)
-
   } catch(e) {
-    btn.classList.remove('loading')
-    btn.textContent = '↓ Download'
+    btn.classList.remove('loading'); btn.innerHTML = '<span>↓</span> Download'
     alert('Download failed — try again')
   }
 }
 
 // ── Progress ─────────────────────────────────────────────────────────────────
-let pbStart = 0, pbDuration = 0
-function startProgress() {
-  stopProgress()
-  if (audioBuffer) { pbStart = audioCtx.currentTime; pbDuration = audioBuffer.duration }
-  progressTimer = setInterval(tick, 200)
-}
+function startProgress() { stopProgress(); progressTimer = setInterval(tick, 150) }
 function stopProgress() { if(progressTimer){clearInterval(progressTimer);progressTimer=null} }
 function tick() {
-  let cur, dur
-  if (audioBuffer && audioCtx) {
-    cur = audioCtx.currentTime - pbStart; dur = pbDuration
-  } else {
-    cur = audioEl.currentTime; dur = audioEl.duration
-  }
-  if (!dur) return
-  const f=document.getElementById('pf'); if(f) f.style.width=(Math.min(cur/dur,1)*100)+'%'
-  const t=document.getElementById('tc'); if(t) t.textContent=fmt(cur)
-  const td=document.getElementById('td'); if(td) td.textContent=fmt(dur)
+  if (!audioBuffer || !audioCtx) return
+  const elapsed = Math.min(audioCtx.currentTime - playStartCtxTime + playStartOffset, audioBuffer.duration)
+  const pct = elapsed / audioBuffer.duration * 100
+  const f = document.getElementById('pf'); if(f) f.style.width = pct + '%'
+  const t = document.getElementById('tc'); if(t) t.textContent = fmt(elapsed)
 }
 function updateBtn() { const b=document.getElementById('pb'); if(b) b.textContent=isPlaying?'⏸':'▶' }
 
 function seek(e, el) {
-  const pct = (e.clientX-el.getBoundingClientRect().left)/el.offsetWidth
-  if (audioBuffer) {
-    startPitchPlayback(pct * audioBuffer.duration)
-  } else if (audioEl.duration) {
-    audioEl.currentTime = pct * audioEl.duration
-  }
+  if (!audioBuffer) return
+  const pct = (e.clientX - el.getBoundingClientRect().left) / el.offsetWidth
+  const offset = pct * audioBuffer.duration
+  if (isPlaying) startPlayback(offset)
+  else { playStartOffset = offset; tick() }
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -327,42 +350,42 @@ function pitchHtml() {
         value="${currentPitch}" oninput="setPitch(this.value)">
       <div class="pitch-val" id="pv">${currentPitch>0?'+'+currentPitch:currentPitch}</div>
     </div>
-    <div class="pitch-note">semitones — no tempo change</div>
+    <div class="pitch-note">semitones · tempo unchanged</div>
   </div>`
 }
 
 function showLoading(song) {
   document.getElementById('player').innerHTML = `
     <div><div class="now-code">${esc(song.code||'')}</div><div class="now-title">${esc(song.title||song.code)}</div></div>
-    <div><div class="loading-ring"></div><div class="loading-text" id="load-txt">Loading...</div></div>
+    <div><div class="loading-ring"></div><div class="loading-text" id="ltxt">Loading...</div></div>
     ${pitchHtml()}`
 }
-function showLoadingText(t) { const el=document.getElementById('load-txt'); if(el) el.textContent=t }
+function showLoadingText(t) { const e=document.getElementById('ltxt'); if(e) e.textContent=t }
 
 function showPlayer(song) {
-  const dur = audioBuffer ? fmt(audioBuffer.duration) : (audioEl.duration ? fmt(audioEl.duration) : '—')
+  const dur = fmt(audioBuffer?.duration || 0)
   const dlDone = downloads[song.code] ? 'done' : ''
-  const dlLabel = downloads[song.code] ? '✓ Downloaded' : '↓ Download'
+  const dlLabel = downloads[song.code] ? '✓ Downloaded' : '↓&nbsp;&nbsp;Download'
   document.getElementById('player').innerHTML = `
     <div><div class="now-code">${esc(song.code||'')}</div><div class="now-title">${esc(song.title||song.code)}</div></div>
     <div style="width:100%;max-width:480px">
-      <div class="progress-outer" onclick="seek(event,this)"><div class="progress-fill" id="pf" style="width:0%"></div></div>
-      <div class="times"><span id="tc">0:00</span><span id="td">${dur}</span></div>
+      <div class="progress-outer" onclick="seek(event,this)">
+        <div class="progress-fill" id="pf" style="width:0%"></div>
+      </div>
+      <div class="times"><span id="tc">0:00</span><span>${dur}</span></div>
     </div>
     <div class="controls">
       <button class="ctrl-btn" onclick="if(currentIdx>0)playSong(currentIdx-1)">◀◀</button>
       <button class="play-btn" id="pb" onclick="togglePlay()">⏸</button>
       <button class="ctrl-btn" onclick="if(currentIdx<songs.length-1)playSong(currentIdx+1)">▶▶</button>
     </div>
-    <button class="dl-btn ${dlDone}" id="dl-btn-${currentIdx}" onclick="downloadSong(${currentIdx})">
-      <span>↓</span> ${dlLabel}
+    <button class="dl-btn ${dlDone}" id="dlb${currentIdx}" onclick="downloadSong(${currentIdx})">
+      <span style="font-size:16px">↓</span> ${dlLabel}
     </button>
     ${pitchHtml()}`
 }
-
 function showErr(msg) {
-  document.getElementById('player').innerHTML = `
-    <div class="err-icon">⚠</div><div class="err-text">${msg}</div>${pitchHtml()}`
+  document.getElementById('player').innerHTML = `<div class="err-icon">⚠</div><div class="err-text">${msg}</div>${pitchHtml()}`
 }
 function showState(icon,title,msg) {
   document.getElementById('app').style.display='none'
@@ -370,9 +393,8 @@ function showState(icon,title,msg) {
   s.innerHTML=`<div class="state-icon">${icon}</div><div class="state-title">${title}</div><div class="state-sub">${msg}</div>`
   document.getElementById('nav-title').textContent=title
 }
-
-function fmt(s) { const t=Math.max(0,Math.floor(s||0)); return Math.floor(t/60)+':'+(t%60+'').padStart(2,'0') }
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+function fmt(s){const t=Math.max(0,Math.floor(s||0));return Math.floor(t/60)+':'+(t%60+'').padStart(2,'0')}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 init()
 </script>

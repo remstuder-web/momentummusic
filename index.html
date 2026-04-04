@@ -156,6 +156,18 @@ let progressTimer = null
 let audioReady = false
 let currentPitch = 0
 
+  // Convert Dropbox share URL → direct streaming URL (dl.dropboxusercontent.com)
+  function toDirectUrl(shareUrl) {
+    if (!shareUrl) return null
+    let u = shareUrl
+      .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+    // Set dl=1 for direct download/stream
+    if (u.includes('dl=0')) u = u.replace('dl=0', 'dl=1')
+    else if (u.includes('dl=')) u = u.replace(/dl=\d/, 'dl=1')
+    else u += (u.includes('?') ? '&dl=1' : '?dl=1')
+    return u
+  }
+
 // ── Init Audio Context on user interaction ──────────────────────────────────
 async function initAudio() {
   await Tone.start()
@@ -227,14 +239,15 @@ async function playSong(idx) {
   const song = songs[idx]
   renderPlayerLoading(song)
 
-  const proxyUrl = `/api/audio?url=${encodeURIComponent(song.shareUrl)}`
+  const directUrl = toDirectUrl(song.shareUrl)
+  if (!directUrl) { renderPlayerError('No audio URL'); return }
 
   try {
     pitchShiftNode = new Tone.PitchShift(currentPitch)
     pitchShiftNode.toDestination()
 
     tonePlayer = new Tone.Player({
-      url: proxyUrl,
+      url: directUrl,
       onload: () => {
         duration = tonePlayer.buffer.duration
         renderPlayerReady(song)
@@ -355,12 +368,12 @@ function renderPlayerReady(song) {
   bindPitch()
 }
 
-function renderPlayerError() {
+function renderPlayerError(msg) {
   document.getElementById('player-area').innerHTML = `
     <div class="empty-player">
       <div class="empty-player-icon" style="opacity:.3">⚠</div>
       <div class="empty-player-text" style="color:#e05a4a">COULD NOT LOAD AUDIO</div>
-      <div class="empty-player-text" style="margin-top:8px">Link may have expired</div>
+      <div class="empty-player-text" style="margin-top:8px">${msg || 'Link may have expired'}</div>
     </div>
     ${pitchHtml()}
   `

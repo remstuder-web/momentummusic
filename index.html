@@ -175,14 +175,13 @@ let progressTimer = null
 let audioReady = false
 let currentPitch = 0
 
-// Convert Dropbox share URL → proxied URL (avoids iOS CORS issues)
+// URLs stored as dl.dropboxusercontent.com — proxy for CORS
 function toProxiedUrl(shareUrl) {
   if (!shareUrl) return null
-  let direct = shareUrl
-    .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
-    .replace('dl=0', 'dl=1')
-  if (!direct.includes('dl=1')) direct += (direct.includes('?') ? '&dl=1' : '?dl=1')
-  return '/api/audio?url=' + encodeURIComponent(direct)
+  // Handle both www. and dl. formats just in case
+  let u = shareUrl.replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+  u = u.includes('dl=') ? u.replace(/dl=\d/, 'dl=1') : u + (u.includes('?') ? '&dl=1' : '?dl=1')
+  return '/api/audio?url=' + encodeURIComponent(u)
 }
 
 // ── Init Audio Context on user interaction ──────────────────────────────────

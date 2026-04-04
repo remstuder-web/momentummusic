@@ -18,7 +18,7 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
 .nav-title{font-family:'Space Mono',monospace;font-size:10px;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav-exp{font-family:'Space Mono',monospace;font-size:10px;color:#333}
 .app{position:relative;z-index:1;display:flex;flex:1;overflow:hidden;height:calc(100vh - 49px)}
-.sidebar{width:220px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.06);overflow-y:auto;background:rgba(0,0,0,.5);backdrop-filter:blur(8px)}
+.sidebar{width:220px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.06);overflow-y:auto;background:rgba(0,0,0,.55)}
 .sb-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.4);padding:10px 14px 6px;border-bottom:1px solid rgba(255,255,255,.05)}
 .song-item{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);transition:background .15s}
 .song-item:hover{background:rgba(255,255,255,.04)}
@@ -29,7 +29,7 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
 .song-dl-dot.visible{opacity:1}
 .song-dot{width:6px;height:6px;border-radius:50%;background:#1a1a1a;flex-shrink:0;transition:all .3s}
 .song-dot.on{background:#4caf82;box-shadow:0 0 8px #4caf82}
-.player-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 40px;gap:24px;min-width:0;background:rgba(0,0,0,.3);backdrop-filter:blur(4px)}
+.player-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 40px;gap:24px;min-width:0;background:rgba(0,0,0,.45)}
 .now-code{font-family:'Space Mono',monospace;font-size:10px;color:#444;text-align:center;margin-bottom:4px}
 .now-title{font-size:24px;text-align:center;color:#f5f1ea;font-weight:300}
 .progress-outer{width:100%;max-width:480px;height:2px;background:rgba(255,255,255,.08);border-radius:2px;cursor:pointer;position:relative}
@@ -102,23 +102,31 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
 (function() {
   const c = document.getElementById('space')
   const ctx = c.getContext('2d')
-  let W, H, DPR, stars = []
-  const N = 260, SPEED = 0.5
+  let W = 0, H = 0, DPR = 1, stars = [], dirty = true
+  const N = 350, SPEED = 0.45
 
-  function resize() {
+  function scheduleResize() {
     DPR = window.devicePixelRatio || 1
-    W = window.innerWidth; H = window.innerHeight
-    c.style.width = W + 'px'; c.style.height = H + 'px'
-    c.width = Math.floor(W * DPR)
-    c.height = Math.floor(H * DPR)
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
+    W = window.innerWidth
+    H = window.innerHeight
+    dirty = true  // resize happens at next frame start, never mid-draw
   }
+
+  function applyResize() {
+    c.style.width = W + 'px'; c.style.height = H + 'px'
+    c.width = Math.round(W * DPR)   // resets 2D context state
+    c.height = Math.round(H * DPR)
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0)  // reapply after reset
+    dirty = false
+  }
+
   function makeStar() {
     return { x:(Math.random()-0.5)*2, y:(Math.random()-0.5)*2, z:Math.random(), pz:0 }
   }
-  function init() { resize(); stars = Array.from({length:N}, makeStar) }
+
   function draw() {
-    ctx.fillStyle = 'rgba(0,0,0,0.16)'
+    if (dirty) applyResize()  // always at frame start, never mid-draw
+    ctx.fillStyle = 'rgba(0,0,0,0.13)'
     ctx.fillRect(0, 0, W, H)
     const cx = W/2, cy = H/2
     stars.forEach(s => {
@@ -128,7 +136,7 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
       const px = (s.x/s.pz)*W + cx, py = (s.y/s.pz)*H + cy
       if (sx<-20||sx>W+20||sy<-20||sy>H+20) { Object.assign(s, makeStar()); return }
       const t = 1 - s.z
-      const size = Math.max(0.4, t * 2.2)
+      const size = Math.max(0.3, t * 1.6)
       const alpha = 0.3 + t * 0.7
       const bright = Math.floor(180 + t * 75)
       ctx.beginPath()
@@ -140,8 +148,16 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
     })
     requestAnimationFrame(draw)
   }
-  window.addEventListener('resize', resize)
-  init(); draw()
+
+  let resizeTimer
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(scheduleResize, 80)
+  })
+
+  scheduleResize()
+  stars = Array.from({length:N}, makeStar)
+  draw()
 })()
 
 // ── Audio ────────────────────────────────────────────────────────────────────
@@ -152,21 +168,27 @@ const db = createClient(SB_URL, SB_KEY)
 
 let songs = [], sessionId = null, currentIdx = -1
 let isPlaying = false, progressTimer = null, currentPitch = 0
-let tonePlayer = null, pitchNode = null
+let audioCtx = null, sourceNode = null, pitchNode = null
+let audioBuffer = null, playOffset = 0, playStarted = 0
 let downloads = {}
 
 function toDirectUrl(u) {
   if (!u) return null
   if (u.includes('dl.dropboxusercontent.com')) return u
-  return u.replace('www.dropbox.com','dl.dropboxusercontent.com')
-    .replace(/dl=0/,'dl=1') + (u.includes('dl=') ? '' : (u.includes('?') ? '&dl=1' : '?dl=1'))
+  return u.replace('www.dropbox.com','dl.dropboxusercontent.com').replace(/dl=0/,'dl=1')
+    + (u.includes('dl=') ? '' : (u.includes('?') ? '&dl=1' : '?dl=1'))
 }
 function toFetchUrl(u) {
   if (!u) return null
   return '/api/audio?url=' + encodeURIComponent(toDirectUrl(u))
 }
 
-async function init() {
+async function ensureCtx() {
+  if (audioCtx) return
+  await Tone.start()
+  audioCtx = Tone.getContext().rawContext
+  if (audioCtx.state === 'suspended') await audioCtx.resume()
+}
   const id = new URLSearchParams(location.search).get('s')
   if (!id) { showState('🔒','NO LINK','Open your personal listen link.'); return }
   sessionId = id
@@ -209,94 +231,98 @@ async function ensureCtx() {
 }
 
 async function playSong(idx) {
-  if (idx === currentIdx && tonePlayer) { togglePlay(); return }
+  if (idx === currentIdx && audioBuffer) { togglePlay(); return }
   stopAll()
   currentIdx = idx
   setActive(idx)
   const song = songs[idx]
   showLoading(song)
-
   try {
-    await Tone.start()
+    await ensureCtx()
     showLoadingText('Loading...')
     const resp = await fetch(toFetchUrl(song.shareUrl))
     if (!resp.ok) throw new Error('HTTP ' + resp.status)
-    const buf = await resp.arrayBuffer()
-    // Use blob URL so Tone.Player loads it same-origin (no CORS, no context mismatch)
-    const blobUrl = URL.createObjectURL(new Blob([buf], {type: 'audio/mpeg'}))
     showLoadingText('Decoding...')
-    pitchNode = new Tone.PitchShift(currentPitch).toDestination()
-    tonePlayer = new Tone.Player(blobUrl).connect(pitchNode)
-    await Tone.loaded()
-    URL.revokeObjectURL(blobUrl)
+    audioBuffer = await audioCtx.decodeAudioData(await resp.arrayBuffer())
     showPlayer(song)
-    tonePlayer.start()
-    isPlaying = true
-    startProgress()
-    tonePlayer.onstop = () => {
-      isPlaying = false; stopProgress(); updateBtn()
-      if (currentIdx < songs.length - 1) playSong(currentIdx + 1)
-    }
+    beginPlayback(0)
   } catch(e) {
-    console.error('playSong error:', e)
-    showErr('Could not load — try again or generate a new link')
+    console.error('playSong:', e)
+    showErr('Could not load — generate a new link from Momentum')
   }
 }
 
-function startPlayback() {
-  if (!tonePlayer) return
-  tonePlayer.start()
+function beginPlayback(offset) {
+  stopSource()
+  if (!audioBuffer || !audioCtx) return
+  pitchNode = new Tone.PitchShift(currentPitch).toDestination()
+  sourceNode = audioCtx.createBufferSource()
+  sourceNode.buffer = audioBuffer
+  sourceNode.connect(pitchNode.input)
+  playOffset = offset
+  playStarted = audioCtx.currentTime
+  sourceNode.start(0, offset)
+  sourceNode.onended = () => {
+    const elapsed = audioCtx.currentTime - playStarted + playOffset
+    if (elapsed >= audioBuffer.duration - 0.5) {
+      isPlaying = false; stopProgress(); updateBtn()
+      if (currentIdx < songs.length - 1) playSong(currentIdx + 1)
+    }
+  }
   isPlaying = true; startProgress(); updateBtn()
 }
 
-function stopAll() {
-  stopProgress()
-  if (tonePlayer) { try { tonePlayer.stop(); tonePlayer.dispose() } catch(e){} tonePlayer = null }
+function stopSource() {
+  if (sourceNode) { try { sourceNode.stop(); sourceNode.disconnect() } catch(e){} sourceNode = null }
   if (pitchNode) { try { pitchNode.dispose() } catch(e){} pitchNode = null }
-  isPlaying = false
+}
+
+function stopAll() {
+  stopProgress(); stopSource()
+  audioBuffer = null; isPlaying = false; playOffset = 0
 }
 
 function togglePlay() {
-  if (!tonePlayer) return
+  if (!audioBuffer) return
   if (isPlaying) {
-    tonePlayer.stop(); isPlaying = false; stopProgress(); updateBtn()
+    playOffset = audioCtx.currentTime - playStarted + playOffset
+    stopSource(); isPlaying = false; stopProgress(); updateBtn()
   } else {
-    tonePlayer.start(); isPlaying = true; startProgress(); updateBtn()
+    if (audioCtx.state === 'suspended') audioCtx.resume()
+    beginPlayback(playOffset)
   }
 }
 
 function setPitch(v) {
   currentPitch = parseInt(v)
   const el = document.getElementById('pv'); if (el) el.textContent = currentPitch>0?'+'+currentPitch:currentPitch
-  if (pitchNode) pitchNode.pitch = currentPitch
+  if (isPlaying && audioBuffer) {
+    playOffset = audioCtx.currentTime - playStarted + playOffset
+    beginPlayback(Math.min(playOffset, audioBuffer.duration - 0.1))
+  } else if (pitchNode) pitchNode.pitch = currentPitch
 }
 function resetPitch() { currentPitch=0; const s=document.getElementById('ps'); if(s)s.value=0; setPitch(0) }
 
 // ── Download ─────────────────────────────────────────────────────────────────
 async function downloadSong(idx) {
   const song = songs[idx]
-  const url = toDirectUrl(song.shareUrl)
   const btn = document.getElementById(`dlb${idx}`)
   if (!btn || btn.classList.contains('loading')) return
   btn.classList.add('loading'); btn.innerHTML = '<span>↓</span> Downloading...'
   try {
-    const resp = await fetch(url)
+    const resp = await fetch(toFetchUrl(song.shareUrl))
     const blob = await resp.blob()
-    const ext = url.match(/\.(mp3|wav|m4a|flac|aiff|ogg)/i)?.[1] || 'mp3'
+    const ext = (song.shareUrl||'').match(/\.(mp3|wav|m4a|flac|aiff|ogg)/i)?.[1] || 'mp3'
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = (song.title || song.code) + '.' + ext
-    a.click()
+    a.href = URL.createObjectURL(blob); a.download = (song.title||song.code)+'.'+ext; a.click()
     URL.revokeObjectURL(a.href)
     btn.classList.remove('loading'); btn.classList.add('done'); btn.innerHTML = '✓ Downloaded'
-    // Mark in sidebar
     document.querySelector(`#si${idx} .song-dl-dot`)?.classList.add('visible')
-    // Save to DB
     downloads[song.code] = new Date().toISOString()
     await db.from('share_sessions').update({ downloads }).eq('id', sessionId)
   } catch(e) {
     btn.classList.remove('loading'); btn.innerHTML = '<span>↓</span> Download'
-    alert('Download failed — try again')
+    alert('Download failed')
   }
 }
 
@@ -304,23 +330,18 @@ async function downloadSong(idx) {
 function startProgress() { stopProgress(); progressTimer = setInterval(tick, 150) }
 function stopProgress() { if(progressTimer){clearInterval(progressTimer);progressTimer=null} }
 function tick() {
-  if (!tonePlayer) return
-  const cur = tonePlayer.immediate ? Tone.now() : (tonePlayer.currentTime || 0)
-  const dur = tonePlayer.buffer?.duration || 0
-  if (!dur) return
-  const pct = Math.min(cur / dur, 1) * 100
-  const f = document.getElementById('pf'); if(f) f.style.width = pct + '%'
-  const t = document.getElementById('tc'); if(t) t.textContent = fmt(cur)
+  if (!audioBuffer || !audioCtx) return
+  const elapsed = Math.min(audioCtx.currentTime - playStarted + playOffset, audioBuffer.duration)
+  const f = document.getElementById('pf'); if(f) f.style.width = (elapsed/audioBuffer.duration*100)+'%'
+  const t = document.getElementById('tc'); if(t) t.textContent = fmt(elapsed)
 }
 function updateBtn() { const b=document.getElementById('pb'); if(b) b.textContent=isPlaying?'⏸':'▶' }
 
 function seek(e, el) {
-  if (!tonePlayer?.buffer) return
-  const pct = (e.clientX - el.getBoundingClientRect().left) / el.offsetWidth
-  const offset = pct * tonePlayer.buffer.duration
-  tonePlayer.stop()
-  tonePlayer.start('+0', offset)
-  isPlaying = true; updateBtn(); startProgress()
+  if (!audioBuffer) return
+  const offset = ((e.clientX - el.getBoundingClientRect().left) / el.offsetWidth) * audioBuffer.duration
+  if (isPlaying) beginPlayback(offset)
+  else { playOffset = offset; tick() }
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────

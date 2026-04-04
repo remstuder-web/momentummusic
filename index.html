@@ -175,15 +175,19 @@ let progressTimer = null
 let audioReady = false
 let currentPitch = 0
 
-  // Convert Dropbox share URL → direct streaming URL (dl.dropboxusercontent.com)
+  // Convert Dropbox share URL → direct streaming URL
   function toDirectUrl(shareUrl) {
     if (!shareUrl) return null
     let u = shareUrl
-      .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
-    // Set dl=1 for direct download/stream
-    if (u.includes('dl=0')) u = u.replace('dl=0', 'dl=1')
-    else if (u.includes('dl=')) u = u.replace(/dl=\d/, 'dl=1')
-    else u += (u.includes('?') ? '&dl=1' : '?dl=1')
+    // Method 1: dl.dropboxusercontent.com with dl=1 (direct CDN stream)
+    u = u.replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+    // Remove dl=0, set dl=1
+    u = u.replace(/[?&]dl=0/, m => m.replace('dl=0', 'dl=1'))
+    if (!u.includes('dl=1')) u += (u.includes('?') ? '&dl=1' : '?dl=1')
+    // Remove st= param which can cause issues
+    u = u.replace(/[?&]st=[^&]*/g, m => m.startsWith('?') ? '?' : '')
+      .replace(/\?&/, '?').replace(/&&/, '&').replace(/[?&]$/, '')
+    console.log('[audio] direct url:', u)
     return u
   }
 
@@ -304,13 +308,14 @@ async function playSong(idx) {
         startProgress()
       },
       onerror: (e) => {
-        renderPlayerError()
-        console.error(e)
+        console.error('[Tone] load error:', e, '\nURL:', directUrl)
+        renderPlayerError('Load failed — see browser console')
       }
     }).connect(pitchShiftNode)
 
   } catch(e) {
-    renderPlayerError()
+    console.error('[audio] catch error:', e)
+    renderPlayerError(e.message)
   }
 }
 

@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -98,11 +99,29 @@
     .empty-player-icon{font-size:48px;opacity:.15;margin-bottom:16px}
     .empty-player-text{font-family:'Space Mono',monospace;font-size:11px;color:#333;letter-spacing:.08em}
 
+    .player-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 48px;gap:32px;min-width:0;overflow:hidden;width:100%}
+
     @media(max-width:640px){
-      .sidebar{width:200px}
-      .player-area{padding:24px 20px;gap:24px}
-      .now-title{font-size:18px}
+      /* Stack: sidebar on top as horizontal scroll row, player below */
+      .app{flex-direction:column}
+      .sidebar{width:100%;height:auto;max-height:140px;border-right:none;border-bottom:1px solid #1a1a1a;overflow-x:auto;overflow-y:hidden;display:flex;flex-direction:row;padding:0}
+      .sidebar-label{display:none}
+      .song-item{flex-direction:column;align-items:center;padding:10px 12px;gap:4px;min-width:90px;border-bottom:none;border-right:1px solid #0f0f0f;white-space:nowrap}
+      .song-info{min-width:0;text-align:center}
+      .song-title{font-size:11px}
+      .song-code{display:none}
+      .song-num{display:none}
+      .player-area{padding:20px 16px;gap:18px}
+      .now-title{font-size:17px}
       .controls{gap:20px}
+      .play-btn{width:52px;height:52px;font-size:20px}
+      .pitch-slider{height:4px}
+      .nav-expiry{display:none}
+    }
+    @media(max-width:380px){
+      .song-item{min-width:70px;padding:8px}
+      .player-area{padding:14px 10px;gap:14px}
+      .now-title{font-size:15px}
     }
   </style>
 </head>
@@ -111,7 +130,7 @@
 <div id="interact-overlay" class="interact-overlay">
   <div class="interact-logo">LISTEN</div>
   <div class="interact-hint">PRIVATE DEMO SESSION</div>
-  <button class="interact-btn" onclick="initAudio()">▶ TAP TO START</button>
+  <button class="interact-btn" id="start-btn">▶ TAP TO START</button>
 </div>
 
 <nav>
@@ -169,12 +188,35 @@ let currentPitch = 0
   }
 
 // ── Init Audio Context on user interaction ──────────────────────────────────
+// iOS requires touchend AND must resume context before every sound
+const startBtn = document.getElementById('start-btn')
+startBtn.addEventListener('touchend', handleStart, { passive: false })
+startBtn.addEventListener('click', handleStart)
+
+async function handleStart(e) {
+  e.preventDefault()
+  await initAudio()
+}
+
 async function initAudio() {
-  await Tone.start()
+  try {
+    await Tone.start()
+    // Force resume — iOS sometimes stays suspended
+    if (Tone.getContext().state !== 'running') {
+      await Tone.getContext().resume()
+    }
+  } catch(e) { console.warn('Audio init:', e) }
   audioReady = true
   document.getElementById('interact-overlay').style.display = 'none'
   loadSession()
 }
+
+// iOS: resume AudioContext when returning to tab
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && audioReady) {
+    Tone.getContext().resume().catch(() => {})
+  }
+})
 
 // ── Load session from Supabase ──────────────────────────────────────────────
 async function loadSession() {
@@ -238,6 +280,11 @@ async function playSong(idx) {
   setActiveSong(idx)
   const song = songs[idx]
   renderPlayerLoading(song)
+
+  // iOS: resume context before every play (it suspends on background/blur)
+  try {
+    if (Tone.getContext().state !== 'running') await Tone.getContext().resume()
+  } catch(e) {}
 
   const directUrl = toDirectUrl(song.shareUrl)
   if (!directUrl) { renderPlayerError('No audio URL'); return }

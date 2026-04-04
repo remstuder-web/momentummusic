@@ -175,20 +175,16 @@ let progressTimer = null
 let audioReady = false
 let currentPitch = 0
 
-  // Convert Dropbox share URL → direct streaming URL
-  function toDirectUrl(shareUrl) {
+  // On iOS Safari, Dropbox CDN blocks cross-origin audio — use Vercel proxy
+  function toProxiedUrl(shareUrl) {
     if (!shareUrl) return null
-    let u = shareUrl
-    // Method 1: dl.dropboxusercontent.com with dl=1 (direct CDN stream)
-    u = u.replace('www.dropbox.com', 'dl.dropboxusercontent.com')
-    // Remove dl=0, set dl=1
-    u = u.replace(/[?&]dl=0/, m => m.replace('dl=0', 'dl=1'))
-    if (!u.includes('dl=1')) u += (u.includes('?') ? '&dl=1' : '?dl=1')
-    // Remove st= param which can cause issues
-    u = u.replace(/[?&]st=[^&]*/g, m => m.startsWith('?') ? '?' : '')
-      .replace(/\?&/, '?').replace(/&&/, '&').replace(/[?&]$/, '')
-    console.log('[audio] direct url:', u)
-    return u
+    // Convert to direct dl URL first
+    let direct = shareUrl
+      .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+    if (direct.includes('dl=0')) direct = direct.replace('dl=0', 'dl=1')
+    else if (!direct.includes('dl=1')) direct += (direct.includes('?') ? '&dl=1' : '?dl=1')
+    console.log('[audio] proxied url from:', direct)
+    return '/api/audio?url=' + encodeURIComponent(direct)
   }
 
 // ── Init Audio Context on user interaction ──────────────────────────────────
@@ -290,15 +286,15 @@ async function playSong(idx) {
     if (Tone.getContext().state !== 'running') await Tone.getContext().resume()
   } catch(e) {}
 
-  const directUrl = toDirectUrl(song.shareUrl)
-  if (!directUrl) { renderPlayerError('No audio URL'); return }
+  const proxiedUrl = toProxiedUrl(song.shareUrl)
+  if (!proxiedUrl) { renderPlayerError('No audio URL'); return }
 
   try {
     pitchShiftNode = new Tone.PitchShift(currentPitch)
     pitchShiftNode.toDestination()
 
     tonePlayer = new Tone.Player({
-      url: directUrl,
+      url: proxiedUrl,
       onload: () => {
         duration = tonePlayer.buffer.duration
         renderPlayerReady(song)
@@ -308,7 +304,7 @@ async function playSong(idx) {
         startProgress()
       },
       onerror: (e) => {
-        console.error('[Tone] load error:', e, '\nURL:', directUrl)
+        console.error('[Tone] load error:', e, '\nURL:', proxiedUrl)
         renderPlayerError('Load failed — see browser console')
       }
     }).connect(pitchShiftNode)

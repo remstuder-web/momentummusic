@@ -193,20 +193,18 @@ startBtn.addEventListener('click', handleStart)
 
 async function handleStart(e) {
   e.preventDefault()
-  await initAudio()
+  await ensureAudio()
+  document.getElementById('interact-overlay').style.display = 'none'
 }
 
-async function initAudio() {
+async function ensureAudio() {
+  if (audioReady) return
   try {
-    // Create raw AudioContext (works on all iOS versions)
     audioCtx = new (window.AudioContext || window.webkitAudioContext)()
     if (audioCtx.state === 'suspended') await audioCtx.resume()
-    // Also init Tone.js context pointing to same context
     await Tone.start()
   } catch(e) { console.warn('Audio init:', e) }
   audioReady = true
-  document.getElementById('interact-overlay').style.display = 'none'
-  loadSession()
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -215,7 +213,9 @@ document.addEventListener('visibilitychange', () => {
   }
 })
 
-// ── Load session from Supabase ──────────────────────────────────────────────
+// ── Load session immediately on page load — no audio needed ─────────────────
+loadSession()
+
 async function loadSession() {
   const params = new URLSearchParams(location.search)
   const id = params.get('s')
@@ -270,6 +270,11 @@ function setActiveSong(idx) {
 // ── Player — HTML5 <audio> + Web Audio API ──────────────────────────────────
 async function playSong(idx) {
   if (idx === currentIdx && audioEl) { togglePlay(); return }
+
+  // Init audio context on first song tap (user gesture)
+  await ensureAudio()
+  document.getElementById('interact-overlay').style.display = 'none'
+
   stopAll()
   currentIdx = idx
   setActiveSong(idx)

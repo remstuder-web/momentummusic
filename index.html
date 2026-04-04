@@ -189,6 +189,8 @@ async function ensureCtx() {
   audioCtx = Tone.getContext().rawContext
   if (audioCtx.state === 'suspended') await audioCtx.resume()
 }
+
+async function init() {
   const id = new URLSearchParams(location.search).get('s')
   if (!id) { showState('🔒','NO LINK','Open your personal listen link.'); return }
   sessionId = id
@@ -222,14 +224,6 @@ function setActive(idx) {
 }
 
 // ── Pitch-correct playback: fetch → decode → AudioBufferSource → PitchShift ──
-async function ensureCtx() {
-  if (audioCtx) return
-  await Tone.start()
-  // Use Tone's context — so raw Web Audio nodes can connect to Tone nodes
-  audioCtx = Tone.getContext().rawContext
-  if (audioCtx.state === 'suspended') await audioCtx.resume()
-}
-
 async function playSong(idx) {
   if (idx === currentIdx && audioBuffer) { togglePlay(); return }
   stopAll()
@@ -367,7 +361,7 @@ function showLoading(song) {
 function showLoadingText(t) { const e=document.getElementById('ltxt'); if(e) e.textContent=t }
 
 function showPlayer(song) {
-  const dur = fmt(tonePlayer?.buffer?.duration || 0)
+  const dur = fmt(audioBuffer?.duration || 0)
   const dlDone = downloads[song.code] ? 'done' : ''
   const dlLabel = downloads[song.code] ? '✓ Downloaded' : '↓&nbsp;&nbsp;Download'
   document.getElementById('player').innerHTML = `

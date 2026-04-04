@@ -6,6 +6,7 @@
 <title>LISTEN</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0a0a0a;color:#f5f1ea;font-family:'DM Sans',sans-serif;font-weight:300;min-height:100vh;display:flex;flex-direction:column}
@@ -21,10 +22,12 @@ nav{display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid #1
 .song-item:hover{background:#111}
 .song-item.active{background:rgba(201,168,76,.06);border-left:2px solid #c9a84c}
 .song-num{font-family:'Space Mono',monospace;font-size:10px;color:#333;width:18px;flex-shrink:0}
-.song-title{font-size:13px;color:#cec9c1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.song-dot{width:6px;height:6px;border-radius:50%;background:#1a1a1a;flex-shrink:0;margin-left:auto}
+.song-title{font-size:13px;color:#cec9c1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.song-dot{width:6px;height:6px;border-radius:50%;background:#1a1a1a;flex-shrink:0}
 .song-dot.on{background:#4caf82;box-shadow:0 0 5px #4caf82}
-.player-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 40px;gap:28px;min-width:0}
+.song-dl{font-family:'Space Mono',monospace;font-size:10px;color:#4caf82;flex-shrink:0;display:none}
+.song-dl.visible{display:block}
+.player-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 40px;gap:24px;min-width:0}
 .now-code{font-family:'Space Mono',monospace;font-size:10px;color:#444;text-align:center;margin-bottom:6px}
 .now-title{font-size:22px;text-align:center;color:#f5f1ea}
 .progress-outer{width:100%;max-width:480px;height:3px;background:#1c1c1c;border-radius:2px;cursor:pointer}
@@ -35,35 +38,39 @@ nav{display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid #1
 .ctrl-btn:hover{color:#cec9c1}
 .play-btn{width:56px;height:56px;border-radius:50%;background:#1c1c1c;border:1px solid #303030;font-size:20px;cursor:pointer;color:#f5f1ea;display:flex;align-items:center;justify-content:center}
 .play-btn:hover{border-color:#c9a84c;color:#c9a84c}
+.dl-btn{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:8px 20px;background:transparent;border:1px solid rgba(76,175,130,.5);color:#4caf82;border-radius:3px;cursor:pointer;letter-spacing:.08em;display:flex;align-items:center;gap:8px;transition:all .2s}
+.dl-btn:hover{background:rgba(76,175,130,.1);border-color:#4caf82}
+.dl-btn.loading{opacity:.5;cursor:default}
+.dl-btn.done{border-color:rgba(76,175,130,.3);color:rgba(76,175,130,.5)}
 .pitch-wrap{width:100%;max-width:480px}
-.pitch-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.4);text-align:center;margin-bottom:10px}
+.pitch-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.5);text-align:center;margin-bottom:10px}
 .pitch-row{display:flex;align-items:center;gap:14px}
 .pitch-val{font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#c9a84c;width:36px;text-align:center}
-.pitch-slider{flex:1;-webkit-appearance:none;appearance:none;height:3px;background:#1c1c1c;outline:none;cursor:pointer;border-radius:2px}
+.pitch-slider{flex:1;-webkit-appearance:none;appearance:none;height:3px;background:linear-gradient(to right,#1c1c1c 0%,#c9a84c 50%,#1c1c1c 100%);outline:none;cursor:pointer;border-radius:2px}
 .pitch-slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#c9a84c;cursor:pointer}
 .pitch-slider::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#c9a84c;cursor:pointer;border:none}
 .pitch-reset{font-family:'Space Mono',monospace;font-size:10px;padding:3px 8px;background:transparent;border:1px solid #252525;color:#444;border-radius:2px;cursor:pointer}
 .pitch-reset:hover{border-color:#c9a84c;color:#c9a84c}
+.pitch-note{font-family:'Space Mono',monospace;font-size:9px;color:#333;text-align:center;margin-top:6px}
 .loading-ring{width:36px;height:36px;border:2px solid #1c1c1c;border-top-color:#c9a84c;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-text{font-family:'Space Mono',monospace;font-size:11px;color:#444;text-align:center;margin-top:8px}
 .err-icon{font-size:36px;opacity:.25;text-align:center}
-.err-text{font-family:'Space Mono',monospace;font-size:11px;color:#e05a4a;text-align:center;margin-top:8px}
+.err-text{font-family:'Space Mono',monospace;font-size:12px;color:#e05a4a;text-align:center}
 .empty-hint{font-family:'Space Mono',monospace;font-size:11px;color:#333;text-align:center}
-.state-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:40px}
+.state{flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px}
 .state-icon{font-size:36px;opacity:.3}
 .state-title{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#555}
-.state-sub{font-size:13px;color:#333;text-align:center;line-height:1.7}
-@media(max-width:600px){
+.state-sub{font-size:13px;color:#333;text-align:center}
+@media(max-width:640px){
   .app{flex-direction:column}
-  .sidebar{width:100%;height:110px;border-right:none;border-bottom:1px solid #1a1a1a;overflow-x:auto;overflow-y:hidden;display:flex;flex-direction:row}
+  .sidebar{width:100%;max-height:130px;overflow-x:auto;overflow-y:hidden;display:flex;flex-direction:row;border-right:none;border-bottom:1px solid #1a1a1a}
   .sb-label{display:none}
-  .song-item{flex-direction:column;min-width:80px;padding:8px 10px;border-bottom:none;border-right:1px solid #0f0f0f;text-align:center;gap:4px}
+  .song-item{flex-direction:column;min-width:80px;padding:8px 10px;gap:4px;border-bottom:none;border-right:1px solid #0f0f0f;white-space:nowrap}
+  .song-title{font-size:11px}
   .song-num{display:none}
-  .song-dot{margin:0 auto}
   .player-area{padding:20px 16px;gap:18px}
-  .now-title{font-size:17px}
-  .play-btn{width:50px;height:50px;font-size:18px}
+  .now-title{font-size:18px}
 }
 </style>
 </head>
@@ -75,14 +82,16 @@ nav{display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid #1
   <span class="nav-exp" id="nav-exp"></span>
 </nav>
 <div class="app" id="app" style="display:none">
-  <div class="sidebar"><div class="sb-label">DEMOS</div><div id="song-list"></div></div>
+  <div class="sidebar">
+    <div class="sb-label">DEMOS</div>
+    <div id="song-list"></div>
+  </div>
   <div class="player-area" id="player">
     <div class="empty-hint">← SELECT A DEMO</div>
   </div>
 </div>
-<div class="state-screen" id="state" style="display:none"></div>
-
-<audio id="audio-el" preload="none" style="display:none"></audio>
+<div class="state" id="state"></div>
+<audio id="audio-el" preload="auto"></audio>
 
 <script>
 const SB_URL = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
@@ -91,27 +100,27 @@ const { createClient } = window.supabase
 const db = createClient(SB_URL, SB_KEY)
 
 const audioEl = document.getElementById('audio-el')
-let songs = [], currentIdx = -1, isPlaying = false, progressTimer = null, currentPitch = 0
+let songs = [], sessionId = null, currentIdx = -1
+let isPlaying = false, progressTimer = null, currentPitch = 0
+let audioCtx = null, pitchNode = null, sourceNode = null, audioBuffer = null
+let downloads = {}  // songCode → true
 
-// Convert Dropbox share URL to direct streaming URL for <audio> element
 function toDirectUrl(u) {
   if (!u) return null
-  if (u.includes('dl.dropboxusercontent.com')) return u  // already direct
-  // Convert www.dropbox.com share link → direct CDN URL
-  return u
-    .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
-    .replace(/[?&]dl=0/, m => m.replace('dl=0','dl=1'))
-    + (u.includes('dl=') ? '' : (u.includes('?') ? '&dl=1' : '?dl=1'))
+  if (u.includes('dl.dropboxusercontent.com')) return u
+  return u.replace('www.dropbox.com','dl.dropboxusercontent.com')
+    .replace(/dl=0/,'dl=1') + (u.includes('dl=') ? '' : (u.includes('?') ? '&dl=1' : '?dl=1'))
 }
 
-// Load session
 async function init() {
   const id = new URLSearchParams(location.search).get('s')
   if (!id) { showState('🔒','NO LINK','Open your personal listen link.'); return }
+  sessionId = id
   const { data } = await db.from('share_sessions').select('*').eq('id', id).maybeSingle()
   if (!data) { showState('🔍','NOT FOUND','This link is invalid or expired.'); return }
   if (data.expires_at && new Date(data.expires_at) < new Date()) { showState('⏱','EXPIRED','Ask the producer for a new link.'); return }
   songs = data.songs || []
+  downloads = data.downloads || {}
   document.getElementById('nav-title').textContent = data.patch_name || 'Demo Session'
   document.title = 'LISTEN — ' + (data.patch_name || 'Demo')
   const exp = data.expires_at ? Math.ceil((new Date(data.expires_at)-Date.now())/86400000) : null
@@ -121,13 +130,15 @@ async function init() {
 }
 
 function buildList() {
-  document.getElementById('song-list').innerHTML = songs.map((s,i) =>
-    `<div class="song-item" id="si${i}" onclick="playSong(${i})">
+  document.getElementById('song-list').innerHTML = songs.map((s,i) => {
+    const dl = downloads[s.code] ? '<span class="song-dl visible">↓</span>' : '<span class="song-dl"></span>'
+    return `<div class="song-item" id="si${i}" onclick="playSong(${i})">
       <span class="song-num">${String(i+1).padStart(2,'0')}</span>
       <div class="song-title">${esc(s.title||s.code)}</div>
+      ${dl}
       <div class="song-dot" id="sd${i}"></div>
     </div>`
-  ).join('')
+  }).join('')
 }
 
 function setActive(idx) {
@@ -136,9 +147,16 @@ function setActive(idx) {
   if(idx>=0){ document.getElementById('si'+idx)?.classList.add('active'); document.getElementById('sd'+idx)?.classList.add('on') }
 }
 
+// ── Pitch-correct playback via Web Audio API ─────────────────────────────────
+async function ensureAudioCtx() {
+  if (audioCtx) return
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  await Tone.start()
+}
+
 async function playSong(idx) {
-  if (idx === currentIdx && audioEl.src) { togglePlay(); return }
-  stop()
+  if (idx === currentIdx && audioBuffer) { togglePlay(); return }
+  stopAudio()
   currentIdx = idx
   setActive(idx)
   const song = songs[idx]
@@ -147,96 +165,205 @@ async function playSong(idx) {
   const url = toDirectUrl(song.shareUrl)
   if (!url) { showErr('No audio URL'); return }
 
-  audioEl.src = url
+  try {
+    await ensureAudioCtx()
+    if (audioCtx.state === 'suspended') await audioCtx.resume()
 
-  audioEl.oncanplay = () => {
+    // Fetch audio as blob — avoids crossOrigin CORS issues, enables true pitch shift
+    showLoadingText('Fetching audio...')
+    const resp = await fetch(url)
+    if (!resp.ok) throw new Error('HTTP ' + resp.status)
+    showLoadingText('Decoding...')
+    const arrayBuf = await resp.arrayBuffer()
+    audioBuffer = await audioCtx.decodeAudioData(arrayBuf)
+
     showPlayer(song)
-    audioEl.play().then(() => {
-      isPlaying = true
-      startProgress()
-    }).catch(e => showErr('Tap play to start'))
+    startPitchPlayback()
+  } catch(e) {
+    console.error('load error:', e)
+    // Fallback: plain <audio> element (no pitch shift)
+    audioBuffer = null
+    audioEl.src = url
+    audioEl.oncanplay = () => {
+      showPlayer(song)
+      audioEl.play().catch(()=>showErr('Tap play to start'))
+      isPlaying = true; startProgress()
+    }
+    audioEl.onerror = () => showErr('Could not load — generate a new link')
+    audioEl.load()
   }
-  audioEl.onerror = () => showErr('Could not load — link may have expired')
-  audioEl.onended = () => { isPlaying=false; stopProgress(); updateBtn(); if(idx<songs.length-1) playSong(idx+1) }
-  audioEl.load()
+}
+
+function startPitchPlayback(startAt = 0) {
+  if (!audioBuffer || !audioCtx) return
+  stopSourceNode()
+
+  pitchNode = new Tone.PitchShift(currentPitch)
+  pitchNode.toDestination()
+
+  sourceNode = audioCtx.createBufferSource()
+  sourceNode.buffer = audioBuffer
+  sourceNode.connect(pitchNode.input)
+  sourceNode.start(0, startAt)
+  sourceNode.onended = () => { if(isPlaying){ isPlaying=false; stopProgress(); updateBtn(); if(currentIdx<songs.length-1) playSong(currentIdx+1) } }
+
+  isPlaying = true
+  startProgress()
+  updateBtn()
+}
+
+function stopSourceNode() {
+  if (sourceNode) { try { sourceNode.stop(); sourceNode.disconnect() } catch(e){} sourceNode = null }
+  if (pitchNode) { try { pitchNode.dispose() } catch(e){} pitchNode = null }
+}
+
+function stopAudio() {
+  stopProgress()
+  stopSourceNode()
+  audioEl.pause(); audioEl.src = ''; audioEl.oncanplay = null; audioEl.onerror = null
+  audioBuffer = null; isPlaying = false
 }
 
 function togglePlay() {
-  if (!audioEl.src) return
-  if (isPlaying) {
-    audioEl.pause(); isPlaying=false; stopProgress(); updateBtn()
-  } else {
-    audioEl.play().then(()=>{isPlaying=true;startProgress();updateBtn()}).catch(()=>{})
+  if (audioBuffer) {
+    if (isPlaying) {
+      // Store current time for resume
+      if (sourceNode) { try { sourceNode.stop() } catch(e){} }
+      isPlaying = false; stopProgress(); updateBtn()
+    } else {
+      startPitchPlayback(audioEl.currentTime || 0)
+    }
+  } else if (audioEl.src) {
+    if (isPlaying) { audioEl.pause(); isPlaying=false; stopProgress(); updateBtn() }
+    else { audioEl.play().then(()=>{isPlaying=true;startProgress();updateBtn()}).catch(()=>{}) }
   }
 }
 
-function stop() {
-  stopProgress(); audioEl.pause(); audioEl.src=''; audioEl.oncanplay=null; audioEl.onerror=null; isPlaying=false
-}
-
-function startProgress() { stopProgress(); progressTimer=setInterval(tick,200) }
-function stopProgress() { if(progressTimer){clearInterval(progressTimer);progressTimer=null} }
-function tick() {
-  if(!audioEl.duration) return
-  const pct = audioEl.currentTime/audioEl.duration*100
-  const f=document.getElementById('pf'); if(f) f.style.width=pct+'%'
-  const c=document.getElementById('tc'); if(c) c.textContent=fmt(audioEl.currentTime)
-}
-function updateBtn() { const b=document.getElementById('pb'); if(b) b.textContent=isPlaying?'⏸':'▶' }
-
 function setPitch(v) {
-  currentPitch=parseInt(v)
-  const l=document.getElementById('pv'); if(l) l.textContent=currentPitch>0?'+'+currentPitch:currentPitch
-  // playbackRate changes pitch+tempo together — best available without Web Audio CORS
-  audioEl.playbackRate = Math.pow(2, currentPitch/12)
+  currentPitch = parseInt(v)
+  const l = document.getElementById('pv'); if(l) l.textContent = currentPitch>0?'+'+currentPitch:currentPitch
+  if (pitchNode) pitchNode.pitch = currentPitch
 }
 function resetPitch() { currentPitch=0; const s=document.getElementById('ps'); if(s)s.value=0; setPitch(0) }
 
-function seek(e, el) {
-  if(!audioEl.duration) return
-  audioEl.currentTime = (e.clientX-el.getBoundingClientRect().left)/el.offsetWidth * audioEl.duration
+// ── Download ─────────────────────────────────────────────────────────────────
+async function downloadSong(idx) {
+  const song = songs[idx]
+  const url = toDirectUrl(song.shareUrl)
+  const btn = document.getElementById('dl-btn-'+idx)
+  if (!btn || btn.classList.contains('loading')) return
+
+  btn.classList.add('loading')
+  btn.textContent = '↓ Downloading...'
+
+  try {
+    const resp = await fetch(url)
+    const blob = await resp.blob()
+    const ext = url.match(/\.(mp3|wav|m4a|flac|aiff|ogg)/i)?.[1] || 'mp3'
+    const filename = (song.title || song.code) + '.' + ext
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(a.href)
+
+    btn.classList.remove('loading')
+    btn.classList.add('done')
+    btn.textContent = '✓ Downloaded'
+
+    // Mark as downloaded in sidebar
+    const dl = document.querySelector(`#si${idx} .song-dl`)
+    if (dl) dl.classList.add('visible')
+
+    // Save download to DB
+    downloads[song.code] = new Date().toISOString()
+    await db.from('share_sessions').update({ downloads }).eq('id', sessionId)
+
+  } catch(e) {
+    btn.classList.remove('loading')
+    btn.textContent = '↓ Download'
+    alert('Download failed — try again')
+  }
 }
 
+// ── Progress ─────────────────────────────────────────────────────────────────
+let pbStart = 0, pbDuration = 0
+function startProgress() {
+  stopProgress()
+  if (audioBuffer) { pbStart = audioCtx.currentTime; pbDuration = audioBuffer.duration }
+  progressTimer = setInterval(tick, 200)
+}
+function stopProgress() { if(progressTimer){clearInterval(progressTimer);progressTimer=null} }
+function tick() {
+  let cur, dur
+  if (audioBuffer && audioCtx) {
+    cur = audioCtx.currentTime - pbStart; dur = pbDuration
+  } else {
+    cur = audioEl.currentTime; dur = audioEl.duration
+  }
+  if (!dur) return
+  const f=document.getElementById('pf'); if(f) f.style.width=(Math.min(cur/dur,1)*100)+'%'
+  const t=document.getElementById('tc'); if(t) t.textContent=fmt(cur)
+  const td=document.getElementById('td'); if(td) td.textContent=fmt(dur)
+}
+function updateBtn() { const b=document.getElementById('pb'); if(b) b.textContent=isPlaying?'⏸':'▶' }
+
+function seek(e, el) {
+  const pct = (e.clientX-el.getBoundingClientRect().left)/el.offsetWidth
+  if (audioBuffer) {
+    startPitchPlayback(pct * audioBuffer.duration)
+  } else if (audioEl.duration) {
+    audioEl.currentTime = pct * audioEl.duration
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
 function pitchHtml() {
   return `<div class="pitch-wrap">
-    <div class="pitch-label">KEY (pitch + tempo)</div>
+    <div class="pitch-label">KEY — pitch shift</div>
     <div class="pitch-row">
       <button class="pitch-reset" onclick="resetPitch()">Reset</button>
-      <input class="pitch-slider" id="ps" type="range" min="-6" max="6" step="1" value="${currentPitch}" oninput="setPitch(this.value)">
+      <input class="pitch-slider" id="ps" type="range" min="-12" max="12" step="1"
+        value="${currentPitch}" oninput="setPitch(this.value)">
       <div class="pitch-val" id="pv">${currentPitch>0?'+'+currentPitch:currentPitch}</div>
     </div>
+    <div class="pitch-note">semitones — no tempo change</div>
   </div>`
 }
 
 function showLoading(song) {
   document.getElementById('player').innerHTML = `
     <div><div class="now-code">${esc(song.code||'')}</div><div class="now-title">${esc(song.title||song.code)}</div></div>
-    <div><div class="loading-ring"></div><div class="loading-text">Loading...</div></div>
+    <div><div class="loading-ring"></div><div class="loading-text" id="load-txt">Loading...</div></div>
     ${pitchHtml()}`
 }
+function showLoadingText(t) { const el=document.getElementById('load-txt'); if(el) el.textContent=t }
 
 function showPlayer(song) {
+  const dur = audioBuffer ? fmt(audioBuffer.duration) : (audioEl.duration ? fmt(audioEl.duration) : '—')
+  const dlDone = downloads[song.code] ? 'done' : ''
+  const dlLabel = downloads[song.code] ? '✓ Downloaded' : '↓ Download'
   document.getElementById('player').innerHTML = `
     <div><div class="now-code">${esc(song.code||'')}</div><div class="now-title">${esc(song.title||song.code)}</div></div>
     <div style="width:100%;max-width:480px">
       <div class="progress-outer" onclick="seek(event,this)"><div class="progress-fill" id="pf" style="width:0%"></div></div>
-      <div class="times"><span id="tc">0:00</span><span>${fmt(audioEl.duration)}</span></div>
+      <div class="times"><span id="tc">0:00</span><span id="td">${dur}</span></div>
     </div>
     <div class="controls">
       <button class="ctrl-btn" onclick="if(currentIdx>0)playSong(currentIdx-1)">◀◀</button>
       <button class="play-btn" id="pb" onclick="togglePlay()">⏸</button>
       <button class="ctrl-btn" onclick="if(currentIdx<songs.length-1)playSong(currentIdx+1)">▶▶</button>
     </div>
+    <button class="dl-btn ${dlDone}" id="dl-btn-${currentIdx}" onclick="downloadSong(${currentIdx})">
+      <span>↓</span> ${dlLabel}
+    </button>
     ${pitchHtml()}`
 }
 
 function showErr(msg) {
   document.getElementById('player').innerHTML = `
-    <div class="err-icon">⚠</div>
-    <div class="err-text">${msg}</div>
-    ${pitchHtml()}`
+    <div class="err-icon">⚠</div><div class="err-text">${msg}</div>${pitchHtml()}`
 }
-
 function showState(icon,title,msg) {
   document.getElementById('app').style.display='none'
   const s=document.getElementById('state'); s.style.display='flex'

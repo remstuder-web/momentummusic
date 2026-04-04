@@ -166,29 +166,27 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON)
 
 let songs = []
 let currentIdx = -1
-let tonePlayer = null
-let pitchShiftNode = null
+let audioEl = null       // HTML5 <audio> element
+let audioCtx = null      // raw Web Audio API context
+let sourceNode = null    // MediaElementSource
+let pitchNode = null     // Tone.PitchShift (still used for pitch)
+let gainNode = null
 let isPlaying = false
-let duration = 0
-let startedAt = 0
 let progressTimer = null
 let audioReady = false
 let currentPitch = 0
 
-  // On iOS Safari, Dropbox CDN blocks cross-origin audio — use Vercel proxy
-  function toProxiedUrl(shareUrl) {
-    if (!shareUrl) return null
-    // Convert to direct dl URL first
-    let direct = shareUrl
-      .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
-    if (direct.includes('dl=0')) direct = direct.replace('dl=0', 'dl=1')
-    else if (!direct.includes('dl=1')) direct += (direct.includes('?') ? '&dl=1' : '?dl=1')
-    console.log('[audio] proxied url from:', direct)
-    return '/api/audio?url=' + encodeURIComponent(direct)
-  }
+// Convert Dropbox share URL → proxied URL (avoids iOS CORS issues)
+function toProxiedUrl(shareUrl) {
+  if (!shareUrl) return null
+  let direct = shareUrl
+    .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+    .replace('dl=0', 'dl=1')
+  if (!direct.includes('dl=1')) direct += (direct.includes('?') ? '&dl=1' : '?dl=1')
+  return '/api/audio?url=' + encodeURIComponent(direct)
+}
 
 // ── Init Audio Context on user interaction ──────────────────────────────────
-// iOS requires touchend AND must resume context before every sound
 const startBtn = document.getElementById('start-btn')
 startBtn.addEventListener('touchend', handleStart, { passive: false })
 startBtn.addEventListener('click', handleStart)
@@ -200,21 +198,20 @@ async function handleStart(e) {
 
 async function initAudio() {
   try {
+    // Create raw AudioContext (works on all iOS versions)
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+    if (audioCtx.state === 'suspended') await audioCtx.resume()
+    // Also init Tone.js context pointing to same context
     await Tone.start()
-    // Force resume — iOS sometimes stays suspended
-    if (Tone.getContext().state !== 'running') {
-      await Tone.getContext().resume()
-    }
   } catch(e) { console.warn('Audio init:', e) }
   audioReady = true
   document.getElementById('interact-overlay').style.display = 'none'
   loadSession()
 }
 
-// iOS: resume AudioContext when returning to tab
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && audioReady) {
-    Tone.getContext().resume().catch(() => {})
+  if (document.visibilityState === 'visible' && audioCtx) {
+    audioCtx.resume().catch(() => {})
   }
 })
 
@@ -270,63 +267,73 @@ function setActiveSong(idx) {
   }
 }
 
-// ── Player ──────────────────────────────────────────────────────────────────
+// ── Player — HTML5 <audio> + Web Audio API ──────────────────────────────────
 async function playSong(idx) {
-  if (idx === currentIdx && tonePlayer) {
-    togglePlay(); return
-  }
+  if (idx === currentIdx && audioEl) { togglePlay(); return }
   stopAll()
   currentIdx = idx
   setActiveSong(idx)
   const song = songs[idx]
   renderPlayerLoading(song)
 
-  // iOS: resume context before every play (it suspends on background/blur)
-  try {
-    if (Tone.getContext().state !== 'running') await Tone.getContext().resume()
-  } catch(e) {}
+  // Resume context on iOS
+  if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume()
 
-  const proxiedUrl = toProxiedUrl(song.shareUrl)
-  if (!proxiedUrl) { renderPlayerError('No audio URL'); return }
+  const url = toProxiedUrl(song.shareUrl)
+  if (!url) { renderPlayerError('No audio URL'); return }
 
   try {
-    pitchShiftNode = new Tone.PitchShift(currentPitch)
-    pitchShiftNode.toDestination()
+    // Create hidden <audio> element — iOS natively handles WAV/M4A/MP3
+    audioEl = new Audio()
+    audioEl.crossOrigin = 'anonymous'
+    audioEl.preload = 'auto'
 
-    tonePlayer = new Tone.Player({
-      url: proxiedUrl,
-      onload: () => {
-        duration = tonePlayer.buffer.duration
-        renderPlayerReady(song)
-        tonePlayer.start()
-        isPlaying = true
-        startedAt = Tone.now()
-        startProgress()
-      },
-      onerror: (e) => {
-        console.error('[Tone] load error:', e, '\nURL:', proxiedUrl)
-        renderPlayerError('Load failed — see browser console')
-      }
-    }).connect(pitchShiftNode)
+    // Wire through Web Audio API for pitch shifting
+    sourceNode = audioCtx.createMediaElementSource(audioEl)
+    gainNode = audioCtx.createGain()
+
+    // Use Tone's PitchShift connected to raw audioCtx destination
+    pitchNode = new Tone.PitchShift(currentPitch)
+    pitchNode.toDestination()
+
+    // Connect: source → Tone input → speakers
+    const toneInput = Tone.getDestination().input
+    sourceNode.connect(gainNode)
+    gainNode.connect(pitchNode.input || toneInput)
+
+    audioEl.addEventListener('canplay', () => {
+      renderPlayerReady(song)
+      audioEl.play().catch(e => { console.error('play() failed:', e); renderPlayerError('Playback failed') })
+      isPlaying = true
+      startProgress()
+    }, { once: true })
+
+    audioEl.addEventListener('ended', () => { isPlaying = false; stopProgress(); updatePlayBtn(); playNext() })
+    audioEl.addEventListener('error', (e) => {
+      console.error('audio error:', e, audioEl.error)
+      renderPlayerError('Could not load audio')
+    })
+
+    audioEl.src = url
+    audioEl.load()
 
   } catch(e) {
-    console.error('[audio] catch error:', e)
+    console.error('[audio] error:', e)
     renderPlayerError(e.message)
   }
 }
 
 function togglePlay() {
-  if (!tonePlayer) return
+  if (!audioEl) return
   if (isPlaying) {
-    Tone.getTransport().pause()
-    tonePlayer.stop()
+    audioEl.pause()
     isPlaying = false
     stopProgress()
     updatePlayBtn()
   } else {
-    tonePlayer.start()
+    audioCtx?.resume()
+    audioEl.play().catch(() => {})
     isPlaying = true
-    startedAt = Tone.now()
     startProgress()
     updatePlayBtn()
   }
@@ -334,10 +341,16 @@ function togglePlay() {
 
 function stopAll() {
   stopProgress()
-  if (tonePlayer) { try { tonePlayer.stop(); tonePlayer.dispose() } catch(e) {} tonePlayer = null }
-  if (pitchShiftNode) { try { pitchShiftNode.dispose() } catch(e) {} pitchShiftNode = null }
+  if (audioEl) {
+    audioEl.pause()
+    audioEl.src = ''
+    audioEl.remove()
+    audioEl = null
+  }
+  if (sourceNode) { try { sourceNode.disconnect() } catch(e) {} sourceNode = null }
+  if (gainNode) { try { gainNode.disconnect() } catch(e) {} gainNode = null }
+  if (pitchNode) { try { pitchNode.dispose() } catch(e) {} pitchNode = null }
   isPlaying = false
-  duration = 0
 }
 
 function playNext() { if (currentIdx < songs.length - 1) playSong(currentIdx + 1) }
@@ -346,19 +359,22 @@ function playPrev() { if (currentIdx > 0) playSong(currentIdx - 1) }
 // ── Progress ─────────────────────────────────────────────────────────────────
 function startProgress() {
   stopProgress()
-  progressTimer = setInterval(updateProgress, 100)
+  progressTimer = setInterval(updateProgress, 250)
 }
 function stopProgress() { if (progressTimer) { clearInterval(progressTimer); progressTimer = null } }
 
 function updateProgress() {
-  if (!isPlaying || !duration) return
-  const elapsed = Tone.now() - startedAt
-  const pct = Math.min(elapsed / duration, 1) * 100
+  if (!audioEl) return
+  const elapsed = audioEl.currentTime
+  const dur = audioEl.duration || 0
+  if (!dur) return
+  const pct = Math.min(elapsed / dur, 1) * 100
   const fill = document.getElementById('progress-fill')
   if (fill) fill.style.width = pct + '%'
   const cur = document.getElementById('time-current')
   if (cur) cur.textContent = fmtTime(elapsed)
-  if (elapsed >= duration) { isPlaying = false; stopProgress(); updatePlayBtn(); playNext() }
+  const tot = document.getElementById('time-total')
+  if (tot) tot.textContent = fmtTime(dur)
 }
 
 // ── Pitch ────────────────────────────────────────────────────────────────────
@@ -366,7 +382,7 @@ function setPitch(v) {
   currentPitch = parseInt(v)
   const label = document.getElementById('pitch-value')
   if (label) label.textContent = currentPitch > 0 ? '+' + currentPitch : currentPitch
-  if (pitchShiftNode) pitchShiftNode.pitch = currentPitch
+  if (pitchNode) pitchNode.pitch = currentPitch
 }
 function resetPitch() {
   currentPitch = 0
@@ -392,6 +408,7 @@ function renderPlayerLoading(song) {
 }
 
 function renderPlayerReady(song) {
+  const dur = audioEl?.duration || 0
   document.getElementById('player-area').innerHTML = `
     <div class="now-playing">
       <div class="now-code">${esc(song.code||'')}</div>
@@ -403,7 +420,7 @@ function renderPlayerReady(song) {
       </div>
       <div class="progress-times">
         <span id="time-current">0:00</span>
-        <span id="time-total">${fmtTime(duration)}</span>
+        <span id="time-total">${fmtTime(dur)}</span>
       </div>
     </div>
     <div class="controls">
@@ -454,15 +471,10 @@ function updatePlayBtn() {
 }
 
 function seekClick(e, el) {
-  if (!tonePlayer || !duration) return
+  if (!audioEl || !audioEl.duration) return
   const rect = el.getBoundingClientRect()
   const pct = (e.clientX - rect.left) / rect.width
-  const newPos = pct * duration
-  tonePlayer.stop()
-  tonePlayer.start('+0', newPos)
-  startedAt = Tone.now() - newPos
-  isPlaying = true
-  startProgress()
+  audioEl.currentTime = pct * audioEl.duration
 }
 
 function showState(icon, title, msg) {

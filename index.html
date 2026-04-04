@@ -102,47 +102,47 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
 (function() {
   const c = document.getElementById('space')
   const ctx = c.getContext('2d')
-  let W, H, stars = []
-  const N = 200, SPEED = 0.4
+  let W, H, DPR, stars = []
+  const N = 260, SPEED = 0.5
 
   function resize() {
-    W = c.width = window.innerWidth
-    H = c.height = window.innerHeight
+    DPR = window.devicePixelRatio || 1
+    W = window.innerWidth; H = window.innerHeight
+    c.width = W * DPR; c.height = H * DPR
+    c.style.width = W + 'px'; c.style.height = H + 'px'
+    ctx.scale(DPR, DPR)
   }
   function makeStar() {
-    return {
-      x: (Math.random() - 0.5) * 2,
-      y: (Math.random() - 0.5) * 2,
-      z: Math.random(),
-      pz: 0
-    }
+    return { x:(Math.random()-0.5)*2, y:(Math.random()-0.5)*2, z:Math.random(), pz:0 }
   }
   function init() { resize(); stars = Array.from({length:N}, makeStar) }
   function draw() {
-    ctx.fillStyle = 'rgba(0,0,0,0.18)'
+    ctx.fillStyle = 'rgba(0,0,0,0.16)'
     ctx.fillRect(0, 0, W, H)
-    const cx = W / 2, cy = H / 2
+    const cx = W/2, cy = H/2
     stars.forEach(s => {
-      s.pz = s.z
-      s.z -= SPEED * 0.01
+      s.pz = s.z; s.z -= SPEED * 0.01
       if (s.z <= 0) { Object.assign(s, makeStar()); s.z = 1; s.pz = 1 }
-      const sx = (s.x / s.z) * W + cx
-      const sy = (s.y / s.z) * H + cy
-      const px = (s.x / s.pz) * W + cx
-      const py = (s.y / s.pz) * H + cy
-      const size = Math.max(0.3, (1 - s.z) * 2.5)
-      const bright = Math.min(255, Math.floor((1 - s.z) * 280))
-      if (sx < 0 || sx > W || sy < 0 || sy > H) { Object.assign(s, makeStar()); return }
+      const sx = (s.x/s.z)*W + cx, sy = (s.y/s.z)*H + cy
+      const px = (s.x/s.pz)*W + cx, py = (s.y/s.pz)*H + cy
+      if (sx<-20||sx>W+20||sy<-20||sy>H+20) { Object.assign(s, makeStar()); return }
+      const t = 1 - s.z
+      const size = Math.max(0.4, t * 2.2)
+      const alpha = 0.3 + t * 0.7
+      const bright = Math.floor(180 + t * 75)
       ctx.beginPath()
       ctx.moveTo(px, py)
       ctx.lineTo(sx, sy)
-      ctx.strokeStyle = `rgba(${bright},${bright},${bright+20},${0.4 + (1-s.z)*0.6})`
+      ctx.strokeStyle = `rgba(${bright},${bright},${Math.min(255,bright+30)},${alpha})`
       ctx.lineWidth = size
       ctx.stroke()
     })
     requestAnimationFrame(draw)
   }
-  window.addEventListener('resize', resize)
+  window.addEventListener('resize', () => {
+    ctx.setTransform(1,0,0,1,0,0) // reset before rescale
+    resize()
+  })
   init(); draw()
 })()
 
@@ -163,6 +163,13 @@ function toDirectUrl(u) {
   if (u.includes('dl.dropboxusercontent.com')) return u
   return u.replace('www.dropbox.com','dl.dropboxusercontent.com')
     .replace(/dl=0/,'dl=1') + (u.includes('dl=') ? '' : (u.includes('?') ? '&dl=1' : '?dl=1'))
+}
+
+// For fetch-based decode: always use proxy (avoids CORS on scl/fi links)
+function toFetchUrl(u) {
+  if (!u) return null
+  const direct = toDirectUrl(u)
+  return '/api/audio?url=' + encodeURIComponent(direct)
 }
 
 async function init() {
@@ -213,7 +220,7 @@ async function playSong(idx) {
   const song = songs[idx]
   showLoading(song)
 
-  const url = toDirectUrl(song.shareUrl)
+  const url = toFetchUrl(song.shareUrl)
   if (!url) { showErr('No audio URL'); return }
 
   try {

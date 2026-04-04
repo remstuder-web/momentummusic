@@ -166,10 +166,10 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON)
 
 let songs = []
 let currentIdx = -1
-let audioEl = null       // HTML5 <audio> element
-let audioCtx = null      // raw Web Audio API context
-let pitchNode = null     // Tone.PitchShift
-let gainNode = null
+let audioEl = null
+let audioCtx = null
+let sourceNode = null
+let pitchNode = null
 let isPlaying = false
 let progressTimer = null
 let audioReady = false
@@ -287,17 +287,28 @@ async function playSong(idx) {
   if (!url) { renderPlayerError('No audio URL'); return }
 
   try {
-    // Create hidden <audio> element — iOS natively handles WAV/M4A/MP3
+    // Create hidden <audio> element
     audioEl = new Audio()
+    audioEl.crossOrigin = 'anonymous'  // OK with proxy (same domain)
     audioEl.preload = 'auto'
 
-    // Wire audio — direct playback (pitch via Tone without MediaElementSource)
-    // Note: MediaElementSource requires crossOrigin which blocks Dropbox CORS
-    gainNode = audioCtx.createGain()
+    // Wire through Web Audio for pitch shifting
+    sourceNode = audioCtx.createMediaElementSource(audioEl)
+    pitchNode = new Tone.PitchShift(currentPitch)
+    pitchNode.toDestination()
+    sourceNode.connect(pitchNode.input)
+
+    // Show loading progress
+    audioEl.addEventListener('progress', () => {
+      if (!audioEl.buffered.length || !audioEl.duration) return
+      const pct = Math.round((audioEl.buffered.end(0) / audioEl.duration) * 100)
+      const hint = document.getElementById('loading-hint')
+      if (hint) hint.textContent = `Loading... ${pct}%`
+    })
 
     audioEl.addEventListener('canplay', () => {
       renderPlayerReady(song)
-      audioEl.play().catch(e => { console.error('play() failed:', e); renderPlayerError('Playback blocked — tap first') })
+      audioEl.play().catch(e => { console.error('play() failed:', e); renderPlayerError('Tap again to play') })
       isPlaying = true
       startProgress()
     }, { once: true })
@@ -336,7 +347,7 @@ function togglePlay() {
 function stopAll() {
   stopProgress()
   if (audioEl) { audioEl.pause(); audioEl.src = ''; audioEl = null }
-  if (gainNode) { try { gainNode.disconnect() } catch(e) {} gainNode = null }
+  if (sourceNode) { try { sourceNode.disconnect() } catch(e) {} sourceNode = null }
   if (pitchNode) { try { pitchNode.dispose() } catch(e) {} pitchNode = null }
   isPlaying = false
 }
@@ -370,8 +381,6 @@ function setPitch(v) {
   currentPitch = parseInt(v)
   const label = document.getElementById('pitch-value')
   if (label) label.textContent = currentPitch > 0 ? '+' + currentPitch : currentPitch
-  // Convert semitones to playbackRate: rate = 2^(semitones/12)
-  if (audioEl) audioEl.playbackRate = Math.pow(2, currentPitch / 12)
   if (pitchNode) pitchNode.pitch = currentPitch
 }
 function resetPitch() {
@@ -383,6 +392,7 @@ function resetPitch() {
 
 // ── Render states ─────────────────────────────────────────────────────────────
 function renderPlayerLoading(song) {
+  const isFlac = song.shareUrl?.toLowerCase().includes('.flac')
   document.getElementById('player-area').innerHTML = `
     <div class="now-playing">
       <div class="now-code">${esc(song.code||'')}</div>
@@ -390,7 +400,7 @@ function renderPlayerLoading(song) {
     </div>
     <div>
       <div class="loading-ring"></div>
-      <div class="loading-text">Loading...</div>
+      <div class="loading-text" id="loading-hint">${isFlac ? 'Loading FLAC — may take a moment...' : 'Loading...'}</div>
     </div>
     ${pitchHtml()}
   `

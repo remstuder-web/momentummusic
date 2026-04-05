@@ -98,67 +98,116 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
 <div class="state" id="state"></div>
 
 <script>
-// ── Starfield ────────────────────────────────────────────────────────────────
-(function() {
+// ── Background switcher ───────────────────────────────────────────────────────
+function setBackground(bg) {
   const c = document.getElementById('space')
+  // Stop any existing animation by replacing canvas (clears all listeners)
+  const fresh = c.cloneNode(false)
+  c.parentNode.replaceChild(fresh, c)
+  if (bg === 'void') { fresh.style.background = '#000'; return }
+  if (bg === 'aurora') startAurora(fresh)
+  else if (bg === 'rain') startRain(fresh)
+  else if (bg === 'grid') startGrid(fresh)
+  else startStars(fresh) // default: stars
+}
+
+function startAurora(c) {
   const ctx = c.getContext('2d')
-  let W = 0, H = 0, DPR = 1, stars = [], dirty = true
-  const N = 350, SPEED = 0.45
-
-  function scheduleResize() {
-    DPR = window.devicePixelRatio || 1
-    W = window.innerWidth
-    H = window.innerHeight
-    dirty = true  // resize happens at next frame start, never mid-draw
-  }
-
-  function applyResize() {
-    c.style.width = W + 'px'; c.style.height = H + 'px'
-    c.width = Math.round(W * DPR)   // resets 2D context state
-    c.height = Math.round(H * DPR)
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0)  // reapply after reset
-    dirty = false
-  }
-
-  function makeStar() {
-    return { x:(Math.random()-0.5)*2, y:(Math.random()-0.5)*2, z:Math.random(), pz:0 }
-  }
-
+  let W, H, t = 0, dirty = true, DPR = 1
+  function resize() { DPR = devicePixelRatio||1; W = innerWidth; H = innerHeight; dirty = true }
+  function apply() { c.width=W*DPR; c.height=H*DPR; c.style.width=W+'px'; c.style.height=H+'px'; ctx.scale(DPR,DPR); dirty=false }
   function draw() {
-    if (dirty) applyResize()  // always at frame start, never mid-draw
-    ctx.fillStyle = 'rgba(0,0,0,0.13)'
-    ctx.fillRect(0, 0, W, H)
-    const cx = W/2, cy = H/2
-    stars.forEach(s => {
-      s.pz = s.z; s.z -= SPEED * 0.01
-      if (s.z <= 0) { Object.assign(s, makeStar()); s.z = 1; s.pz = 1 }
-      const sx = (s.x/s.z)*W + cx, sy = (s.y/s.z)*H + cy
-      const px = (s.x/s.pz)*W + cx, py = (s.y/s.pz)*H + cy
-      if (sx<-20||sx>W+20||sy<-20||sy>H+20) { Object.assign(s, makeStar()); return }
-      const t = 1 - s.z
-      const size = Math.max(0.3, t * 1.6)
-      const alpha = 0.3 + t * 0.7
-      const bright = Math.floor(180 + t * 75)
-      ctx.beginPath()
-      ctx.moveTo(px, py)
-      ctx.lineTo(sx, sy)
-      ctx.strokeStyle = `rgba(${bright},${bright},${Math.min(255,bright+30)},${alpha})`
-      ctx.lineWidth = size
-      ctx.stroke()
+    if (dirty) apply()
+    ctx.fillStyle = 'rgba(0,0,0,0.04)'
+    ctx.fillRect(0,0,W,H)
+    for (let i = 0; i < 4; i++) {
+      const hue = 140 + i*30 + Math.sin(t*0.3+i)*20
+      const y = H*0.3 + Math.sin(t*0.2+i*1.5)*H*0.15
+      const grd = ctx.createRadialGradient(W/2, y, 0, W/2, y, W*0.8)
+      grd.addColorStop(0, `hsla(${hue},80%,50%,0.06)`)
+      grd.addColorStop(1, 'transparent')
+      ctx.fillStyle = grd; ctx.fillRect(0,0,W,H)
+    }
+    t += 0.015
+    requestAnimationFrame(draw)
+  }
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt=setTimeout(resize,80) })
+  resize(); draw()
+}
+
+function startRain(c) {
+  const ctx = c.getContext('2d')
+  let W, H, drops = [], dirty = true, DPR = 1
+  function resize() { DPR = devicePixelRatio||1; W = innerWidth; H = innerHeight; dirty = true }
+  function apply() { c.width=W*DPR; c.height=H*DPR; c.style.width=W+'px'; c.style.height=H+'px'; ctx.scale(DPR,DPR); dirty=false; drops=Array.from({length:120},()=>({x:Math.random()*W,y:Math.random()*H,len:10+Math.random()*20,speed:4+Math.random()*6,alpha:0.1+Math.random()*0.3})) }
+  function draw() {
+    if (dirty) apply()
+    ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(0,0,W,H)
+    drops.forEach(d => {
+      ctx.beginPath(); ctx.moveTo(d.x,d.y); ctx.lineTo(d.x-1,d.y+d.len)
+      ctx.strokeStyle = `rgba(180,220,255,${d.alpha})`; ctx.lineWidth = 0.8; ctx.stroke()
+      d.y += d.speed
+      if (d.y > H+d.len) { d.y = -d.len; d.x = Math.random()*W }
     })
     requestAnimationFrame(draw)
   }
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt=setTimeout(resize,80) })
+  resize(); draw()
+}
 
-  let resizeTimer
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer)
-    resizeTimer = setTimeout(scheduleResize, 80)
-  })
+function startGrid(c) {
+  const ctx = c.getContext('2d')
+  let W, H, t = 0, dirty = true, DPR = 1
+  function resize() { DPR = devicePixelRatio||1; W = innerWidth; H = innerHeight; dirty = true }
+  function apply() { c.width=W*DPR; c.height=H*DPR; c.style.width=W+'px'; c.style.height=H+'px'; ctx.scale(DPR,DPR); dirty=false }
+  function draw() {
+    if (dirty) apply()
+    ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,H)
+    const size = 60; const offset = (t * 0.5) % size
+    ctx.strokeStyle = 'rgba(201,168,76,0.08)'; ctx.lineWidth = 0.5
+    for (let x = -size+offset; x < W+size; x += size) {
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke()
+    }
+    const voffset = (t * 0.3) % size
+    for (let y = -size+voffset; y < H+size; y += size) {
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke()
+    }
+    // Glow at intersections near center
+    const cx = W/2, cy = H/2
+    const grd = ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(W,H)*0.6)
+    grd.addColorStop(0,'rgba(201,168,76,0.04)'); grd.addColorStop(1,'transparent')
+    ctx.fillStyle = grd; ctx.fillRect(0,0,W,H)
+    t += 0.5; requestAnimationFrame(draw)
+  }
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt=setTimeout(resize,80) })
+  resize(); draw()
+}
 
-  scheduleResize()
-  stars = Array.from({length:N}, makeStar)
-  draw()
-})()
+function startStars(c) {
+  const ctx = c.getContext('2d')
+  let W = 0, H = 0, DPR = 1, stars = [], dirty = true
+  const N = 350, SPEED = 0.45
+  function resize() { DPR = devicePixelRatio||1; W = innerWidth; H = innerHeight; dirty = true }
+  function apply() { c.style.width=W+'px'; c.style.height=H+'px'; c.width=Math.round(W*DPR); c.height=Math.round(H*DPR); ctx.setTransform(DPR,0,0,DPR,0,0); dirty=false }
+  function makeStar() { return {x:(Math.random()-0.5)*2,y:(Math.random()-0.5)*2,z:Math.random(),pz:0} }
+  function draw() {
+    if (dirty) apply()
+    ctx.fillStyle='rgba(0,0,0,0.13)'; ctx.fillRect(0,0,W,H)
+    const cx=W/2,cy=H/2
+    stars.forEach(s => {
+      s.pz=s.z; s.z-=SPEED*0.01
+      if(s.z<=0){Object.assign(s,makeStar());s.z=1;s.pz=1}
+      const sx=(s.x/s.z)*W+cx,sy=(s.y/s.z)*H+cy,px=(s.x/s.pz)*W+cx,py=(s.y/s.pz)*H+cy
+      if(sx<-20||sx>W+20||sy<-20||sy>H+20){Object.assign(s,makeStar());return}
+      const t=1-s.z; const size=Math.max(0.3,t*1.6); const alpha=0.3+t*0.7; const bright=Math.floor(180+t*75)
+      ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(sx,sy)
+      ctx.strokeStyle=`rgba(${bright},${bright},${Math.min(255,bright+30)},${alpha})`;ctx.lineWidth=size;ctx.stroke()
+    })
+    requestAnimationFrame(draw)
+  }
+  let rt; window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(resize,80)})
+  resize(); stars=Array.from({length:N},makeStar); draw()
+}
 
 // ── Audio ────────────────────────────────────────────────────────────────────
 const SB_URL = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
@@ -198,6 +247,7 @@ async function init() {
   downloads = data.downloads || {}
   document.getElementById('nav-title').textContent = data.patch_name || 'Demo Session'
   document.title = 'LISTEN — ' + (data.patch_name || 'Demo')
+  setBackground(data.background || 'stars')
   const exp = data.expires_at ? Math.ceil((new Date(data.expires_at)-Date.now())/86400000) : null
   if (exp) document.getElementById('nav-exp').textContent = exp + 'd left'
   buildList()
@@ -399,6 +449,7 @@ function showState(icon,title,msg) {
 function fmt(s){const t=Math.max(0,Math.floor(s||0));return Math.floor(t/60)+':'+(t%60+'').padStart(2,'0')}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
+startStars(document.getElementById('space'))
 init()
 </script>
 </body>

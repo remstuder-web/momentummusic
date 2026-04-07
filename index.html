@@ -39,7 +39,8 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
 .ctrl-btn{background:transparent;border:none;color:#444;font-size:16px;cursor:pointer;transition:color .15s;padding:4px}
 .ctrl-btn:hover{color:#cec9c1}
 .play-btn{width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);font-size:22px;cursor:pointer;color:#f5f1ea;display:flex;align-items:center;justify-content:center;transition:all .2s;backdrop-filter:blur(4px)}
-.play-btn:hover{border-color:#c9a84c;color:#c9a84c;background:rgba(201,168,76,.08)}
+.stop-btn{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);font-size:13px;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.stop-btn:hover{border-color:#e05a4a;color:#e05a4a;background:rgba(224,90,74,.08)}
 .dl-btn{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:10px 24px;background:rgba(76,175,130,.08);border:1px solid rgba(76,175,130,.4);color:#4caf82;border-radius:4px;cursor:pointer;letter-spacing:.08em;display:flex;align-items:center;gap:10px;transition:all .2s}
 .dl-btn:hover{background:rgba(76,175,130,.15);border-color:#4caf82}
 .dl-btn.loading{opacity:.5;cursor:default;pointer-events:none}
@@ -500,8 +501,20 @@ function seekFromWaveform(e, canvas) {
   const t = document.getElementById('tc'); if (t) t.textContent = fmt(offset)
 }
 
+function stopSong() {
+  if (!tonePlayer) return
+  playOffset = 0
+  isSeeking = true
+  tonePlayer.stop()
+  isSeeking = false
+  isPlaying = false
+  stopProgress()
+  drawWaveform(0)
+  const t = document.getElementById('tc'); if (t) t.textContent = '0:00'
+  updateBtn()
+}
+
 function commitSeek() {
-  if (!isSeeking) return
   if (tonePlayer) {
     if (isPlaying) {
       // restart from new position
@@ -568,6 +581,7 @@ function showPlayer(song) {
     </div>
     <div class="controls">
       <button class="play-btn" id="pb" onclick="togglePlay()">⏸</button>
+      <button class="stop-btn" onclick="stopSong()" title="Stop">■</button>
     </div>
     <button class="dl-btn ${dlDone}" id="dlb${currentIdx}" onclick="downloadSong(${currentIdx})">
       <span style="font-size:16px">↓</span> ${dlLabel}

@@ -60,6 +60,7 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:12p
 .pitch-note{font-family:'Space Mono',monospace;font-size:9px;color:#333;text-align:center;margin-top:8px}
 .loading-ring{width:36px;height:36px;border:2px solid rgba(255,255,255,.08);border-top-color:#c9a84c;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{from{opacity:.2}to{opacity:.8}}
 .loading-text{font-family:'Space Mono',monospace;font-size:11px;color:#555;text-align:center;margin-top:10px;letter-spacing:.06em}
 .err-icon{font-size:36px;opacity:.2;text-align:center}
 .err-text{font-family:'Space Mono',monospace;font-size:12px;color:#e05a4a;text-align:center}
@@ -276,6 +277,7 @@ let isPlaying = false, progressTimer = null, currentPitch = 0
 let tonePlayer = null, pitchNode = null, toneBuffer = null
 let audioBuffer = null, playOffset = 0, playStarted = 0
 let downloads = {}
+const preloadCache = {}   // idx → AudioBuffer, preloaded in background
 
 function toDirectUrl(u) {
   if (!u) return null
@@ -308,6 +310,8 @@ async function init() {
   if (exp) document.getElementById('nav-exp').textContent = exp + 'd left'
   buildList()
   document.getElementById('app').style.display = 'flex'
+  // Start background preloading after a short delay so UI renders first
+  setTimeout(preloadAll, 800)
 }
 
 function buildList() {
@@ -406,7 +410,50 @@ function setActive(idx) {
   rdxScrollTo(idx, true)
 }
 
-// ── Playback: fetch → decode → Tone.Player → PitchShift ──────────────────────
+// ── Background preload ────────────────────────────────────────────────────────
+async function preloadAll() {
+  for (let i = 0; i < songs.length; i++) {
+    if (preloadCache[i]) continue  // already done
+    if (i === currentIdx) continue  // playSong handles this one
+    const song = songs[i]
+    const url = toFetchUrl(song.previewUrl || song.shareUrl)
+    if (!url) continue
+    try {
+      setCardLoading(i, true)
+      const resp = await fetch(url)
+      if (!resp.ok) throw new Error('HTTP ' + resp.status)
+      const arrBuf = await resp.arrayBuffer()
+      const ctx = new AudioContext()
+      const decoded = await ctx.decodeAudioData(arrBuf)
+      ctx.close()
+      preloadCache[i] = decoded
+      setCardLoading(i, false)
+      console.log(`✓ Preloaded [${i}] ${song.title || song.code}`)
+    } catch(e) {
+      setCardLoading(i, false)
+      console.warn(`⚠ Preload failed [${i}]:`, e.message)
+    }
+  }
+}
+
+function setCardLoading(idx, loading) {
+  const card = document.getElementById('rc' + idx)
+  if (!card) return
+  const dot = card.querySelector('.rc-dot')
+  if (!dot) return
+  if (loading) {
+    dot.style.background = '#333'
+    dot.style.animation = 'pulse .8s ease-in-out infinite alternate'
+  } else if (preloadCache[idx]) {
+    dot.style.background = 'rgba(76,175,130,.5)'
+    dot.style.animation = ''
+  } else {
+    dot.style.background = ''
+    dot.style.animation = ''
+  }
+}
+
+// ── Playback ──────────────────────────────────────────────────────────────────
 async function playSong(idx) {
   if (idx === currentIdx && audioBuffer) { togglePlay(); return }
   stopAll()
@@ -416,18 +463,22 @@ async function playSong(idx) {
   showLoading(song)
   try {
     await ensureAudio()
-    showLoadingText('Loading...')
-    // Use preview MP3 for fast streaming; fall back to WAV if no preview yet
-    const resp = await fetch(toFetchUrl(song.previewUrl || song.shareUrl))
-    if (!resp.ok) throw new Error('HTTP ' + resp.status)
-    showLoadingText('Decoding...')
-    const arrBuf = await resp.arrayBuffer()
+    let decoded = preloadCache[idx] || null
 
-    // Fresh AudioContext for decoding (Tone's ctx rejects decodeAudioData)
-    const decodeCtx = new AudioContext()
-    const decoded = await decodeCtx.decodeAudioData(arrBuf.slice(0))
-    decodeCtx.close()
+    if (!decoded) {
+      showLoadingText('Loading...')
+      // Use preview MP3 for fast streaming; fall back to WAV if no preview yet
+      const resp = await fetch(toFetchUrl(song.previewUrl || song.shareUrl))
+      if (!resp.ok) throw new Error('HTTP ' + resp.status)
+      showLoadingText('Decoding...')
+      const arrBuf = await resp.arrayBuffer()
+      const decodeCtx = new AudioContext()
+      decoded = await decodeCtx.decodeAudioData(arrBuf.slice(0))
+      decodeCtx.close()
+    }
+
     audioBuffer = decoded
+    preloadCache[idx] = decoded  // ensure cached for future
 
     // Tone.ToneAudioBuffer wraps the raw AudioBuffer so Tone.Player can use it
     toneBuffer = new Tone.ToneAudioBuffer()
@@ -461,6 +512,7 @@ function stopAll() {
   if (tonePlayer) { try { tonePlayer.stop(); tonePlayer.dispose() } catch(e){} tonePlayer = null }
   if (pitchNode) { try { pitchNode.dispose() } catch(e){} pitchNode = null }
   audioBuffer = null; toneBuffer = null; isPlaying = false; playOffset = 0; playStarted = 0; waveformPeaks = null; isSeeking = false
+  // Note: preloadCache is intentionally kept — buffers stay ready for instant replay
 }
 
 // Create a fresh Tone.Player from stored toneBuffer — needed because

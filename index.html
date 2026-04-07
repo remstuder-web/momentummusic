@@ -382,12 +382,14 @@ function stopAll() {
 function togglePlay() {
   if (!tonePlayer) return
   if (isPlaying) {
-    playOffset = Tone.now() - playStarted + playOffset
+    // Save elapsed position before stopping
+    playOffset = Math.min(playOffset + (Tone.now() - playStarted), audioBuffer?.duration || 0)
     tonePlayer.stop()
     isPlaying = false; stopProgress(); updateBtn()
   } else {
+    // Resume from saved position
     tonePlayer.start(Tone.now(), playOffset)
-    playStarted = Tone.now() - playOffset
+    playStarted = Tone.now()   // ← reset to NOW, keep playOffset as the base
     isPlaying = true; startProgress(); updateBtn()
   }
 }
@@ -499,14 +501,14 @@ function seekFromWaveform(e, canvas) {
 }
 
 function commitSeek() {
-  if (!audioBuffer || !isSeeking) return
-  isSeeking = false
+  if (!isSeeking) return
+  // keep isSeeking=true while stop fires so onstop is guarded
   if (isPlaying && tonePlayer) {
-    // Restart from the scrubbed position
-    try { tonePlayer.stop() } catch(e) {}
+    tonePlayer.stop()
     tonePlayer.start(Tone.now(), playOffset)
-    playStarted = Tone.now() - playOffset
+    playStarted = Tone.now()   // ← same fix: reset to NOW
   }
+  isSeeking = false  // clear AFTER stop so onstop guard catches it
 }
 
 // ── Progress ─────────────────────────────────────────────────────────────────

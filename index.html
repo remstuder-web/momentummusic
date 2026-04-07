@@ -271,7 +271,7 @@ const db = createClient(SB_URL, SB_KEY)
 
 let songs = [], sessionId = null, currentIdx = -1
 let isPlaying = false, progressTimer = null, currentPitch = 0
-let tonePlayer = null, pitchNode = null
+let tonePlayer = null, pitchNode = null, toneBuffer = null
 let audioBuffer = null, playOffset = 0, playStarted = 0
 let downloads = {}
 
@@ -347,7 +347,7 @@ async function playSong(idx) {
     audioBuffer = decoded
 
     // Tone.ToneAudioBuffer wraps the raw AudioBuffer so Tone.Player can use it
-    const toneBuffer = new Tone.ToneAudioBuffer()
+    toneBuffer = new Tone.ToneAudioBuffer()
     toneBuffer._buffer = decoded
 
     // Chain: Tone.Player → Tone.PitchShift → output
@@ -377,20 +377,36 @@ function stopAll() {
   stopProgress()
   if (tonePlayer) { try { tonePlayer.stop(); tonePlayer.dispose() } catch(e){} tonePlayer = null }
   if (pitchNode) { try { pitchNode.dispose() } catch(e){} pitchNode = null }
-  audioBuffer = null; isPlaying = false; playOffset = 0; playStarted = 0; waveformPeaks = null; isSeeking = false
+  audioBuffer = null; toneBuffer = null; isPlaying = false; playOffset = 0; playStarted = 0; waveformPeaks = null; isSeeking = false
+}
+
+// Create a fresh Tone.Player from stored toneBuffer — needed because
+// Tone.js players cannot be restarted after stop(); must recreate
+function makePlayer(offset) {
+  if (tonePlayer) { try { tonePlayer.stop(); tonePlayer.dispose() } catch(e){} tonePlayer = null }
+  tonePlayer = new Tone.Player(toneBuffer).connect(pitchNode)
+  tonePlayer.onstop = () => {
+    if (isSeeking) return
+    if (!isPlaying) return
+    isPlaying = false; stopProgress(); updateBtn()
+    if (currentIdx < songs.length - 1) playSong(currentIdx + 1)
+  }
+  tonePlayer.start(Tone.now(), offset)
+  playStarted = Tone.now()
 }
 
 function togglePlay() {
-  if (!tonePlayer) return
+  if (!tonePlayer || !toneBuffer) return
   if (isPlaying) {
+    // Pause — save position
     playOffset = Math.min(playOffset + (Tone.now() - playStarted), audioBuffer?.duration || 0)
-    isSeeking = true          // guard onstop from advancing
+    isSeeking = true
     tonePlayer.stop()
     isSeeking = false
     isPlaying = false; stopProgress(); updateBtn()
   } else {
-    tonePlayer.start(Tone.now(), playOffset)
-    playStarted = Tone.now()
+    // Resume — recreate player from saved position
+    makePlayer(playOffset)
     isPlaying = true; startProgress(); updateBtn()
   }
 }
@@ -515,21 +531,14 @@ function stopSong() {
 }
 
 function commitSeek() {
-  if (tonePlayer) {
-    if (isPlaying) {
-      // restart from new position
-      tonePlayer.stop()
-      tonePlayer.start(Tone.now(), playOffset)
-      playStarted = Tone.now()
-    } else {
-      // was paused — start from clicked position
-      tonePlayer.start(Tone.now(), playOffset)
-      playStarted = Tone.now()
-      isPlaying = true
-      startProgress()
-      updateBtn()
-    }
+  if (!toneBuffer) return
+  const wasPlaying = isPlaying
+  makePlayer(playOffset)
+  if (!wasPlaying) {
+    isPlaying = true
+    updateBtn()
   }
+  startProgress()
   isSeeking = false
 }
 

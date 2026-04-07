@@ -353,6 +353,7 @@ async function playSong(idx) {
     pitchNode = new Tone.PitchShift(currentPitch).toDestination()
     tonePlayer = new Tone.Player(toneBuffer).connect(pitchNode)
     tonePlayer.onstop = () => {
+      if (isSeeking) return  // seek triggered stop — don't advance
       if (!isPlaying) return
       isPlaying = false; stopProgress(); updateBtn()
       if (currentIdx < songs.length - 1) playSong(currentIdx + 1)
@@ -375,7 +376,7 @@ function stopAll() {
   stopProgress()
   if (tonePlayer) { try { tonePlayer.stop(); tonePlayer.dispose() } catch(e){} tonePlayer = null }
   if (pitchNode) { try { pitchNode.dispose() } catch(e){} pitchNode = null }
-  audioBuffer = null; isPlaying = false; playOffset = 0; playStarted = 0; waveformPeaks = null
+  audioBuffer = null; isPlaying = false; playOffset = 0; playStarted = 0; waveformPeaks = null; isSeeking = false
 }
 
 function togglePlay() {
@@ -484,21 +485,27 @@ function drawWaveform(progress) {
   }
 }
 
+let isSeeking = false  // prevents onstop from advancing song during seek
+
 function seekFromWaveform(e, canvas) {
   if (!audioBuffer) return
   const rect = canvas.getBoundingClientRect()
   const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left
-  const offset = (x / rect.width) * audioBuffer.duration
-  if (isPlaying) {
-    tonePlayer.stop()
-    tonePlayer.start(Tone.now(), Math.max(0, offset))
-    playStarted = Tone.now() - offset
-    playOffset = 0
-  } else {
-    playOffset = Math.max(0, offset)
-    drawWaveform(offset / audioBuffer.duration)
-    const t = document.getElementById('tc')
-    if (t) t.textContent = fmt(offset)
+  const offset = Math.max(0, Math.min((x / rect.width) * audioBuffer.duration, audioBuffer.duration - 0.01))
+  // Just update visuals while dragging — only restart playback on release
+  playOffset = offset
+  drawWaveform(offset / audioBuffer.duration)
+  const t = document.getElementById('tc'); if (t) t.textContent = fmt(offset)
+}
+
+function commitSeek() {
+  if (!audioBuffer || !isSeeking) return
+  isSeeking = false
+  if (isPlaying && tonePlayer) {
+    // Restart from the scrubbed position
+    try { tonePlayer.stop() } catch(e) {}
+    tonePlayer.start(Tone.now(), playOffset)
+    playStarted = Tone.now() - playOffset
   }
 }
 
@@ -572,14 +579,30 @@ function showPlayer(song) {
     drawWaveform(0)
   })
 
-  // Click / touch to seek
-  let seeking = false
-  const doSeek = e => { e.preventDefault(); seekFromWaveform(e, canvas) }
-  canvas.addEventListener('mousedown', e => { seeking = true; doSeek(e) })
-  canvas.addEventListener('mousemove', e => { if (seeking) doSeek(e) })
-  canvas.addEventListener('mouseup', () => seeking = false)
-  canvas.addEventListener('touchstart', doSeek, { passive: false })
-  canvas.addEventListener('touchmove', doSeek, { passive: false })
+  // Click / touch to seek — mousedown starts, window mouseup commits
+  const onDown = e => {
+    if (!audioBuffer) return
+    e.preventDefault()
+    isSeeking = true
+    stopProgress()  // pause tick while scrubbing
+    seekFromWaveform(e, canvas)
+  }
+  const onMove = e => {
+    if (!isSeeking) return
+    e.preventDefault()
+    seekFromWaveform(e, canvas)
+  }
+  const onUp = () => {
+    if (!isSeeking) return
+    commitSeek()
+    if (isPlaying) startProgress()
+  }
+  canvas.addEventListener('mousedown', onDown)
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+  canvas.addEventListener('touchstart', onDown, { passive: false })
+  canvas.addEventListener('touchmove', onMove, { passive: false })
+  canvas.addEventListener('touchend', onUp)
 
   // Redraw on window resize
   window.addEventListener('resize', () => {

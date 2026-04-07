@@ -335,7 +335,8 @@ async function playSong(idx) {
   try {
     await ensureAudio()
     showLoadingText('Loading...')
-    const resp = await fetch(toFetchUrl(song.shareUrl))
+    // Use preview MP3 for fast streaming; fall back to WAV if no preview yet
+    const resp = await fetch(toFetchUrl(song.previewUrl || song.shareUrl))
     if (!resp.ok) throw new Error('HTTP ' + resp.status)
     showLoadingText('Decoding...')
     const arrBuf = await resp.arrayBuffer()

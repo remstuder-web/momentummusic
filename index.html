@@ -382,14 +382,14 @@ function stopAll() {
 function togglePlay() {
   if (!tonePlayer) return
   if (isPlaying) {
-    // Save elapsed position before stopping
     playOffset = Math.min(playOffset + (Tone.now() - playStarted), audioBuffer?.duration || 0)
+    isSeeking = true          // guard onstop from advancing
     tonePlayer.stop()
+    isSeeking = false
     isPlaying = false; stopProgress(); updateBtn()
   } else {
-    // Resume from saved position
     tonePlayer.start(Tone.now(), playOffset)
-    playStarted = Tone.now()   // ← reset to NOW, keep playOffset as the base
+    playStarted = Tone.now()
     isPlaying = true; startProgress(); updateBtn()
   }
 }
@@ -502,13 +502,22 @@ function seekFromWaveform(e, canvas) {
 
 function commitSeek() {
   if (!isSeeking) return
-  // keep isSeeking=true while stop fires so onstop is guarded
-  if (isPlaying && tonePlayer) {
-    tonePlayer.stop()
-    tonePlayer.start(Tone.now(), playOffset)
-    playStarted = Tone.now()   // ← same fix: reset to NOW
+  if (tonePlayer) {
+    if (isPlaying) {
+      // restart from new position
+      tonePlayer.stop()
+      tonePlayer.start(Tone.now(), playOffset)
+      playStarted = Tone.now()
+    } else {
+      // was paused — start from clicked position
+      tonePlayer.start(Tone.now(), playOffset)
+      playStarted = Tone.now()
+      isPlaying = true
+      startProgress()
+      updateBtn()
+    }
   }
-  isSeeking = false  // clear AFTER stop so onstop guard catches it
+  isSeeking = false
 }
 
 // ── Progress ─────────────────────────────────────────────────────────────────
@@ -558,9 +567,7 @@ function showPlayer(song) {
       <div class="times"><span id="tc">0:00</span><span>${dur}</span></div>
     </div>
     <div class="controls">
-      <button class="ctrl-btn" onclick="if(currentIdx>0)playSong(currentIdx-1)">◀◀</button>
       <button class="play-btn" id="pb" onclick="togglePlay()">⏸</button>
-      <button class="ctrl-btn" onclick="if(currentIdx<songs.length-1)playSong(currentIdx+1)">▶▶</button>
     </div>
     <button class="dl-btn ${dlDone}" id="dlb${currentIdx}" onclick="downloadSong(${currentIdx})">
       <span style="font-size:16px">↓</span> ${dlLabel}

@@ -32,10 +32,9 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
 .player-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 40px;gap:24px;min-width:0;background:rgba(0,0,0,.45)}
 .now-code{font-family:'Space Mono',monospace;font-size:10px;color:#444;text-align:center;margin-bottom:4px}
 .now-title{font-size:24px;text-align:center;color:#f5f1ea;font-weight:300}
-.progress-outer{width:100%;max-width:480px;height:2px;background:rgba(255,255,255,.08);border-radius:2px;cursor:pointer;position:relative}
-.progress-outer:hover{height:4px;margin:-1px 0}
-.progress-fill{height:100%;background:#c9a84c;border-radius:2px;transition:width .15s linear;pointer-events:none}
-.times{display:flex;justify-content:space-between;font-family:'Space Mono',monospace;font-size:10px;color:#444;width:100%;max-width:480px;margin-top:6px}
+.progress-outer{width:100%;max-width:600px;position:relative;cursor:pointer;user-select:none}
+.waveform-canvas{display:block;width:100%;height:80px;border-radius:4px}
+.times{display:flex;justify-content:space-between;font-family:'Space Mono',monospace;font-size:10px;color:#444;width:100%;max-width:600px;margin-top:6px}
 .controls{display:flex;align-items:center;gap:28px}
 .ctrl-btn{background:transparent;border:none;color:#444;font-size:16px;cursor:pointer;transition:color .15s;padding:4px}
 .ctrl-btn:hover{color:#cec9c1}
@@ -45,7 +44,7 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
 .dl-btn:hover{background:rgba(76,175,130,.15);border-color:#4caf82}
 .dl-btn.loading{opacity:.5;cursor:default;pointer-events:none}
 .dl-btn.done{border-color:rgba(76,175,130,.25);color:rgba(76,175,130,.5);background:transparent}
-.pitch-wrap{width:100%;max-width:480px}
+.pitch-wrap{width:100%;max-width:600px}
 .pitch-label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.5);text-align:center;margin-bottom:12px}
 .pitch-row{display:flex;align-items:center;gap:16px}
 .pitch-val{font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:#c9a84c;width:40px;text-align:center}
@@ -75,6 +74,7 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:14p
   .player-area{padding:20px 16px;gap:18px}
   .now-title{font-size:18px}
   .dl-btn{padding:8px 16px;font-size:10px}
+  .waveform-canvas{height:56px}
 }
 </style>
 </head>
@@ -375,7 +375,7 @@ function stopAll() {
   stopProgress()
   if (tonePlayer) { try { tonePlayer.stop(); tonePlayer.dispose() } catch(e){} tonePlayer = null }
   if (pitchNode) { try { pitchNode.dispose() } catch(e){} pitchNode = null }
-  audioBuffer = null; isPlaying = false; playOffset = 0; playStarted = 0
+  audioBuffer = null; isPlaying = false; playOffset = 0; playStarted = 0; waveformPeaks = null
 }
 
 function togglePlay() {
@@ -422,29 +422,97 @@ async function downloadSong(idx) {
   }
 }
 
+// ── Waveform ──────────────────────────────────────────────────────────────────
+let waveformPeaks = null  // Float32Array of peak values per pixel column
+
+function buildWaveformPeaks(buffer, width) {
+  const ch = buffer.getChannelData(0)
+  const n = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : null
+  const peaks = new Float32Array(width)
+  const blockSize = Math.floor(ch.length / width)
+  for (let i = 0; i < width; i++) {
+    let max = 0
+    const start = i * blockSize
+    for (let j = 0; j < blockSize; j++) {
+      const l = Math.abs(ch[start + j] || 0)
+      const r = n ? Math.abs(n[start + j] || 0) : l
+      const v = Math.max(l, r)
+      if (v > max) max = v
+    }
+    peaks[i] = max
+  }
+  return peaks
+}
+
+function drawWaveform(progress) {
+  const canvas = document.getElementById('wfc')
+  if (!canvas || !waveformPeaks) return
+  const dpr = window.devicePixelRatio || 1
+  const W = canvas.offsetWidth, H = canvas.offsetHeight
+  if (canvas.width !== W * dpr || canvas.height !== H * dpr) {
+    canvas.width = W * dpr; canvas.height = H * dpr
+    waveformPeaks = buildWaveformPeaks(audioBuffer, W * dpr)
+  }
+  const ctx = canvas.getContext('2d')
+  const w = canvas.width, h = canvas.height
+  ctx.clearRect(0, 0, w, h)
+
+  const mid = h / 2
+  const playedX = Math.floor(progress * w)
+
+  for (let x = 0; x < w; x++) {
+    const peak = waveformPeaks[x] || 0
+    // Scale: max amplitude = 90% of half-height, with a minimum bar height
+    const barH = Math.max(2, peak * mid * 0.9)
+    const played = x < playedX
+
+    // Color gradient: played = gold, unplayed = dark
+    if (played) {
+      // Gold with slight brightness variation based on peak
+      const brightness = 0.5 + peak * 0.5
+      ctx.fillStyle = `rgba(201,168,76,${brightness})`
+    } else {
+      ctx.fillStyle = `rgba(255,255,255,${0.06 + peak * 0.08})`
+    }
+    ctx.fillRect(x, mid - barH, 1, barH * 2)
+  }
+
+  // Playhead line
+  if (playedX > 0 && playedX < w) {
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
+    ctx.fillRect(playedX - 1, 0, 2, h)
+  }
+}
+
+function seekFromWaveform(e, canvas) {
+  if (!audioBuffer) return
+  const rect = canvas.getBoundingClientRect()
+  const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left
+  const offset = (x / rect.width) * audioBuffer.duration
+  if (isPlaying) {
+    tonePlayer.stop()
+    tonePlayer.start(Tone.now(), Math.max(0, offset))
+    playStarted = Tone.now() - offset
+    playOffset = 0
+  } else {
+    playOffset = Math.max(0, offset)
+    drawWaveform(offset / audioBuffer.duration)
+    const t = document.getElementById('tc')
+    if (t) t.textContent = fmt(offset)
+  }
+}
+
 // ── Progress ─────────────────────────────────────────────────────────────────
-function startProgress() { stopProgress(); progressTimer = setInterval(tick, 150) }
+function startProgress() { stopProgress(); progressTimer = setInterval(tick, 80) }
 function stopProgress() { if(progressTimer){clearInterval(progressTimer);progressTimer=null} }
 function tick() {
   if (!audioBuffer || !tonePlayer) return
   const elapsed = Math.min(Tone.now() - playStarted + playOffset, audioBuffer.duration)
-  const f = document.getElementById('pf'); if(f) f.style.width = (elapsed/audioBuffer.duration*100)+'%'
+  const progress = elapsed / audioBuffer.duration
+  drawWaveform(progress)
   const t = document.getElementById('tc'); if(t) t.textContent = fmt(elapsed)
 }
 function updateBtn() { const b=document.getElementById('pb'); if(b) b.textContent=isPlaying?'⏸':'▶' }
-
-function seek(e, el) {
-  if (!audioBuffer) return
-  const offset = ((e.clientX - el.getBoundingClientRect().left) / el.offsetWidth) * audioBuffer.duration
-  if (isPlaying) {
-    tonePlayer.stop()
-    tonePlayer.start(Tone.now(), offset)
-    playStarted = Tone.now() - offset
-    playOffset = 0
-  } else {
-    playOffset = offset; tick()
-  }
-}
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function pitchHtml() {
@@ -474,9 +542,9 @@ function showPlayer(song) {
   const dlLabel = downloads[song.code] ? '✓ Downloaded' : '↓&nbsp;&nbsp;Download'
   document.getElementById('player').innerHTML = `
     <div><div class="now-code">${esc(song.code||'')}</div><div class="now-title">${esc(song.title||song.code)}</div></div>
-    <div style="width:100%;max-width:480px">
-      <div class="progress-outer" onclick="seek(event,this)">
-        <div class="progress-fill" id="pf" style="width:0%"></div>
+    <div style="width:100%;max-width:600px">
+      <div class="progress-outer" id="wf-wrap">
+        <canvas class="waveform-canvas" id="wfc"></canvas>
       </div>
       <div class="times"><span id="tc">0:00</span><span>${dur}</span></div>
     </div>
@@ -489,6 +557,41 @@ function showPlayer(song) {
       <span style="font-size:16px">↓</span> ${dlLabel}
     </button>
     ${pitchHtml()}`
+
+  // Wire up waveform canvas events
+  const canvas = document.getElementById('wfc')
+  const wrap = document.getElementById('wf-wrap')
+  // Build peaks and draw initial state
+  requestAnimationFrame(() => {
+    const dpr = window.devicePixelRatio || 1
+    const W = canvas.offsetWidth
+    canvas.width = W * dpr; canvas.height = (window.innerWidth < 640 ? 56 : 80) * dpr
+    canvas.style.width = W + 'px'
+    canvas.style.height = (window.innerWidth < 640 ? 56 : 80) + 'px'
+    waveformPeaks = buildWaveformPeaks(audioBuffer, W * dpr)
+    drawWaveform(0)
+  })
+
+  // Click / touch to seek
+  let seeking = false
+  const doSeek = e => { e.preventDefault(); seekFromWaveform(e, canvas) }
+  canvas.addEventListener('mousedown', e => { seeking = true; doSeek(e) })
+  canvas.addEventListener('mousemove', e => { if (seeking) doSeek(e) })
+  canvas.addEventListener('mouseup', () => seeking = false)
+  canvas.addEventListener('touchstart', doSeek, { passive: false })
+  canvas.addEventListener('touchmove', doSeek, { passive: false })
+
+  // Redraw on window resize
+  window.addEventListener('resize', () => {
+    if (!audioBuffer || !document.getElementById('wfc')) return
+    const c = document.getElementById('wfc')
+    const dpr = window.devicePixelRatio || 1
+    const W = c.offsetWidth
+    c.width = W * dpr; c.height = (window.innerWidth < 640 ? 56 : 80) * dpr
+    waveformPeaks = buildWaveformPeaks(audioBuffer, W * dpr)
+    const elapsed = isPlaying ? Math.min(Tone.now() - playStarted + playOffset, audioBuffer.duration) : playOffset
+    drawWaveform(elapsed / audioBuffer.duration)
+  }, { once: true })
 }
 function showErr(msg) {
   document.getElementById('player').innerHTML = `<div class="err-icon">⚠</div><div class="err-text">${msg}</div>${pitchHtml()}`

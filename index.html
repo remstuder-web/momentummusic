@@ -439,35 +439,11 @@ async function playSong(idx) {
   showLoading(song)
 
   try {
-    await ensureAudioCtx()
-    if (audioCtx.state === 'suspended') await audioCtx.resume()
-
     // Create native audio element — streaming starts immediately
     audioEl = new Audio()
     audioEl.crossOrigin = 'anonymous'
     audioEl.preload = 'auto'
     audioEl.src = toFetchUrl(song.previewUrl || song.shareUrl)
-
-    // Connect to Web Audio for pitch shift
-    // Wrap in try/catch — on iOS, createMediaElementSource can fail
-    // if the same element was already connected
-    try {
-      sourceNode = audioCtx.createMediaElementSource(audioEl)
-      gainNode = audioCtx.createGain()
-      gainNode.gain.value = 1.0
-      sourceNode.connect(gainNode)
-
-      if (currentPitch !== 0) {
-        // Only create PitchShift node when pitch is non-zero (saves resources)
-        pitchShifter = new Tone.PitchShift(currentPitch).toDestination()
-        gainNode.connect(pitchShifter.input)
-      } else {
-        gainNode.connect(audioCtx.destination)
-      }
-    } catch(connErr) {
-      console.warn('Audio graph connection failed, using direct playback:', connErr)
-      // Fallback: no pitch shift, just plain audio
-    }
 
     // When song ends naturally, advance
     audioEl.onended = () => {
@@ -476,24 +452,21 @@ async function playSong(idx) {
       if (currentIdx < songs.length - 1) playSong(currentIdx + 1)
     }
 
-    // onerror — show error
     audioEl.onerror = () => {
       if (myGen !== playGen) return
       showErr('Audio load failed — check connection')
     }
 
-    // Can play — show player UI and start
+    // Can play — show UI and start
     audioEl.oncanplay = () => {
       if (myGen !== playGen) return
-      if (audioEl._playerShown) return  // prevent double-trigger
+      if (audioEl._playerShown) return
       audioEl._playerShown = true
       showPlayer(song)
-      audioCtx?.resume().catch(()=>{})
       audioEl.play().catch(e => console.warn('play() blocked:', e))
       isPlaying = true
       startProgress()
       updateBtn()
-      // Decode waveform in background without blocking playback
       decodeWaveformInBackground(song, myGen)
     }
 
@@ -532,11 +505,9 @@ async function decodeWaveformInBackground(song, myGen) {
 function stopAll() {
   playGen++
   stopProgress()
-  isSeeking = false
-  waveformPeaks = null
-  audioBuffer = null
+  isSeeking = false; waveformPeaks = null; audioBuffer = null
   if (audioEl) {
-    audioEl.oncanplay = null; audioEl.onended = null
+    audioEl.oncanplay = null; audioEl.onended = null; audioEl.onerror = null
     audioEl.pause(); audioEl.src = ''; audioEl = null
   }
   if (sourceNode) { try { sourceNode.disconnect() } catch(e){} sourceNode = null }
@@ -557,13 +528,31 @@ function togglePlay() {
   }
 }
 
-function setPitch(v) {
+async function setPitch(v) {
   currentPitch = parseInt(v)
   const el = document.getElementById('pv')
   if (el) el.textContent = currentPitch > 0 ? '+' + currentPitch : currentPitch
-  if (pitchShifter) {
-    pitchShifter.pitch = currentPitch
+  if (!audioEl) return
+  if (currentPitch === 0) {
+    // Disconnect Web Audio — let audio element play directly
+    if (sourceNode) { try { sourceNode.disconnect() } catch(e){} sourceNode = null }
+    if (gainNode)   { try { gainNode.disconnect() }   catch(e){} gainNode = null }
+    if (pitchShifter) { try { pitchShifter.dispose() } catch(e){} pitchShifter = null }
+    if (audioCtx)   { try { audioCtx.close() } catch(e){} audioCtx = null }
+    return
   }
+  // Lazily connect Web Audio graph for pitch shifting
+  try {
+    await ensureAudioCtx(); await audioCtx.resume()
+    if (!sourceNode) {
+      sourceNode = audioCtx.createMediaElementSource(audioEl)
+      gainNode = audioCtx.createGain(); gainNode.gain.value = 1.0
+      sourceNode.connect(gainNode)
+    }
+    if (pitchShifter) { try { pitchShifter.dispose() } catch(e){} }
+    pitchShifter = new Tone.PitchShift(currentPitch).toDestination()
+    gainNode.connect(pitchShifter.input)
+  } catch(e) { console.warn('Pitch shift failed:', e.message) }
 }
 function resetPitch() { currentPitch=0; const s=document.getElementById('ps'); if(s)s.value=0; setPitch(0) }
 

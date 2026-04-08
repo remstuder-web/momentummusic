@@ -274,11 +274,14 @@ const db = createClient(SB_URL, SB_KEY)
 
 let songs = [], sessionId = null, currentIdx = -1
 let isPlaying = false, progressTimer = null, currentPitch = 0
-let tonePlayer = null, pitchNode = null, toneBuffer = null
-let audioBuffer = null, playOffset = 0, playStarted = 0
+let audioEl = null        // native <audio> for streaming playback
+let audioCtx = null       // Web Audio API context
+let sourceNode = null     // MediaElementSourceNode
+let gainNode = null       // for LUFS normalization
+let pitchShifter = null   // Tone.PitchShift connected after sourceNode
+let audioBuffer = null    // decoded buffer (for waveform only)
 let downloads = {}
-const preloadCache = {}   // idx → AudioBuffer, preloaded in background
-let playGen = 0           // increments each playSong call — onstop ignores stale callbacks
+let playGen = 0           // increments on each new song — stale callbacks check this
 
 function toDirectUrl(u) {
   if (!u) return null
@@ -291,8 +294,9 @@ function toFetchUrl(u) {
   return '/api/audio?url=' + encodeURIComponent(toDirectUrl(u))
 }
 
-async function ensureAudio() {
-  await Tone.start()
+async function ensureAudioCtx() {
+  if (audioCtx) return
+  audioCtx = new AudioContext()
 }
 
 async function init() {
@@ -411,143 +415,144 @@ function setActive(idx) {
   rdxScrollTo(idx, true)
 }
 
-// ── Background preload ────────────────────────────────────────────────────────
-async function preloadAll() {
-  for (let i = 0; i < songs.length; i++) {
-    if (preloadCache[i]) continue  // already done
-    if (i === currentIdx) continue  // playSong handles this one
-    const song = songs[i]
+// ── Background preload — browser preconnects to Dropbox URLs so they stream faster ──
+function preloadAll() {
+  songs.forEach((song, i) => {
     const url = toFetchUrl(song.previewUrl || song.shareUrl)
-    if (!url) continue
-    try {
-      setCardLoading(i, true)
-      const resp = await fetch(url)
-      if (!resp.ok) throw new Error('HTTP ' + resp.status)
-      const arrBuf = await resp.arrayBuffer()
-      const ctx = new AudioContext()
-      const decoded = await ctx.decodeAudioData(arrBuf)
-      ctx.close()
-      preloadCache[i] = decoded
-      setCardLoading(i, false)
-      console.log(`✓ Preloaded [${i}] ${song.title || song.code}`)
-    } catch(e) {
-      setCardLoading(i, false)
-      console.warn(`⚠ Preload failed [${i}]:`, e.message)
-    }
-  }
+    if (!url) return
+    // Use <link rel=prefetch> so browser warms the connection without downloading the file
+    const link = document.createElement('link')
+    link.rel = 'prefetch'; link.as = 'fetch'; link.href = url
+    document.head.appendChild(link)
+  })
 }
 
-function setCardLoading(idx, loading) {
-  const card = document.getElementById('rc' + idx)
-  if (!card) return
-  const dot = card.querySelector('.rc-dot')
-  if (!dot) return
-  if (loading) {
-    dot.style.background = '#333'
-    dot.style.animation = 'pulse .8s ease-in-out infinite alternate'
-  } else if (preloadCache[idx]) {
-    dot.style.background = 'rgba(76,175,130,.5)'
-    dot.style.animation = ''
-  } else {
-    dot.style.background = ''
-    dot.style.animation = ''
-  }
-}
-
-// ── Playback ──────────────────────────────────────────────────────────────────
+// ── Playback — native <audio> streaming ──────────────────────────────────────
 async function playSong(idx) {
-  if (idx === currentIdx && audioBuffer) { togglePlay(); return }
-  playGen++                // invalidate any previous onstop callbacks
+  if (idx === currentIdx && audioEl && !audioEl.ended) { togglePlay(); return }
+  playGen++
   const myGen = playGen
   stopAll()
   currentIdx = idx
   setActive(idx)
   const song = songs[idx]
   showLoading(song)
-  try {
-    await ensureAudio()
-    let decoded = preloadCache[idx] || null
 
-    if (!decoded) {
-      showLoadingText('Loading...')
-      const resp = await fetch(toFetchUrl(song.previewUrl || song.shareUrl))
-      if (!resp.ok) throw new Error('HTTP ' + resp.status)
-      showLoadingText('Decoding...')
-      const arrBuf = await resp.arrayBuffer()
-      const decodeCtx = new AudioContext()
-      decoded = await decodeCtx.decodeAudioData(arrBuf.slice(0))
-      decodeCtx.close()
+  try {
+    await ensureAudioCtx()
+    if (audioCtx.state === 'suspended') await audioCtx.resume()
+
+    // Create native audio element — streaming starts immediately
+    audioEl = new Audio()
+    audioEl.crossOrigin = 'anonymous'
+    audioEl.preload = 'auto'
+    audioEl.src = toFetchUrl(song.previewUrl || song.shareUrl)
+
+    // Connect to Web Audio for pitch shift
+    // Wrap in try/catch — on iOS, createMediaElementSource can fail
+    // if the same element was already connected
+    try {
+      sourceNode = audioCtx.createMediaElementSource(audioEl)
+      gainNode = audioCtx.createGain()
+      gainNode.gain.value = 1.0
+      sourceNode.connect(gainNode)
+
+      if (currentPitch !== 0) {
+        // Only create PitchShift node when pitch is non-zero (saves resources)
+        pitchShifter = new Tone.PitchShift(currentPitch).toDestination()
+        gainNode.connect(pitchShifter.input)
+      } else {
+        gainNode.connect(audioCtx.destination)
+      }
+    } catch(connErr) {
+      console.warn('Audio graph connection failed, using direct playback:', connErr)
+      // Fallback: no pitch shift, just plain audio
     }
 
-    // Abort if another song was requested while we were loading/decoding
-    if (myGen !== playGen) return
-
-    audioBuffer = decoded
-    preloadCache[idx] = decoded
-
-    toneBuffer = new Tone.ToneAudioBuffer()
-    toneBuffer._buffer = decoded
-
-    pitchNode = new Tone.PitchShift(currentPitch).toDestination()
-    tonePlayer = new Tone.Player(toneBuffer).connect(pitchNode)
-    tonePlayer.onstop = () => {
-      if (myGen !== playGen) return  // stale callback — new song already started
-      if (isSeeking) return
-      if (!isPlaying) return
+    // When song ends naturally, advance
+    audioEl.onended = () => {
+      if (myGen !== playGen) return
       isPlaying = false; stopProgress(); updateBtn()
       if (currentIdx < songs.length - 1) playSong(currentIdx + 1)
     }
 
-    showPlayer(song)
-    tonePlayer.start()
-    isPlaying = true
-    playStarted = Tone.now()
-    playOffset = 0
-    startProgress()
-    updateBtn()
+    // onerror — show error
+    audioEl.onerror = () => {
+      if (myGen !== playGen) return
+      showErr('Audio load failed — check connection')
+    }
+
+    // Can play — show player UI and start
+    audioEl.oncanplay = () => {
+      if (myGen !== playGen) return
+      if (audioEl._playerShown) return  // prevent double-trigger
+      audioEl._playerShown = true
+      showPlayer(song)
+      audioCtx?.resume().catch(()=>{})
+      audioEl.play().catch(e => console.warn('play() blocked:', e))
+      isPlaying = true
+      startProgress()
+      updateBtn()
+      // Decode waveform in background without blocking playback
+      decodeWaveformInBackground(song, myGen)
+    }
+
+    audioEl.load()
   } catch(e) {
     if (myGen !== playGen) return
     console.error('playSong:', e)
-    showErr(e.name + ': ' + (e.message || 'unknown'))
+    showErr(e.name + ': ' + (e.message||''))
   }
+}
+
+async function decodeWaveformInBackground(song, myGen) {
+  // Fetch and decode full audio just for the waveform — non-blocking
+  try {
+    const resp = await fetch(toFetchUrl(song.previewUrl || song.shareUrl))
+    if (!resp.ok || myGen !== playGen) return
+    const arrBuf = await resp.arrayBuffer()
+    if (myGen !== playGen) return
+    const ctx = new OfflineAudioContext(1, 44100, 44100)
+    const decoded = await ctx.decodeAudioData(arrBuf)
+    if (myGen !== playGen) return
+    audioBuffer = decoded
+    // Redraw waveform with real peaks
+    const canvas = document.getElementById('wfc')
+    if (canvas) {
+      const dpr = window.devicePixelRatio || 1
+      const W = canvas.offsetWidth
+      canvas.width = W * dpr
+      canvas.height = canvas.offsetHeight * dpr
+      waveformPeaks = buildWaveformPeaks(decoded, W * dpr)
+      drawWaveform(audioEl ? audioEl.currentTime / decoded.duration : 0)
+    }
+  } catch(e) { /* waveform is optional */ }
 }
 
 function stopAll() {
   playGen++
   stopProgress()
-  if (tonePlayer) { try { tonePlayer.stop(); tonePlayer.dispose() } catch(e){} tonePlayer = null }
-  if (pitchNode) { try { pitchNode.dispose() } catch(e){} pitchNode = null }
-  audioBuffer = null; toneBuffer = null; isPlaying = false; playOffset = 0; playStarted = 0; waveformPeaks = null; isSeeking = false
-  // Note: preloadCache is intentionally kept — buffers stay ready for instant replay
-}
-
-// Create a fresh Tone.Player from stored toneBuffer — needed because
-// Tone.js players cannot be restarted after stop(); must recreate
-function makePlayer(offset) {
-  if (tonePlayer) { try { tonePlayer.stop(); tonePlayer.dispose() } catch(e){} tonePlayer = null }
-  tonePlayer = new Tone.Player(toneBuffer).connect(pitchNode)
-  tonePlayer.onstop = () => {
-    if (isSeeking) return
-    if (!isPlaying) return
-    isPlaying = false; stopProgress(); updateBtn()
-    if (currentIdx < songs.length - 1) playSong(currentIdx + 1)
+  isSeeking = false
+  waveformPeaks = null
+  audioBuffer = null
+  if (audioEl) {
+    audioEl.oncanplay = null; audioEl.onended = null
+    audioEl.pause(); audioEl.src = ''; audioEl = null
   }
-  tonePlayer.start(Tone.now(), offset)
-  playStarted = Tone.now()
+  if (sourceNode) { try { sourceNode.disconnect() } catch(e){} sourceNode = null }
+  if (gainNode)   { try { gainNode.disconnect() }   catch(e){} gainNode = null }
+  if (pitchShifter) { try { pitchShifter.dispose() } catch(e){} pitchShifter = null }
+  isPlaying = false
 }
 
 function togglePlay() {
-  if (!tonePlayer || !toneBuffer) return
+  if (!audioEl) return
   if (isPlaying) {
-    // Pause — save position
-    playOffset = Math.min(playOffset + (Tone.now() - playStarted), audioBuffer?.duration || 0)
-    isSeeking = true
-    tonePlayer.stop()
-    isSeeking = false
+    audioEl.pause()
     isPlaying = false; stopProgress(); updateBtn()
   } else {
-    // Resume — recreate player from saved position
-    makePlayer(playOffset)
+    audioCtx?.resume()
+    audioEl.play().catch(e => console.warn('play():', e))
     isPlaying = true; startProgress(); updateBtn()
   }
 }
@@ -556,7 +561,9 @@ function setPitch(v) {
   currentPitch = parseInt(v)
   const el = document.getElementById('pv')
   if (el) el.textContent = currentPitch > 0 ? '+' + currentPitch : currentPitch
-  if (pitchNode) pitchNode.pitch = currentPitch
+  if (pitchShifter) {
+    pitchShifter.pitch = currentPitch
+  }
 }
 function resetPitch() { currentPitch=0; const s=document.getElementById('ps'); if(s)s.value=0; setPitch(0) }
 
@@ -608,38 +615,45 @@ function buildWaveformPeaks(buffer, width) {
 
 function drawWaveform(progress) {
   const canvas = document.getElementById('wfc')
-  if (!canvas || !waveformPeaks) return
+  if (!canvas) return
   const dpr = window.devicePixelRatio || 1
   const W = canvas.offsetWidth, H = canvas.offsetHeight
   if (canvas.width !== W * dpr || canvas.height !== H * dpr) {
     canvas.width = W * dpr; canvas.height = H * dpr
-    waveformPeaks = buildWaveformPeaks(audioBuffer, W * dpr)
+    if (audioBuffer) waveformPeaks = buildWaveformPeaks(audioBuffer, W * dpr)
   }
   const ctx = canvas.getContext('2d')
   const w = canvas.width, h = canvas.height
   ctx.clearRect(0, 0, w, h)
-
   const mid = h / 2
   const playedX = Math.floor(progress * w)
 
+  if (!waveformPeaks) {
+    // No waveform yet — draw a simple progress bar as placeholder
+    ctx.fillStyle = 'rgba(255,255,255,.06)'
+    ctx.fillRect(0, mid - 3, w, 6)
+    if (playedX > 0) {
+      ctx.fillStyle = 'rgba(201,168,76,.6)'
+      ctx.fillRect(0, mid - 3, playedX, 6)
+    }
+    if (playedX > 0 && playedX < w) {
+      ctx.fillStyle = 'rgba(255,255,255,.9)'
+      ctx.fillRect(playedX - 1, 0, 2, h)
+    }
+    return
+  }
+
   for (let x = 0; x < w; x++) {
     const peak = waveformPeaks[x] || 0
-    // Scale: max amplitude = 90% of half-height, with a minimum bar height
     const barH = Math.max(2, peak * mid * 0.9)
     const played = x < playedX
-
-    // Color gradient: played = gold, unplayed = dark
     if (played) {
-      // Gold with slight brightness variation based on peak
-      const brightness = 0.5 + peak * 0.5
-      ctx.fillStyle = `rgba(201,168,76,${brightness})`
+      ctx.fillStyle = `rgba(201,168,76,${0.5 + peak * 0.5})`
     } else {
       ctx.fillStyle = `rgba(255,255,255,${0.06 + peak * 0.08})`
     }
     ctx.fillRect(x, mid - barH, 1, barH * 2)
   }
-
-  // Playhead line
   if (playedX > 0 && playedX < w) {
     ctx.fillStyle = 'rgba(255,255,255,0.9)'
     ctx.fillRect(playedX - 1, 0, 2, h)
@@ -649,38 +663,28 @@ function drawWaveform(progress) {
 let isSeeking = false  // prevents onstop from advancing song during seek
 
 function seekFromWaveform(e, canvas) {
-  if (!audioBuffer) return
+  if (!audioEl) return
   const rect = canvas.getBoundingClientRect()
   const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left
-  const offset = Math.max(0, Math.min((x / rect.width) * audioBuffer.duration, audioBuffer.duration - 0.01))
-  // Just update visuals while dragging — only restart playback on release
-  playOffset = offset
-  drawWaveform(offset / audioBuffer.duration)
+  const dur = audioEl.duration || audioBuffer?.duration || 0
+  if (!dur) return
+  const offset = Math.max(0, Math.min((x / rect.width) * dur, dur - 0.01))
+  // Update visuals while dragging — commit on release
+  const progress = offset / dur
+  drawWaveform(progress)
   const t = document.getElementById('tc'); if (t) t.textContent = fmt(offset)
-}
-
-function stopSong() {
-  if (!tonePlayer) return
-  playOffset = 0
-  isSeeking = true
-  tonePlayer.stop()
-  isSeeking = false
-  isPlaying = false
-  stopProgress()
-  drawWaveform(0)
-  const t = document.getElementById('tc'); if (t) t.textContent = '0:00'
-  updateBtn()
+  audioEl._seekTarget = offset  // store for commitSeek
 }
 
 function commitSeek() {
-  if (!toneBuffer) return
-  const wasPlaying = isPlaying
-  makePlayer(playOffset)
-  if (!wasPlaying) {
-    isPlaying = true
-    updateBtn()
+  if (!audioEl || !isSeeking) return
+  const offset = audioEl._seekTarget ?? 0
+  audioEl.currentTime = offset
+  if (!isPlaying) {
+    audioCtx?.resume()
+    audioEl.play().catch(()=>{})
+    isPlaying = true; updateBtn(); startProgress()
   }
-  startProgress()
   isSeeking = false
 }
 
@@ -688,11 +692,15 @@ function commitSeek() {
 function startProgress() { stopProgress(); progressTimer = setInterval(tick, 80) }
 function stopProgress() { if(progressTimer){clearInterval(progressTimer);progressTimer=null} }
 function tick() {
-  if (!audioBuffer || !tonePlayer) return
-  const elapsed = Math.min(Tone.now() - playStarted + playOffset, audioBuffer.duration)
-  const progress = elapsed / audioBuffer.duration
-  drawWaveform(progress)
+  if (!audioEl) return
+  const elapsed = audioEl.currentTime
+  const dur = audioEl.duration || audioBuffer?.duration || 0
+  if (!dur) return
+  drawWaveform(elapsed / dur)
   const t = document.getElementById('tc'); if(t) t.textContent = fmt(elapsed)
+  // Show total duration once known
+  const td = document.getElementById('tdur')
+  if (td && audioEl.duration && !isNaN(audioEl.duration)) td.textContent = fmt(audioEl.duration)
 }
 function updateBtn() { const b=document.getElementById('pb'); if(b) b.textContent=isPlaying?'⏸':'▶' }
 
@@ -719,7 +727,6 @@ function showLoading(song) {
 function showLoadingText(t) { const e=document.getElementById('ltxt'); if(e) e.textContent=t }
 
 function showPlayer(song) {
-  const dur = fmt(audioBuffer?.duration || 0)
   const dlDone = downloads[song.code] ? 'done' : ''
   const dlLabel = downloads[song.code] ? '✓ Downloaded' : '↓&nbsp;&nbsp;Download'
   document.getElementById('player').innerHTML = `
@@ -728,36 +735,34 @@ function showPlayer(song) {
       <div class="progress-outer" id="wf-wrap">
         <canvas class="waveform-canvas" id="wfc"></canvas>
       </div>
-      <div class="times"><span id="tc">0:00</span><span>${dur}</span></div>
+      <div class="times"><span id="tc">0:00</span><span id="tdur">—:——</span></div>
     </div>
     <div class="controls">
-      <button class="play-btn" id="pb" onclick="togglePlay()">▶</button>
+      <button class="play-btn" id="pb" onclick="togglePlay()">⏸</button>
     </div>
     <button class="dl-btn ${dlDone}" id="dlb${currentIdx}" onclick="downloadSong(${currentIdx})">
       <span style="font-size:16px">↓</span> ${dlLabel}
     </button>
     ${pitchHtml()}`
 
-  // Wire up waveform canvas events
+  // Wire up waveform canvas — starts as empty bar, fills in after background decode
   const canvas = document.getElementById('wfc')
-  const wrap = document.getElementById('wf-wrap')
-  // Build peaks and draw initial state
   requestAnimationFrame(() => {
     const dpr = window.devicePixelRatio || 1
     const W = canvas.offsetWidth
     canvas.width = W * dpr; canvas.height = (window.innerWidth < 640 ? 56 : 80) * dpr
     canvas.style.width = W + 'px'
     canvas.style.height = (window.innerWidth < 640 ? 56 : 80) + 'px'
-    waveformPeaks = buildWaveformPeaks(audioBuffer, W * dpr)
+    // Draw empty bar until waveform data arrives from background decode
     drawWaveform(0)
   })
 
   // Click / touch to seek — mousedown starts, window mouseup commits
   const onDown = e => {
-    if (!audioBuffer) return
+    if (!audioEl) return
     e.preventDefault()
     isSeeking = true
-    stopProgress()  // pause tick while scrubbing
+    stopProgress()
     seekFromWaveform(e, canvas)
   }
   const onMove = e => {
@@ -777,16 +782,15 @@ function showPlayer(song) {
   canvas.addEventListener('touchmove', onMove, { passive: false })
   canvas.addEventListener('touchend', onUp)
 
-  // Redraw on window resize
+  // Redraw on resize
   window.addEventListener('resize', () => {
-    if (!audioBuffer || !document.getElementById('wfc')) return
-    const c = document.getElementById('wfc')
+    const c = document.getElementById('wfc'); if (!c) return
     const dpr = window.devicePixelRatio || 1
     const W = c.offsetWidth
     c.width = W * dpr; c.height = (window.innerWidth < 640 ? 56 : 80) * dpr
-    waveformPeaks = buildWaveformPeaks(audioBuffer, W * dpr)
-    const elapsed = isPlaying ? Math.min(Tone.now() - playStarted + playOffset, audioBuffer.duration) : playOffset
-    drawWaveform(elapsed / audioBuffer.duration)
+    if (audioBuffer) waveformPeaks = buildWaveformPeaks(audioBuffer, W * dpr)
+    const dur = audioEl?.duration || audioBuffer?.duration || 0
+    drawWaveform(dur ? (audioEl?.currentTime || 0) / dur : 0)
   }, { once: true })
 }
 function showErr(msg) {

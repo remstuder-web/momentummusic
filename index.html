@@ -278,6 +278,7 @@ let tonePlayer = null, pitchNode = null, toneBuffer = null
 let audioBuffer = null, playOffset = 0, playStarted = 0
 let downloads = {}
 const preloadCache = {}   // idx → AudioBuffer, preloaded in background
+let playGen = 0           // increments each playSong call — onstop ignores stale callbacks
 
 function toDirectUrl(u) {
   if (!u) return null
@@ -456,6 +457,8 @@ function setCardLoading(idx, loading) {
 // ── Playback ──────────────────────────────────────────────────────────────────
 async function playSong(idx) {
   if (idx === currentIdx && audioBuffer) { togglePlay(); return }
+  playGen++                // invalidate any previous onstop callbacks
+  const myGen = playGen
   stopAll()
   currentIdx = idx
   setActive(idx)
@@ -467,7 +470,6 @@ async function playSong(idx) {
 
     if (!decoded) {
       showLoadingText('Loading...')
-      // Use preview MP3 for fast streaming; fall back to WAV if no preview yet
       const resp = await fetch(toFetchUrl(song.previewUrl || song.shareUrl))
       if (!resp.ok) throw new Error('HTTP ' + resp.status)
       showLoadingText('Decoding...')
@@ -477,18 +479,20 @@ async function playSong(idx) {
       decodeCtx.close()
     }
 
-    audioBuffer = decoded
-    preloadCache[idx] = decoded  // ensure cached for future
+    // Abort if another song was requested while we were loading/decoding
+    if (myGen !== playGen) return
 
-    // Tone.ToneAudioBuffer wraps the raw AudioBuffer so Tone.Player can use it
+    audioBuffer = decoded
+    preloadCache[idx] = decoded
+
     toneBuffer = new Tone.ToneAudioBuffer()
     toneBuffer._buffer = decoded
 
-    // Chain: Tone.Player → Tone.PitchShift → output
     pitchNode = new Tone.PitchShift(currentPitch).toDestination()
     tonePlayer = new Tone.Player(toneBuffer).connect(pitchNode)
     tonePlayer.onstop = () => {
-      if (isSeeking) return  // seek triggered stop — don't advance
+      if (myGen !== playGen) return  // stale callback — new song already started
+      if (isSeeking) return
       if (!isPlaying) return
       isPlaying = false; stopProgress(); updateBtn()
       if (currentIdx < songs.length - 1) playSong(currentIdx + 1)
@@ -502,12 +506,14 @@ async function playSong(idx) {
     startProgress()
     updateBtn()
   } catch(e) {
+    if (myGen !== playGen) return
     console.error('playSong:', e)
     showErr(e.name + ': ' + (e.message || 'unknown'))
   }
 }
 
 function stopAll() {
+  playGen++
   stopProgress()
   if (tonePlayer) { try { tonePlayer.stop(); tonePlayer.dispose() } catch(e){} tonePlayer = null }
   if (pitchNode) { try { pitchNode.dispose() } catch(e){} pitchNode = null }

@@ -69,8 +69,21 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:12p
 .state-icon{font-size:36px;opacity:.3}
 .state-title{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#555}
 .state-sub{font-size:13px;color:#333;text-align:center}
-@media(max-width:640px){
-  .rolodex-wrap{height:80px}
+.feedback-panel{width:100%;max-width:600px;margin-top:8px;border-top:1px solid rgba(255,255,255,.06);padding-top:16px}
+.feedback-title{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.5);margin-bottom:12px}
+.feedback-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;max-height:180px;overflow-y:auto}
+.feedback-item{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:3px}
+.feedback-ts{font-family:'Space Mono',monospace;font-size:10px;color:#c9a84c;flex-shrink:0;cursor:pointer;padding-top:1px}
+.feedback-ts:hover{color:#f5f1ea}
+.feedback-txt{font-size:13px;color:#cec9c1;flex:1;line-height:1.5}
+.feedback-input-row{display:flex;gap:8px}
+.feedback-inp{flex:1;background:#111;border:1px solid #252525;color:#f5f1ea;font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 10px;border-radius:3px;outline:none}
+.feedback-inp:focus{border-color:rgba(201,168,76,.4)}
+.feedback-inp::placeholder{color:#333}
+.feedback-submit{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;padding:8px 14px;background:transparent;border:1px solid rgba(201,168,76,.4);color:#c9a84c;border-radius:3px;cursor:pointer;white-space:nowrap}
+.feedback-submit:hover{background:rgba(201,168,76,.08)}
+.feedback-sent{font-family:'Space Mono',monospace;font-size:10px;color:#4caf82;padding:6px 0}
+@media(max-width:640px){.feedback-panel{padding:12px 0 0}}
   .rcard{width:90px;height:62px;margin:0 4px}
   .rcard.near{width:90px;height:62px}
   .rcard.active{width:106px;height:70px}
@@ -274,12 +287,12 @@ const db = createClient(SB_URL, SB_KEY)
 
 let songs = [], sessionId = null, currentIdx = -1
 let isPlaying = false, progressTimer = null
-let audioEl = null       // single <audio> element — reused across songs
-let audioBuffer = null   // decoded PCM for waveform (background)
-let waveformPeaks = null
+let audioEl = null
+let audioBuffer = null, waveformPeaks = null
 let isSeeking = false
-let downloads = {}
+let downloads = {}, feedback = {}
 let currentPitch = 0
+let feedbackEnabled = false
 
 function toFetchUrl(u) {
   if (!u) return null
@@ -300,6 +313,8 @@ async function init() {
   if (data.expires_at && new Date(data.expires_at) < new Date()) { showState('⏱','EXPIRED','Contact the producer for a new link.'); return }
   songs = data.songs || []
   downloads = data.downloads || {}
+  feedback = data.feedback || {}
+  feedbackEnabled = data.feedback_enabled || false
   document.getElementById('nav-title').textContent = data.patch_name || 'Demo Session'
   document.title = 'LISTEN — ' + (data.patch_name || 'Demo')
   setBackground(data.background || 'stars')
@@ -615,6 +630,70 @@ function showLoading(song) {
     ${pitchHtml()}`
 }
 
+function feedbackHtml(song) {
+  if (!feedbackEnabled) return ''
+  const code = song.code || ''
+  const items = (feedback[code] || [])
+  const itemsHtml = items.map((f,i) => `
+    <div class="feedback-item">
+      <span class="feedback-ts" onclick="seekToTime(${f.ts})" title="Click to seek">${fmt(f.ts)}</span>
+      <span class="feedback-txt">${esc(f.text)}</span>
+    </div>`).join('')
+  return `<div class="feedback-panel">
+    <div class="feedback-title">FEEDBACK</div>
+    ${items.length ? `<div class="feedback-list">${itemsHtml}</div>` : ''}
+    <div class="feedback-input-row">
+      <input class="feedback-inp" id="fb-inp" placeholder="Write feedback at current time..." onkeydown="if(event.key==='Enter')submitFeedback('${esc(code)}')" />
+      <button class="feedback-submit" onclick="submitFeedback('${esc(code)}')">→ Send</button>
+    </div>
+    <div class="feedback-sent" id="fb-sent" style="display:none">✓ Feedback sent!</div>
+  </div>`
+}
+
+async function submitFeedback(code) {
+  const inp = document.getElementById('fb-inp')
+  if (!inp) return
+  const text = inp.value.trim()
+  if (!text) return
+  const ts = audioEl ? Math.floor(audioEl.currentTime) : 0
+  inp.value = ''
+  if (!feedback[code]) feedback[code] = []
+  feedback[code].push({ ts, text, at: new Date().toISOString() })
+  // Save to Supabase
+  try { await db.from('share_sessions').update({ feedback }).eq('id', sessionId) }
+  catch(e) { console.warn('Feedback save failed:', e) }
+  // Re-render only the feedback list area
+  const list = document.querySelector('.feedback-list')
+  const items = feedback[code] || []
+  const newListHtml = items.map(f => `
+    <div class="feedback-item">
+      <span class="feedback-ts" onclick="seekToTime(${f.ts})" title="Click to seek">${fmt(f.ts)}</span>
+      <span class="feedback-txt">${esc(f.text)}</span>
+    </div>`).join('')
+  if (list) {
+    list.innerHTML = newListHtml
+  } else {
+    // Insert list above input row
+    const row = document.querySelector('.feedback-input-row')
+    if (row) {
+      const div = document.createElement('div')
+      div.className = 'feedback-list'
+      div.innerHTML = newListHtml
+      row.parentNode.insertBefore(div, row)
+    }
+  }
+  const sent = document.getElementById('fb-sent')
+  if (sent) { sent.style.display = 'block'; setTimeout(() => { sent.style.display = 'none' }, 2000) }
+}
+
+function seekToTime(ts) {
+  if (!audioEl) return
+  audioEl.currentTime = ts
+  if (!isPlaying) {
+    audioEl.play().then(() => { isPlaying = true; startProgress(); updateBtn() }).catch(()=>{})
+  }
+}
+
 function showPlayer(song) {
   const dlDone = downloads[song.code] ? 'done' : ''
   const dlLabel = downloads[song.code] ? '✓ Downloaded' : '↓&nbsp;&nbsp;Download'
@@ -630,7 +709,8 @@ function showPlayer(song) {
     <button class="dl-btn ${dlDone}" id="dlb${currentIdx}" onclick="downloadSong(${currentIdx})">
       <span style="font-size:16px">↓</span> ${dlLabel}
     </button>
-    ${pitchHtml()}`
+    ${pitchHtml()}
+    ${feedbackHtml(song)}`
 
   const canvas = document.getElementById('wfc')
   requestAnimationFrame(() => {

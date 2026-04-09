@@ -496,7 +496,7 @@ async function downloadSong(idx) {
     const blob = await resp.blob()
     const ext = (song.shareUrl||'').match(/\.(mp3|wav|m4a|flac|aiff|ogg)/i)?.[1] || 'mp3'
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob); a.download = (song.title||song.code)+'.'+ext; a.click()
+    a.href = URL.createObjectURL(blob); a.download = song.filename || ((song.title||song.code)+'.'+ext); a.click()
     URL.revokeObjectURL(a.href)
     btn.classList.remove('loading'); btn.classList.add('done'); btn.innerHTML = '✓ Downloaded'
     document.getElementById('rc'+idx)?.classList.add('dl-done')

@@ -70,7 +70,7 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:12p
 .state-title{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#555}
 .state-sub{font-size:13px;color:#333;text-align:center}
 .feedback-panel{width:100%;max-width:600px;margin-top:8px;border-top:1px solid rgba(255,255,255,.06);padding-top:16px}
-.feedback-title{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.5);margin-bottom:12px}
+.feedback-title{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.85);margin-bottom:12px}
 .feedback-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;max-height:180px;overflow-y:auto}
 .feedback-item{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:3px}
 .feedback-ts{font-family:'Space Mono',monospace;font-size:10px;color:#c9a84c;flex-shrink:0;cursor:pointer;padding-top:1px}
@@ -614,6 +614,8 @@ function commitSeek() {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function pitchHtml() {
+  // Only show pitch slider on submission links (no feedback panel)
+  if (feedbackEnabled) return ''
   return `<div class="pitch-wrap">
     <div class="pitch-label">KEY — pitch shift</div>
     <div class="pitch-row">

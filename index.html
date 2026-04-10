@@ -292,7 +292,7 @@ function startC64(c) {
       for (let cl = 0; cl < COLS; cl++) {
         const g = grid[r][cl]
         const flicker = 0.55 + 0.45 * Math.sin(t*g.speed + g.phase)
-        ctx.fillStyle = `rgba(20,255,80,${0.07 + g.bright*flicker*0.45})`
+        ctx.fillStyle = `rgba(20,255,80,${0.025 + g.bright*flicker*0.14})`
         ctx.fillText(g.ch, (cl+0.5)*fw, (r+0.5)*fh)
         if (Math.random() < 0.0008) { g.ch = CHARS[Math.random()*CHARS.length|0]; g.bright = Math.random() }
       }
@@ -321,7 +321,7 @@ function startC64(c) {
     const ry = ((t*16) % (H+24)) - 12
     const rgrd = ctx.createLinearGradient(0,ry-10,0,ry+10)
     rgrd.addColorStop(0,'rgba(30,255,90,0)')
-    rgrd.addColorStop(0.5,'rgba(30,255,90,0.035)')
+    rgrd.addColorStop(0.5,'rgba(30,255,90,0.012)')
     rgrd.addColorStop(1,'rgba(30,255,90,0)')
     ctx.fillStyle = rgrd; ctx.fillRect(0,ry-10,W,20)
 

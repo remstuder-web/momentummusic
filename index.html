@@ -20,14 +20,13 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:12p
 .app{position:relative;z-index:1;display:flex;flex-direction:column;flex:1;overflow:hidden}
 .rolodex-wrap{position:relative;flex-shrink:0;height:96px;overflow:hidden;background:rgba(0,0,0,.5);border-bottom:1px solid rgba(255,255,255,.05)}
 .rolodex-track{display:flex;align-items:center;height:100%;padding:0 calc(50% - 65px);gap:0;cursor:grab;user-select:none;will-change:transform;transition:transform .35s cubic-bezier(.25,.46,.45,.94)}
-.prompt-line{flex-shrink:0;height:52px;display:flex;align-items:center;padding:0 28px;background:rgba(0,0,0,.65);border-bottom:1px solid rgba(20,255,80,.08);font-family:'Courier New',Courier,monospace;font-size:13px;letter-spacing:.04em;color:rgba(20,255,80,.75);position:relative;overflow:hidden}
-.prompt-prefix{color:rgba(20,255,80,.55);margin-right:6px;white-space:nowrap}
-.prompt-text{color:rgba(20,255,80,.85);letter-spacing:.12em}
-.prompt-cursor{display:inline-block;color:rgba(20,255,80,.9);animation:crt-blink .9s step-start infinite;margin-left:1px;font-size:11px;vertical-align:middle}
+.prompt-line{flex-shrink:0;height:120px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;font-family:'Courier New',Courier,monospace;font-size:52px;font-weight:400;letter-spacing:.18em;color:rgba(20,255,80,.82);position:relative}
+.prompt-prefix{display:none}
+.prompt-text{color:rgba(20,255,80,.82)}
+.prompt-cursor{display:inline-block;color:rgba(20,255,80,.9);animation:crt-blink .85s step-start infinite;margin-left:3px;font-size:52px;line-height:1;vertical-align:baseline}
 @keyframes crt-blink{0%,49%{opacity:1}50%,100%{opacity:0}}
-/* Scanline overlay on prompt */
-.prompt-line::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.15) 2px,rgba(0,0,0,.15) 3px);pointer-events:none}
-@media(max-width:640px){.prompt-line{height:40px;padding:0 16px;font-size:11px}}
+.prompt-line::after{display:none}
+@media(max-width:640px){.prompt-line{height:80px;font-size:32px}.prompt-cursor{font-size:32px}}
 .rcard{flex-shrink:0;width:110px;height:72px;border:1px solid #1a1a1a;border-radius:4px;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;transition:all .3s cubic-bezier(.25,.46,.45,.94);margin:0 5px}
 .rcard .rc-num{font-family:'Space Mono',monospace;font-size:9px;color:#2a2a2a;letter-spacing:.08em}
 .rcard .rc-title{font-family:'Space Mono',monospace;font-size:10px;color:#444;text-align:center;padding:0 8px;overflow:hidden;max-width:100px;white-space:nowrap;text-overflow:ellipsis;letter-spacing:.04em}
@@ -120,8 +119,7 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:12p
   </div>
   <!-- Prompt line -->
   <div class="prompt-line" id="prompt-line">
-    <span class="prompt-prefix">ready.<span class="prompt-cursor" id="pcursor">█</span></span>
-    <span class="prompt-text" id="ptext"></span>
+    <span class="prompt-text" id="ptext"></span><span class="prompt-cursor" id="pcursor">█</span>
   </div>
   <div class="player-area" id="player">
     <div class="empty-hint">↑ SELECT A DEMO</div>

@@ -20,14 +20,6 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:12p
 .app{position:relative;z-index:1;display:flex;flex-direction:column;flex:1;overflow:hidden}
 .rolodex-wrap{position:relative;flex-shrink:0;height:96px;overflow:hidden;background:rgba(0,0,0,.5);border-bottom:1px solid rgba(255,255,255,.05)}
 .rolodex-track{display:flex;align-items:center;height:100%;padding:0 calc(50% - 65px);gap:0;cursor:grab;user-select:none;will-change:transform;transition:transform .35s cubic-bezier(.25,.46,.45,.94)}
-.prompt-line{flex-shrink:0;height:160px;display:flex;align-items:center;justify-content:center;background:transparent;border:none}
-.prompt-inner{position:relative;display:inline-flex;align-items:baseline}
-.prompt-prefix{display:none}
-.prompt-text{font-family:'Courier New',Courier,monospace;font-size:104px;font-weight:700;letter-spacing:.14em;color:rgba(20,255,80,.36);text-transform:uppercase;min-width:1px}
-.prompt-cursor{position:absolute;left:100%;bottom:8px;font-family:'Courier New',Courier,monospace;font-size:52px;font-weight:400;color:rgba(20,255,80,.9);animation:crt-blink .85s step-start infinite;margin-left:6px;white-space:nowrap}
-@keyframes crt-blink{0%,49%{opacity:1}50%,100%{opacity:0}}
-.prompt-line::after{display:none}
-@media(max-width:640px){.prompt-line{height:110px}.prompt-text{font-size:64px}.prompt-cursor{font-size:32px;bottom:4px}}
 .rcard{flex-shrink:0;width:110px;height:72px;border:1px solid #1a1a1a;border-radius:4px;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;transition:all .3s cubic-bezier(.25,.46,.45,.94);margin:0 5px}
 .rcard .rc-num{font-family:'Space Mono',monospace;font-size:9px;color:#2a2a2a;letter-spacing:.08em}
 .rcard .rc-title{font-family:'Space Mono',monospace;font-size:10px;color:#444;text-align:center;padding:0 8px;overflow:hidden;max-width:100px;white-space:nowrap;text-overflow:ellipsis;letter-spacing:.04em}
@@ -118,12 +110,8 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:12p
     <div class="fade-left"></div>
     <div class="fade-right"></div>
   </div>
-  <!-- Prompt line -->
-  <div class="prompt-line" id="prompt-line">
-    <div class="prompt-inner">
-      <span class="prompt-text" id="ptext"></span><span class="prompt-cursor" id="pcursor">█</span>
-    </div>
-  </div>
+  <!-- Prompt line — only on submission links (no feedback panel) -->
+</div>
   <div class="player-area" id="player">
     <div class="empty-hint">↑ SELECT A DEMO</div>
   </div>
@@ -515,7 +503,6 @@ function playSong(idx) {
     audioEl.play().then(() => {
       isPlaying = true; startProgress(); updateBtn()
       decodeWaveformBg(song)
-      typePrompt('midas')
     }).catch(err => {
       console.warn('play() rejected:', err)
       // autoplay blocked — show player anyway, wait for user click
@@ -540,35 +527,10 @@ function playSong(idx) {
   window._currentAudioEl = audioEl
 }
 
-let _promptTyping = false
-function typePrompt(word) {
-  const el = document.getElementById('ptext')
-  const cursor = document.getElementById('pcursor')
-  if (!el) return
-  if (_promptTyping) return  // already typing
-  _promptTyping = true
-  el.textContent = ''
-  // Move cursor after typed text
-  let i = 0
-  const interval = setInterval(() => {
-    if (i >= word.length) {
-      clearInterval(interval)
-      _promptTyping = false
-      // cursor stays blinking after word
-      if (cursor) cursor.style.marginLeft = '4px'
-      return
-    }
-    el.textContent += word[i]
-    i++
-  }, 120)
-}
 
 function stopAll() {
   stopProgress()
   waveformPeaks = null; audioBuffer = null; isSeeking = false; isPlaying = false
-  _promptTyping = false
-  const pt = document.getElementById('ptext'); if (pt) pt.textContent = ''
-  const pc = document.getElementById('pcursor'); if (pc) pc.style.marginLeft = '1px'
   if (audioEl) {
     audioEl.pause()
     audioEl.src = ''

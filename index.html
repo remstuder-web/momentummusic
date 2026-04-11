@@ -848,24 +848,27 @@ function showStemsPage(song) {
 async function downloadStems() {
   const song = songs[0]; if (!song) return
   const btn = document.getElementById('sdlb')
-  const status = document.getElementById('sdls')
   if (!btn) return
   btn.disabled = true; btn.textContent = '↓ Downloading...'
   try {
-    const resp = await fetch(toFetchUrl(song.shareUrl))
-    const blob = await resp.blob()
+    // Build direct Dropbox dl link — no proxy needed for ZIPs
+    let url = song.shareUrl || ''
+    if (url.includes('dropbox.com')) {
+      url = url.replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+        .replace(/[?&]dl=0/, '').replace(/[?&]dl=1/, '')
+      url += (url.includes('?') ? '&' : '?') + 'dl=1'
+    }
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
+    a.href = url
     a.download = song.filename || (song.title || song.code) + '.zip'
-    a.click(); URL.revokeObjectURL(a.href)
+    a.target = '_blank'
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
     btn.textContent = '✓ Downloaded'
-    if (status) status.textContent = song.filename || ''
     await db.from('share_sessions').update({
       downloads: { [song.code]: new Date().toISOString() }
     }).eq('id', sessionId)
   } catch(e) {
     btn.disabled = false; btn.textContent = '↓ Download Stems'
-    if (status) status.textContent = 'Download failed — check connection'
   }
 }
 

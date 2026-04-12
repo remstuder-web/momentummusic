@@ -20,17 +20,15 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:12p
 .app{position:relative;z-index:1;display:flex;flex-direction:column;flex:1;overflow:hidden}
 .rolodex-wrap{position:relative;flex-shrink:0;height:96px;overflow:hidden;background:rgba(0,0,0,.5);border-bottom:1px solid rgba(255,255,255,.05)}
 .rolodex-track{display:flex;align-items:center;height:100%;padding:0 calc(50% - 65px);gap:0;cursor:grab;user-select:none;will-change:transform;transition:transform .35s cubic-bezier(.25,.46,.45,.94)}
-.rcard{flex-shrink:0;width:110px;height:72px;border:1px solid #1a1a1a;border-radius:4px;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;transition:all .3s cubic-bezier(.25,.46,.45,.94);margin:0 5px}
-.rcard .rc-num{font-family:'Space Mono',monospace;font-size:9px;color:#2a2a2a;letter-spacing:.08em}
-.rcard .rc-title{font-family:'Space Mono',monospace;font-size:10px;color:#444;text-align:center;padding:0 8px;overflow:hidden;max-width:100px;white-space:nowrap;text-overflow:ellipsis;letter-spacing:.04em}
-.rcard .rc-dot{width:3px;height:3px;border-radius:50%;background:#1a1a1a}
-.rcard.near .rc-num{color:#3a3a3a}
-.rcard.near .rc-title{color:#666}
-.rcard.near{border-color:#222;background:#0d0d0d}
-.rcard.active{width:130px;height:80px;border-color:#c9a84c;background:#111}
-.rcard.active .rc-num{color:rgba(201,168,76,.55)}
-.rcard.active .rc-title{color:#c9a84c;font-size:11px}
-.rcard.active .rc-dot{background:#c9a84c;width:4px;height:4px}
+.rcard{flex-shrink:0;width:110px;height:72px;border:1px solid rgba(76,175,130,.2);border-radius:4px;background:rgba(76,175,130,.07);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:all .3s cubic-bezier(.25,.46,.45,.94);margin:0 5px}
+.rcard .rc-num{display:none}
+.rcard .rc-title{font-family:'Space Mono',monospace;font-size:9px;color:rgba(255,255,255,.38);text-align:center;padding:0 8px;overflow:hidden;max-width:100px;white-space:nowrap;text-overflow:ellipsis;letter-spacing:.04em}
+.rcard .rc-dot{width:3px;height:3px;border-radius:50%;background:rgba(76,175,130,.25)}
+.rcard.near{border-color:rgba(76,175,130,.3);background:rgba(76,175,130,.1)}
+.rcard.near .rc-title{color:rgba(255,255,255,.55)}
+.rcard.active{width:130px;height:80px;border-color:#4caf82;background:rgba(76,175,130,.18)}
+.rcard.active .rc-title{color:#fff;font-size:11px}
+.rcard.active .rc-dot{background:#4caf82;width:4px;height:4px}
 .rcard.dl-done::after{content:'↓';position:absolute;top:4px;right:6px;font-size:8px;color:#4caf82;font-family:'Space Mono',monospace}
 .fade-left{position:absolute;left:0;top:0;bottom:0;width:80px;background:linear-gradient(to right,rgba(0,0,0,.97),transparent);pointer-events:none;z-index:2}
 .fade-right{position:absolute;right:0;top:0;bottom:0;width:80px;background:linear-gradient(to left,rgba(0,0,0,.97),transparent);pointer-events:none;z-index:2}
@@ -74,7 +72,8 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:12p
 .stems-dl-btn{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;letter-spacing:.1em;padding:16px 40px;background:transparent;border:1px solid rgba(76,175,130,.5);color:#4caf82;border-radius:4px;cursor:pointer;transition:all .2s;margin-top:8px}
 .stems-dl-btn:hover{background:rgba(76,175,130,.08);border-color:#4caf82}
 .stems-dl-btn:disabled{opacity:.5;cursor:default}
-.stems-dl-status{font-family:'Space Mono',monospace;font-size:9px;color:#333;letter-spacing:.06em}margin-top:8px;border-top:1px solid rgba(255,255,255,.06);padding-top:16px}
+.stems-dl-status{font-family:'Space Mono',monospace;font-size:9px;color:#333;letter-spacing:.06em}
+.feedback-panel{width:100%;max-width:740px;margin-top:8px;border-top:1px solid rgba(255,255,255,.06);padding-top:16px}
 .feedback-title{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(201,168,76,.85);margin-bottom:12px}
 .feedback-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;max-height:180px;overflow-y:auto}
 .feedback-item{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:3px}
@@ -417,12 +416,13 @@ async function init() {
 
 function buildList() {
   const track = document.getElementById('rdx-track')
-  track.innerHTML = songs.map((s,i) => `
-    <div class="rcard" id="rc${i}" onclick="rdxSelect(${i})">
-      <div class="rc-num">${String(i+1).padStart(2,'0')}</div>
-      <div class="rc-title">${esc(s.title||s.code)}</div>
+  track.innerHTML = songs.map((s,i) => {
+    const label = [s.code, s.title||s.code].filter(Boolean).join('_')
+    return `<div class="rcard" id="rc${i}" onclick="rdxSelect(${i})">
+      <div class="rc-title">${esc(label)}</div>
       <div class="rc-dot"></div>
-    </div>`).join('')
+    </div>`
+  }).join('')
   initRolodex()
 }
 

@@ -116,7 +116,7 @@ nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;padding:12p
     <div class="fade-right"></div>
   </div>
   <div class="player-area" id="player">
-    <div class="empty-hint">↑ SELECT A DEMO</div>
+    <div class="empty-hint" id="empty-hint">↑ SELECT A DEMO</div>
   </div>
 </div>
 <div class="state" id="state"></div>
@@ -375,6 +375,7 @@ let isSeeking = false
 let downloads = {}, feedback = {}
 let currentPitch = 0
 let feedbackEnabled = false
+let sessionType = 'demo'  // 'demo' | 'production' | 'mixing' | 'instrumental'
 
 function toFetchUrl(u) {
   if (!u) return null
@@ -397,6 +398,7 @@ async function init() {
   downloads = data.downloads || {}
   feedback = data.feedback || {}
   feedbackEnabled = data.feedback_enabled || false
+  sessionType = data.session_type || 'demo'
   document.getElementById('nav-title').textContent = data.patch_name || 'Demo Session'
   document.title = 'LISTEN — ' + (data.patch_name || 'Demo')
   setBackground(data.background || 'stars')
@@ -412,6 +414,10 @@ async function init() {
 
   buildList()
   document.getElementById('app').style.display = 'flex'
+  // Update empty hint based on session type
+  const hints = { production: '↑ SELECT SONG', mixing: '↑ SELECT MIX', instrumental: '↑ SELECT INSTRUMENTAL', demo: '↑ SELECT A DEMO' }
+  const hint = document.getElementById('empty-hint')
+  if (hint) hint.textContent = hints[sessionType] || hints.demo
 }
 
 function buildList() {

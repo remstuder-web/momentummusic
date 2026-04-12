@@ -415,7 +415,7 @@ async function init() {
   buildList()
   document.getElementById('app').style.display = 'flex'
   // Update empty hint based on session type
-  const hints = { production: '↑ SELECT SONG', mixing: '↑ SELECT MIX', instrumental: '↑ SELECT INSTRUMENTAL', demo: '↑ SELECT A DEMO' }
+  const hints = { production: '↑ SELECT VERSION', mixing: '↑ SELECT MIX', instrumental: '↑ SELECT INSTRUMENTAL', demo: '↑ SELECT A DEMO' }
   const hint = document.getElementById('empty-hint')
   if (hint) hint.textContent = hints[sessionType] || hints.demo
 }

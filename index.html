@@ -514,19 +514,22 @@ function playSong(idx) {
   audioEl = document.createElement('audio')
   audioEl.preload = 'auto'
 
+  // 'playing' fires when audio actually produces sound — use this to show player
+  audioEl.addEventListener('playing', function onPlaying() {
+    audioEl.removeEventListener('playing', onPlaying)
+    if (audioEl !== window._currentAudioEl) return
+    showPlayer(song)
+    isPlaying = true; startProgress(); updateBtn()
+    decodeWaveformBg(song)
+  })
+
   audioEl.addEventListener('canplay', function onCanPlay() {
     audioEl.removeEventListener('canplay', onCanPlay)
-    if (audioEl !== window._currentAudioEl) return // stale
+    if (audioEl !== window._currentAudioEl) return
     audioEl._canPlayFired = true
-    // Start play() first — show player UI inside .then() so audio & UI start together
-    audioEl.play().then(() => {
-      if (audioEl !== window._currentAudioEl) return
-      showPlayer(song)
-      isPlaying = true; startProgress(); updateBtn()
-      decodeWaveformBg(song)
-    }).catch(err => {
-      console.warn('play() rejected:', err)
-      // Autoplay blocked — still show player so user can press play
+    audioEl.play().catch(err => {
+      console.warn('play() rejected — autoplay blocked:', err)
+      // Autoplay blocked — show player so user can press play manually
       showPlayer(song)
       isPlaying = false; updateBtn()
     })

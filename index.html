@@ -537,12 +537,16 @@ function playSong(idx) {
 
   audioEl.addEventListener('error', () => {
     if (audioEl !== window._currentAudioEl) return
-    if (audioEl._canPlayFired) return // already playing fine, ignore stale error
-    setTimeout(() => {
-      if (audioEl !== window._currentAudioEl) return
-      if (audioEl._canPlayFired) return
-      showErr('Could not load audio — check connection')
-    }, 3000)
+    if (audioEl._canPlayFired) return
+    const code = audioEl.error?.code
+    // Only show error for fatal failures (decode=3, unsupported=4)
+    // Ignore code 2 (network) — fires during Dropbox redirects but resolves
+    if (code === 3 || code === 4) {
+      setTimeout(() => {
+        if (audioEl !== window._currentAudioEl || audioEl._canPlayFired) return
+        showErr('Could not load audio — check connection')
+      }, 1000)
+    }
   })
 
   const url = toFetchUrl(song.previewUrl || song.shareUrl)

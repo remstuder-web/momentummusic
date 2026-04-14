@@ -537,7 +537,11 @@ function playSong(idx) {
 
   audioEl.addEventListener('error', () => {
     if (audioEl !== window._currentAudioEl) return
-    showErr('Could not load audio — check connection')
+    // Small delay — avoid showing error on transient load start
+    setTimeout(() => {
+      if (audioEl !== window._currentAudioEl) return
+      if (!isPlaying) showErr('Could not load audio — check connection')
+    }, 2000)
   })
 
   const url = toFetchUrl(song.previewUrl || song.shareUrl)

@@ -517,13 +517,13 @@ function playSong(idx) {
   audioEl.addEventListener('canplay', function onCanPlay() {
     audioEl.removeEventListener('canplay', onCanPlay)
     if (audioEl !== window._currentAudioEl) return // stale
+    audioEl._canPlayFired = true
     showPlayer(song)
     audioEl.play().then(() => {
       isPlaying = true; startProgress(); updateBtn()
       decodeWaveformBg(song)
     }).catch(err => {
       console.warn('play() rejected:', err)
-      // autoplay blocked — show player anyway, wait for user click
       showPlayer(song)
       isPlaying = false; updateBtn()
     })
@@ -537,11 +537,12 @@ function playSong(idx) {
 
   audioEl.addEventListener('error', () => {
     if (audioEl !== window._currentAudioEl) return
-    // Small delay — avoid showing error on transient load start
+    if (audioEl._canPlayFired) return // already playing fine, ignore stale error
     setTimeout(() => {
       if (audioEl !== window._currentAudioEl) return
-      if (!isPlaying) showErr('Could not load audio — check connection')
-    }, 2000)
+      if (audioEl._canPlayFired) return
+      showErr('Could not load audio — check connection')
+    }, 3000)
   })
 
   const url = toFetchUrl(song.previewUrl || song.shareUrl)

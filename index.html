@@ -518,12 +518,15 @@ function playSong(idx) {
     audioEl.removeEventListener('canplay', onCanPlay)
     if (audioEl !== window._currentAudioEl) return // stale
     audioEl._canPlayFired = true
-    showPlayer(song)
+    // Start play() first — show player UI inside .then() so audio & UI start together
     audioEl.play().then(() => {
+      if (audioEl !== window._currentAudioEl) return
+      showPlayer(song)
       isPlaying = true; startProgress(); updateBtn()
       decodeWaveformBg(song)
     }).catch(err => {
       console.warn('play() rejected:', err)
+      // Autoplay blocked — still show player so user can press play
       showPlayer(song)
       isPlaying = false; updateBtn()
     })

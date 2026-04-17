@@ -1,5 +1,17 @@
 # CHANGES
 
+## [2026-04-18] test-system.cjs — DONE
+TASK: system health test suite
+WHAT: Created test-system.cjs with 8 tests: watcher alive, category suggestion, Spotify intl URL, pulse check, briefing no hardcoded filters, notes-to-feedback JSON, no brain dupes, git initialized. Fixed test 4 (pulse check writes to inbox not response body; NO_UPDATES is valid), fixed test 5 (regex was matching prompt strings not DB queries). Final result: 8/8 PASS.
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-18] repair session audit — DONE
+TASK: FIX 1–4 verification + git init
+WHAT: Audited all 4 fixes — all already applied from 2026-04-17 session. FIX1 (brainContext simplified, system prompt correct), FIX2 (ghost tasks: removeItem + newInBackup), FIX3 (loadCategories unconditional), FIX4 (API key input intact). No code changes needed. Initialized git repo with baseline commit 3545fd6.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-17] ProjectsTab.svelte — DONE
 TASK: brainContext simplification in processNotesToFeedback + processPdfToFeedback
 WHAT: Replaced dialectical CONFIRMED/TENSION/OUTDATED/NEW system prompt with simple "Return only JSON arrays of strings" + flat bullet list of brain titles/content (80 chars). Dialectical framing caused Claude to return prose.

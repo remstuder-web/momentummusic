@@ -1,13 +1,16 @@
 {
-  "updated": "2026-04-17T00:03:00Z",
-  "last_task": "brainContext simplification in feedback functions",
+  "updated": "2026-04-18T00:00:00Z",
+  "last_task": "repair session audit + git init",
   "status": "done",
   "working": [
-    "processNotesToFeedback: brainContext is now simple system prompt — returns JSON arrays reliably",
-    "processPdfToFeedback: same brainContext simplification applied"
+    "FIX1: ProjectsTab brainContext simplified in both functions — already applied 2026-04-17",
+    "FIX2: DailyTab ghost tasks fixed (removeItem + newInBackup) — already applied 2026-04-17",
+    "FIX3: BrainTab fetchCatSuggestion calls loadCategories unconditionally — already correct",
+    "FIX4: +page.svelte API key input reads/writes mm_api_key correctly — already correct",
+    "git init — baseline commit 3545fd6 with all 35 source files"
   ],
   "broken": [],
   "partial": [],
-  "next": "Continue with remaining tasks from TASKS.md",
-  "notes": "Dialectical framing (CONFIRMED/TENSION/OUTDATED/NEW) moved out of JSON extraction functions entirely. Belongs only in Mozart chat context."
+  "next": "Manual verification: DailyTab delete task + reload, ProjectsTab notes-to-feedback",
+  "notes": "All 4 fixes were already in place from yesterday. .env excluded from git via .gitignore. Watcher running on port 4242."
 }

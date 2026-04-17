@@ -1,0 +1,13 @@
+{
+  "updated": "2026-04-17T00:03:00Z",
+  "last_task": "brainContext simplification in feedback functions",
+  "status": "done",
+  "working": [
+    "processNotesToFeedback: brainContext is now simple system prompt — returns JSON arrays reliably",
+    "processPdfToFeedback: same brainContext simplification applied"
+  ],
+  "broken": [],
+  "partial": [],
+  "next": "Continue with remaining tasks from TASKS.md",
+  "notes": "Dialectical framing (CONFIRMED/TENSION/OUTDATED/NEW) moved out of JSON extraction functions entirely. Belongs only in Mozart chat context."
+}

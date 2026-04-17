@@ -1,0 +1,1716 @@
+<script>
+  import { supabase } from './supabase.js'
+
+  let dumpText = $state('')
+  let dumpDragging = $state(null)
+  let processing = $state(false)
+  let capturing = $state(false)
+  let captureResult = $state(null)
+  let captureContext = $state('')
+  let captureCategory = $state('')
+  let entries = $state([])
+  let lastExtracted = $state(null)
+  let entriesOpen = $state(false)
+  let tracksOpen = $state(false)
+  let expandedEntries = $state({})
+  let watchedArtists = $state([])
+  let referenceTrackEntries = $state([])
+  let importResult = $state(null)
+  let importCategory = $state('reference_tracks')
+  let newCategoryForImport = $state('')
+  let duplicateWarnings = $state([])
+  let pendingApproval = $state([])
+  let pendingOriginalText = $state('')
+  let showApproval = $state(false)
+  let newCategoryInput = $state({})
+  let spotifyPreview = $state(null)
+  let spotifyPreviewType = $state('reference_current')
+  let spotifyMixerName = $state('')
+
+  let catSuggestion = $state(null)
+  let catSuggestLoading = $state(false)
+  let catSuggestOverride = $state('')
+  let splitEdits = $state([])
+  let prefilledCategory = $state('')
+
+  let tracksByGenre = $derived.by(() => {
+    const groups = {}
+    for (const t of referenceTrackEntries) {
+      if (t.collection_name === 'my_productions') continue
+      const genre = (t.genre_tags?.[0]) || 'other'
+      if (!groups[genre]) groups[genre] = []
+      groups[genre].push(t)
+    }
+    return groups
+  })
+
+  // Categories derived from loaded entries — used for Claude prompts inside processDump
+  let distinctCategories = $derived([...new Set(entries.map(e => e.category).filter(Boolean))].sort())
+
+  // Live-loaded category list — used for datalist, suggest-category, and post-save refresh
+  let existingCategories = $state([])
+
+  async function loadCategories() {
+    const { data } = await supabase
+      .from('brain_knowledge')
+      .select('category')
+      .not('category', 'is', null)
+    existingCategories = [...new Set((data || []).map(r => r.category))].sort()
+    if (!captureCategory && existingCategories.length > 0) {
+      captureCategory = existingCategories[0]
+    }
+  }
+
+  async function loadEntries() {
+    const { data, error } = await supabase
+      .from('brain_knowledge')
+      .select('*')
+      .order('category')
+      .order('created_at', { ascending: false })
+    if (error) console.error('brain_knowledge load error:', error.message)
+    entries = data || []
+
+    const seen = {}
+    const warnings = []
+    for (const e of entries) {
+      const key = e.category
+      if (!seen[key]) seen[key] = []
+      const shortTitle = e.title.slice(0, 30).toLowerCase()
+      if (seen[key].some(t => t.includes(shortTitle.slice(0, 15)))) {
+        warnings.push(`Possible duplicate in ${e.category}: "${e.title.slice(0, 40)}"`)
+      }
+      seen[key].push(shortTitle)
+    }
+    duplicateWarnings = warnings
+
+    const { data: wa, error: waErr } = await supabase
+      .from('watched_artists')
+      .select('*')
+      .eq('active', true)
+      .order('artist_name')
+    if (waErr) console.error('watched_artists load error:', waErr.message)
+    watchedArtists = wa || []
+
+    const { data: tracks, error: tErr } = await supabase
+      .from('reference_tracks')
+      .select('*')
+      .order('tempo')
+    if (tErr) console.error('reference_tracks load error:', tErr.message)
+    referenceTrackEntries = tracks || []
+    await loadCategories()
+  }
+
+  async function unwatchArtist(id) {
+    await supabase.from('watched_artists').update({ active: false }).eq('id', id)
+    watchedArtists = watchedArtists.filter(a => a.id !== id)
+  }
+
+  async function captureScreen() {
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    if (!apiKey) { alert('Add API key in Settings.'); return }
+    capturing = true
+    captureResult = null
+    try {
+      await new Promise(r => setTimeout(r, 3000))
+      const res = await fetch('http://localhost:4242/capture-screen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, context: captureContext, category: captureCategory })
+      })
+      const d = await res.json()
+      if (!d.ok) throw new Error(d.error)
+      captureResult = d.analysis
+      await loadEntries()
+    } catch(e) {
+      alert('Screen capture failed: ' + e.message + '\nMake sure watcher is running.')
+    }
+    capturing = false
+  }
+
+  async function processImageDump(file) {
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    if (!apiKey) { alert('Add API key in Settings.'); return }
+
+    processing = true
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = () => res(r.result.split(',')[1])
+        r.onerror = rej
+        r.readAsDataURL(file)
+      })
+
+      const catList = existingCategories.join(', ')
+
+      const [{ data: ownProdsImg }, { data: refEntriesImg }] = await Promise.all([
+        supabase.from('brain_knowledge').select('title,content').eq('active', true).eq('category', 'own_production').order('created_at', { ascending: false }).limit(5),
+        supabase.from('brain_knowledge').select('title,content').eq('active', true).ilike('category', 'reference_%').order('created_at', { ascending: false }).limit(5)
+      ])
+      const imgSysParts = []
+      if (ownProdsImg?.length) imgSysParts.push('## MY PRODUCTIONS\n' + ownProdsImg.map(p => `- ${p.title}: ${p.content}`).join('\n'))
+      if (refEntriesImg?.length) imgSysParts.push('## CURRENT REFERENCES\n' + refEntriesImg.map(r => `- ${r.title}: ${r.content}`).join('\n'))
+      const imgSystemContext = imgSysParts.join('\n\n')
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 600,
+          ...(imgSystemContext ? { system: imgSystemContext } : {}),
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: file.type, data: base64 }},
+            { type: 'text', text:
+              `Read this image and extract all useful information for a music producer.
+Could be: artist info, chart data, conversation screenshot, trends, analytics, anything.
+
+Extract what is relevant. Keep all concrete facts verbatim.
+Suggest the best category from:
+${catList}
+
+Return ONLY JSON:
+[{
+  "category": "best category",
+  "isNewCategory": false,
+  "entry_type": "fact",
+  "title": "what this image shows (max 8 words)",
+  "content": "all extracted information, verbatim where possible"
+}]`
+            }
+          ]}]
+        })
+      })
+
+      const d = await response.json()
+      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/brain-vision', model: 'claude-sonnet-4-20250514', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
+      if (d.error) throw new Error(d.error.message)
+
+      const raw = d.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '[]'
+      const match = raw.match(/\[[\s\S]*\]/)
+      const items = match ? JSON.parse(match[0]) : []
+
+      if (items.length) {
+        pendingApproval = items
+        showApproval = true
+      }
+    } catch(e) { alert('Image processing error: ' + e.message) }
+    processing = false
+  }
+
+  async function fetchCatSuggestion() {
+    if (/spotify\.com/.test(dumpText)) return
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    if (!apiKey) return
+    catSuggestLoading = true
+    catSuggestion = null
+    catSuggestOverride = ''
+    splitEdits = []
+    try {
+      // Always refresh categories before suggesting — never use a stale list
+      await loadCategories()
+      const res = await fetch('http://localhost:4242/suggest-category', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: dumpText, existingCategories, apiKey })
+      })
+      const d = await res.json()
+      if (!d.ok) throw new Error(d.error)
+      catSuggestion = d
+      if (d.action === 'split' && Array.isArray(d.splits)) {
+        splitEdits = d.splits.map(s => ({ category: s.category, title: s.title || s.content?.slice(0, 60) || '', content: s.content || s.text || '' }))
+      }
+    } catch(e) {
+      console.error('suggest-category error:', e.message)
+      // On error just proceed directly to normal processing
+      catSuggestion = null
+    }
+    catSuggestLoading = false
+  }
+
+  async function proceedAfterSuggestion(category) {
+    prefilledCategory = category
+    catSuggestion = null
+    await processDump()
+    prefilledCategory = ''
+  }
+
+  async function saveSplitsDirect() {
+    for (const s of splitEdits) {
+      if (!s.content.trim()) continue
+      const title = s.title || s.content.trim().slice(0, 60)
+      const { data: existing } = await supabase.from('brain_knowledge').select('id').eq('category', s.category).eq('title', title).maybeSingle()
+      if (existing) { console.warn('Duplicate skipped:', title); continue }
+      await supabase.from('brain_knowledge').insert({
+        category: s.category,
+        title,
+        content: s.content.trim(),
+        entry_type: 'knowledge',
+        active: true
+      })
+    }
+    catSuggestion = null
+    splitEdits = []
+    dumpText = ''
+    await loadEntries()
+  }
+
+  async function processDump() {
+    if (processing) return
+    if (!dumpText.trim()) return
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+
+    const _isQuestion = dumpText.trim().endsWith('?') || /^(how|what|why|when|where|who|should|can|could|would)/i.test(dumpText.trim())
+    const _isLong = dumpText.trim().split(/\s+/).length > 300
+    console.log('CHECK ORDER: spotify=', /spotify\.com\/(track|playlist|album|artist)/.test(dumpText), 'question=', _isQuestion, 'long=', _isLong)
+
+    if (!apiKey) { alert('Add API key in Settings.'); return }
+
+    // 1a. SPOTIFY TRACK — preview card flow (no Claude needed)
+    const spotifyTrackM = dumpText.match(/spotify\.com\/(?:intl-\w+\/)?track\/([a-zA-Z0-9]+)/)
+    if (spotifyTrackM) {
+      processing = true
+      dumpText = '' // clear immediately on URL recognition
+      try {
+        const r = await fetch('http://localhost:4242/analyze-spotify-track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: spotifyTrackM[0] })
+        })
+        const d = await r.json()
+        if (!d.ok) throw new Error(d.error)
+        spotifyPreview = d
+      } catch(e) { alert('Spotify track analysis failed: ' + e.message) }
+      processing = false
+      return
+    }
+
+    // 1b. SPOTIFY PLAYLIST / ARTIST — full import flow
+    const spotifyM = dumpText.match(
+      /https:\/\/open\.spotify\.com\/(?:intl-\w+\/)?(playlist|album|artist)\/([a-zA-Z0-9]+)/
+    )
+    if (spotifyM) {
+      processing = true
+      try {
+        const r = await fetch('http://localhost:4242/agent-import-spotify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: spotifyM[0], type: spotifyM[1], apiKey })
+        })
+        const d = await r.json()
+        if (!d.ok) throw new Error(d.error)
+        importResult = d; dumpText = ''; await loadEntries()
+      } catch(e) { alert('Spotify import failed: ' + e.message) }
+      processing = false
+      return
+    }
+
+    // 2. QUESTION CHECK — verbatim, no Claude
+    const isQuestion = dumpText.trim().endsWith('?')
+      || /^(how|what|why|when|where|who|should|can|could|would)/i.test(dumpText.trim())
+    if (isQuestion) {
+      pendingApproval = [{
+        entry_type: 'question',
+        suggestedCategory: 'question',
+        title: dumpText.trim().slice(0, 60),
+        content: dumpText.trim(),
+        verbatim_full: dumpText.trim()
+      }]
+      showApproval = true
+      return
+    }
+
+    // 2b. CATEGORY SUGGESTION — intercept for text > 200 chars (unless already suggested or prefilled)
+    if (dumpText.trim().length > 200 && catSuggestion === null && !prefilledCategory) {
+      await fetchCatSuggestion()
+      return
+    }
+
+    // 3. LENGTH CHECK — long text gets chunked
+    const wordCount = dumpText.trim().split(/\s+/).length
+    const isLong = wordCount > 300
+
+    // 4. ARTICLE CHECK — external formatting signals
+    const isArticle = /https?:\/\//.test(dumpText)
+      || dumpText.includes('©')
+      || dumpText.split('\n').length > 15
+
+    // Fix 1 — SHORT text with category already chosen: save directly, skip Claude
+    if (prefilledCategory && !isLong && !isArticle) {
+      processing = true
+      try {
+        const lines = dumpText.trim().split('\n').filter(Boolean)
+        const title = (lines[0] || dumpText.trim()).slice(0, 60)
+        await supabase.from('brain_knowledge').insert({
+          category: prefilledCategory,
+          title,
+          content: dumpText.trim(),
+          entry_type: 'knowledge',
+          active: true
+        })
+        dumpText = ''
+        catSuggestion = null
+        newCategoryInput = {}
+        await loadEntries()
+      } catch(e) { alert('Save error: ' + e.message) }
+      processing = false
+      return
+    }
+
+    processing = true
+    try {
+      // Fetch context: own productions + current references for system prompt
+      const [{ data: ownProds }, { data: refEntries }] = await Promise.all([
+        supabase.from('brain_knowledge').select('title,content').eq('active', true).eq('category', 'own_production').order('created_at', { ascending: false }).limit(5),
+        supabase.from('brain_knowledge').select('title,content').eq('active', true).ilike('category', 'reference_%').order('created_at', { ascending: false }).limit(5)
+      ])
+      const systemParts = []
+      if (ownProds?.length) systemParts.push('## MY PRODUCTIONS\n' + ownProds.map(p => `- ${p.title}: ${p.content}`).join('\n'))
+      if (refEntries?.length) systemParts.push('## CURRENT REFERENCES\n' + refEntries.map(r => `- ${r.title}: ${r.content}`).join('\n'))
+      const systemContext = systemParts.join('\n\n')
+
+      let prompt = ''
+
+      if (prefilledCategory) {
+        // Category already chosen — only extract/structure, never re-suggest
+        if (isLong && !isArticle) {
+          prompt = `The category is already chosen: ${prefilledCategory}.
+Do NOT suggest a different category. Only split and structure the content.
+Split this text into logical chunks at natural topic breaks.
+Keep ALL text verbatim — do not summarize or rephrase.
+
+Return ONLY JSON:
+[{
+  "entry_type": "chunk",
+  "suggestedCategory": "${prefilledCategory}",
+  "isNewCategory": false,
+  "title": "short topic label for this chunk",
+  "content": "verbatim chunk text"
+}]`
+        } else {
+          prompt = `The category is already chosen: ${prefilledCategory}.
+Do NOT suggest a different category. Only extract and structure the content.
+Extract ONLY concrete facts: numbers, names, dates, specific claims, statistics.
+NO opinions, NO generic advice.
+Note the source URL if present.
+
+Return ONLY JSON:
+[{
+  "entry_type": "fact",
+  "suggestedCategory": "${prefilledCategory}",
+  "isNewCategory": false,
+  "title": "topic of these facts",
+  "content": "• fact 1\\n• fact 2\\n• fact 3",
+  "source_url": "url if found or empty string"
+}]`
+        }
+      } else if (isLong && !isArticle) {
+        prompt = `Split this text into logical chunks at natural topic breaks.
+Each chunk should be self-contained and meaningful.
+Keep ALL text verbatim — do not summarize or rephrase.
+Assign each chunk one of these categories or propose a new one:
+${existingCategories.join(', ')}
+
+Return ONLY JSON:
+[{
+  "entry_type": "chunk",
+  "suggestedCategory": "category name",
+  "isNewCategory": true/false,
+  "title": "short topic label for this chunk",
+  "content": "verbatim chunk text"
+}]`
+      } else if (isArticle) {
+        prompt = `Extract ONLY concrete facts from this text:
+numbers, names, dates, specific claims, statistics.
+NO opinions. NO generic advice. NO interpretations.
+Each fact as one short line.
+Note the source URL if present.
+Suggest a category from: ${existingCategories.join(', ')}
+
+Return ONLY JSON:
+[{
+  "entry_type": "fact",
+  "suggestedCategory": "category name",
+  "isNewCategory": false,
+  "title": "topic of these facts",
+  "content": "• fact 1\\n• fact 2\\n• fact 3",
+  "source_url": "url if found or empty string"
+}]`
+      } else {
+        prompt = `Classify this input for a music producer's knowledge base.
+Rules:
+- If it reads like a personal thought → entry_type: "thought"
+- If it's structured knowledge → entry_type: "knowledge"
+- Keep content verbatim — do NOT rephrase or summarize
+- Title should be descriptive, max 8 words
+Existing categories: ${existingCategories.join(', ')}
+
+Return ONLY JSON (single item array):
+[{
+  "entry_type": "knowledge",
+  "suggestedCategory": "exact category name",
+  "isNewCategory": true/false,
+  "title": "descriptive title",
+  "content": "verbatim content"
+}]`
+      }
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1500,
+          ...(systemContext ? { system: systemContext } : {}),
+          messages: [{ role: 'user', content: prompt + '\n\nINPUT:\n' + dumpText }]
+        })
+      })
+      const d = await res.json()
+      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/brain-dump', model: 'claude-haiku-4-5-20251001', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000001) + (d.usage.output_tokens * 0.000005) }) }).catch(() => {})
+      if (d.error) throw new Error(d.error.message)
+      const raw = d.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '[]'
+      const match = raw.match(/\[[\s\S]*\]/)
+      const items = match ? JSON.parse(match[0]) : []
+
+      pendingApproval = items
+      pendingOriginalText = dumpText
+      showApproval = true
+
+    } catch(e) { alert('Processing error: ' + e.message) }
+    processing = false
+  }
+
+  async function saveApproved() {
+    for (const item of pendingApproval) {
+      if ((item.content || '').includes('spotify_id') || (item.content || '').toLowerCase().includes('spotify track')) {
+        console.error('saveApproved: blocked Spotify item — use saveSpotifyPreview() instead', item)
+        continue
+      }
+      const { data: existing } = await supabase.from('brain_knowledge').select('id').eq('category', item.suggestedCategory).eq('title', item.title).maybeSingle()
+      if (existing) { console.warn('Duplicate skipped:', item.title); continue }
+      await supabase.from('brain_knowledge').insert({
+        category: item.suggestedCategory,
+        title: item.title,
+        content: item.content,
+        entry_type: item.entry_type || 'knowledge',
+        source_url: item.source_url || null,
+        verbatim_full: item.entry_type === 'chunk' ? pendingOriginalText : null,
+        active: true
+      })
+    }
+    pendingApproval = []
+    pendingOriginalText = ''
+    showApproval = false
+    dumpText = ''
+    newCategoryInput = {}
+    catSuggestion = null
+    await loadEntries()
+  }
+
+  async function saveTrackImport(trackData) {
+    const manualCat = importCategory === '__new__'
+      ? newCategoryForImport.trim()
+      : importCategory
+
+    // Auto-derive category from first genre if user left it at default
+    const firstGenre = trackData.genres?.[0] || ''
+    const autoCat = firstGenre.includes('house') || firstGenre.includes('electronic') || firstGenre.includes('techno') ? 'electronic'
+      : firstGenre.includes('hip') || firstGenre.includes('rap') || firstGenre.includes('trap') ? 'hiphop'
+      : firstGenre.includes('r-n-b') || firstGenre.includes('soul') || firstGenre.includes('rnb') ? 'rnb'
+      : firstGenre.includes('afro') ? 'afrobeats'
+      : firstGenre.includes('latin') || firstGenre.includes('reggaeton') ? 'latin'
+      : firstGenre.includes('pop') ? 'pop'
+      : 'reference_inspiration'
+
+    const cat = manualCat || autoCat
+
+    if (cat !== 'reference_tracks' && importResult?.trackData?.spotifyId) {
+      await supabase.from('reference_tracks')
+        .update({ collection_name: cat })
+        .eq('spotify_id', importResult.trackData.spotifyId)
+    }
+
+    const content = [
+      `Artist: ${trackData.artist}`,
+      `Album: ${trackData.album} (${trackData.release_date?.slice(0,4) || '?'})`,
+      `BPM: ${trackData.tempo} · Key: ${trackData.key}`,
+      `Energy: ${trackData.energy?.toFixed(2)} · Dance: ${trackData.danceability?.toFixed(2)}`,
+      `Valence: ${trackData.valence?.toFixed(2)} · Popularity: ${trackData.popularity}/100`,
+      `Genres: ${(trackData.genres||[]).join(', ')}`,
+      `Followers: ${trackData.artistFollowers?.toLocaleString()}`
+    ].join('\n')
+
+    await supabase.from('brain_knowledge').insert({
+      category: cat,
+      title: `${trackData.title} — ${trackData.artist}`,
+      content,
+      entry_type: 'reference_track',
+      active: true
+    })
+
+    importResult = null
+    importCategory = 'reference_tracks'
+    await loadEntries()
+  }
+
+  // spotifyPreviewType is used directly as the brain_knowledge category
+  // valid values: reference_current | reference_mixing | reference_inspiration | reference_sound
+
+  async function saveSpotifyPreview() {
+    if (!spotifyPreview) return
+    const t = spotifyPreview
+    const cat = spotifyPreviewType || 'reference_inspiration'
+
+    // Upsert to reference_tracks
+    await supabase.from('reference_tracks').upsert({
+      spotify_id: t.spotify_id,
+      title: t.title,
+      artist: t.artist,
+      album: t.album,
+      release_date: t.release_date,
+      genre_tags: t.genres,
+      tempo: t.bpm,
+      key: t.key,
+      popularity: t.popularity,
+      artist_popularity: t.artist_popularity,
+      artist_followers: t.artist_followers,
+      preview_url: t.preview_url,
+      album_art: t.art_url,
+      approved: true
+    }, { onConflict: 'spotify_id' })
+
+    const content = [
+      `Artist: ${t.artist}`,
+      `Album: ${t.album} (${t.release_date?.slice(0,4) || '?'})`,
+      t.bpm ? `BPM: ${t.bpm} · Key: ${t.key || 'unknown'}` : null,
+      `Popularity: ${t.popularity}/100`,
+      t.artist_followers ? `Artist followers: ${t.artist_followers?.toLocaleString()}` : null,
+      `Genres: ${(t.genres||[]).slice(0,4).join(', ')}`,
+    ].filter(Boolean).join('\n')
+
+    const isCurrent = spotifyPreviewType === 'reference_current'
+    const surfacedUntil = isCurrent
+      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      : null
+    const metadata = (spotifyPreviewType === 'reference_mixing' && spotifyMixerName.trim())
+      ? { mixer: spotifyMixerName.trim() }
+      : null
+
+    await supabase.from('brain_knowledge').insert({
+      category: cat,
+      title: `${t.title} — ${t.artist}`,
+      content,
+      entry_type: 'FACT',
+      source_url: `https://open.spotify.com/track/${t.spotify_id}`,
+      active: true,
+      surfaced_in_daily: isCurrent,
+      surfaced_until: surfacedUntil,
+      metadata,
+    })
+
+    spotifyPreview = null
+    spotifyPreviewType = 'reference_current'
+    spotifyMixerName = ''
+    await loadEntries()
+  }
+
+  async function syncAllRefs() {
+    try {
+      const r = await fetch('http://localhost:4242/sync-all-refs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: localStorage.getItem('mm_api_key') || '' })
+      })
+      const d = await r.json()
+      if (!d.ok) throw new Error(d.error)
+      alert(`Synced: ${d.added} new tracks added (${d.skipped} already existed)`)
+      await loadEntries()
+    } catch(e) { alert('Sync failed: ' + e.message) }
+  }
+
+  async function saveExtracted() {
+    if (!lastExtracted?.length) return
+    for (const item of lastExtracted) {
+      await supabase.from('brain_knowledge').insert({
+        category: item.category,
+        title: item.title,
+        content: item.content,
+        active: true
+      })
+    }
+    dumpText = ''
+    lastExtracted = null
+    await loadEntries()
+  }
+
+  async function toggleEntry(id, active) {
+    await supabase.from('brain_knowledge')
+      .update({ active: !active }).eq('id', id)
+    entries = entries.map(e => e.id === id ? { ...e, active: !active } : e)
+  }
+
+  async function deleteEntry(id) {
+    await supabase.from('brain_knowledge').delete().eq('id', id)
+    entries = entries.filter(e => e.id !== id)
+  }
+
+  loadEntries()
+</script>
+
+<div class="brain-wrap">
+
+  <!-- Left: dump input -->
+  <div class="brain-dump-col"
+    ondragover={e => {
+      e.preventDefault()
+      const hasImage = [...(e.dataTransfer?.items||[])].some(i => i.type.startsWith('image/'))
+      dumpDragging = hasImage ? 'image' : 'text'
+    }}
+    ondragleave={() => dumpDragging = null}
+    ondrop={async e => {
+      e.preventDefault()
+      dumpDragging = null
+      const file = [...e.dataTransfer.files][0]
+      if (!file) return
+      if (file.type.startsWith('image/')) { await processImageDump(file); return }
+      if (file.type === 'text/plain') { dumpText = await file.text(); return }
+    }}>
+
+    <div class="brain-screen-section">
+      <div class="brain-section-title">SCREEN CAPTURE</div>
+      <p class="brain-hint">
+        Captures your screen in 3 seconds — switch to
+        DAW, WhatsApp, or anything you want analyzed.
+      </p>
+      <div class="brain-screen-controls">
+        <input class="brain-spotify-inp"
+          bind:value={captureContext}
+          placeholder="What should I look for? (e.g. mixing session, chord chart...)"
+          style="flex:1"
+        />
+        <input class="brain-cat-rename-inp" list="brain-cats-dl" bind:value={captureCategory} placeholder="category" style="width:140px;flex-shrink:0" />
+      </div>
+      <button
+        class="brain-process-btn {capturing ? 'loading' : ''}"
+        onclick={captureScreen}
+        disabled={capturing}>
+        {capturing ? '📸 Capturing in 3s...' : '📸 Capture Screen → Brain'}
+      </button>
+      {#if captureResult}
+        <div class="brain-capture-result">
+          <div class="brain-preview-title">CAPTURED & SAVED TO BRAIN</div>
+          <div class="brain-approval-content">{captureResult}</div>
+        </div>
+      {/if}
+    </div>
+
+    <div class="brain-section-title">DUMP ANYTHING</div>
+    <p class="brain-hint">
+      Paste articles, notes, thoughts, research —
+      Claude extracts and files it automatically.
+    </p>
+    <textarea
+      class="brain-textarea {dumpDragging === 'image' ? 'drag-image' : ''}"
+      bind:value={dumpText}
+      placeholder="Paste text, Spotify links, articles, thoughts...
+Or DROP AN IMAGE (screenshot, chart, conversation)"
+    ></textarea>
+    {#if dumpDragging === 'image'}
+      <p class="brain-image-drop-hint">📷 Drop image — Claude will read and extract info</p>
+    {/if}
+    {#if dumpText.match(/open\.spotify\.com/)}
+      {#each [dumpText.match(/open\.spotify\.com\/(playlist|artist|album|track)/)?.[1] || 'link'] as urlType}
+        <p class="brain-spotify-hint">🎵 Spotify {urlType} URL detected</p>
+      {/each}
+    {/if}
+    <div class="brain-actions">
+      <button class="brain-sync-btn" onclick={syncAllRefs}>↺ Sync All System Refs</button>
+      <button
+        class="brain-process-btn {processing ? 'loading' : ''}"
+        onclick={processDump}
+        disabled={processing || !dumpText.trim()}
+      >
+        {#if processing}
+          ✦ Processing...
+        {:else if /spotify\.com\/(?:intl-\w+\/)?track\//.test(dumpText)}
+          ✦ Analyze Track
+        {:else if dumpText.includes('spotify.com/playlist')}
+          ✦ Import Playlist
+        {:else if dumpText.includes('spotify.com/artist')}
+          ✦ Import or Watch Artist
+        {:else}
+          ✦ Extract & Categorize
+        {/if}
+      </button>
+    </div>
+
+    {#if spotifyPreview}
+      <div class="brain-track-preview">
+        {#if spotifyPreview.art_url}
+          <img src={spotifyPreview.art_url} class="brain-track-art" alt={spotifyPreview.album} width="60" height="60" />
+        {/if}
+        <div class="brain-track-preview-info">
+          <div class="brain-track-preview-title">{spotifyPreview.artist} — {spotifyPreview.title}</div>
+          <div class="brain-track-preview-stats">
+            {#if spotifyPreview.bpm}
+              {spotifyPreview.bpm}bpm ·
+              {spotifyPreview.key || '?'}{#if spotifyPreview.key_confidence === 'low'} <span class="key-confidence-warn" title="Detected from 30s preview — verify manually">⚠</span>{/if}
+            {:else}
+              BPM: no preview available
+            {/if}
+            · {spotifyPreview.popularity}/100 popularity
+          </div>
+          <div class="brain-track-preview-genres">
+            {#each (spotifyPreview.genres||[]).slice(0,4) as g}
+              <span class="brain-genre-pill">{g}</span>
+            {/each}
+          </div>
+          <!-- Contextual tag step -->
+          <div class="sp-type-row">
+            {#each [
+              { id: 'reference_current',     label: 'Check Out (7d)' },
+              { id: 'reference_mixing',      label: 'Mixing Ref' },
+              { id: 'reference_inspiration', label: 'Music Ref' },
+              { id: 'reference_sound',       label: 'Sound Ref' },
+            ] as opt}
+              <label class="sp-type-opt {spotifyPreviewType === opt.id ? 'on' : ''}">
+                <input type="radio" name="sp-type" value={opt.id} bind:group={spotifyPreviewType} />
+                {opt.label}
+              </label>
+            {/each}
+          </div>
+          {#if spotifyPreviewType === 'reference_mixing'}
+            <input class="sp-mixer-inp" bind:value={spotifyMixerName} placeholder="Mixer name (optional)" />
+          {/if}
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="brain-save-btn" onclick={saveSpotifyPreview}>Add to Brain</button>
+            <button class="brain-discard-btn" onclick={() => { spotifyPreview = null; spotifyPreviewType = 'reference_current'; spotifyMixerName = '' }}>Discard</button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if importResult?.type === 'track' && importResult.trackData}
+      {@const t = importResult.trackData}
+      <div class="brain-track-preview">
+        {#if t.albumArt}
+          <img src={t.albumArt} class="brain-track-art" alt={t.album} width="50" height="50" />
+        {/if}
+        <div class="brain-track-preview-info">
+          <div class="brain-track-preview-title">{t.title} — {t.artist}</div>
+          <div class="brain-track-preview-stats">
+            {t.tempo}bpm · {t.key} · energy {t.energy?.toFixed(2)} · {t.popularity}/100
+          </div>
+          <div class="brain-track-preview-genres">
+            {#each (t.genres||[]).slice(0,4) as g}
+              <span class="brain-genre-pill">{g}</span>
+            {/each}
+          </div>
+          <div class="brain-track-cat-row">
+            <span class="brain-approval-cat-label">FILE UNDER:</span>
+            <input class="brain-cat-rename-inp" list="brain-cats-dl" bind:value={importCategory} placeholder="category" />
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="brain-save-btn" onclick={() => saveTrackImport(t)}>
+              ✓ Save Track to Brain
+            </button>
+            <button class="brain-discard-btn" onclick={() => importResult = null}>Discard</button>
+          </div>
+        </div>
+      </div>
+    {:else if importResult}
+      <div class="brain-import-result">
+        <div class="brain-preview-title">IMPORTED</div>
+        <div class="brain-import-summary">
+          {importResult.summary || `Imported: ${importResult.trackCount ?? '?'} tracks · ${importResult.artistCount ?? '?'} artists · Top genres: ${importResult.topGenres?.join(', ') || '—'} · Avg ${importResult.avgTempo ?? '?'}bpm`}
+        </div>
+        {#if importResult.trackCount !== undefined}
+          <div class="brain-import-stats">
+            {importResult.trackCount} tracks · {importResult.artistCount} artists · {importResult.genreCount} genres
+            {#if importResult.topGenres?.length} · {importResult.topGenres.join(', ')}{/if}
+          </div>
+        {/if}
+        <button class="brain-import-dismiss" onclick={() => importResult = null}>dismiss</button>
+      </div>
+    {/if}
+
+    {#if catSuggestLoading}
+      <div class="cat-suggest-card">
+        <div class="cat-suggest-header">ANALYSING CATEGORY…</div>
+        <div class="cat-suggest-loading">thinking</div>
+      </div>
+    {:else if catSuggestion}
+      <div class="cat-suggest-card">
+        <div class="cat-suggest-header">SUGGESTED CATEGORY</div>
+
+        {#if catSuggestion.action === 'split'}
+          <!-- SPLIT MODE -->
+          <div class="cat-suggest-reason">{catSuggestion.reason}</div>
+          <div class="cat-suggest-label">SPLIT INTO {splitEdits.length} ENTRIES</div>
+          {#each splitEdits as part, i}
+            <div class="cat-suggest-split-row">
+              <input
+                class="cat-suggest-inp cat-suggest-inp-sm"
+                list="brain-cats-dl"
+                value={part.category}
+                oninput={e => splitEdits = splitEdits.map((s, j) => j === i ? { ...s, category: e.target.value } : s)}
+                placeholder="category"
+              />
+              <textarea
+                class="cat-suggest-split-text"
+                rows="3"
+                value={part.content}
+                oninput={e => splitEdits = splitEdits.map((s, j) => j === i ? { ...s, content: e.target.value } : s)}
+              ></textarea>
+            </div>
+          {/each}
+          <div class="cat-suggest-actions">
+            <button class="cat-suggest-btn-primary" onclick={saveSplitsDirect}>✓ Save Split</button>
+            <button class="cat-suggest-btn-ghost" onclick={() => proceedAfterSuggestion('')}>Process as One</button>
+            <button class="cat-suggest-btn-ghost" onclick={() => { catSuggestion = null; splitEdits = [] }}>Cancel</button>
+          </div>
+
+        {:else}
+          <!-- EXISTING / NEW MODE -->
+          <div class="cat-suggest-pill cat-suggest-pill-{catSuggestion.action}">
+            {catSuggestion.action === 'new' ? 'NEW CATEGORY' : 'EXISTING'}
+          </div>
+          <div class="cat-suggest-name">{catSuggestion.suggestion}</div>
+          <div class="cat-suggest-reason">{catSuggestion.reason}</div>
+          {#if catSuggestion.alternatives?.length}
+            <div class="cat-suggest-label">ALTERNATIVES</div>
+            <div class="cat-suggest-alts">
+              {#each catSuggestion.alternatives as alt}
+                {@const altCat = typeof alt === 'string' ? alt : alt.category}
+                {@const altReason = typeof alt === 'string' ? '' : alt.reason}
+                <button class="cat-suggest-alt-btn" onclick={() => proceedAfterSuggestion(altCat)} title={altReason}>{altCat}</button>
+              {/each}
+            </div>
+          {/if}
+          <div class="cat-suggest-label">OR TYPE A DIFFERENT CATEGORY</div>
+          <input
+            class="cat-suggest-inp"
+            list="brain-cats-dl"
+            bind:value={catSuggestOverride}
+            placeholder="override category…"
+          />
+          <div class="cat-suggest-actions">
+            <button class="cat-suggest-btn-primary"
+              onclick={() => proceedAfterSuggestion(catSuggestOverride || catSuggestion.suggestion)}>
+              ✓ Use {catSuggestOverride || catSuggestion.suggestion}
+            </button>
+            <button class="cat-suggest-btn-ghost" onclick={() => catSuggestion = null}>Cancel</button>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    {#if showApproval && pendingApproval.length}
+      <div class="brain-approval-panel">
+        <div class="brain-preview-title">
+          REVIEW BEFORE SAVING — {pendingApproval.length} item(s)
+        </div>
+        {#each pendingApproval as item}
+          <div class="brain-approval-item">
+            <div class="brain-approval-type">
+              {item.entry_type === 'chunk' ? '📄 CHUNK' :
+               item.entry_type === 'fact' ? '📊 FACT' :
+               item.entry_type === 'thought' ? '💭 THOUGHT' :
+               item.entry_type === 'question' ? '❓ QUESTION' : '📝 KNOWLEDGE'}
+              <span class="brain-approval-cat-label" style="margin-left:4px">{item.suggestedCategory}</span>
+            </div>
+            <div class="brain-approval-title">{item.title}</div>
+            <div class="brain-approval-content">{item.content}</div>
+          </div>
+        {/each}
+        <div class="brain-approval-actions">
+          <button class="brain-save-btn" onclick={saveApproved}>
+            ✓ Save All to Brain
+          </button>
+          <button class="brain-discard-btn"
+            onclick={() => { showApproval = false; pendingApproval = []; dumpText = '' }}>
+            Discard
+          </button>
+        </div>
+      </div>
+    {/if}
+  </div>
+
+  <!-- Shared datalist for category autocomplete — built from live Supabase data -->
+  <datalist id="brain-cats-dl">
+    {#each existingCategories as cat}
+      <option value={cat}></option>
+    {/each}
+  </datalist>
+
+  <!-- Right: entries -->
+  <div class="brain-entries-col">
+    <button class="brain-entries-toggle" onclick={() => entriesOpen = !entriesOpen}>
+      <span>BRAIN ENTRIES</span>
+      <span class="brain-cat-count">{entries.length + watchedArtists.length}</span>
+      <span class="brain-cat-arrow {entriesOpen ? 'open' : ''}">▶</span>
+    </button>
+
+    {#if entriesOpen}
+      {@const normalEntries = [...entries.filter(e => e.category !== 'reference_tracks')].sort((a,b) => a.category.localeCompare(b.category))}
+      {@const catIds = [...new Set(normalEntries.map(e => e.category))]}
+
+      {#if duplicateWarnings.length}
+        <div class="brain-dup-warning">
+          ⚠ {duplicateWarnings.length} possible duplicate(s) — review and delete to keep the brain clean
+        </div>
+      {/if}
+
+      {#if !entries.length && !watchedArtists.length && !referenceTrackEntries.length}
+        <p class="brain-empty">No entries yet. Dump something above.</p>
+      {/if}
+
+      <!-- Knowledge entries grouped by category -->
+      {#each catIds as catId}
+        <div class="brain-cat-divider">{catId.replace(/_/g, ' ')}</div>
+        {#each normalEntries.filter(e => e.category === catId) as entry}
+          {#if entry.category === 'question'}
+            <div class="brain-question-row">
+              <span class="brain-question-icon">❓</span>
+              <span class="brain-question-text">{entry.content}</span>
+              <span class="brain-question-date">
+                {new Date(entry.created_at).toLocaleDateString('de-CH')}
+              </span>
+              <button class="track-del-btn" onclick={() => deleteEntry(entry.id)}>×</button>
+            </div>
+          {:else}
+            <div class="brain-entry {entry.active ? '' : 'inactive'}">
+              <div class="brain-entry-header">
+                <button
+                  class="brain-toggle {entry.active ? 'on' : ''}"
+                  onclick={() => toggleEntry(entry.id, entry.active)}
+                  title={entry.active ? 'Active' : 'Paused'}
+                >{entry.active ? '◉' : '○'}</button>
+                <span
+                  class="brain-entry-title clickable-title"
+                  onclick={() => expandedEntries = { ...expandedEntries, [entry.id]: !expandedEntries[entry.id] }}
+                >{entry.title}</span>
+                <button class="brain-del" onclick={() => deleteEntry(entry.id)}>×</button>
+              </div>
+              {#if expandedEntries[entry.id]}
+                <div class="brain-entry-content">{entry.content}</div>
+              {/if}
+            </div>
+          {/if}
+        {/each}
+      {/each}
+
+      <!-- Watched Artists -->
+      {#if watchedArtists.length}
+        <div class="brain-subsection-title">WATCHED ARTISTS</div>
+        {#each watchedArtists as artist}
+          <div class="brain-watched-row">
+            <span class="brain-watched-name">{artist.artist_name}</span>
+            <span class="brain-watched-genre">{Array.isArray(artist.genres) ? artist.genres.slice(0,2).join(', ') : (artist.genres || '—')}</span>
+            <span class="brain-watched-checked">{artist.last_checked ? new Date(artist.last_checked).toLocaleDateString('en-GB', {day:'2-digit',month:'short'}) : 'never'}</span>
+            <button class="brain-del" onclick={() => unwatchArtist(artist.id)} title="Stop watching">×</button>
+          </div>
+        {/each}
+      {/if}
+    {/if}
+  </div>
+
+  <!-- Reference Tracks — separate toggle section -->
+  <div class="brain-entries-col" style="margin-top: 12px;">
+    <button class="brain-entries-toggle" onclick={() => tracksOpen = !tracksOpen}>
+      <span>REFERENCE TRACKS</span>
+      <span class="brain-cat-count">{referenceTrackEntries.length}</span>
+      <span class="brain-cat-arrow {tracksOpen ? 'open' : ''}">▶</span>
+    </button>
+
+    {#if tracksOpen}
+      {@const myProductions = referenceTrackEntries.filter(t => t.collection_name === 'my_productions')}
+      {@const extRefs = referenceTrackEntries.filter(t => t.collection_name !== 'my_productions')}
+
+      {#if myProductions.length}
+        <div class="brain-genre-group">
+          <div class="brain-genre-label" style="color:rgba(201,168,76,.75)">MY PRODUCTIONS</div>
+          {#each myProductions as track}
+            <div class="brain-track-row">
+              <button class="track-play-btn"
+                onclick={() => window.open(
+                  'http://localhost:4242/production/' + encodeURIComponent(track.title + '.wav'),
+                  '_blank'
+                )}
+                title="Open in production folder">▶</button>
+              <div class="track-info">
+                <span class="track-artist-title">{track.title}</span>
+                <span class="track-stats">
+                  {track.tempo ? track.tempo + 'bpm' : ''}
+                  {track.key ? ' · ' + track.key : ''}
+                  {track.loudness != null ? ' · ' + track.loudness + 'LUFS' : ''}
+                  {track.energy != null ? ' · energy ' + track.energy?.toFixed(3) : ''}
+                </span>
+              </div>
+              <button class="track-del-btn"
+                onclick={async () => {
+                  await supabase.from('reference_tracks').delete().eq('id', track.id)
+                  referenceTrackEntries = referenceTrackEntries.filter(t => t.id !== track.id)
+                }}>×</button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+
+      {#each Object.entries(tracksByGenre) as [genre, tracks]}
+        <div class="brain-genre-group">
+          <div class="brain-genre-label">{genre}</div>
+          {#each tracks as track}
+            <div class="brain-track-row">
+              <button class="track-play-btn"
+                onclick={() => window.open(
+                  'https://open.spotify.com/track/' + track.spotify_id,
+                  'spotify_preview',
+                  'width=400,height=600,left=100,top=100,toolbar=no,menubar=no'
+                )}
+                title="Play in Spotify">▶</button>
+              <div class="track-info">
+                <span class="track-artist-title">{track.artist} — {track.title}</span>
+                <span class="track-stats">
+                  {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
+                  {track.key ? ' · ' + track.key : ''}
+                  {track.energy != null ? ' · energy ' + track.energy?.toFixed(2) : ''}
+                  {track.popularity != null ? ' · ' + track.popularity + '/100' : ''}
+                </span>
+              </div>
+              <button class="track-dl-btn"
+                title="Copy Spotify link"
+                onclick={async () => {
+                  const url = 'https://open.spotify.com/track/' + track.spotify_id
+                  await navigator.clipboard.writeText(url)
+                  track._copied = true; referenceTrackEntries = [...referenceTrackEntries]
+                  setTimeout(() => {
+                    track._copied = false
+                    referenceTrackEntries = [...referenceTrackEntries]
+                  }, 1500)
+                }}>
+                {track._copied ? '✓' : '↓'}
+              </button>
+              <button class="track-del-btn"
+                onclick={async () => {
+                  await supabase.from('reference_tracks').delete().eq('id', track.id)
+                  referenceTrackEntries = referenceTrackEntries.filter(t => t.id !== track.id)
+                }}>×</button>
+            </div>
+          {/each}
+        </div>
+      {/each}
+
+      {#if !referenceTrackEntries.length}
+        <p class="brain-empty">No reference tracks yet. Import a Spotify track URL above.</p>
+      {/if}
+    {/if}
+  </div>
+
+</div>
+
+<style>
+  .brain-wrap {
+    display: grid;
+    grid-template-columns: 40% 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+
+  .brain-section-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: rgba(201,168,76,.75);
+    margin-bottom: 10px;
+  }
+
+  /* ── Left column ── */
+  .brain-dump-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: sticky;
+    top: 24px;
+  }
+
+  .brain-hint {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 300;
+    color: #555;
+    line-height: 1.6;
+    margin-bottom: 2px;
+  }
+
+  .brain-textarea {
+    width: 100%;
+    min-height: 200px;
+    background: #1c1c1c;
+    border: 1px solid #303030;
+    color: #cec9c1;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 300;
+    padding: 10px 12px;
+    outline: none;
+    resize: vertical;
+    border-radius: 3px;
+    line-height: 1.6;
+  }
+  .brain-textarea:focus { border-color: rgba(201,168,76,.4); }
+  .brain-textarea::placeholder { color: #3a3a3a; }
+  .brain-textarea.drag-image { border-color: #4caf82; background: rgba(76,175,130,.04); }
+  .brain-spotify-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; margin: 4px 0 0; letter-spacing: .04em; }
+  .brain-image-drop-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; margin: 4px 0 0; letter-spacing: .04em; }
+
+  .brain-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+  .brain-sync-btn { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; background: transparent; border: 1px solid #252525; padding: 4px 10px; border-radius: 2px; cursor: pointer; }
+  .brain-sync-btn:hover { color: #c9a84c; border-color: #c9a84c; }
+
+  .brain-process-btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    padding: 9px 18px;
+    background: transparent;
+    border: 1px solid rgba(201,168,76,.5);
+    color: #c9a84c;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .brain-process-btn:hover:not(:disabled) {
+    background: rgba(201,168,76,.1);
+    border-color: #c9a84c;
+  }
+  .brain-process-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .brain-process-btn.loading { opacity: .7; }
+
+  /* ── Preview block ── */
+  .brain-preview {
+    background: #111;
+    border: 1px solid rgba(201,168,76,.2);
+    border-radius: 4px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .brain-preview-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    color: rgba(201,168,76,.6);
+    text-transform: uppercase;
+  }
+
+  .brain-preview-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px;
+    background: #1c1c1c;
+    border: 1px solid #252525;
+    border-radius: 3px;
+  }
+
+  .brain-preview-cat {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: rgba(201,168,76,.6);
+    letter-spacing: .06em;
+  }
+
+  .brain-approval-meta { display: flex; gap: 6px; align-items: center; }
+  .brain-approval-type { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(201,168,76,.6); letter-spacing: .06em; text-transform: uppercase; }
+  .brain-approval-new-cat { font-family: 'Space Mono', monospace; font-size: 8px; color: #4caf82; letter-spacing: .06em; border: 1px solid #4caf82; padding: 1px 4px; border-radius: 2px; }
+  .brain-approval-cat-row { display: flex; align-items: center; gap: 6px; }
+  .brain-approval-cat-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; white-space: nowrap; }
+
+  .brain-title-edit {
+    background: #0a0a0a;
+    border: 1px solid #2a2a2a;
+    color: #f5f1ea;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 8px;
+    outline: none;
+    border-radius: 2px;
+    width: 100%;
+  }
+  .brain-title-edit:focus { border-color: rgba(201,168,76,.4); }
+
+  .brain-content-edit {
+    background: #0a0a0a;
+    border: 1px solid #2a2a2a;
+    color: #cec9c1;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 300;
+    padding: 6px 8px;
+    outline: none;
+    resize: vertical;
+    border-radius: 2px;
+    width: 100%;
+    min-height: 70px;
+    line-height: 1.5;
+  }
+  .brain-content-edit:focus { border-color: rgba(201,168,76,.4); }
+
+  .brain-preview-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding-top: 4px;
+  }
+
+  .brain-save-btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 7px 16px;
+    background: #c9a84c;
+    color: #0a0a0a;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .brain-save-btn:hover { background: #d4b45e; }
+
+  .brain-discard-btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 7px 12px;
+    background: transparent;
+    border: 1px solid #303030;
+    color: #555;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .brain-discard-btn:hover { border-color: #e05a4a; color: #e05a4a; }
+
+  .brain-track-preview { display: flex; gap: 12px; margin-top: 12px; padding: 10px; background: #0d0d0d; border: 1px solid #252525; border-radius: 3px; }
+  .brain-track-art { border-radius: 2px; flex-shrink: 0; }
+  .brain-track-preview-info { flex: 1; min-width: 0; }
+  .brain-track-preview-title { font-family: 'Space Mono', monospace; font-size: 10px; color: #f5f1ea; margin-bottom: 4px; }
+  .brain-track-preview-stats { font-family: 'Space Mono', monospace; font-size: 8px; color: #666; margin-bottom: 6px; }
+  .key-confidence-warn { color: #c9a84c; cursor: help; font-size: 9px; }
+
+  /* Spotify preview type selector */
+  .sp-type-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .sp-type-opt { display: flex; align-items: center; gap: 4px; font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px; border: 1px solid #252525; border-radius: 2px; color: #555; cursor: pointer; transition: all .15s; }
+  .sp-type-opt input[type=radio] { display: none; }
+  .sp-type-opt.on { border-color: #c9a84c; color: #c9a84c; background: rgba(201,168,76,.06); }
+  .sp-type-opt:hover { border-color: #444; color: #9e9690; }
+  .sp-mixer-inp { font-family: 'DM Sans', sans-serif; font-size: 13px; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; padding: 5px 9px; outline: none; border-radius: 3px; width: 100%; margin-top: 5px; }
+  .brain-track-preview-genres { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; }
+  .brain-genre-pill { font-family: 'Space Mono', monospace; font-size: 7px; padding: 1px 5px; border-radius: 2px; background: rgba(76,175,130,.1); color: rgba(76,175,130,.7); border: 1px solid rgba(76,175,130,.2); }
+  .brain-track-cat-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+
+  /* ── Category Suggestion Card ───────────────────────────────────────────── */
+  .cat-suggest-card { margin-top: 12px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; padding: 14px; }
+  .cat-suggest-header { font-family: 'Space Mono', monospace; font-size: 10px; color: rgba(201,168,76,.75); letter-spacing: .12em; margin-bottom: 10px; }
+  .cat-suggest-loading { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .4 } 50% { opacity: 1 } }
+  .cat-suggest-pill { display: inline-block; font-family: 'Space Mono', monospace; font-size: 8px; letter-spacing: .1em; padding: 2px 7px; border-radius: 2px; margin-bottom: 6px; }
+  .cat-suggest-pill-existing { background: rgba(76,175,130,.15); color: #4caf82; border: 1px solid rgba(76,175,130,.3); }
+  .cat-suggest-pill-new { background: rgba(201,168,76,.12); color: #c9a84c; border: 1px solid rgba(201,168,76,.3); }
+  .cat-suggest-name { font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 700; color: #c9a84c; margin-bottom: 6px; }
+  .cat-suggest-reason { font-size: 12px; color: #9e9690; margin-bottom: 10px; line-height: 1.4; }
+  .cat-suggest-label { font-family: 'Space Mono', monospace; font-size: 8px; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-bottom: 6px; margin-top: 8px; }
+  .cat-suggest-alts { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+  .cat-suggest-alt-btn { background: #252525; border: 1px solid #303030; color: #cec9c1; font-family: 'Space Mono', monospace; font-size: 10px; padding: 4px 9px; border-radius: 2px; cursor: pointer; }
+  .cat-suggest-alt-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+  .cat-suggest-inp { width: 100%; background: #0a0a0a; border: 1px solid #303030; color: #f5f1ea; font-size: 12px; padding: 6px 8px; border-radius: 2px; margin-bottom: 10px; box-sizing: border-box; }
+  .cat-suggest-inp:focus { outline: none; border-color: #c9a84c; }
+  .cat-suggest-inp-sm { width: auto; flex: 1; margin-bottom: 0; }
+  .cat-suggest-split-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; padding: 8px; background: #0d0d0d; border: 1px solid #252525; border-radius: 2px; }
+  .cat-suggest-split-text { background: #0a0a0a; border: 1px solid #303030; color: #cec9c1; font-size: 11px; font-family: inherit; padding: 6px 8px; border-radius: 2px; resize: vertical; }
+  .cat-suggest-split-text:focus { outline: none; border-color: #c9a84c; }
+  .cat-suggest-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+  .cat-suggest-btn-primary { background: rgba(201,168,76,.15); border: 1px solid rgba(201,168,76,.4); color: #c9a84c; font-family: 'Space Mono', monospace; font-size: 10px; padding: 6px 12px; border-radius: 2px; cursor: pointer; }
+  .cat-suggest-btn-primary:hover { background: rgba(201,168,76,.25); }
+  .cat-suggest-btn-ghost { background: transparent; border: 1px solid #303030; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 10px; padding: 6px 12px; border-radius: 2px; cursor: pointer; }
+  .cat-suggest-btn-ghost:hover { color: #cec9c1; border-color: #555; }
+
+  .brain-approval-panel { margin-top: 12px; border: 1px solid rgba(201,168,76,.2); border-radius: 3px; padding: 12px; background: #0d0d0d; }
+  .brain-approval-item { padding: 8px 0; border-bottom: 1px solid #1a1a1a; margin-bottom: 8px; }
+  .brain-approval-type { font-family: 'Space Mono', monospace; font-size: 8px; color: #444; letter-spacing: .1em; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .brain-new-cat-badge { background: rgba(201,168,76,.1); color: rgba(201,168,76,.7); border: 1px solid rgba(201,168,76,.2); border-radius: 2px; padding: 1px 5px; font-size: 7px; }
+  .brain-approval-category-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .brain-approval-cat-label { font-family: 'Space Mono', monospace; font-size: 8px; color: #555; }
+  .brain-cat-rename-inp { flex: 1; background: #111; border: 1px solid rgba(201,168,76,.2); color: #c9a84c; font-family: 'Space Mono', monospace; font-size: 9px; padding: 3px 7px; border-radius: 2px; outline: none; }
+  .brain-approval-title { font-family: 'Space Mono', monospace; font-size: 10px; color: #cec9c1; margin-bottom: 4px; }
+  .brain-approval-content { font-size: 12px; color: #666; line-height: 1.5; max-height: 80px; overflow-y: auto; }
+  .brain-approval-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+  /* ── Right column ── */
+  .brain-entries-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .brain-entries-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #252525;
+    cursor: pointer;
+    padding: 9px 0;
+    color: rgba(201,168,76,.9);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .brain-entries-toggle:hover { color: #c9a84c; border-bottom-color: rgba(201,168,76,.25); }
+
+  .brain-cat-count { font-size: 8px; color: #444; margin-left: 4px; }
+  .brain-cat-arrow { margin-left: auto; font-size: 8px; color: #333; transition: transform .15s; }
+  .brain-cat-arrow.open { transform: rotate(90deg); color: #c9a84c; }
+
+  .brain-cat-divider {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: rgba(201,168,76,.5);
+    padding: 10px 0 5px;
+    border-bottom: 1px solid #1a1a1a;
+    margin-bottom: 4px;
+  }
+
+  .brain-subsection-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: rgba(201,168,76,.4);
+    padding: 14px 0 5px;
+    border-bottom: 1px solid #1a1a1a;
+    margin-bottom: 4px;
+  }
+
+  .brain-entry {
+    background: #1c1c1c;
+    border: 1px solid #252525;
+    border-radius: 3px;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    transition: opacity .2s;
+  }
+  .brain-entry.inactive { opacity: .35; }
+  .brain-question-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid #111;
+  }
+  .brain-question-icon {
+    font-size: 10px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .brain-question-text {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 300;
+    color: #cec9c1;
+    flex: 1;
+    font-style: italic;
+    line-height: 1.5;
+  }
+  .brain-question-date {
+    font-family: 'Space Mono', monospace;
+    font-size: 8px;
+    color: #333;
+    flex-shrink: 0;
+  }
+
+  .brain-entry-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .brain-entry-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #f5f1ea;
+    line-height: 1.4;
+    flex: 1;
+  }
+  .brain-entry-title.clickable-title {
+    cursor: pointer;
+  }
+  .brain-entry-title.clickable-title:hover { color: #c9a84c; }
+
+  .brain-toggle {
+    background: transparent;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    color: #444;
+    transition: color .15s;
+    flex-shrink: 0;
+  }
+  .brain-toggle.on { color: #c9a84c; }
+  .brain-toggle:hover { color: #c9a84c; }
+
+  .brain-del {
+    background: transparent;
+    border: none;
+    color: #555;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .brain-del:hover { color: #e05a4a; }
+
+  .brain-entry-content {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 300;
+    color: #9e9690;
+    line-height: 1.6;
+    padding: 6px 0 2px 22px;
+  }
+
+  .brain-ref-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    background: #1c1c1c;
+    border: 1px solid #252525;
+    border-radius: 3px;
+    margin-bottom: 3px;
+    transition: opacity .2s;
+  }
+  .brain-ref-row.inactive { opacity: .35; }
+  .brain-ref-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: #cec9c1;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .brain-ref-meta {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: #555;
+    white-space: nowrap;
+    letter-spacing: .03em;
+  }
+
+  .brain-watched-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: #1c1c1c;
+    border: 1px solid #252525;
+    border-radius: 3px;
+    margin-bottom: 3px;
+  }
+  .brain-watched-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #cec9c1;
+    flex: 1;
+  }
+  .brain-watched-genre {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 300;
+    color: #555;
+    white-space: nowrap;
+  }
+  .brain-watched-checked {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: #444;
+    white-space: nowrap;
+  }
+
+  .brain-dup-warning {
+    font-family: 'Space Mono', monospace;
+    font-size: 8px;
+    color: rgba(201,168,76,.6);
+    padding: 4px 0;
+    letter-spacing: .06em;
+  }
+
+  .brain-empty {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #333;
+    margin-top: 8px;
+  }
+
+  .brain-spotify-row { margin-bottom: 24px; }
+  .brain-spotify-input-row { display: flex; gap: 8px; margin-top: 8px; }
+  .brain-spotify-inp {
+    flex: 1;
+    background: #111;
+    border: 1px solid #252525;
+    color: #f5f1ea;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 8px 10px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .brain-spotify-inp:focus { border-color: rgba(201,168,76,.3); }
+  .brain-spotify-inp::placeholder { color: #333; }
+  .brain-import-result {
+    margin-top: 10px;
+    padding: 10px;
+    background: #111;
+    border: 1px solid #252525;
+    border-radius: 3px;
+  }
+  .brain-import-summary {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 300;
+    color: #9e9690;
+    line-height: 1.5;
+    margin-top: 4px;
+  }
+  .brain-import-stats {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: #444;
+    margin-top: 6px;
+    letter-spacing: .04em;
+  }
+  .brain-import-dismiss {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: #333;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    margin-top: 6px;
+    padding: 0;
+    display: block;
+  }
+  .brain-import-dismiss:hover { color: #555; }
+
+  /* ── Reference Tracks ── */
+  .brain-genre-group { margin-bottom: 8px; }
+
+  .brain-genre-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    color: rgba(201,168,76,.5);
+    padding: 6px 0 3px;
+    text-transform: uppercase;
+    border-bottom: 1px solid #1c1c1c;
+  }
+
+  .brain-track-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 0;
+    border-bottom: 1px solid #111;
+  }
+
+  .track-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .track-artist-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: #cec9c1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .track-stats {
+    font-family: 'Space Mono', monospace;
+    font-size: 8px;
+    color: #444;
+  }
+
+  .track-play-btn {
+    color: #4caf82;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 10px;
+    flex-shrink: 0;
+    padding: 2px 4px;
+  }
+  .track-play-btn:hover { color: #6fcfa0; }
+
+  .track-dl-btn {
+    color: #555;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    flex-shrink: 0;
+    padding: 2px 4px;
+    font-family: 'Space Mono', monospace;
+  }
+  .track-dl-btn:hover { color: #4caf82; }
+
+  .track-del-btn {
+    color: #333;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    flex-shrink: 0;
+    padding: 2px 4px;
+  }
+  .track-del-btn:hover { color: #e05a4a; }
+  .brain-screen-section { padding-bottom: 16px; border-bottom: 1px solid #1c1c1c; margin-bottom: 16px; }
+  .brain-screen-controls { display: flex; gap: 8px; margin-bottom: 8px; }
+  .brain-capture-result { margin-top: 8px; padding: 8px 10px; background: #0d0d0d; border: 1px solid #252525; border-radius: 3px; }
+</style>

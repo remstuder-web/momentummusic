@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] momentum-watcher.cjs — DONE
+TASK: Hypebot RSS feed URL fix
+WHAT: Hypebot moved their RSS from /feed to /latest/rss/ — old URL returned 301 (not followed by fetchJSON) then 404. Fixed URL. Both MBW and Hypebot now return HTTP 200 with real headlines. Pulse check confirmed fetching real data; Claude returning NO_UPDATES is correct behavior (no contradictions vs brain today).
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-18] test-system.cjs — DONE
 TASK: system health test suite
 WHAT: Created test-system.cjs with 8 tests: watcher alive, category suggestion, Spotify intl URL, pulse check, briefing no hardcoded filters, notes-to-feedback JSON, no brain dupes, git initialized. Fixed test 4 (pulse check writes to inbox not response body; NO_UPDATES is valid), fixed test 5 (regex was matching prompt strings not DB queries). Final result: 8/8 PASS.

@@ -323,7 +323,7 @@ Label your assessments:
 async function runPulseCheck(apiKey, sharedBrainRows) {
   const sites = [
     { name: 'Music Business Worldwide', url: 'https://www.musicbusinessworldwide.com/feed/' },
-    { name: 'Hypebot',                  url: 'https://www.hypebot.com/feed' }
+    { name: 'Hypebot',                  url: 'https://www.hypebot.com/latest/rss/' }
   ]
 
   let freshContent = ''

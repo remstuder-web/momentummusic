@@ -1,16 +1,15 @@
 {
-  "updated": "2026-04-18T00:00:00Z",
-  "last_task": "repair session audit + git init",
+  "updated": "2026-04-18T00:02:00Z",
+  "last_task": "end-to-end pulse check + Hypebot RSS fix",
   "status": "done",
   "working": [
-    "FIX1: ProjectsTab brainContext simplified in both functions — already applied 2026-04-17",
-    "FIX2: DailyTab ghost tasks fixed (removeItem + newInBackup) — already applied 2026-04-17",
-    "FIX3: BrainTab fetchCatSuggestion calls loadCategories unconditionally — already correct",
-    "FIX4: +page.svelte API key input reads/writes mm_api_key correctly — already correct",
-    "git init — baseline commit 3545fd6 with all 35 source files"
+    "Pulse check: fetches real data — MBW HTTP 200, Hypebot HTTP 200 (fixed URL)",
+    "Morning briefing: reads real Supabase data, no hardcoded categories",
+    "NO_UPDATES response from Claude is correct — no contradictions vs brain today",
+    "fetchJSON works correctly for RSS XML (returns _raw field)"
   ],
   "broken": [],
   "partial": [],
-  "next": "Manual verification: DailyTab delete task + reload, ProjectsTab notes-to-feedback",
-  "notes": "All 4 fixes were already in place from yesterday. .env excluded from git via .gitignore. Watcher running on port 4242."
+  "next": "Continue with TASKS.md — all systems verified working",
+  "notes": "Hypebot RSS moved from /feed to /latest/rss/. fetchJSON does not follow HTTP redirects — fix by always using the correct final URL. Pulse check is fire-and-forget: returns {ok:true} immediately, saves to inbox only when Claude finds updates worth flagging."
 }

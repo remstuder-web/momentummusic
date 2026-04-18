@@ -123,6 +123,16 @@ const MIME = {
   '.ogg': 'audio/ogg',  '.opus': 'audio/ogg',
 }
 
+// ── MP3 transcoding via ffmpeg ────────────────────────────────────────────
+function transcodeToMp3(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    exec(
+      `ffmpeg -i "${inputPath}" -b:a 320k -y "${outputPath}"`,
+      (err) => { if (err) reject(err); else resolve(outputPath) }
+    )
+  })
+}
+
 ;[DEMOS_DIR, SUBMISSIONS_DIR, PRODUCTION_DIR, INSTRUMENTALS_DIR, MIXING_DIR, RELEASES_DIR, STEMS_DIR].forEach(d => {
   if (!fs.existsSync(d)) { fs.mkdirSync(d, { recursive: true }); console.log('Created:', d) }
 })
@@ -1307,8 +1317,28 @@ async function restore(input) {
         // filePath is relative to Dropbox root e.g. /!MOMENTUM MUSIC/Production/file.wav
         let shareLink = null
         if (DROPBOX_APP_KEY) shareLink = await getDropboxShareLink(filePath)
+
+        // Transcode WAV → MP3 (320k) alongside the original, non-blocking
+        let mp3ShareLink = null
+        let mp3Path = null
+        const localPath = path.join(process.env.HOME, 'Dropbox', filePath)
+        if (localPath.toLowerCase().endsWith('.wav') && fs.existsSync(localPath)) {
+          const localMp3 = localPath.replace(/\.wav$/i, '.mp3')
+          const dbxMp3   = filePath.replace(/\.wav$/i, '.mp3')
+          mp3Path = dbxMp3
+          // Fire-and-forget: transcode then get Dropbox link
+          transcodeToMp3(localPath, localMp3)
+            .then(() => {
+              console.log(`✓ Transcoded MP3: ${path.basename(localMp3)}`)
+              if (DROPBOX_APP_KEY) {
+                return getDropboxShareLink(dbxMp3)
+              }
+            })
+            .catch(e => console.warn('  MP3 transcode failed:', e.message.slice(0, 80)))
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, shareLink }))
+        res.end(JSON.stringify({ ok: true, shareLink, mp3Path, mp3ShareLink }))
       } catch(err) {
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: err.message }))
@@ -2801,9 +2831,16 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
   const routePrefixes = { '/audio/': DEMOS_DIR, '/production/': PRODUCTION_DIR, '/mixing/': MIXING_DIR, '/instrumentals/': INSTRUMENTALS_DIR }
   const matchedPrefix = Object.keys(routePrefixes).find(p => req.url.startsWith(p))
   if (matchedPrefix) {
-    const filename = decodeURIComponent(req.url.slice(matchedPrefix.length))
+    let filename = decodeURIComponent(req.url.slice(matchedPrefix.length))
     if (filename.includes('..') || filename.includes('/')) { res.writeHead(400); res.end(); return }
-    const filepath = path.join(routePrefixes[matchedPrefix], filename)
+    let filepath = path.join(routePrefixes[matchedPrefix], filename)
+    // Prefer MP3 over WAV when client accepts audio/mpeg and MP3 exists alongside
+    const acceptsMp3 = (req.headers.accept || '').includes('audio/mpeg')
+    if (acceptsMp3 && filename.toLowerCase().endsWith('.wav')) {
+      const mp3Filename = filename.replace(/\.wav$/i, '.mp3')
+      const mp3Filepath = path.join(routePrefixes[matchedPrefix], mp3Filename)
+      if (fs.existsSync(mp3Filepath)) { filename = mp3Filename; filepath = mp3Filepath }
+    }
     if (!fs.existsSync(filepath)) { res.writeHead(404); res.end('not found'); return }
     const stat  = fs.statSync(filepath)
     const mime  = MIME[path.extname(filename).toLowerCase()] || 'audio/mpeg'

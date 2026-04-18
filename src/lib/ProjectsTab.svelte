@@ -1355,14 +1355,16 @@
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ filePath: dbxPath })
         })
-        const { shareLink } = await linkRes.json()
+        const linkData = await linkRes.json()
         const songEntry = {
           code: song.code,
           title: audioFile,
           filename: audioFile,
-          shareUrl: shareLink || null,
+          shareUrl: linkData.shareLink || null,
+          mp3ShareUrl: linkData.mp3ShareLink || null,
           previewUrl: null
         }
+        const mp3Filename = audioFile ? audioFile.replace(/\.wav$/i, '.mp3') : null
         const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
         await supabase.from('share_sessions').insert({
           id,
@@ -1371,7 +1373,8 @@
           expires_at: expiresAt,
           background: selectedListenBg,
           feedback_enabled: true,
-          session_type: 'production'
+          session_type: 'production',
+          mp3_path: mp3Filename
         })
       } catch(e) { console.warn('Listen link background error:', e.message) }
     })()
@@ -1432,6 +1435,7 @@
         const isMix = v.version_type === 'mixing'
         const cachedLink = isMix ? wd.mix_sharelink : wd.prod_sharelink
         let shareLink = cachedLink || null
+        let mp3ShareLink = null
         if (!shareLink) {
           const dbxPath = `/!MOMENTUM MUSIC/${subdir}/${v.audio_path}`
           const linkRes = await fetch('http://localhost:4242/share-link', {
@@ -1440,8 +1444,8 @@
           })
           const data = await linkRes.json()
           shareLink = data.shareLink || null
+          mp3ShareLink = data.mp3ShareLink || null
           if (shareLink) {
-            // Cache for future use
             saveWorkData(song, wd2 => {
               if (isMix) { wd2.mix_sharelink = shareLink } else { wd2.prod_sharelink = shareLink }
             })
@@ -1453,8 +1457,10 @@
           title: v.audio_path || song.title || song.code,
           filename: v.audio_path,
           shareUrl: shareLink || null,
+          mp3ShareUrl: mp3ShareLink || null,
           previewUrl: null
         }
+        const mp3Filename = v.audio_path ? v.audio_path.replace(/\.wav$/i, '.mp3') : null
         const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
         const sessionPayload = {
           id: listenId,
@@ -1463,12 +1469,12 @@
           expires_at: expiresAt,
           background: selectedListenBg,
           feedback_enabled: true,
-          session_type: v.version_type === 'mixing' ? 'mixing' : 'production'
+          session_type: v.version_type === 'mixing' ? 'mixing' : 'production',
+          mp3_path: mp3Filename
         }
         const { error } = await supabase.from('share_sessions').insert(sessionPayload)
         if (error) {
-          // Fallback: retry without session_type in case column doesn't exist yet
-          const { session_type, ...payloadNoType } = sessionPayload
+          const { session_type, mp3_path, ...payloadNoType } = sessionPayload
           await supabase.from('share_sessions').insert(payloadNoType)
         }
         console.log('✓ Listen session ready:', listenUrl)

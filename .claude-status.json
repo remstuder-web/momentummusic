@@ -1,16 +1,19 @@
 {
-  "updated": "2026-04-18T19:15:00Z",
-  "last_task": "chart-analysis-search-fix",
+  "updated": "2026-04-18T19:30:00Z",
+  "last_task": "mp3-transcode-share-link",
   "status": "done",
   "working": [
-    "/agent-chart-analysis: returns ok:true with 3 fully-analyzed tracks + Claude assessment",
-    "Spotify search: q='year:2026 genre:pop', limit=10 (Client Credentials caps at 10; limit=20 → 400)",
-    "market=DE removed — causes 400 with Client Credentials token",
-    "popularity sort removed — search results return undefined popularity",
-    "chart_source: 'spotify_top_2026'"
+    "transcodeToMp3() helper added to watcher (ffmpeg 320k, Promise-based)",
+    "/share-link: fire-and-forgets WAV→MP3 transcode after Dropbox link; returns mp3Path + mp3ShareLink",
+    "Audio serving (/production/, /mixing/, /audio/): prefers .mp3 over .wav when Accept: audio/mpeg",
+    "ProjectsTab sendToArtist: stores mp3ShareUrl in songs[], mp3_path in share_sessions",
+    "ProjectsTab production listen link: same mp3 fields stored"
   ],
   "broken": [],
-  "partial": [],
-  "next": "SQL still needed in Supabase:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, ADD COLUMN IF NOT EXISTS spectral_centroid float, ADD COLUMN IF NOT EXISTS spectral_contrast float, ADD COLUMN IF NOT EXISTS spectral_flux float, ADD COLUMN IF NOT EXISTS mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS review_date date;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS reviewed boolean DEFAULT false;",
-  "notes": "Spotify Client Credentials limitations discovered: (1) limit capped at 10, not 50; (2) market param causes 400; (3) popularity field is undefined in search results; (4) new-releases and editorial playlists require Extended Quota Mode (403)."
+  "partial": [
+    "Listen page (momentummusic.vercel.app) is a separate repo — NOT in /Users/remo/momentum. <source> tag update for MP3 preference needs to be done there.",
+    "mp3ShareLink is always null in share-link response currently — transcode is fire-and-forget so link is generated async after response. Songs[] has mp3ShareUrl=null until that separate step is wired."
+  ],
+  "next": "SQL needed in Supabase:\nALTER TABLE share_sessions ADD COLUMN IF NOT EXISTS mp3_path text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, spectral_centroid float, spectral_contrast float, spectral_flux float, mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text, review_date date, reviewed boolean DEFAULT false;",
+  "notes": "transcodeToMp3 is fire-and-forget — mp3ShareLink is not returned synchronously in /share-link response because the transcode takes time. To return the mp3 Dropbox link, the frontend would need to poll or the transcode needs to be awaited (adds ~5-10s to response). Currently mp3Path (filename only) is stored in share_sessions.mp3_path so the listen page can construct the URL if needed."
 }

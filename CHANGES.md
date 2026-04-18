@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] momentum-watcher.cjs + ProjectsTab.svelte — DONE
+TASK: MP3 transcoding for share links
+WHAT: Added transcodeToMp3() (ffmpeg 320k); /share-link now fire-and-forgets WAV→MP3 transcode after Dropbox link generation, returns mp3Path+mp3ShareLink; audio serving route prefers .mp3 over .wav when Accept: audio/mpeg header present; ProjectsTab sendToArtist and production listen link now store mp3ShareUrl in songs[] and mp3_path in share_sessions; listen page (separate repo) still needs <source> update
+RESULT: works — watcher online, 0 svelte errors
+BLOCKERS: SQL needed: ALTER TABLE share_sessions ADD COLUMN IF NOT EXISTS mp3_path text; listen page (momentummusic.vercel.app) is separate repo — audio element <source> update needed there
+
 ## [2026-04-18] momentum-watcher.cjs — DONE
 TASK: chart-analysis search fix
 WHAT: /agent-chart-analysis: fixed Spotify search — limit capped at 10 for Client Credentials (limit=20 returns 400); market=DE also invalid; popularity undefined in search results so sort removed; working query is 'year:2026 genre:pop' limit=10; tested ok:true with 3 analyzed tracks + Claude assessment

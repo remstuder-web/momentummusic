@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] +page.svelte + momentum-watcher.cjs — DONE
+TASK: watcher control section in settings panel
+WHAT: added WATCHER section to settings panel — green/red dot + status + Stop button; added POST /watcher-stop endpoint to watcher (runs pm2 stop); stopped state shows terminal hint instead of Start button
+RESULT: works — watcher restarts and /ping confirmed live
+BLOCKERS: none
+
 ## [2026-04-18] pm2 setup + Start Momentum.command + watcher /ping — DONE
 TASK: pm2 watcher daemon setup
 WHAT: installed pm2 globally, started momentum-watcher as pm2 daemon, updated Start Momentum.command (removed watcher tab, now 2 tabs: dev + claude), updated /ping to include time field, added pm2 restart rule to CLAUDE.md

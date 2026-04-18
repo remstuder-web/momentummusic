@@ -3474,6 +3474,15 @@ ${chatText.slice(0, 3000)}`
     return
   }
 
+  // ── POST /watcher-stop ────────────────────────────────────────────────────
+  if (req.method === 'POST' && req.url === '/watcher-stop') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, message: 'Watcher stopping...' }))
+    require('child_process').exec('pm2 stop momentum-watcher')
+    return
+  }
+
   // ── POST /cleanup-brain-dupes — delete duplicate brain_knowledge rows ─────
   if (req.method === 'POST' && req.url === '/cleanup-brain-dupes') {
     res.setHeader('Access-Control-Allow-Origin', '*')

@@ -12,6 +12,7 @@
   let activeTab = $state('daily')
   let showSettings = $state(false)
   let showCosts = $state(false)
+  let watcherStatus = $state(null) // null=checking, true=running, false=stopped
   let apiKeyInput = $state('')
   let apiKeySaved = $state(false)
   let openaiKeyInput = $state('')
@@ -231,8 +232,23 @@
     if (showCosts) loadUsageData()
   })
 
+  async function checkWatcher() {
+    watcherStatus = null
+    try {
+      const r = await fetch('http://localhost:4242/ping', { signal: AbortSignal.timeout(2000) })
+      watcherStatus = r.ok
+    } catch { watcherStatus = false }
+  }
+
+  async function stopWatcher() {
+    try {
+      await fetch('http://localhost:4242/watcher-stop', { method: 'POST' })
+      watcherStatus = false
+    } catch { watcherStatus = false }
+  }
+
   $effect(() => {
-    if (showSettings) { loadTasks(); loadChanges(); loadErrors(); loadGoals() }
+    if (showSettings) { loadTasks(); loadChanges(); loadErrors(); loadGoals(); checkWatcher() }
   })
 </script>
 
@@ -406,6 +422,25 @@
             {/if}
           {/if}
         </div>
+        <div class="settings-field">
+          <label>WATCHER</label>
+          <div class="watcher-status-row">
+            {#if watcherStatus === null}
+              <span class="watcher-dot" style="background:#555"></span>
+              <span class="watcher-label">Checking…</span>
+            {:else if watcherStatus}
+              <span class="watcher-dot" style="background:#4caf82"></span>
+              <span class="watcher-label">Watcher running</span>
+              <button class="settings-clear" onclick={stopWatcher}>Stop</button>
+            {:else}
+              <span class="watcher-dot" style="background:#e74c3c"></span>
+              <span class="watcher-label">Watcher stopped</span>
+            {/if}
+          </div>
+          {#if watcherStatus === false}
+            <p class="settings-hint" style="color:#e74c3c">Run <code>pm2 start momentum-watcher</code> in terminal to restart</p>
+          {/if}
+        </div>
         <button class="settings-close" onclick={() => showSettings = false}>Close</button>
       </div>
     </div>
@@ -485,6 +520,9 @@
   .settings-title { font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 700; letter-spacing: .14em; color: #c9a84c; }
   .settings-field { display: flex; flex-direction: column; gap: 8px; }
   .settings-field label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; color: #9e9690; }
+  .watcher-status-row { display: flex; align-items: center; gap: 8px; }
+  .watcher-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .watcher-label { font-family: 'Space Mono', monospace; font-size: 11px; color: #cec9c1; }
   .settings-row { display: flex; gap: 6px; }
   .settings-inp { flex: 1; background: #0a0a0a; border: 1px solid #303030; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 13px; padding: 8px 12px; outline: none; border-radius: 3px; }
   .settings-inp:focus { border-color: rgba(201,168,76,.5); }

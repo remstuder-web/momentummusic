@@ -1,21 +1,22 @@
 {
-  "updated": "2026-04-18T17:22:00Z",
-  "last_task": "three-quick-fixes",
+  "updated": "2026-04-18T17:40:00Z",
+  "last_task": "mozart-formatting-full-signals",
   "status": "done",
   "working": [
     "pm2 watcher online",
-    "/agent-chart-analysis: ok=true, chart_source=spotify_search, 3 tracks analyzed",
-    "loudness_lufs: ReplayGain-6.0, clamped -20 to -4 (values landing at floor ~-18 to -20)",
-    "tasks_remaining / tasks_done: pure checkbox counting - [ ] / - [x]",
-    "mozartContext.js shared across all tabs with hit benchmark",
-    "analyze_audio.py: 14-signal Essentia extraction"
+    "mozartContext.js: FORMATTING RULES in system prompt (## headers, [GAP]/[OK], no bold, ## Next Step)",
+    "mozartContext.js: formatTrack shows bpm, key/scale, nrg, dnc, val, LUFS, brt, bas, aco, duration, genres",
+    "mozartContext.js: HIT BENCHMARK includes brt/bas/aco averages",
+    "mozartContext.js: CURRENT SONG versions use formatVersion with all 9 signals",
+    "analyze_audio.py: LUFS = ReplayGain-6.0, clamped -20 to -4",
+    "/agent-chart-analysis: ok=true, chart_source=spotify_search"
   ],
   "broken": [],
   "partial": [
     "pm2 startup launchd needs manual sudo for reboot persistence",
-    "reference_tracks missing new columns — run ALTER TABLE SQL (shown at watcher startup)",
-    "Spotify editorial playlists (Viral 50) need Extended Quota Mode at developer.spotify.com"
+    "reference_tracks missing new columns (brt, bas, aco etc) — run ALTER TABLE SQL shown at watcher startup",
+    "Spotify editorial playlists need Extended Quota Mode at developer.spotify.com"
   ],
-  "next": "Run ALTER TABLE reference_tracks SQL in Supabase. Enable Extended Quota Mode in Spotify developer dashboard for Viral 50 playlist access.",
-  "notes": "LUFS floor clamp at -20 being hit for 30s preview clips — may need further offset tuning if real tracks read differently. tasks_remaining will show 0 until TASKS.md uses - [ ] checkbox format."
+  "next": "Run ALTER TABLE reference_tracks SQL in Supabase to add brightness, bass_energy, acousticness, scale, key_strength, valence, duration_seconds columns.",
+  "notes": "mozartContext.js avg() helper now skips null values to avoid averaging zeros. New signal abbreviations: brt=brightness, bas=bass_energy, aco=acousticness."
 }

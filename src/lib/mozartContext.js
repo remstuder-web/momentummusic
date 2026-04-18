@@ -10,31 +10,65 @@ export async function buildMozartContext(supabase, options = {}) {
   ])
 
   const hitRefs = refs?.filter(t => t.collection_name !== 'daily_chart') || []
+  const avg = (arr, key) => arr.filter(t => t[key] != null).reduce((s, t) => s + t[key], 0) / (arr.filter(t => t[key] != null).length || 1)
+
   const hitBenchmark = hitRefs.length ? {
-    avg_bpm:         Math.round(hitRefs.reduce((s, t) => s + (t.tempo || 0), 0) / hitRefs.length),
-    avg_loudness:    (hitRefs.reduce((s, t) => s + (t.loudness || 0), 0) / hitRefs.length).toFixed(1),
-    avg_energy:      (hitRefs.reduce((s, t) => s + (t.energy || 0), 0) / hitRefs.length).toFixed(2),
-    avg_danceability:(hitRefs.reduce((s, t) => s + (t.danceability || 0), 0) / hitRefs.length).toFixed(2),
-    avg_valence:     (hitRefs.reduce((s, t) => s + (t.valence || 0), 0) / hitRefs.length).toFixed(2),
-    common_keys:     [...new Set(hitRefs.map(t => t.key).filter(Boolean))].slice(0, 3)
+    avg_bpm:          Math.round(avg(hitRefs, 'tempo')),
+    avg_loudness:     avg(hitRefs, 'loudness').toFixed(1),
+    avg_energy:       avg(hitRefs, 'energy').toFixed(2),
+    avg_danceability: avg(hitRefs, 'danceability').toFixed(2),
+    avg_valence:      avg(hitRefs, 'valence').toFixed(2),
+    avg_brightness:   avg(hitRefs, 'brightness').toFixed(2),
+    avg_bass_energy:  avg(hitRefs, 'bass_energy').toFixed(2),
+    avg_acousticness: avg(hitRefs, 'acousticness').toFixed(2),
+    common_keys:      [...new Set(hitRefs.map(t => t.key).filter(Boolean))].slice(0, 3)
   } : null
+
+  const fmtDur = s => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : null
 
   const formatTrack = t =>
     `${t.artist ? t.artist + ' — ' : ''}${t.title}: ` + [
-      t.tempo ? Math.round(t.tempo) + 'bpm' : null,
-      t.key ? t.key + (t.scale ? ' ' + t.scale : '') : null,
-      t.energy != null ? 'nrg ' + Number(t.energy).toFixed(2) : null,
-      t.danceability != null ? 'dnc ' + Number(t.danceability).toFixed(2) : null,
-      t.valence != null ? 'val ' + Number(t.valence).toFixed(2) : null,
-      t.loudness != null ? Number(t.loudness).toFixed(1) + 'LUFS' : null,
-      t.genre_tags?.length ? t.genre_tags.slice(0, 2).join(', ') : null
+      t.tempo       ? Math.round(t.tempo) + 'bpm'                              : null,
+      t.key         ? t.key + (t.scale ? ' ' + t.scale : '')                  : null,
+      t.energy      != null ? 'nrg ' + Number(t.energy).toFixed(2)            : null,
+      t.danceability!= null ? 'dnc ' + Number(t.danceability).toFixed(2)      : null,
+      t.valence     != null ? 'val ' + Number(t.valence).toFixed(2)           : null,
+      t.loudness    != null ? Number(t.loudness).toFixed(1) + 'LUFS'          : null,
+      t.brightness  != null ? 'brt ' + Number(t.brightness).toFixed(2)       : null,
+      t.bass_energy != null ? 'bas ' + Number(t.bass_energy).toFixed(2)      : null,
+      t.acousticness!= null ? 'aco ' + Number(t.acousticness).toFixed(2)     : null,
+      t.duration_seconds    ? fmtDur(t.duration_seconds)                      : null,
+      t.genre_tags?.length  ? t.genre_tags.slice(0, 2).join(', ')             : null
+    ].filter(Boolean).join(' · ')
+
+  const formatVersion = (name, a) =>
+    `${name}: ` + [
+      a.bpm           ? Math.round(a.bpm) + 'bpm'                             : null,
+      a.key           ? a.key + (a.scale ? ' ' + a.scale : '')                : null,
+      a.energy        != null ? 'nrg ' + Number(a.energy).toFixed(2)         : null,
+      a.danceability  != null ? 'dnc ' + Number(a.danceability).toFixed(2)   : null,
+      a.valence       != null ? 'val ' + Number(a.valence).toFixed(2)        : null,
+      a.loudness_lufs != null ? Number(a.loudness_lufs).toFixed(1) + 'LUFS'  : null,
+      a.brightness    != null ? 'brt ' + Number(a.brightness).toFixed(2)     : null,
+      a.bass_energy   != null ? 'bas ' + Number(a.bass_energy).toFixed(2)    : null,
+      a.acousticness  != null ? 'aco ' + Number(a.acousticness).toFixed(2)   : null,
+      a.duration_seconds      ? fmtDur(a.duration_seconds)                   : null
     ].filter(Boolean).join(' · ')
 
   let context = `You are Mozart, a co-intelligence music production advisor for Remo.
 Assess tracks the way Spotify's algorithm does — using signal data to find gaps.
-When comparing tracks, always reference specific numbers, not vague descriptions.
-Flag gaps using: [GAP] energy too low · [GAP] loudness -3LUFS below refs · etc.
-Always end assessments with one specific actionable next step.\n\n`
+
+FORMATTING RULES — always follow these:
+- Use ## for section headers
+- Use bullet points for lists, never long text blocks
+- Max 2 sentences per bullet point
+- Numbers and signal values always inline: 135bpm · E minor · nrg 0.82
+- [GAP] prefix for every identified problem
+- [OK] prefix for every strength
+- End every response with ## Next Step — one specific action only
+- Never write paragraphs of continuous text
+- Never use bold (**text**) — headers and [GAP]/[OK] tags are enough structure
+- Keep each section tight — 3-5 bullets maximum\n\n`
 
   if (hitBenchmark) context +=
     `## HIT BENCHMARK (avg of ${hitRefs.length} reference tracks)\n` +
@@ -43,6 +77,9 @@ Always end assessments with one specific actionable next step.\n\n`
     `dnc ${hitBenchmark.avg_danceability} · ` +
     `val ${hitBenchmark.avg_valence} · ` +
     `${hitBenchmark.avg_loudness}LUFS · ` +
+    `brt ${hitBenchmark.avg_brightness} · ` +
+    `bas ${hitBenchmark.avg_bass_energy} · ` +
+    `aco ${hitBenchmark.avg_acousticness} · ` +
     `keys: ${hitBenchmark.common_keys.join(', ')}\n\n`
 
   if (currentSong && songVersions?.length) {
@@ -50,15 +87,7 @@ Always end assessments with one specific actionable next step.\n\n`
     if (versionsWithAnalysis.length) {
       context += `## CURRENT SONG: ${currentSong}\n`
       versionsWithAnalysis.forEach(v => {
-        const a = v.analysis
-        context += `${v.name}: ` + [
-          a.bpm ? Math.round(a.bpm) + 'bpm' : null,
-          a.key ? a.key + (a.scale ? ' ' + a.scale : '') : null,
-          a.energy != null ? 'nrg ' + a.energy : null,
-          a.danceability != null ? 'dnc ' + a.danceability : null,
-          a.valence != null ? 'val ' + a.valence : null,
-          a.loudness_lufs != null ? a.loudness_lufs + 'LUFS' : null
-        ].filter(Boolean).join(' · ') + '\n'
+        context += formatVersion(v.name, v.analysis) + '\n'
       })
       context += '\n'
     }

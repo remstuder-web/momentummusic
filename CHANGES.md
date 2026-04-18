@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] src/lib/mozartContext.js — DONE
+TASK: Mozart formatting rules + full signal set in all context blocks
+WHAT: (1) System prompt replaced with explicit FORMATTING RULES: ## headers, bullet points, [GAP]/[OK] prefixes, no bold, ## Next Step ending, max 3-5 bullets per section; (2) formatTrack now emits all 9 signals: bpm, key/scale, nrg, dnc, val, LUFS, brt, bas, aco, duration, genres; (3) HIT BENCHMARK includes brt/bas/aco averages; (4) CURRENT SONG versions use same full-signal formatVersion function; (5) avg() helper skips null values
+RESULT: all context blocks now carry full signal data for gap analysis
+BLOCKERS: none
+
 ## [2026-04-18] momentum-watcher.cjs + analyze_audio.py — DONE
 TASK: three quick fixes — tasks checkbox counting, LUFS calibration, chart search primary
 WHAT: (1) buildStatusResponse: reverted to pure - [ ] / - [x] checkbox counting (no header fallback); (2) analyze_audio.py: LUFS offset -23→-6, clamped max(-20, min(-4, val)); (3) chart analysis: search is now primary method (no Viral 50 attempt), added market=DE + popularity sort + chart_source:'spotify_search' in response

@@ -1420,8 +1420,11 @@
     song._sent_flash = vId; songs = [...songs]
     setTimeout(() => { song._sent_flash = null; songs = [...songs] }, 2500)
 
-    // Auto-create next version after sending
+    // Auto-create next version only when sending the LATEST version of this type
     saveWorkData(song, wd2 => {
+      const versionsOfType = wd2.versions.filter(v2 => v2.version_type === v.version_type)
+      const isLatest = versionsOfType[versionsOfType.length - 1]?.id === vId
+      if (!isLatest) return
       const nextName = generateVersionName(wd2.versions, v.version_type)
       const newV = { id: 'v'+Date.now(), name: nextName, version_type: v.version_type, created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: '', sent_to_artist: false }
       wd2.versions.push(newV)

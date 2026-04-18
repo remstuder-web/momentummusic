@@ -1,18 +1,17 @@
 {
-  "updated": "2026-04-18T17:50:00Z",
-  "last_task": "task-30-31-brain-confidence-review-search-tiktok",
+  "updated": "2026-04-18T17:57:00Z",
+  "last_task": "task-32-whatsapp-bulk-entry-connections",
   "status": "done",
   "working": [
-    "TASK 30A: brain confidence dots (low/medium/strong/locked), confirm tooltip for promotions",
-    "TASK 30B: review_date date picker in expanded view, DailyTab review banner + tab switch",
-    "TASK 30C: brain search — real-time filter on title+content, clear button",
-    "TASK 31: /analyze-youtube-track endpoint (yt-dlp + Essentia, TikTok/Instagram/YouTube)",
-    "TASK 31: BrainTab processDump() detects TikTok/Instagram/YouTube URLs → analysis card",
-    "page.svelte: listens for mm-switch-tab CustomEvent to switch activeTab",
-    "watcher ping ok"
+    "/analyze-chat: multi-entry JSON array extraction, existingCategories in prompt, cost tracked",
+    "BrainTab processDump(): WhatsApp detection → /analyze-chat → pendingApproval panel",
+    "approval panel: editable category per item, confidence badge, remove button",
+    "saveApproved: persists confidence field",
+    "DailyTab extractWhatsapp: localStorage + mm-switch-tab → BrainTab picks up on load",
+    "Entry connections: Related: chips in expanded view, JS-only, same-category + title-word match"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run SQL in Supabase: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text; ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS review_date date;",
-  "notes": "confidence column: 'low'|'medium'|'strong'|'locked'. review_date column: date. Both needed for TASK 30 features to persist. brain_knowledge also still needs brightness, bass_energy, acousticness, scale, key_strength, valence, duration_seconds on reference_tracks table."
+  "next": "Run SQL in Supabase: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text; ADD COLUMN IF NOT EXISTS review_date date;",
+  "notes": "WhatsApp detection regex: /\\d{1,2}\\/\\d{1,2}\\/\\d{2,4}.*[-–].*:/ + >5 lines. Entry connections are pure JS on loaded entries — no DB query. DailyTab WhatsApp button now redirects to Brain tab instead of showing an alert."
 }

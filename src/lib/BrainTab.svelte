@@ -268,6 +268,26 @@ Return ONLY JSON:
 
     if (!apiKey) { alert('Add API key in Settings.'); return }
 
+    // 1a0. WHATSAPP EXPORT — multi-entry extraction
+    if (/\d{1,2}\/\d{1,2}\/\d{2,4}.*[-–].*:/.test(dumpText) && dumpText.split('\n').length > 5) {
+      processing = true
+      const chatText = dumpText
+      dumpText = ''
+      try {
+        const r = await fetch('http://localhost:4242/analyze-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatText, apiKey, existingCategories: distinctCategories })
+        })
+        const d = await r.json()
+        if (!d.ok) throw new Error(d.error)
+        pendingApproval = d.items
+        showApproval = true
+      } catch(e) { alert('Chat analysis failed: ' + e.message) }
+      processing = false
+      return
+    }
+
     // 1aa. TIKTOK / INSTAGRAM / YOUTUBE URL — audio extraction
     if (/tiktok\.com|instagram\.com|youtube\.com\/watch|youtu\.be/.test(dumpText.trim())) {
       processing = true
@@ -513,6 +533,7 @@ Return ONLY JSON (single item array):
         title: item.title,
         content: item.content,
         entry_type: item.entry_type || 'knowledge',
+        confidence: item.confidence || null,
         source_url: item.source_url || null,
         verbatim_full: item.entry_type === 'chunk' ? pendingOriginalText : null,
         active: true
@@ -750,6 +771,16 @@ Return ONLY JSON (single item array):
 
   loadEntries()
   loadDueReview().then(items => dueReviewItems = items)
+
+  // Pick up items dispatched from DailyTab WhatsApp button
+  const pending = localStorage.getItem('mm_pending_chat_items')
+  if (pending) {
+    try {
+      pendingApproval = JSON.parse(pending)
+      showApproval = true
+    } catch(e) {}
+    localStorage.removeItem('mm_pending_chat_items')
+  }
 </script>
 
 <div class="brain-wrap">
@@ -1005,14 +1036,26 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
         <div class="brain-preview-title">
           REVIEW BEFORE SAVING — {pendingApproval.length} item(s)
         </div>
-        {#each pendingApproval as item}
+        {#each pendingApproval as item, idx}
           <div class="brain-approval-item">
-            <div class="brain-approval-type">
-              {item.entry_type === 'chunk' ? '📄 CHUNK' :
-               item.entry_type === 'fact' ? '📊 FACT' :
-               item.entry_type === 'thought' ? '💭 THOUGHT' :
-               item.entry_type === 'question' ? '❓ QUESTION' : '📝 KNOWLEDGE'}
-              <span class="brain-approval-cat-label" style="margin-left:4px">{item.suggestedCategory}</span>
+            <div class="brain-approval-item-header">
+              <span class="brain-approval-type">
+                {item.entry_type === 'chunk' ? '📄' :
+                 item.entry_type === 'fact' ? '📊' :
+                 item.entry_type === 'thought' ? '💭' :
+                 item.entry_type === 'question' ? '❓' : '📝'}
+              </span>
+              <input
+                class="brain-approval-cat-inp"
+                list="brain-cats-dl"
+                value={item.suggestedCategory}
+                oninput={e => pendingApproval = pendingApproval.map((it, i) => i === idx ? { ...it, suggestedCategory: e.target.value } : it)}
+                placeholder="category"
+              />
+              {#if item.confidence}
+                <span class="brain-approval-conf conf-badge-{item.confidence}">{item.confidence}</span>
+              {/if}
+              <button class="brain-approval-remove" onclick={() => pendingApproval = pendingApproval.filter((_, i) => i !== idx)}>×</button>
             </div>
             <div class="brain-approval-title">{item.title}</div>
             <div class="brain-approval-content">{item.content}</div>
@@ -1020,7 +1063,7 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
         {/each}
         <div class="brain-approval-actions">
           <button class="brain-save-btn" onclick={saveApproved}>
-            ✓ Save All to Brain
+            ✓ Save All ({pendingApproval.length}) to Brain
           </button>
           <button class="brain-discard-btn"
             onclick={() => { showApproval = false; pendingApproval = []; dumpText = '' }}>
@@ -1169,6 +1212,25 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
                     <button class="brain-review-clear" onclick={() => setReviewDate(entry.id, '')}>×</button>
                   {/if}
                 </div>
+                {@const titleWords = (entry.title || '').split(/\s+/).filter(w => w.length > 4).map(w => w.toLowerCase())}
+                {@const related = entries.filter(e =>
+                  e.id !== entry.id &&
+                  e.category !== 'question' &&
+                  (e.category === entry.category ||
+                   titleWords.some(w => e.title?.toLowerCase().includes(w)))
+                ).slice(0, 3)}
+                {#if related.length}
+                  <div class="brain-related-row">
+                    <span class="brain-related-label">Related:</span>
+                    {#each related as rel}
+                      <button
+                        class="brain-related-chip"
+                        onclick={() => expandedEntries = { ...expandedEntries, [rel.id]: true }}
+                        title={rel.category}
+                      >{rel.title?.slice(0, 30)}{rel.title?.length > 30 ? '…' : ''}</button>
+                    {/each}
+                  </div>
+                {/if}
               {/if}
             </div>
           {/if}
@@ -2001,4 +2063,37 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
     font-size: 12px; cursor: pointer; padding: 0 2px;
   }
   .brain-review-clear:hover { color: #e05a4a; }
+
+  /* Approval panel — per-item header with editable category */
+  .brain-approval-item-header { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .brain-approval-cat-inp {
+    flex: 1; background: #111; border: 1px solid #303030; border-radius: 3px;
+    color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 11px; padding: 2px 6px;
+  }
+  .brain-approval-cat-inp:focus { outline: none; border-color: rgba(201,168,76,.4); }
+  .brain-approval-conf {
+    font-family: 'Space Mono', monospace; font-size: 9px; padding: 1px 5px;
+    border-radius: 2px; flex-shrink: 0; text-transform: uppercase; letter-spacing: .05em;
+  }
+  .conf-badge-weak   { background: rgba(68,68,68,.4); color: #666; }
+  .conf-badge-medium { background: rgba(201,168,76,.15); color: rgba(201,168,76,.8); }
+  .conf-badge-strong { background: rgba(76,175,130,.15); color: #4caf82; }
+  .brain-approval-remove {
+    background: transparent; border: none; color: #444; font-size: 13px;
+    cursor: pointer; padding: 0 2px; flex-shrink: 0;
+  }
+  .brain-approval-remove:hover { color: #e05a4a; }
+
+  /* Entry connections */
+  .brain-related-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding-top: 5px; margin-top: 4px; border-top: 1px solid #1c1c1c; }
+  .brain-related-label {
+    font-family: 'Space Mono', monospace; font-size: 9px;
+    color: rgba(201,168,76,.5); text-transform: uppercase; letter-spacing: .05em; flex-shrink: 0;
+  }
+  .brain-related-chip {
+    background: #1c1c1c; border: 1px solid #303030; border-radius: 3px;
+    color: #9e9690; font-family: 'Space Mono', monospace; font-size: 10px;
+    padding: 2px 7px; cursor: pointer; transition: border-color .15s, color .15s;
+  }
+  .brain-related-chip:hover { border-color: rgba(201,168,76,.4); color: #cec9c1; }
 </style>

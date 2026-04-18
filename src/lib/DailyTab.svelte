@@ -826,10 +826,10 @@
         body: JSON.stringify({ chatText, chatName: name, apiKey })
       })
       const d = await res.json()
-      if (d.ok) {
-        await loadInbox()
-        alert('✓ Chat analyzed and saved to Brain + Inbox')
-      } else {
+      if (d.ok && d.items?.length) {
+        localStorage.setItem('mm_pending_chat_items', JSON.stringify(d.items))
+        document.dispatchEvent(new CustomEvent('mm-switch-tab', { detail: 'brain' }))
+      } else if (!d.ok) {
         alert('Error: ' + d.error)
       }
     } catch(e) { alert('Error: ' + e.message) }

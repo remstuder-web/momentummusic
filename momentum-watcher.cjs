@@ -3385,84 +3385,90 @@ Format: use ALL CAPS section labels, bullet points with •` }
     return
   }
 
-  // ── POST /analyze-chat — analyze WhatsApp/chat text → Brain + Inbox ──────
+  // ── POST /analyze-chat — extract multi-entry items from WhatsApp chat ──────
   if (req.method === 'POST' && req.url.startsWith('/analyze-chat')) {
     let body = ''
     req.on('data', d => body += d)
     req.on('end', async () => {
       try {
-        const { chatText, chatName, apiKey } = JSON.parse(body || '{}')
+        const { chatText, chatName, apiKey, existingCategories = [] } = JSON.parse(body || '{}')
         if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing apiKey' })); return }
         if (!chatText) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing chatText' })); return }
+
+        const catList = existingCategories.length
+          ? existingCategories.join(', ')
+          : 'collaboration, artist_strategy, mixing_technique, production_style, market_knowledge, industry_insight, question'
 
         const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
             model: 'claude-haiku-4-5-20251001',
-            max_tokens: 500,
+            max_tokens: 1500,
             messages: [{
               role: 'user',
-              content: `Read this WhatsApp conversation with ${chatName || 'artist'}.
-Extract only what matters for the producer.
-Plain text, no markdown.
+              content: `Extract all useful information from this WhatsApp chat for a music producer named Remo.
 
-FEEDBACK POINTS
-- [specific feedback about the music]
+Extract separately:
+- Action items (things to do)
+- Artist mentions and context
+- Feedback received on music
+- Decisions made
+- Interesting observations
+- Questions raised
 
-ACTION ITEMS
-- [what needs to happen]
+For each item return:
+{
+  "title": "short label max 8 words",
+  "content": "verbatim relevant text or summary",
+  "category": "best fit from [${catList}]",
+  "entry_type": "observation|pattern|rule|reference|question",
+  "confidence": "weak|medium|strong"
+}
 
-SENTIMENT
-- [overall vibe of the conversation]
+Return ONLY a JSON array. No explanation. No markdown. Start with [.
 
-Chat content:
-${chatText.slice(0, 3000)}`
+Chat from ${chatName || 'contact'}:
+${chatText.slice(0, 4000)}`
             }]
           })
         })
 
         const cd = await claudeRes.json()
-        const analysis = cd.content?.[0]?.text || ''
+        const raw = cd.content?.[0]?.text || '[]'
         const inputT = cd.usage?.input_tokens || 0
         const outputT = cd.usage?.output_tokens || 0
 
-        await fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
+        fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
           method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
           body: JSON.stringify({
             endpoint: '/analyze-chat', model: 'claude-haiku-4-5-20251001',
             input_tokens: inputT, output_tokens: outputT,
             cost_usd: (inputT * 0.000001) + (outputT * 0.000005)
           })
-        })
+        }).catch(() => {})
 
-        await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
-          method: 'POST',
-          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({
-            category: 'collaboration',
-            title: `WhatsApp: ${chatName || 'Artist'} ${new Date().toLocaleDateString('de-CH')}`,
-            content: analysis,
-            entry_type: 'chat',
-            active: true
-          })
-        })
+        let items = []
+        try {
+          const jsonStart = raw.indexOf('[')
+          items = JSON.parse(jsonStart >= 0 ? raw.slice(jsonStart) : raw)
+        } catch(e) {
+          console.warn('analyze-chat: JSON parse failed, wrapping as single item')
+          items = [{ title: `WhatsApp: ${chatName || 'chat'}`, content: raw, category: 'collaboration', entry_type: 'observation', confidence: 'medium' }]
+        }
 
-        await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
-          method: 'POST',
-          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({
-            type: 'briefing',
-            song_title: 'WhatsApp: ' + (chatName || 'Artist'),
-            message: analysis,
-            patch_name: chatName || 'WhatsApp Chat',
-            read: false
-          })
-        })
+        // Normalise to pendingApproval shape expected by BrainTab
+        const normalised = items.map(it => ({
+          title: it.title || 'untitled',
+          content: it.content || '',
+          suggestedCategory: it.category || 'collaboration',
+          entry_type: it.entry_type || 'knowledge',
+          confidence: it.confidence || 'medium'
+        }))
 
-        console.log(`✓ analyze-chat: ${chatName || 'Artist'}`)
+        console.log(`✓ analyze-chat: ${normalised.length} items from ${chatName || 'chat'}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, analysis }))
+        res.end(JSON.stringify({ ok: true, items: normalised, chatName: chatName || 'chat' }))
       } catch(e) {
         logError('analyze-chat', e.message)
         console.error('analyze-chat error:', e.message)

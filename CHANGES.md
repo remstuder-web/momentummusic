@@ -1,5 +1,15 @@
 # CHANGES
 
+## [2026-04-18] BrainTab.svelte + DailyTab.svelte + momentum-watcher.cjs + page.svelte — DONE
+TASK: 30 + 31 — Brain confidence/review/search + TikTok/Instagram/YouTube analysis
+WHAT:
+  TASK 30A: confidence indicator on each brain entry (4 dots: low/medium/strong/locked). Promotions to strong/locked show confirmation tooltip. Demotions instant. Saves to confidence column.
+  TASK 30B: review_date date picker in expanded entry view. Saves inline. DailyTab shows "N brain entries ready for review" banner that dispatches mm-switch-tab event → page.svelte switches to brain tab.
+  TASK 30C: search input at top of brain entries panel — real-time JS filter on title+content. Clear button when text present.
+  TASK 31: /analyze-youtube-track endpoint — yt-dlp + Essentia, detects platform from URL (tiktok/instagram/youtube). BrainTab processDump() detects TikTok/Instagram/YouTube URLs first, calls /analyze-youtube-track, shows analysis card.
+RESULT: all compiled cleanly, watcher ping ok
+BLOCKERS: brain_knowledge table needs confidence (text) and review_date (date) columns — run SQL: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text; ADD COLUMN IF NOT EXISTS review_date date;
+
 ## [2026-04-18] src/lib/mozartContext.js — DONE
 TASK: Mozart formatting rules + full signal set in all context blocks
 WHAT: (1) System prompt replaced with explicit FORMATTING RULES: ## headers, bullet points, [GAP]/[OK] prefixes, no bold, ## Next Step ending, max 3-5 bullets per section; (2) formatTrack now emits all 9 signals: bpm, key/scale, nrg, dnc, val, LUFS, brt, bas, aco, duration, genres; (3) HIT BENCHMARK includes brt/bas/aco averages; (4) CURRENT SONG versions use same full-signal formatVersion function; (5) avg() helper skips null values

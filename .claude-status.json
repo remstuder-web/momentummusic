@@ -1,22 +1,18 @@
 {
-  "updated": "2026-04-18T17:40:00Z",
-  "last_task": "mozart-formatting-full-signals",
+  "updated": "2026-04-18T17:50:00Z",
+  "last_task": "task-30-31-brain-confidence-review-search-tiktok",
   "status": "done",
   "working": [
-    "pm2 watcher online",
-    "mozartContext.js: FORMATTING RULES in system prompt (## headers, [GAP]/[OK], no bold, ## Next Step)",
-    "mozartContext.js: formatTrack shows bpm, key/scale, nrg, dnc, val, LUFS, brt, bas, aco, duration, genres",
-    "mozartContext.js: HIT BENCHMARK includes brt/bas/aco averages",
-    "mozartContext.js: CURRENT SONG versions use formatVersion with all 9 signals",
-    "analyze_audio.py: LUFS = ReplayGain-6.0, clamped -20 to -4",
-    "/agent-chart-analysis: ok=true, chart_source=spotify_search"
+    "TASK 30A: brain confidence dots (low/medium/strong/locked), confirm tooltip for promotions",
+    "TASK 30B: review_date date picker in expanded view, DailyTab review banner + tab switch",
+    "TASK 30C: brain search — real-time filter on title+content, clear button",
+    "TASK 31: /analyze-youtube-track endpoint (yt-dlp + Essentia, TikTok/Instagram/YouTube)",
+    "TASK 31: BrainTab processDump() detects TikTok/Instagram/YouTube URLs → analysis card",
+    "page.svelte: listens for mm-switch-tab CustomEvent to switch activeTab",
+    "watcher ping ok"
   ],
   "broken": [],
-  "partial": [
-    "pm2 startup launchd needs manual sudo for reboot persistence",
-    "reference_tracks missing new columns (brt, bas, aco etc) — run ALTER TABLE SQL shown at watcher startup",
-    "Spotify editorial playlists need Extended Quota Mode at developer.spotify.com"
-  ],
-  "next": "Run ALTER TABLE reference_tracks SQL in Supabase to add brightness, bass_energy, acousticness, scale, key_strength, valence, duration_seconds columns.",
-  "notes": "mozartContext.js avg() helper now skips null values to avoid averaging zeros. New signal abbreviations: brt=brightness, bas=bass_energy, aco=acousticness."
+  "partial": [],
+  "next": "Run SQL in Supabase: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text; ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS review_date date;",
+  "notes": "confidence column: 'low'|'medium'|'strong'|'locked'. review_date column: date. Both needed for TASK 30 features to persist. brain_knowledge also still needs brightness, bass_energy, acousticness, scale, key_strength, valence, duration_seconds on reference_tracks table."
 }

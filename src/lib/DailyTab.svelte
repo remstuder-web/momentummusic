@@ -728,6 +728,7 @@
   let editingTaskId = $state(null)
   let inboxItems = $state([])
   let inboxUnread = $state(0)
+  let brainReviewCount = $state(0)
   let generatingBriefing = $state(false)
   let scoutingArtists = $state(false)
   let matchingDemos = $state(false)
@@ -1115,6 +1116,14 @@ ${mozartContext}`
   loadInbox()
   loadCheckOut()
   loadGoals()
+  ;(async () => {
+    const { data } = await supabase
+      .from('brain_knowledge')
+      .select('id')
+      .lte('review_date', todayISO)
+      .not('review_date', 'is', null)
+    brainReviewCount = (data || []).length
+  })()
 
   onMount(() => {
     syncDownloadNotifications()
@@ -1258,6 +1267,14 @@ ${mozartContext}`
             📊 How am I doing?
           </button>
         </div>
+
+        <!-- Brain review banner -->
+        {#if brainReviewCount > 0}
+          <button
+            class="brain-review-nudge"
+            onclick={() => document.dispatchEvent(new CustomEvent('mm-switch-tab', { detail: 'brain' }))}
+          >🧠 {brainReviewCount} brain {brainReviewCount === 1 ? 'entry' : 'entries'} ready for review →</button>
+        {/if}
 
         <!-- Submission nudges -->
         {#if subReminders.length}
@@ -1851,6 +1868,16 @@ ${mozartContext}`
 
   .reminders { display: flex; flex-direction: column; gap: 6px; }
   .reminder-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: rgba(201,168,76,.06); border: 1px solid rgba(201,168,76,.3); border-radius: 4px; }
+  .brain-review-nudge {
+    display: block; width: 100%; text-align: left;
+    background: rgba(76,175,130,.07); border: 1px solid rgba(76,175,130,.25);
+    border-radius: 4px; color: #4caf82;
+    font-family: 'Space Mono', monospace; font-size: 11px;
+    padding: 6px 10px; cursor: pointer; margin-bottom: 6px;
+    transition: background .15s;
+  }
+  .brain-review-nudge:hover { background: rgba(76,175,130,.13); }
+
   .sub-reminders { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
   .sub-reminder-row { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: rgba(224,90,74,.08); border: 1px solid rgba(224,90,74,.4); border-radius: 3px; cursor: pointer; width: 100%; text-align: left; transition: background .15s; }
   .sub-reminder-row:hover { background: rgba(224,90,74,.14); }

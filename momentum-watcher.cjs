@@ -867,7 +867,7 @@ async function buildStatusResponse() {
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
     'GET /instrumentals/:filename', 'GET /stems/:filename',
     'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /speak',
-    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features',
+    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-youtube-track',
     'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
     'POST /launch-claude-code', 'POST /launch-claude-overnight',
     'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
@@ -2997,6 +2997,66 @@ Respond ONLY in JSON:
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))
     }
+    return
+  }
+
+  // ── POST /analyze-youtube-track — yt-dlp download + Essentia (YouTube/TikTok/Instagram) ──
+  if (req.method === 'POST' && req.url === '/analyze-youtube-track') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      try {
+        const { url } = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!url) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'No URL' })); return }
+
+        const preview_source = /tiktok\.com/.test(url) ? 'tiktok'
+          : /instagram\.com/.test(url) ? 'instagram'
+          : 'youtube'
+
+        const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
+        const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
+        const tmpAudio = `/tmp/yt_${Date.now()}.mp3`
+
+        // Get title via yt-dlp --get-title first
+        let title = url
+        try {
+          title = execSync(`yt-dlp --get-title --no-warnings "${url}" 2>/dev/null`, { encoding: 'utf8', timeout: 30000 }).trim()
+        } catch(e) {}
+
+        execSync(
+          `yt-dlp -x --audio-format mp3 --download-sections "*0-30" -o "${tmpAudio}" "${url}"`,
+          { timeout: 90000 }
+        )
+
+        const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+        const feat = JSON.parse(esOut)
+
+        try { fs.unlinkSync(tmpAudio) } catch(e) {}
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          ok: true,
+          title,
+          preview_source,
+          bpm:              feat.bpm,
+          key:              feat.key,
+          scale:            feat.scale,
+          key_strength:     feat.key_strength,
+          energy:           feat.energy,
+          danceability:     feat.danceability,
+          valence:          feat.valence,
+          loudness_lufs:    feat.loudness_lufs,
+          brightness:       feat.brightness,
+          bass_energy:      feat.bass_energy,
+          acousticness:     feat.acousticness,
+          duration_seconds: feat.duration_seconds
+        }))
+      } catch(e) {
+        console.error('analyze-youtube-track:', e.message?.slice(0, 80))
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
     return
   }
 

@@ -34,6 +34,10 @@
   let splitEdits = $state([])
   let prefilledCategory = $state('')
 
+  let brainSearch = $state('')
+  let confidenceTooltip = $state(null) // { entryId, to, label }
+  let dueReviewItems = $state([])
+
   let tracksByGenre = $derived.by(() => {
     const groups = {}
     for (const t of referenceTrackEntries) {
@@ -263,6 +267,26 @@ Return ONLY JSON:
     console.log('CHECK ORDER: spotify=', /spotify\.com\/(track|playlist|album|artist)/.test(dumpText), 'question=', _isQuestion, 'long=', _isLong)
 
     if (!apiKey) { alert('Add API key in Settings.'); return }
+
+    // 1aa. TIKTOK / INSTAGRAM / YOUTUBE URL — audio extraction
+    if (/tiktok\.com|instagram\.com|youtube\.com\/watch|youtu\.be/.test(dumpText.trim())) {
+      processing = true
+      const urlToAnalyze = dumpText.trim()
+      dumpText = ''
+      try {
+        const r = await fetch('http://localhost:4242/analyze-youtube-track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlToAnalyze })
+        })
+        const d = await r.json()
+        if (!d.ok) throw new Error(d.error)
+        spotifyPreview = { ...d, art_url: null, album: '', genres: [], popularity: null, key_confidence: null }
+        spotifyPreviewType = 'reference_current'
+      } catch(e) { alert('Audio analysis failed: ' + e.message) }
+      processing = false
+      return
+    }
 
     // 1a. SPOTIFY TRACK — preview card flow (no Claude needed)
     const spotifyTrackM = dumpText.match(/spotify\.com\/(?:intl-\w+\/)?track\/([a-zA-Z0-9]+)/)
@@ -662,6 +686,47 @@ Return ONLY JSON (single item array):
     entries = entries.filter(e => e.id !== id)
   }
 
+  const CONF_LEVELS = ['low', 'medium', 'strong', 'locked']
+  const CONF_PROMOTE_MSG = {
+    strong: "Mark as confirmed pattern? Mozart will apply this consistently.",
+    locked: "Lock as permanent rule? You can unlock anytime."
+  }
+
+  function handleConfidenceClick(entry, newVal) {
+    const cur = CONF_LEVELS.indexOf(entry.confidence || 'low')
+    const nxt = CONF_LEVELS.indexOf(newVal)
+    if (nxt <= cur) {
+      // Demotion — instant save
+      saveConfidence(entry.id, newVal)
+    } else {
+      // Promotion to strong/locked — confirm first
+      confidenceTooltip = { entryId: entry.id, to: newVal, label: CONF_PROMOTE_MSG[newVal] }
+    }
+  }
+
+  async function saveConfidence(id, val) {
+    await supabase.from('brain_knowledge').update({ confidence: val }).eq('id', id)
+    entries = entries.map(e => e.id === id ? { ...e, confidence: val } : e)
+    confidenceTooltip = null
+  }
+
+  async function setReviewDate(id, date) {
+    await supabase.from('brain_knowledge').update({ review_date: date || null }).eq('id', id)
+    entries = entries.map(e => e.id === id ? { ...e, review_date: date } : e)
+    dueReviewItems = await loadDueReview()
+  }
+
+  async function loadDueReview() {
+    const today = new Date().toISOString().slice(0, 10)
+    const { data } = await supabase
+      .from('brain_knowledge')
+      .select('id, title, category, review_date')
+      .lte('review_date', today)
+      .not('review_date', 'is', null)
+      .order('review_date')
+    return data || []
+  }
+
   function parseRefContent(content) {
     const out = {}
     for (const line of (content || '').split('\n')) {
@@ -684,6 +749,7 @@ Return ONLY JSON (single item array):
   }
 
   loadEntries()
+  loadDueReview().then(items => dueReviewItems = items)
 </script>
 
 <div class="brain-wrap">
@@ -981,10 +1047,34 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
     </button>
 
     {#if entriesOpen}
-      {@const normalEntries = [...entries.filter(e => e.category !== 'reference_tracks')].sort((a,b) => a.category.localeCompare(b.category))}
+      <!-- Search -->
+      <div class="brain-search-row">
+        <input
+          class="brain-search-inp"
+          bind:value={brainSearch}
+          placeholder="Search brain..."
+        />
+        {#if brainSearch}
+          <button class="brain-search-clear" onclick={() => brainSearch = ''}>×</button>
+        {/if}
+      </div>
+
+      <!-- Due review banner -->
+      {#if dueReviewItems.length}
+        <div class="brain-review-banner">
+          🧠 {dueReviewItems.length} brain {dueReviewItems.length === 1 ? 'entry' : 'entries'} ready for review
+        </div>
+      {/if}
+
+      {@const allNormal = [...entries.filter(e => e.category !== 'reference_tracks')].sort((a,b) => a.category.localeCompare(b.category))}
+      {@const normalEntries = brainSearch
+        ? allNormal.filter(e =>
+            e.title?.toLowerCase().includes(brainSearch.toLowerCase()) ||
+            e.content?.toLowerCase().includes(brainSearch.toLowerCase()))
+        : allNormal}
       {@const catIds = [...new Set(normalEntries.map(e => e.category))]}
 
-      {#if duplicateWarnings.length}
+      {#if duplicateWarnings.length && !brainSearch}
         <div class="brain-dup-warning">
           ⚠ {duplicateWarnings.length} possible duplicate(s) — review and delete to keep the brain clean
         </div>
@@ -1054,15 +1144,47 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
                   class="brain-entry-title clickable-title"
                   onclick={() => expandedEntries = { ...expandedEntries, [entry.id]: !expandedEntries[entry.id] }}
                 >{entry.title}</span>
+                <div class="brain-conf-row">
+                  {#each CONF_LEVELS as lvl}
+                    <button
+                      class="brain-conf-dot {(entry.confidence || 'low') === lvl ? 'active' : ''} conf-{lvl}"
+                      onclick={() => handleConfidenceClick(entry, lvl)}
+                      title={lvl}
+                    ></button>
+                  {/each}
+                </div>
                 <button class="brain-del" onclick={() => deleteEntry(entry.id)}>×</button>
               </div>
               {#if expandedEntries[entry.id]}
                 <div class="brain-entry-content">{entry.content}</div>
+                <div class="brain-review-row">
+                  <span class="brain-review-label">Review by:</span>
+                  <input
+                    type="date"
+                    class="brain-review-date-inp"
+                    value={entry.review_date || ''}
+                    onchange={e => setReviewDate(entry.id, e.target.value)}
+                  />
+                  {#if entry.review_date}
+                    <button class="brain-review-clear" onclick={() => setReviewDate(entry.id, '')}>×</button>
+                  {/if}
+                </div>
               {/if}
             </div>
           {/if}
         {/each}
       {/each}
+
+      <!-- Confidence promotion tooltip -->
+      {#if confidenceTooltip}
+        <div class="brain-conf-tooltip">
+          <p class="brain-conf-tooltip-msg">{confidenceTooltip.label}</p>
+          <div class="brain-conf-tooltip-btns">
+            <button class="brain-conf-confirm" onclick={() => saveConfidence(confidenceTooltip.entryId, confidenceTooltip.to)}>Confirm</button>
+            <button class="brain-conf-cancel" onclick={() => confidenceTooltip = null}>Cancel</button>
+          </div>
+        </div>
+      {/if}
 
       <!-- Watched Artists -->
       {#if watchedArtists.length}
@@ -1787,4 +1909,96 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
   .brain-screen-section { padding-bottom: 16px; border-bottom: 1px solid #1c1c1c; margin-bottom: 16px; }
   .brain-screen-controls { display: flex; gap: 8px; margin-bottom: 8px; }
   .brain-capture-result { margin-top: 8px; padding: 8px 10px; background: #0d0d0d; border: 1px solid #252525; border-radius: 3px; }
+
+  /* Brain search */
+  .brain-search-row { display: flex; align-items: center; gap: 6px; margin: 8px 0 6px; }
+  .brain-search-inp {
+    flex: 1;
+    background: #111;
+    border: 1px solid #303030;
+    border-radius: 3px;
+    color: #f5f1ea;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 5px 8px;
+  }
+  .brain-search-inp::placeholder { color: #555; }
+  .brain-search-inp:focus { outline: none; border-color: #3c3c3c; }
+  .brain-search-clear {
+    background: transparent; border: none; color: #555; font-size: 14px;
+    cursor: pointer; padding: 2px 4px; flex-shrink: 0;
+  }
+  .brain-search-clear:hover { color: #e05a4a; }
+
+  /* Due review banner */
+  .brain-review-banner {
+    background: rgba(76,175,130,.08);
+    border: 1px solid rgba(76,175,130,.25);
+    border-radius: 4px;
+    color: #4caf82;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+  }
+
+  /* Confidence dots */
+  .brain-conf-row { display: flex; gap: 3px; align-items: center; flex-shrink: 0; }
+  .brain-conf-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    border: 1px solid #333; background: #1c1c1c;
+    cursor: pointer; padding: 0; flex-shrink: 0;
+    transition: transform .1s;
+  }
+  .brain-conf-dot:hover { transform: scale(1.3); }
+  .brain-conf-dot.conf-low.active    { background: #444; border-color: #555; }
+  .brain-conf-dot.conf-medium.active { background: #c9a84c; border-color: #c9a84c; }
+  .brain-conf-dot.conf-strong.active { background: #4caf82; border-color: #4caf82; }
+  .brain-conf-dot.conf-locked.active { background: #e05a4a; border-color: #e05a4a; }
+
+  /* Confidence tooltip */
+  .brain-conf-tooltip {
+    background: #1c1c1c;
+    border: 1px solid #3c3c3c;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin: 6px 0;
+  }
+  .brain-conf-tooltip-msg {
+    font-size: 12px; color: #cec9c1; margin: 0 0 8px;
+  }
+  .brain-conf-tooltip-btns { display: flex; gap: 6px; }
+  .brain-conf-confirm {
+    background: rgba(76,175,130,.15); border: 1px solid rgba(76,175,130,.4);
+    color: #4caf82; font-family: 'Space Mono', monospace; font-size: 11px;
+    padding: 4px 10px; border-radius: 3px; cursor: pointer;
+  }
+  .brain-conf-confirm:hover { background: rgba(76,175,130,.25); }
+  .brain-conf-cancel {
+    background: transparent; border: 1px solid #303030;
+    color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px;
+    padding: 4px 10px; border-radius: 3px; cursor: pointer;
+  }
+
+  /* Review date in expanded view */
+  .brain-review-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 0 3px; border-top: 1px solid #1c1c1c; margin-top: 6px;
+  }
+  .brain-review-label {
+    font-family: 'Space Mono', monospace; font-size: 9px;
+    color: rgba(201,168,76,.6); text-transform: uppercase; letter-spacing: .05em;
+    flex-shrink: 0;
+  }
+  .brain-review-date-inp {
+    background: #111; border: 1px solid #303030; border-radius: 3px;
+    color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 12px;
+    padding: 3px 6px; cursor: pointer;
+  }
+  .brain-review-date-inp:focus { outline: none; border-color: rgba(201,168,76,.4); }
+  .brain-review-clear {
+    background: transparent; border: none; color: #444;
+    font-size: 12px; cursor: pointer; padding: 0 2px;
+  }
+  .brain-review-clear:hover { color: #e05a4a; }
 </style>

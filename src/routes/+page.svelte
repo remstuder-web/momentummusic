@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from 'svelte'
   import { supabase } from '$lib/supabase.js'
   import DailyTab from '$lib/DailyTab.svelte'
   import DemoTab from '$lib/DemoTab.svelte'
@@ -10,6 +11,12 @@
   import BrainTab from '$lib/BrainTab.svelte'
 
   let activeTab = $state('daily')
+
+  onMount(() => {
+    const handler = e => { activeTab = e.detail }
+    document.addEventListener('mm-switch-tab', handler)
+    return () => document.removeEventListener('mm-switch-tab', handler)
+  })
   let showSettings = $state(false)
   let showCosts = $state(false)
   let watcherStatus = $state(null) // null=checking, true=running, false=stopped

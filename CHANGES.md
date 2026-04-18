@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] src/lib/DailyTab.svelte — DONE
+TASK: agent output font + helper search new tab
+WHAT: FIX 1 — rewrote parseAgentOutput to use agent-* CSS classes (agent-header, agent-bullet, agent-gap, agent-ok, agent-next-move, agent-p); updated .agent-output to DM Sans 14px 300 weight; added agent-label-confirmed/tension/outdated/new inline tag spans; replaced ao-* classes with agent-* throughout. FIX 2 — helper search already using window.open(_blank), confirmed correct
+RESULT: works — 0 svelte errors
+BLOCKERS: none
+
 ## [2026-04-18] src/lib/ListenPage.svelte + src/routes/+page.svelte — DONE
 TASK: listen page with pitch shift controls
 WHAT: Created ListenPage.svelte — public listen page served at momentummusic.vercel.app?s=XXXX. Loads share_sessions from Supabase, shows patch_name, audio player with <source> preferring MP3 then WAV, pitch shift [−][0][+] buttons (range −3 to +3 semitones) using Web Audio playbackRate, double-click center to reset, stars/void background, feedback textarea+submit, download links. +page.svelte: detects ?s= param on mount and renders ListenPage instead of admin app.

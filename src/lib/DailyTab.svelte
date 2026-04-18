@@ -1015,49 +1015,47 @@ ${mozartContext}`
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const lines = text.split('\n')
     let html = ''
-    let inUl = false, inOl = false, inNextMove = false
+    let inNextMove = false
 
-    function closeList() {
-      if (inUl) { html += '</ul>'; inUl = false }
-      if (inOl) { html += '</ol>'; inOl = false }
+    function closeNextMove() {
+      if (inNextMove) { html += '</div>'; inNextMove = false }
     }
 
     function colorTagLine(s) {
       return s
-        .replace(/^\[GAP\]/,    '<span class="ao-tag-gap">[GAP]</span>')
-        .replace(/^\[OK\]/,     '<span class="ao-tag-ok">[OK]</span>')
-        .replace(/^\[(CONFIRMED|TENSION|OUTDATED|NEW)\]/, (m, tag) => `<span class="ao-tag-knowledge">[${tag}]</span>`)
+        .replace(/\[GAP\]/g,       '<span class="ao-tag-gap">[GAP]</span>')
+        .replace(/\[OK\]/g,        '<span class="ao-tag-ok">[OK]</span>')
+        .replace(/\[CONFIRMED\]/g, '<span class="agent-label-confirmed">[CONFIRMED]</span>')
+        .replace(/\[TENSION\]/g,   '<span class="agent-label-tension">[TENSION]</span>')
+        .replace(/\[OUTDATED\]/g,  '<span class="agent-label-outdated">[OUTDATED]</span>')
+        .replace(/\[NEW\]/g,       '<span class="agent-label-new">[NEW]</span>')
     }
 
     for (const line of lines) {
       const t = line.trim()
-      if (!t) { closeList(); continue }
+      if (!t) continue
 
       if (t.startsWith('## ')) {
-        closeList()
-        if (inNextMove) { html += '</div>'; inNextMove = false }
+        closeNextMove()
         const title = esc(t.slice(3).trim())
         const isNextMoveOrStep = /^NEXT (MOVE|STEP)$/i.test(title)
-        html += `<div class="ao-header${isNextMoveOrStep ? ' ao-nm-hdr' : ''}">${title}</div>`
-        if (isNextMoveOrStep) { html += '<div class="ao-next-move">'; inNextMove = true }
+        html += `<div class="agent-header">${title}</div>`
+        if (isNextMoveOrStep) { html += '<div class="agent-next-move">'; inNextMove = true }
       } else if (t.startsWith('- ') || t.startsWith('• ')) {
-        if (inOl) { html += '</ol>'; inOl = false }
-        if (!inUl) { html += '<ul class="ao-ul">'; inUl = true }
         const content = colorTagLine(esc(t.replace(/^[-•]\s+/, '')))
-        html += `<li class="ao-li">${content}</li>`
+        html += `<div class="agent-bullet">${content}</div>`
       } else if (/^\d+\.\s/.test(t)) {
-        if (inUl) { html += '</ul>'; inUl = false }
-        if (!inOl) { html += '<ol class="ao-ol">'; inOl = true }
         const content = colorTagLine(esc(t.replace(/^\d+\.\s+/, '')))
-        html += `<li class="ao-li">${content}</li>`
+        html += `<div class="agent-bullet">${content}</div>`
+      } else if (t.startsWith('[GAP]')) {
+        html += `<div class="agent-gap">${colorTagLine(esc(t))}</div>`
+      } else if (t.startsWith('[OK]')) {
+        html += `<div class="agent-ok">${colorTagLine(esc(t))}</div>`
       } else {
-        closeList()
-        const lineClass = t.startsWith('[GAP]') ? 'ao-gap' : t.startsWith('[OK]') ? 'ao-ok' : /^\[(CONFIRMED|TENSION|OUTDATED|NEW)\]/.test(t) ? 'ao-tag' : ''
-        html += `<p class="ao-p${lineClass ? ' ' + lineClass : ''}">${colorTagLine(esc(t))}</p>`
+        html += `<div class="agent-p">${colorTagLine(esc(t))}</div>`
       }
     }
-    closeList()
-    if (inNextMove) html += '</div>'
+    closeNextMove()
     return html
   }
 
@@ -2034,23 +2032,69 @@ ${mozartContext}`
   .inbox-patch { font-family: 'Space Mono', monospace; font-size: 9px; color: #333; margin-top: 2px; }
 
   /* Structured agent output renderer */
-  .agent-output { padding: 2px 0 4px; }
-  :global(.ao-header) { font-family: 'Space Mono', monospace; font-size: 11px; text-transform: uppercase; color: rgba(201,168,76,.75); letter-spacing: .08em; margin: 14px 0 6px; padding-bottom: 5px; border-bottom: 1px solid #252525; }
-  :global(.ao-header:first-child) { margin-top: 6px; }
-  :global(.ao-nm-hdr) { color: rgba(201,168,76,.9); border-bottom-color: rgba(201,168,76,.2); }
-  :global(.ao-next-move) { background: #141414; border: 1px solid #252525; border-left: 2px solid #c9a84c; border-radius: 4px; padding: 10px 14px; margin-top: 4px; }
-  :global(.ao-ul), :global(.ao-ol) { margin: 4px 0; padding: 0; list-style: none; }
-  :global(.ao-ol) { counter-reset: ao-counter; }
-  :global(.ao-li) { color: #cec9c1; font-size: 14px; line-height: 1.6; padding: 2px 0; margin-left: 14px; position: relative; }
-  :global(.ao-ul .ao-li::before) { content: '–'; position: absolute; left: -12px; color: rgba(201,168,76,.4); }
-  :global(.ao-ol .ao-li) { counter-increment: ao-counter; }
-  :global(.ao-ol .ao-li::before) { content: counter(ao-counter) '.'; position: absolute; left: -16px; color: rgba(201,168,76,.4); font-size: 12px; }
-  :global(.ao-next-move .ao-li) { color: #f5f1ea; }
-  :global(.ao-p) { color: #cec9c1; font-size: 14px; line-height: 1.65; margin: 4px 0; }
-  :global(.ao-next-move .ao-p) { color: #f5f1ea; margin: 0; }
+  .agent-output {
+    padding: 2px 0 4px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #cec9c1;
+    line-height: 1.65;
+  }
+  :global(.agent-header) {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: rgba(201,168,76,.75);
+    margin: 14px 0 6px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #252525;
+  }
+  :global(.agent-header:first-child) { margin-top: 6px; }
+  :global(.agent-bullet) {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #cec9c1;
+    line-height: 1.6;
+    padding: 2px 0 2px 12px;
+    margin: 0;
+  }
+  :global(.agent-gap) {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #e05a4a;
+    padding: 2px 0 2px 12px;
+    line-height: 1.6;
+  }
+  :global(.agent-ok) {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #4caf82;
+    padding: 2px 0 2px 12px;
+    line-height: 1.6;
+  }
+  :global(.agent-next-move) {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #f5f1ea;
+    background: #141414;
+    border-left: 2px solid #c9a84c;
+    padding: 10px 14px;
+    margin-top: 10px;
+    border-radius: 0 3px 3px 0;
+    line-height: 1.65;
+  }
+  :global(.agent-p) { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #cec9c1; line-height: 1.65; margin: 3px 0; }
   :global(.ao-tag-gap) { color: #e74c3c; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; margin-right: 4px; }
   :global(.ao-tag-ok) { color: #4caf82; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; margin-right: 4px; }
-  :global(.ao-tag-knowledge) { color: #c9a84c; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; margin-right: 4px; }
+  :global(.agent-label-confirmed) { color: #c9a84c; font-weight: 400; }
+  :global(.agent-label-tension)   { color: #e8a838; font-weight: 400; }
+  :global(.agent-label-outdated)  { color: #9e9690; font-weight: 400; }
+  :global(.agent-label-new)       { color: #4caf82; font-weight: 400; }
   .task-scroll { }
   .task-scroll.scrollable { max-height: calc(7 * 50px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .year-scroll { max-height: calc(10 * 32px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }

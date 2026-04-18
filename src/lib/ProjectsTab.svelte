@@ -2763,7 +2763,11 @@
 
     <!-- Mozart -->
     <div class="mozart-block">
-      <div class="mozart-title">ASK MOZART</div>
+      <div class="mozart-title">ASK MOZART
+        {#if aiMessages.length > 0}
+          <button class="clear-chat" onclick={() => aiMessages = []}>Clear</button>
+        {/if}
+      </div>
       <div class="chat-input-row">
         <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
         <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
@@ -3247,7 +3251,9 @@
   .add-btn-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 6px 10px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
 
   .mozart-block { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 160px; }
-  .mozart-title { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; }
+  .mozart-title { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; display: flex; align-items: center; gap: 10px; }
+  .clear-chat { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
+  .clear-chat:hover { border-color: #555; color: #9e9690; }
   .chat-out { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
   .chat-msg { display: flex; flex-direction: column; gap: 3px; }
   .chat-who { font-family: 'Space Mono', monospace; font-size: 12px; color: #555; }

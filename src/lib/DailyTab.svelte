@@ -2080,7 +2080,7 @@ ${mozartContext}`
     font-size: 14px;
     font-weight: 300;
     color: #cec9c1;
-    line-height: 1.6;
+    line-height: 1.65;
     padding: 2px 0 2px 12px;
     margin: 0;
   }
@@ -2090,7 +2090,7 @@ ${mozartContext}`
     font-weight: 300;
     color: #e05a4a;
     padding: 2px 0 2px 12px;
-    line-height: 1.6;
+    line-height: 1.65;
   }
   :global(.agent-ok) {
     font-family: 'DM Sans', sans-serif;
@@ -2098,7 +2098,7 @@ ${mozartContext}`
     font-weight: 300;
     color: #4caf82;
     padding: 2px 0 2px 12px;
-    line-height: 1.6;
+    line-height: 1.65;
   }
   :global(.agent-next-move) {
     font-family: 'DM Sans', sans-serif;

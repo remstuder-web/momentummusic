@@ -453,16 +453,17 @@ async function runAgentChartAnalysis(apiKey) {
   const spToken = await getSpotifyToken()
   const spH = { 'Authorization': `Bearer ${spToken}` }
 
-  // 1. Fetch top current tracks — Viral 50 playlist (37i9dQZEVXbLiRSasKsNU9) requires
-  //    Spotify Extended Quota Mode; search is the reliable fallback with client credentials
+  // 1. Fetch current popular tracks via search (Viral 50 requires Extended Quota Mode)
   const year = new Date().getFullYear()
   const searchRes = await fetch(
-    `https://api.spotify.com/v1/search?q=year:${year}&type=track&limit=10`,
+    `https://api.spotify.com/v1/search?q=year:${year}&type=track&market=DE&limit=10`,
     { headers: spH }
   )
   if (!searchRes.ok) throw new Error('Spotify track search failed: ' + searchRes.status)
   const searchData = await searchRes.json()
-  const viralTracks = (searchData.tracks?.items || []).filter(Boolean)
+  const viralTracks = (searchData.tracks?.items || [])
+    .filter(Boolean)
+    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
 
   // 2. Filter out tracks already in reference_tracks
   const existingRes = await fetch(
@@ -609,7 +610,7 @@ async function runAgentChartAnalysis(apiKey) {
   }
 
   console.log(`✓ chart-analysis: ${analyzedTracks.length} tracks stored, assessment saved`)
-  return { ok: true, tracks: analyzedTracks, assessment }
+  return { ok: true, chart_source: 'spotify_search', tracks: analyzedTracks, assessment }
 }
 
 // ── Shared brain context fetch ────────────────────────────────────────────
@@ -842,11 +843,8 @@ async function buildStatusResponse() {
   const tasksText   = fs.existsSync(tasksPath)   ? fs.readFileSync(tasksPath,   'utf8') : ''
   const changesText = fs.existsSync(changesPath)  ? fs.readFileSync(changesPath, 'utf8') : ''
 
-  const checkboxRemaining = (tasksText.match(/- \[ \]/g) || []).length
-  const checkboxDone      = (tasksText.match(/- \[x\]/gi) || []).length
-  const headerCount       = (tasksText.match(/^## TASK \d+/gm) || []).length
-  const tasks_remaining   = checkboxRemaining || headerCount
-  const tasks_done        = checkboxDone
+  const tasks_remaining = (tasksText.match(/- \[ \]/g) || []).length
+  const tasks_done      = (tasksText.match(/- \[x\]/gi) || []).length
   const recent_changes  = changesText.split('\n').slice(-15).join('\n')
 
   let cs = {}

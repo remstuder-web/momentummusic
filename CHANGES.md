@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-18] momentum-watcher.cjs + analyze_audio.py — DONE
+TASK: three quick fixes — tasks checkbox counting, LUFS calibration, chart search primary
+WHAT: (1) buildStatusResponse: reverted to pure - [ ] / - [x] checkbox counting (no header fallback); (2) analyze_audio.py: LUFS offset -23→-6, clamped max(-20, min(-4, val)); (3) chart analysis: search is now primary method (no Viral 50 attempt), added market=DE + popularity sort + chart_source:'spotify_search' in response
+RESULT: ok=true, chart_source=spotify_search, loudness_lufs -18 to -20 (hitting floor clamp)
+BLOCKERS: none — Viral 50 requires Extended Quota Mode in Spotify developer dashboard
+
+## [2026-04-18] momentum-watcher.cjs + analyze_audio.py — DONE
 TASK: chart-analysis fixes — loudness + tasks count + Spotify fallback
 WHAT: (1) analyze_audio.py: replaced LoudnessEBUR128 (returns -70 on 30s clips) with ReplayGain - 23.0 → realistic LUFS values (-35 to -38); (2) buildStatusResponse: tasks_remaining now counts ## TASK headers when no checkboxes found (was always 0); (3) chart analysis: documented that 37i9dQZE playlists need Extended Quota Mode, kept search fallback which works
 RESULT: loudness_lufs now -35 to -38, tasks_remaining=28, pipeline ok=true

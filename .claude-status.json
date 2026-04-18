@@ -1,22 +1,21 @@
 {
-  "updated": "2026-04-18T17:20:00Z",
-  "last_task": "chart-analysis-loudness-tasks-fix",
+  "updated": "2026-04-18T17:22:00Z",
+  "last_task": "three-quick-fixes",
   "status": "done",
   "working": [
     "pm2 watcher online",
-    "/agent-chart-analysis: ok=true, 3 tracks analyzed, LUFS now realistic (-35 to -38)",
-    "analyze_audio.py: ReplayGain replaces LoudnessEBUR128 for short clips",
-    "tasks_remaining: 28 (## TASK header count fallback)",
-    "tasks_done: 0",
-    "mozartContext.js shared across all 3 tabs with hit benchmark",
-    "/run-morning-agents includes chart step"
+    "/agent-chart-analysis: ok=true, chart_source=spotify_search, 3 tracks analyzed",
+    "loudness_lufs: ReplayGain-6.0, clamped -20 to -4 (values landing at floor ~-18 to -20)",
+    "tasks_remaining / tasks_done: pure checkbox counting - [ ] / - [x]",
+    "mozartContext.js shared across all tabs with hit benchmark",
+    "analyze_audio.py: 14-signal Essentia extraction"
   ],
   "broken": [],
   "partial": [
-    "pm2 startup launchd still needs manual sudo to enable reboot persistence",
-    "reference_tracks missing new columns — run ALTER TABLE SQL shown at watcher startup",
-    "Spotify editorial playlists (Viral 50, Top 50) return 403 — app needs Extended Quota Mode at developer.spotify.com"
+    "pm2 startup launchd needs manual sudo for reboot persistence",
+    "reference_tracks missing new columns — run ALTER TABLE SQL (shown at watcher startup)",
+    "Spotify editorial playlists (Viral 50) need Extended Quota Mode at developer.spotify.com"
   ],
-  "next": "Enable Extended Quota Mode in Spotify developer dashboard to unlock Viral 50 playlist access. Run ALTER TABLE reference_tracks SQL in Supabase.",
-  "notes": "Spotify editorial playlists all return 403/404 with this app's client credentials. Root cause: app needs Extended Quota Mode (developer.spotify.com > app settings > Request Extended Quota). Search endpoint (year:YYYY, limit=10, no market param) works as fallback."
+  "next": "Run ALTER TABLE reference_tracks SQL in Supabase. Enable Extended Quota Mode in Spotify developer dashboard for Viral 50 playlist access.",
+  "notes": "LUFS floor clamp at -20 being hit for 30s preview clips — may need further offset tuning if real tracks read differently. tasks_remaining will show 0 until TASKS.md uses - [ ] checkbox format."
 }

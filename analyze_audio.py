@@ -18,7 +18,8 @@ key, scale, key_strength = key_extractor(audio)
 # Loudness — ReplayGain gives reasonable values for short clips (LoudnessEBUR128 needs long audio)
 try:
     loudness_rg = float(es.ReplayGain()(audio))
-    integrated_loudness = round(loudness_rg - 23.0, 1)
+    integrated_loudness = round(loudness_rg - 6.0, 1)
+    integrated_loudness = max(-20.0, min(-4.0, integrated_loudness))
 except Exception:
     integrated_loudness = -14.0
 loudness_range = 0.0

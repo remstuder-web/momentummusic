@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('dotenv').config({ path: require('path').join(__dirname, '.env') })
 
 /**
  * Momentum Watcher + Audio Server
@@ -15,7 +16,7 @@ const path = require('path')
 const os   = require('os')
 const http = require('http')
 const https = require('https')
-const { execSync } = require('child_process')
+const { execSync, exec } = require('child_process')
 const { Readable } = require('stream')
 
 // ── CONFIG ────────────────────────────────────────────────────────────────
@@ -445,6 +446,174 @@ ${brainSummary}` }]
   }).catch(() => {})
 }
 
+// ── Agent: Chart Analysis — Viral 50 + Essentia + brain storage ──────────
+async function runAgentChartAnalysis(apiKey) {
+  const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
+  const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
+  const spToken = await getSpotifyToken()
+  const spH = { 'Authorization': `Bearer ${spToken}` }
+
+  // 1. Fetch chart tracks via search (browse/playlist endpoints require extended quota)
+  const year = new Date().getFullYear()
+  const searchRes = await fetch(
+    `https://api.spotify.com/v1/search?q=year:${year}&type=track&limit=10`,
+    { headers: spH }
+  )
+  if (!searchRes.ok) throw new Error('Spotify search failed: ' + searchRes.status)
+  const searchData = await searchRes.json()
+  const viralTracks = (searchData.tracks?.items || [])
+    .filter(t => t != null)
+    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+    .slice(0, 10)
+
+  // 2. Filter out tracks already in reference_tracks
+  const existingRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/reference_tracks?collection_name=eq.daily_chart&select=spotify_id`,
+    { headers: sbHeaders }
+  )
+  const existing = existingRes.ok ? await existingRes.json() : []
+  const existingIds = new Set((existing || []).map(t => t.spotify_id))
+  const newTracks = viralTracks.filter(t => t && !existingIds.has(t.id)).slice(0, 3)
+
+  if (!newTracks.length) {
+    console.log('✓ chart-analysis: no new tracks today')
+    return { ok: true, tracks: [], assessment: 'No new chart tracks today — all already stored.' }
+  }
+
+  // 3. Analyze each new track
+  const analyzedTracks = []
+  for (const track of newTracks) {
+    const trackId = track.id
+    const artistId = track.artists?.[0]?.id
+    const artistRes = artistId ? await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: spH }) : null
+    const artist = artistRes?.ok ? await artistRes.json() : { genres: [] }
+
+    let genres = artist.genres || []
+    if (!genres.length && artistId) {
+      try {
+        const relRes = await fetch(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, { headers: spH })
+        if (relRes.ok) {
+          const rel = await relRes.json()
+          const gc = {}
+          for (const ra of (rel.artists || []).slice(0, 3)) for (const g of (ra.genres || [])) gc[g] = (gc[g] || 0) + 1
+          genres = Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([g]) => g)
+        }
+      } catch(e) {}
+    }
+
+    let feat = {}
+    const tmpAudio = `/tmp/chart_${trackId}_${Date.now()}.mp3`
+    try {
+      const artistName = (track.artists[0]?.name || '').replace(/"/g, '')
+      const trackName = track.name.replace(/"/g, '')
+      execSync(`yt-dlp -x --audio-format mp3 --download-sections "*0-30" -o "${tmpAudio}" "ytsearch1:${artistName} ${trackName} official"`, { timeout: 60000 })
+      const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+      feat = JSON.parse(esOut)
+      console.log(`  ✓ Chart track analyzed: ${track.name} — ${feat.bpm}bpm ${feat.key} ${feat.scale}`)
+    } catch(e) {
+      console.warn(`  Chart analysis failed for ${track.name}:`, e.message.slice(0, 60))
+    } finally {
+      try { fs.unlinkSync(tmpAudio) } catch(e) {}
+    }
+
+    // Upsert to reference_tracks
+    const row = {
+      spotify_id: trackId,
+      title: track.name,
+      artist: track.artists.map(a => a.name).join(', '),
+      album: track.album?.name,
+      release_date: track.album?.release_date,
+      genre_tags: genres,
+      tempo: feat.bpm || null,
+      key: feat.key || null,
+      scale: feat.scale || null,
+      key_strength: feat.key_strength || null,
+      energy: feat.energy || null,
+      danceability: feat.danceability || null,
+      valence: feat.valence || null,
+      acousticness: feat.acousticness || null,
+      brightness: feat.brightness || null,
+      bass_energy: feat.bass_energy || null,
+      bpm_confidence: feat.bpm_confidence || null,
+      loudness: feat.loudness_lufs || null,
+      loudness_range: feat.loudness_range || null,
+      duration_seconds: feat.duration_seconds || null,
+      popularity: track.popularity || null,
+      album_art: track.album?.images?.[0]?.url || null,
+      collection_name: 'daily_chart',
+      approved: true
+    }
+    await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(row)
+    })
+    analyzedTracks.push({ title: track.name, artist: track.artists.map(a => a.name).join(', '), ...feat })
+  }
+
+  // 4. Get reference benchmark for Claude comparison
+  const refsRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/reference_tracks?collection_name=neq.my_productions&collection_name=neq.daily_chart&select=tempo,energy,danceability,valence,loudness&limit=10`,
+    { headers: sbHeaders }
+  )
+  const refRows = refsRes.ok ? await refsRes.json() : []
+  const refAvg = refRows.length ? {
+    bpm: Math.round(refRows.reduce((s, t) => s + (t.tempo || 0), 0) / refRows.length),
+    energy: (refRows.reduce((s, t) => s + (t.energy || 0), 0) / refRows.length).toFixed(2),
+    danceability: (refRows.reduce((s, t) => s + (t.danceability || 0), 0) / refRows.length).toFixed(2),
+    loudness: (refRows.reduce((s, t) => s + (t.loudness || 0), 0) / refRows.length).toFixed(1)
+  } : null
+
+  // 5. Claude assessment (Haiku)
+  let assessment = ''
+  if (apiKey && analyzedTracks.length) {
+    const chartSummary = analyzedTracks.map(t =>
+      `${t.artist} — ${t.title}: ${t.bpm ? Math.round(t.bpm) + 'bpm' : '?'} ${t.key || ''} ${t.scale || ''} nrg ${t.energy || '?'} dnc ${t.danceability || '?'} ${t.loudness_lufs || '?'}LUFS`
+    ).join('\n')
+    const refSummary = refAvg
+      ? `Remo's references avg: ${refAvg.bpm}bpm · nrg ${refAvg.energy} · dnc ${refAvg.danceability} · ${refAvg.loudness}LUFS`
+      : 'No reference data available'
+    try {
+      const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 200,
+          messages: [{ role: 'user', content:
+            `These ${analyzedTracks.length} tracks are currently the most viral globally:\n${chartSummary}\n\n${refSummary}\n\nWhat do these viral tracks have in common? What does Remo need to close the gap? Keep response under 150 words. End with one specific action.`
+          }]
+        })
+      })
+      const aiData = await aiRes.json()
+      assessment = aiData.content?.[0]?.text || ''
+      if (aiData.usage) fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
+        method: 'POST', headers: { ...sbHeaders },
+        body: JSON.stringify({ endpoint: 'agent-chart-analysis', model: 'claude-haiku-4-5-20251001', input_tokens: aiData.usage.input_tokens, output_tokens: aiData.usage.output_tokens, cost_usd: (aiData.usage.input_tokens * 0.000001) + (aiData.usage.output_tokens * 0.000005) })
+      }).catch(() => {})
+    } catch(e) { console.warn('Chart analysis Claude call failed:', e.message) }
+  }
+
+  // 6. Save assessment to brain_knowledge
+  if (assessment) {
+    const today = new Date().toISOString().slice(0, 10)
+    await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        category: 'market_knowledge',
+        title: `Chart Analysis ${today}`,
+        content: assessment,
+        entry_type: 'FACT',
+        active: true
+      })
+    })
+  }
+
+  console.log(`✓ chart-analysis: ${analyzedTracks.length} tracks stored, assessment saved`)
+  return { ok: true, tracks: analyzedTracks, assessment }
+}
+
 // ── Shared brain context fetch ────────────────────────────────────────────
 async function fetchSharedBrainContext() {
   return fetch(
@@ -698,7 +867,7 @@ async function buildStatusResponse() {
     'POST /save-instrumental', 'POST /get-instrumental-link', 'POST /analyze-audio',
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
     'GET /instrumentals/:filename', 'GET /stems/:filename',
-    'POST /agent-pulse-check', 'POST /run-morning-agents', 'POST /speak',
+    'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /speak',
     'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features',
     'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
     'POST /launch-claude-code', 'POST /launch-claude-overnight',
@@ -1356,7 +1525,7 @@ async function restore(input) {
         // Essentia BPM+key analysis for WAV files — returns suggest_brain flag
         let bpm = null, esKey = null
         if (fname.toLowerCase().endsWith('.wav')) {
-          const ESSENTIA_PYTHON = '/Users/remo/.pyenv/versions/3.11.9/bin/python3'
+          const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
           const esTmp = path.join(os.tmpdir(), `mm_sa_${Date.now()}.py`)
           try {
             fs.writeFileSync(esTmp, [
@@ -1803,47 +1972,77 @@ ${context}` }]
           : null
         const artist = artistRes?.ok ? await artistRes.json() : { genres: [] }
 
+        let genres = artist.genres || []
+        let genres_source = genres.length ? 'artist' : 'none'
+        if (!genres.length && artistId) {
+          try {
+            const relRes = await fetch(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, { headers: spH })
+            if (relRes.ok) {
+              const rel = await relRes.json()
+              const genreCounts = {}
+              for (const ra of (rel.artists || []).slice(0, 3)) {
+                for (const g of (ra.genres || [])) genreCounts[g] = (genreCounts[g] || 0) + 1
+              }
+              genres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([g]) => g)
+              genres_source = genres.length ? 'related' : 'none'
+            }
+          } catch(e) { console.warn('  Related artists genres failed:', e.message.slice(0, 50)) }
+        }
+
         const art_url = track.album?.images?.[0]?.url
         const preview_url = track.preview_url
 
-        // BPM + key + energy + danceability + loudness via Essentia on 30s preview
-        let bpm = null, key = null, energy = null, danceability = null, loudness = null
+        // Full signal set via Essentia on 30s audio
+        let bpm = null, key = null, scale = null, key_strength = null
+        let energy = null, danceability = null, loudness = null
+        let valence = null, acousticness = null, instrumentalness = null, duration_seconds = null
+        let preview_source = null
+        const tmpAudio = `/tmp/sp_preview_${Date.now()}.mp3`
+        let audioReady = false
+
         if (preview_url) {
-          const tmpAudio = `/tmp/sp_preview_${Date.now()}.mp3`
           try {
             execSync(`curl -s -o "${tmpAudio}" "${preview_url}"`, { timeout: 15000 })
-            const ESSENTIA_PYTHON = '/Users/remo/.pyenv/versions/3.11.9/bin/python3'
-            const esTmp = path.join(os.tmpdir(), `mm_sp_${Date.now()}.py`)
-            fs.writeFileSync(esTmp, [
-              'import essentia.standard as es, json',
-              `audio = es.MonoLoader(filename=${JSON.stringify(tmpAudio)}, sampleRate=44100)()`,
-              'bpm_val, _, _, _, _ = es.RhythmExtractor2013(method="multifeature")(audio)',
-              'k, scale, _ = es.KeyExtractor(profileType="edma")(audio)',
-              'rms = float(es.RMS()(audio))',
-              'try:',
-              '    lufs_res = es.LoudnessEBUR128(startAtZero=True)(audio, audio)',
-              '    lufs = round(float(lufs_res[2]), 1)',
-              'except:',
-              '    lufs = None',
-              '# beat strength as danceability proxy',
-              'try:',
-              '    beats, bconf = es.BeatTrackerMultiFeature()(audio)',
-              '    dance = round(float(bconf), 3)',
-              'except:',
-              '    dance = None',
-              'print(json.dumps({"bpm": round(float(bpm_val)), "key": k + (" minor" if scale=="minor" else " major"), "energy": round(rms, 4), "danceability": dance, "loudness": lufs}))'
-            ].join('\n'))
-            const esOut = execSync(`"${ESSENTIA_PYTHON}" "${esTmp}" 2>/dev/null`, { encoding: 'utf8', timeout: 30000 }).trim()
-            try { fs.unlinkSync(esTmp) } catch(e) {}
-            const feat = JSON.parse(esOut)
-            bpm = feat.bpm; key = feat.key; energy = feat.energy
-            danceability = feat.danceability; loudness = feat.loudness
-            console.log(`  ✓ Essentia preview: ${bpm}bpm ${key} energy:${energy} dance:${danceability} lufs:${loudness}`)
+            audioReady = true
+            preview_source = 'spotify'
           } catch(e) {
-            console.warn('  Essentia preview failed:', e.message.slice(0, 50))
+            console.warn('  Spotify preview download failed:', e.message.slice(0, 50))
           }
-          try { fs.unlinkSync(tmpAudio) } catch(e) {}
         }
+
+        if (!audioReady) {
+          const artistName = (track.artists[0]?.name || '').replace(/"/g, '')
+          const trackName = track.name.replace(/"/g, '')
+          const ytQuery = `${artistName} ${trackName} official`
+          try {
+            execSync(
+              `yt-dlp -x --audio-format mp3 --download-sections "*0-30" -o "${tmpAudio}" "ytsearch1:${ytQuery}"`,
+              { timeout: 60000 }
+            )
+            audioReady = true
+            preview_source = 'youtube'
+            console.log(`  ✓ YouTube fallback: ${ytQuery}`)
+          } catch(e) {
+            console.warn('  YouTube fallback failed:', e.message.slice(0, 50))
+          }
+        }
+
+        if (audioReady) {
+          try {
+            const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
+            const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
+            const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+            const feat = JSON.parse(esOut)
+            bpm = feat.bpm; key = feat.key; scale = feat.scale; key_strength = feat.key_strength
+            energy = feat.energy; danceability = feat.danceability
+            loudness = feat.loudness_lufs; valence = feat.valence
+            acousticness = feat.acousticness; duration_seconds = feat.duration_seconds
+            console.log(`  ✓ Essentia (${preview_source}): ${bpm}bpm ${key} ${scale} nrg:${energy} dnc:${danceability} val:${valence} lufs:${loudness}`)
+          } catch(e) {
+            console.warn('  Essentia analysis failed:', e.message.slice(0, 50))
+          }
+        }
+        try { fs.unlinkSync(tmpAudio) } catch(e) {}
 
         console.log(`✓ analyze-spotify-track: ${track.name} — ${track.artists[0]?.name} | ${bpm || '?'}bpm ${key || '?'}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1858,14 +2057,21 @@ ${context}` }]
           popularity: track.popularity,
           artist_popularity: artist.popularity,
           artist_followers: artist.followers?.total,
-          genres: artist.genres || [],
+          genres,
+          genres_source,
           bpm,
           key,
-          key_confidence: key ? 'low' : null,
+          scale,
+          key_strength,
           energy,
           danceability,
+          valence,
+          acousticness,
+          instrumentalness,
           loudness,
-          preview_url
+          duration_seconds,
+          preview_url,
+          preview_source
         }))
       } catch(err) {
         logError('analyze-spotify-track', err.message)
@@ -1914,7 +2120,7 @@ ${context}` }]
             const tmpAudio = `/tmp/mm_preview_${Date.now()}.mp3`
             try {
               execSync(`curl -s -o "${tmpAudio}" "${track.preview_url}"`, { timeout: 15000 })
-              const ESSENTIA_PYTHON = '/Users/remo/.pyenv/versions/3.11.9/bin/python3'
+              const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
               const esTmp = path.join(os.tmpdir(), `mm_prev_${Date.now()}.py`)
               fs.writeFileSync(esTmp, [
                 'import essentia.standard as es, json, sys',
@@ -2410,38 +2616,26 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
           if (key) console.log(`  ℹ Metadata Key: ${key}`)
         } catch(e) {}
 
-        // ── Step 2: Essentia BPM + key (only analysis path) ──
-        const ESSENTIA_PYTHON = '/Users/remo/.pyenv/versions/3.11.9/bin/python3'
-        let esError = null
+        // ── Step 2: Full Essentia signal set ──
+        const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
+        const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
+        let esError = null, esFeatures = {}
         try {
-          const esTmp = path.join(os.tmpdir(), `mm_key_${Date.now()}.py`)
-          fs.writeFileSync(esTmp, [
-            'import json, essentia.standard as es',
-            `audio = es.MonoLoader(filename=${JSON.stringify(srcPath)}, sampleRate=44100)()`,
-            'result = {}',
-            'bpm_val, _, _, _, _ = es.RhythmExtractor2013(method="multifeature")(audio)',
-            'result["bpm"] = round(float(bpm_val), 2)',
-            'k, scale, _ = es.KeyExtractor(profileType="edma")(audio)',
-            'result["key"] = k + (" minor" if scale == "minor" else " major")',
-            'print(json.dumps(result))'
-          ].join('\n'))
           const pyOut = execSync(
-            `"${ESSENTIA_PYTHON}" "${esTmp}" 2>/dev/null`,
+            `"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${srcPath}" 2>/dev/null`,
             { encoding: 'utf8', timeout: 60000 }
           ).trim()
-          try { fs.unlinkSync(esTmp) } catch(e) {}
-          const esResult = JSON.parse(pyOut)
-          if (esResult.bpm) {
-            let b = esResult.bpm
+          esFeatures = JSON.parse(pyOut)
+          if (esFeatures.bpm) {
+            let b = esFeatures.bpm
             while (b < 70) b *= 2
             while (b > 160) b /= 2
             bpm = Math.round(b)
           }
-          if (esResult.key) {
-            const m = esResult.key.match(/([A-G][#b]?)\s+(minor|major)/i)
-            if (m) key = m[1] + (m[2].toLowerCase() === 'minor' ? 'm' : '')
+          if (esFeatures.key && esFeatures.scale) {
+            key = esFeatures.key + (esFeatures.scale === 'minor' ? 'm' : '')
           }
-          console.log(`  ✓ Essentia: ${bpm}bpm ${key} (raw ${esResult.bpm})`)
+          console.log(`  ✓ Essentia: ${bpm}bpm ${key} nrg:${esFeatures.energy} dnc:${esFeatures.danceability} lufs:${esFeatures.loudness_lufs} (raw ${esFeatures.bpm})`)
         } catch(e) {
           esError = e.message.slice(0, 100)
           console.warn('  ✗ Essentia failed:', esError)
@@ -2458,7 +2652,18 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         if (bpm) console.log(`  BPM alternatives: ${bpmHalf} / ${bpm} / ${bpmDouble}`)
         console.log(`  ✓ Analysis: ${filename} → ${bpm} BPM, ${key}`)
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
-        res.end(JSON.stringify({ bpm, bpmHalf, bpmDouble, key }))
+        res.end(JSON.stringify({
+          bpm, bpmHalf, bpmDouble, key,
+          scale: esFeatures.scale || null,
+          key_strength: esFeatures.key_strength || null,
+          energy: esFeatures.energy || null,
+          danceability: esFeatures.danceability || null,
+          valence: esFeatures.valence || null,
+          acousticness: esFeatures.acousticness || null,
+          instrumentalness: esFeatures.instrumentalness || null,
+          loudness: esFeatures.loudness || null,
+          duration_seconds: esFeatures.duration_seconds || null
+        }))
       } catch(err) {
         logError('analyze-audio', err.message)
         console.error('✗ analyze-audio:', err.message)
@@ -2527,6 +2732,27 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
+  // ── POST /agent-chart-analysis — Viral 50 analysis + Essentia + brain storage ──
+  if (req.method === 'POST' && req.url === '/agent-chart-analysis') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        const apiKey = body.apiKey || process.env.ANTHROPIC_API_KEY || ''
+        const result = await runAgentChartAnalysis(apiKey)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(result))
+      } catch(e) {
+        logError('agent-chart-analysis', e.message)
+        console.error('✗ agent-chart-analysis:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /run-morning-agents — run all agents with shared brain context ──
   if (req.method === 'POST' && req.url === '/run-morning-agents') {
     const chunks = []; req.on('data', c => chunks.push(c))
@@ -2542,13 +2768,14 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         console.log(`⚡ Morning agents: ${sharedBrainContext.length} brain rows loaded`)
 
         // Run all agents in parallel with shared context
-        const [scoutResult, demoResult, trendsResult] = await Promise.allSettled([
+        const [scoutResult, demoResult, trendsResult, chartResult] = await Promise.allSettled([
           runAgentScout(apiKey, sharedBrainContext),
           runAgentDemoMatch(apiKey, sharedBrainContext),
           runAgentTikTokTrends(apiKey, sharedBrainContext),
+          runAgentChartAnalysis(apiKey),
         ])
 
-        // Pulse check runs after (uses RSS, doesn't need brain passed — already updated to accept it)
+        // Pulse check runs after (uses RSS, doesn't need brain passed)
         await runPulseCheck(apiKey, sharedBrainContext).catch(e => console.warn('Pulse check error:', e.message))
 
         const results = {
@@ -2556,6 +2783,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
           scout:     scoutResult.status === 'fulfilled'  ? scoutResult.value   : { ok: false, error: scoutResult.reason?.message },
           demoMatch: demoResult.status  === 'fulfilled'  ? demoResult.value    : { ok: false, error: demoResult.reason?.message },
           trends:    trendsResult.status === 'fulfilled' ? trendsResult.value  : { ok: false, error: trendsResult.reason?.message },
+          chart:     chartResult.status === 'fulfilled'  ? chartResult.value   : { ok: false, error: chartResult.reason?.message },
         }
         console.log('✓ Morning agents complete')
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -2791,61 +3019,19 @@ Respond ONLY in JSON:
         }
 
         // Write Python script to temp file to avoid quoting issues
-        const tmpScript = path.join(require('os').tmpdir(), 'momentum_essentia_' + Date.now() + '.py')
-        const escapedPath = filePath.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-        fs.writeFileSync(tmpScript, `
-import essentia.standard as es
-import json, sys
-
-try:
-    loader = es.MonoLoader(filename='${escapedPath}', sampleRate=44100)()
-    duration = len(loader) / 44100
-
-    rhythm = es.RhythmExtractor2013()(loader)
-    tempo = rhythm[0]
-
-    key_ext = es.KeyExtractor()(loader)
-    key = key_ext[0] + ' ' + key_ext[1]
-
-    loudness_ext = es.LoudnessEBUR128(startAtZero=True)
-    loudness_ext.configure()
-    loudness_val = es.LoudnessEBUR128()(loader, loader)
-    integrated = float(loudness_val[2]) if loudness_val else 0.0
-
-    rms = float(es.RMS()(loader))
-
-    print(json.dumps({
-        'tempo': round(float(tempo)),
-        'key': key,
-        'loudness': round(integrated, 1),
-        'energy': round(rms, 4),
-        'duration': round(duration, 1)
-    }))
-except Exception as e:
-    print(json.dumps({'error': str(e)}), file=sys.stderr)
-    sys.exit(1)
-`)
-
-        const ESSENTIA_PYTHON = '/Users/remo/.pyenv/versions/3.11.9/bin/python3'
+        const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
+        const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
         let features
-        try {
-          const result = execSync(`"${ESSENTIA_PYTHON}" "${tmpScript}"`, { encoding: 'utf8', timeout: 60000 })
-          features = JSON.parse(result.trim())
-        } finally {
-          try { fs.unlinkSync(tmpScript) } catch(e) {}
-        }
-
-        if (features.error) throw new Error('Essentia: ' + features.error)
+        const rawResult = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${filePath}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 })
+        const rawFeat = JSON.parse(rawResult.trim())
+        // Normalize for reference_tracks schema
+        features = { ...rawFeat, tempo: rawFeat.bpm, key: rawFeat.key + ' ' + rawFeat.scale, loudness: rawFeat.loudness_lufs, duration: rawFeat.duration_seconds }
 
         // Upsert to reference_tracks
-        const SUPABASE_URL = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
-        const ANON_KEY = 'sb_publishable_4yMwlAo6OLpgGPN_6yWvIw_g5bnjnWS'
-        const sbH = { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json' }
-
         const spotifyId = 'local_' + body.filename.replace(/[^a-z0-9]/gi, '_')
         await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
           method: 'POST',
-          headers: { ...sbH, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+          headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
           body: JSON.stringify({
             spotify_id: spotifyId,
             title: body.filename.replace(/\.(wav|aiff|aif|mp3|flac|m4a)$/i, ''),
@@ -2853,17 +3039,27 @@ except Exception as e:
             genre_tags: [],
             tempo: features.tempo,
             key: features.key,
-            energy: features.energy,
-            loudness: features.loudness,
+            scale: rawFeat.scale,
+            key_strength: rawFeat.key_strength,
+            energy: rawFeat.energy,
+            danceability: rawFeat.danceability,
+            valence: rawFeat.valence,
+            acousticness: rawFeat.acousticness,
+            brightness: rawFeat.brightness,
+            bass_energy: rawFeat.bass_energy,
+            bpm_confidence: rawFeat.bpm_confidence,
+            loudness: rawFeat.loudness_lufs,
+            loudness_range: rawFeat.loudness_range,
+            duration_seconds: rawFeat.duration_seconds,
             popularity: null,
             collection_name: 'my_productions',
             approved: true
           })
         })
 
-        console.log(`✓ Audio analyzed: ${body.filename} — ${features.tempo}bpm ${features.key} ${features.loudness}LUFS`)
+        console.log(`✓ Audio analyzed: ${body.filename} — ${features.tempo}bpm ${features.key} nrg:${rawFeat.energy} dnc:${rawFeat.danceability} ${rawFeat.loudness_lufs}LUFS`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, ...features }))
+        res.end(JSON.stringify({ ok: true, ...rawFeat, tempo: features.tempo, key: features.key }))
       } catch(e) {
         console.warn('analyze-audio-features error:', e.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })
@@ -3542,6 +3738,14 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('  Submissions: ', SUBMISSIONS_DIR)
   console.log('  Audio:        http://localhost:4242/audio/')
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  exec('/opt/homebrew/bin/python3.11 -c "import essentia"', (err) => {
+    if (err) console.warn('⚠ Essentia not available — BPM/key analysis disabled')
+    else console.log('✓ Essentia ready')
+  })
+  // Check reference_tracks has all signal columns — run this SQL if not:
+  fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=scale,key_strength,valence,acousticness,instrumentalness,duration_seconds&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing columns — run SQL:\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS scale text;\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS key_strength float;\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS valence float;\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS acousticness float;\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS instrumentalness float;\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS duration_seconds float;') })
+    .catch(() => {})
 })
 
 // ── File watcher ──────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 <script>
   import { supabase } from './supabase.js'
+  import { buildMozartContext } from './mozartContext.js'
 
   let dumpText = $state('')
   let dumpDragging = $state(null)
@@ -142,14 +143,7 @@
 
       const catList = existingCategories.join(', ')
 
-      const [{ data: ownProdsImg }, { data: refEntriesImg }] = await Promise.all([
-        supabase.from('brain_knowledge').select('title,content').eq('active', true).eq('category', 'own_production').order('created_at', { ascending: false }).limit(5),
-        supabase.from('brain_knowledge').select('title,content').eq('active', true).ilike('category', 'reference_%').order('created_at', { ascending: false }).limit(5)
-      ])
-      const imgSysParts = []
-      if (ownProdsImg?.length) imgSysParts.push('## MY PRODUCTIONS\n' + ownProdsImg.map(p => `- ${p.title}: ${p.content}`).join('\n'))
-      if (refEntriesImg?.length) imgSysParts.push('## CURRENT REFERENCES\n' + refEntriesImg.map(r => `- ${r.title}: ${r.content}`).join('\n'))
-      const imgSystemContext = imgSysParts.join('\n\n')
+      const imgSystemContext = await buildMozartContext(supabase)
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -363,15 +357,8 @@ Return ONLY JSON:
 
     processing = true
     try {
-      // Fetch context: own productions + current references for system prompt
-      const [{ data: ownProds }, { data: refEntries }] = await Promise.all([
-        supabase.from('brain_knowledge').select('title,content').eq('active', true).eq('category', 'own_production').order('created_at', { ascending: false }).limit(5),
-        supabase.from('brain_knowledge').select('title,content').eq('active', true).ilike('category', 'reference_%').order('created_at', { ascending: false }).limit(5)
-      ])
-      const systemParts = []
-      if (ownProds?.length) systemParts.push('## MY PRODUCTIONS\n' + ownProds.map(p => `- ${p.title}: ${p.content}`).join('\n'))
-      if (refEntries?.length) systemParts.push('## CURRENT REFERENCES\n' + refEntries.map(r => `- ${r.title}: ${r.content}`).join('\n'))
-      const systemContext = systemParts.join('\n\n')
+      // Full signal context for system prompt
+      const systemContext = await buildMozartContext(supabase)
 
       let prompt = ''
 
@@ -580,6 +567,15 @@ Return ONLY JSON (single item array):
       genre_tags: t.genres,
       tempo: t.bpm,
       key: t.key,
+      energy: t.energy,
+      danceability: t.danceability,
+      valence: t.valence,
+      acousticness: t.acousticness,
+      instrumentalness: t.instrumentalness,
+      loudness: t.loudness,
+      scale: t.scale,
+      key_strength: t.key_strength,
+      duration_seconds: t.duration_seconds,
       popularity: t.popularity,
       artist_popularity: t.artist_popularity,
       artist_followers: t.artist_followers,
@@ -588,10 +584,13 @@ Return ONLY JSON (single item array):
       approved: true
     }, { onConflict: 'spotify_id' })
 
+    const keyLabel = t.key ? t.key + (t.scale ? ' ' + t.scale : '') : 'unknown'
     const content = [
       `Artist: ${t.artist}`,
       `Album: ${t.album} (${t.release_date?.slice(0,4) || '?'})`,
-      t.bpm ? `BPM: ${t.bpm} · Key: ${t.key || 'unknown'}` : null,
+      t.bpm ? `BPM: ${t.bpm} · Key: ${keyLabel}${t.energy != null ? ' · Energy: ' + t.energy : ''}${t.danceability != null ? ' · Dance: ' + t.danceability : ''}` : null,
+      t.valence != null ? `Valence: ${t.valence} · Acousticness: ${t.acousticness ?? '?'} · Instrumental: ${t.instrumentalness ?? '?'}` : null,
+      t.loudness != null ? `Loudness: ${t.loudness}LUFS` : null,
       `Popularity: ${t.popularity}/100`,
       t.artist_followers ? `Artist followers: ${t.artist_followers?.toLocaleString()}` : null,
       `Genres: ${(t.genres||[]).slice(0,4).join(', ')}`,
@@ -661,6 +660,27 @@ Return ONLY JSON (single item array):
   async function deleteEntry(id) {
     await supabase.from('brain_knowledge').delete().eq('id', id)
     entries = entries.filter(e => e.id !== id)
+  }
+
+  function parseRefContent(content) {
+    const out = {}
+    for (const line of (content || '').split('\n')) {
+      const bpmM = line.match(/BPM:\s*([\d.]+)/)
+      if (bpmM) out.bpm = bpmM[1]
+      const keyM = line.match(/Key:\s*([A-G][#b]?\s*(?:major|minor))/)
+      if (keyM) out.key = keyM[1]
+      const engM = line.match(/Energy:\s*([\d.]+)/)
+      if (engM) out.energy = engM[1]
+      const dncM = line.match(/Dance:\s*([\d.]+)/)
+      if (dncM) out.danceability = dncM[1]
+      const valM = line.match(/Valence:\s*([\d.]+)/)
+      if (valM) out.valence = valM[1]
+      const lufsM = line.match(/Loudness:\s*([-\d.]+)LUFS/)
+      if (lufsM) out.loudness = lufsM[1]
+      const genM = line.match(/Genres:\s*(.+)/)
+      if (genM) out.genres = genM[1]
+    }
+    return out
   }
 
   loadEntries()
@@ -987,6 +1007,41 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
               </span>
               <button class="track-del-btn" onclick={() => deleteEntry(entry.id)}>×</button>
             </div>
+          {:else if entry.entry_type === 'reference_track' || entry.category?.startsWith('reference_')}
+            {@const rc = parseRefContent(entry.content)}
+            <div class="brain-entry brain-ref-entry {entry.active ? '' : 'inactive'}">
+              <div class="brain-entry-header">
+                <button
+                  class="brain-toggle {entry.active ? 'on' : ''}"
+                  onclick={() => toggleEntry(entry.id, entry.active)}
+                  title={entry.active ? 'Active' : 'Paused'}
+                >{entry.active ? '◉' : '○'}</button>
+                <div class="brain-ref-body">
+                  <span class="brain-ref-title">{entry.title}</span>
+                  {#if rc.bpm || rc.key || rc.energy || rc.danceability || rc.loudness}
+                    <span class="brain-ref-stats">
+                      {rc.bpm ? rc.bpm + 'bpm' : ''}
+                      {rc.key ? ' · ' + rc.key : ''}
+                      {rc.energy ? ' · nrg ' + rc.energy : ''}
+                      {rc.danceability ? ' · dnc ' + rc.danceability : ''}
+                      {rc.valence ? ' · val ' + rc.valence : ''}
+                      {rc.loudness ? ' · ' + rc.loudness + 'LUFS' : ''}
+                    </span>
+                  {/if}
+                  {#if rc.genres}
+                    <div class="brain-ref-genres">
+                      {#each rc.genres.split(',').slice(0,2).map(g => g.trim()).filter(Boolean) as g}
+                        <span class="brain-genre-pill">{g}</span>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+                {#if entry.source_url}
+                  <a class="brain-sp-link" href={entry.source_url} target="_blank" title="Open in Spotify">♫</a>
+                {/if}
+                <button class="brain-del" onclick={() => deleteEntry(entry.id)}>×</button>
+              </div>
+            </div>
           {:else}
             <div class="brain-entry {entry.active ? '' : 'inactive'}">
               <div class="brain-entry-header">
@@ -1082,10 +1137,19 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
                 <span class="track-artist-title">{track.artist} — {track.title}</span>
                 <span class="track-stats">
                   {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
-                  {track.key ? ' · ' + track.key : ''}
-                  {track.energy != null ? ' · energy ' + track.energy?.toFixed(2) : ''}
-                  {track.popularity != null ? ' · ' + track.popularity + '/100' : ''}
+                  {track.key ? ' · ' + track.key + (track.scale ? ' ' + track.scale : '') : ''}
+                  {track.energy != null ? ' · nrg ' + Number(track.energy).toFixed(2) : ''}
+                  {track.danceability != null ? ' · dnc ' + Number(track.danceability).toFixed(2) : ''}
+                  {track.valence != null ? ' · val ' + Number(track.valence).toFixed(2) : ''}
+                  {track.loudness != null ? ' · ' + track.loudness + 'LUFS' : ''}
                 </span>
+                {#if track.genre_tags?.length}
+                  <div class="track-genres-row">
+                    {#each (track.genre_tags||[]).slice(0,2) as g}
+                      <span class="brain-genre-pill">{g}</span>
+                    {/each}
+                  </div>
+                {/if}
               </div>
               <button class="track-dl-btn"
                 title="Copy Spotify link"
@@ -1676,6 +1740,16 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
     font-size: 8px;
     color: #444;
   }
+
+  .track-genres-row { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+
+  .brain-ref-entry .brain-entry-header { align-items: flex-start; }
+  .brain-ref-body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .brain-ref-title { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: #cec9c1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brain-ref-stats { font-family: 'Space Mono', monospace; font-size: 8px; color: #444; }
+  .brain-ref-genres { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 1px; }
+  .brain-sp-link { color: rgba(201,168,76,.6); font-size: 10px; text-decoration: none; flex-shrink: 0; padding: 0 4px; }
+  .brain-sp-link:hover { color: #c9a84c; }
 
   .track-play-btn {
     color: #4caf82;

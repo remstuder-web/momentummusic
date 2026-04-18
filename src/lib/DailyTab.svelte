@@ -1,5 +1,6 @@
 <script>
   import { supabase } from './supabase.js'
+  import { buildMozartContext } from './mozartContext.js'
   import { onMount } from 'svelte'
 
   const today = new Date().toDateString()
@@ -961,36 +962,7 @@
     if (!apiKey) { aiMessages = [...aiMessages, { role: 'assistant', content: 'No API key set — add it in Settings ⚙.' }]; aiLoading = false; return }
     const openTasks = (state.tasks||[]).filter(t=>!t.done).slice(0,6).map(t=>t.label+(t.project?' ['+t.project+']':'')).join(', ')
 
-    const [{ data: corrData }, { data: knowData }, { data: qData }, { data: ownProds }, { data: refEntries }, { data: goalsData }] = await Promise.all([
-      supabase.from('brain_knowledge').select('title,content').eq('active', true).eq('category', 'correction').order('created_at', { ascending: false }).limit(3),
-      supabase.from('brain_knowledge').select('category,title,content').eq('active', true).in('category', ['market_knowledge','artist_breaking','genre_strategy']).limit(5),
-      supabase.from('brain_knowledge').select('content').eq('active', true).eq('category', 'question').order('created_at', { ascending: false }).limit(3),
-      supabase.from('brain_knowledge').select('title,content').eq('active', true).eq('category', 'own_production').order('created_at', { ascending: false }).limit(5),
-      supabase.from('brain_knowledge').select('title,content').eq('active', true).ilike('category', 'reference_%').order('created_at', { ascending: false }).limit(5),
-      supabase.from('brain_knowledge').select('title,content').eq('active', true).eq('category', 'goal').order('created_at', { ascending: false }).limit(5),
-    ])
-
-    const corrections = corrData?.length
-      ? corrData.map(c => `- ${c.title}: ${c.content}`).join('\n')
-      : ''
-    const knowledge = knowData?.length
-      ? knowData.map(k => `[${k.category}] ${k.title}: ${k.content}`).join('\n')
-      : ''
-    const questions = qData?.length
-      ? qData.map(q => `- ${q.content}`).join('\n')
-      : ''
-    const ownProdsText = ownProds?.length
-      ? ownProds.map(p => `- ${p.title}: ${p.content}`).join('\n')
-      : ''
-    const refEntriesText = refEntries?.length
-      ? refEntries.map(r => `- ${r.title}: ${r.content}`).join('\n')
-      : ''
-    const goalsText = goalsData?.length
-      ? goalsData.map(g => {
-          try { const d = JSON.parse(g.content); return `- ${g.title}: target ${d.target} ${d.unit} by ${d.deadline}` }
-          catch { return `- ${g.title}` }
-        }).join('\n')
-      : ''
+    const mozartContext = await buildMozartContext(supabase)
 
     const system = `You are this producer's co-intelligence.
 A sharp, direct thinking partner for music production decisions.
@@ -1003,7 +975,7 @@ CHARACTER:
 - For recommendations note: ✓ [why this works] / ✗ [what speaks against it]
 - When corrected, acknowledge it and update your reasoning
 
-${corrections ? 'PAST CORRECTIONS — learn from these:\n' + corrections + '\n' : ''}${knowledge ? 'PRODUCER BRAIN:\n' + knowledge + '\n' : ''}${ownProdsText ? "REMO'S CURRENT PRODUCTIONS:\n" + ownProdsText + '\n' : ''}${refEntriesText ? 'CURRENT REFERENCES:\n' + refEntriesText + '\n' : ''}${goalsText ? "REMO'S ACTIVE GOALS:\n" + goalsText + '\n' : ''}${questions ? 'OPEN QUESTIONS:\n' + questions : ''}`
+${mozartContext}`
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',

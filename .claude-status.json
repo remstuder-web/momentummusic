@@ -1,19 +1,24 @@
 {
-  "updated": "2026-04-18T16:09:20Z",
-  "last_task": "watcher control section in settings panel",
+  "updated": "2026-04-18T17:15:00Z",
+  "last_task": "agent-chart-analysis-pipeline",
   "status": "done",
   "working": [
-    "settings panel shows WATCHER section on open",
-    "green dot + 'Watcher running' + Stop button when /ping responds",
-    "red dot + 'Watcher stopped' + terminal hint when /ping fails",
-    "Stop button calls POST /watcher-stop → runs pm2 stop momentum-watcher",
-    "/watcher-stop returns {ok:true, message:'Watcher stopping...'} before stopping",
-    "/ping returns {ok:true, time:...}"
+    "dotenv loaded at top of momentum-watcher.cjs",
+    "pm2 watcher online",
+    "/status returns anthropic: true, spotify: true",
+    "/analyze-spotify-track falls back to yt-dlp when preview_url is null",
+    "analyze_audio.py extracts 14 signals via Essentia",
+    "mozartContext.js shared across BrainTab, DailyTab, ProjectsTab",
+    "mozartContext includes hit benchmark (avg bpm/energy/danceability/valence/loudness)",
+    "mozartContext includes daily_chart tracks section",
+    "/agent-chart-analysis: searches Spotify year:YYYY, Essentia analysis, saves to reference_tracks daily_chart, Claude assessment",
+    "/run-morning-agents includes chart analysis step"
   ],
   "broken": [],
   "partial": [
-    "pm2 startup launchd still needs manual sudo to enable reboot persistence"
+    "pm2 startup launchd still needs manual sudo to enable reboot persistence",
+    "reference_tracks table missing new columns (scale, key_strength, loudness, valence, acousticness, brightness, bass_energy, bpm_confidence, loudness_range, duration_seconds) — run ALTER TABLE SQL shown in watcher startup log"
   ],
-  "next": "User must run: sudo env PATH=$PATH:/opt/homebrew/Cellar/node/25.8.2/bin /opt/homebrew/lib/node_modules/pm2/bin/pm2 startup launchd -u remo --hp /Users/remo",
-  "notes": "Watcher control UI complete. Stop works via pm2. Start is intentionally a terminal hint (watcher can't restart itself when stopped)."
+  "next": "Run ALTER TABLE SQL in Supabase to add missing reference_tracks columns — SQL is logged at watcher startup",
+  "notes": "Spotify browse endpoints (new-releases, featured-playlists, playlists) all return 403 with client credentials — needs extended quota mode. Use search?q=year:YEAR&type=track&limit=10 (no market param) instead. Loudness LUFS reads -70 for 30s clips due to Essentia LoudnessEBUR128 needing longer audio — known limitation."
 }

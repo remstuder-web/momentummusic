@@ -1,5 +1,41 @@
 # CHANGES
 
+## [2026-04-18] momentum-watcher.cjs + analyze_audio.py + mozartContext.js + CLAUDE.md — DONE
+TASK: agent-chart-analysis endpoint + Spotify search fix
+WHAT: (1) Created /agent-chart-analysis — searches Spotify year:YYYY, downloads 30s clips via yt-dlp, runs Essentia via analyze_audio.py, upserts to reference_tracks collection_name=daily_chart, generates Claude Haiku gap assessment; (2) Fixed Spotify 403 — browse/playlist endpoints need extended quota; search works without market param; (3) Updated CLAUDE.md with endpoint docs and Spotify browse limitation; (4) analyze_audio.py standalone script handles all 14 signals
+RESULT: works — 3 tracks analyzed+stored, Claude assessment generated with gap flags
+BLOCKERS: none
+
+## [2026-04-18] momentum-watcher.cjs + BrainTab.svelte + DailyTab.svelte + ProjectsTab.svelte + mozartContext.js — DONE
+TASK: full Essentia signal set + Mozart context upgrade
+WHAT: (1) All 3 Essentia endpoints now extract: bpm, key, scale, key_strength, energy, danceability, valence, acousticness, instrumentalness, loudness, duration_seconds; (2) Created src/lib/mozartContext.js — shared buildMozartContext(supabase) used by all 3 tabs; (3) BrainTab/DailyTab/ProjectsTab Claude calls now get reference_tracks with full signal set; (4) BrainTab track rows show key+scale+valence; (5) Startup warning logs SQL needed for missing columns
+RESULT: works — /analyze-spotify-track returns all 11 signals; loudness null on 30s clips (expected); column SQL shown in next step
+BLOCKERS: ALTER TABLE reference_tracks needs to be run manually in Supabase (SQL shown in watcher startup log)
+
+## [2026-04-18] momentum-watcher.cjs + BrainTab.svelte — DONE
+TASK: danceability normalization, genres fallback, reference track display
+WHAT: (1) danceability normalized to 0-1 (÷3); (2) genres fallback via related-artists when empty, adds genres_source field; (3) reference track rows show nrg/dnc/LUFS + genre pills; (4) brain_knowledge reference entries show structured Artist·BPM·Key·Genres with Spotify link; (5) saveSpotifyPreview saves energy/danceability/loudness to reference_tracks
+RESULT: works — watcher online, /ping ok
+BLOCKERS: reference_tracks table needs danceability+loudness columns for new fields to persist
+
+## [2026-04-18] momentum-watcher.cjs — DONE
+TASK: fix Python path for Essentia
+WHAT: replaced all 5 ESSENTIA_PYTHON pyenv paths with /opt/homebrew/bin/python3.11; added exec import; added startup check that logs '✓ Essentia ready' or warns if missing
+RESULT: works — startup log shows '✓ Essentia ready'
+BLOCKERS: none
+
+## [2026-04-18] momentum-watcher.cjs — DONE
+TASK: youtube fallback for analyze-spotify-track
+WHAT: when preview_url is null, use yt-dlp to grab first 30s from YouTube ("artist title official") for Essentia analysis; response includes preview_source: 'spotify'|'youtube'
+RESULT: works — watcher online, /ping ok
+BLOCKERS: none
+
+## [2026-04-18] momentum-watcher.cjs — DONE
+TASK: dotenv loading
+WHAT: added require('dotenv').config() at top of watcher; installed dotenv package
+RESULT: works — /status now shows anthropic: true
+BLOCKERS: none
+
 ## [2026-04-18] +page.svelte + momentum-watcher.cjs — DONE
 TASK: watcher control section in settings panel
 WHAT: added WATCHER section to settings panel — green/red dot + status + Stop button; added POST /watcher-stop endpoint to watcher (runs pm2 stop); stopped state shows terminal hint instead of Start button

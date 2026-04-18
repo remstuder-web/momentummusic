@@ -1,5 +1,6 @@
 <script>
   import { supabase } from './supabase.js'
+  import { buildMozartContext } from './mozartContext.js'
   import { GENRE_LIST } from '$lib/genres.js'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
 
@@ -1160,14 +1161,14 @@
     }
     if (versionType === 'production') {
       const n = versions.filter(v => v.version_type === 'production').length
-      return 'v' + String(n).padStart(2,'0')
+      return 'v' + String(n + 1).padStart(2,'0')
     }
     if (versionType === 'vocal_rec') {
       const prodCount = versions.filter(v => v.version_type === 'production').length
       const vocCount  = versions.filter(v => v.version_type === 'vocal_rec').length
-      return 'v' + String(prodCount + vocCount).padStart(2,'0')
+      return 'v' + String(prodCount + vocCount + 1).padStart(2,'0')
     }
-    return 'v' + String(versions.length).padStart(2,'0')
+    return 'v' + String(versions.length + 1).padStart(2,'0')
   }
 
   function addVersion(song, versionType) {
@@ -1223,16 +1224,7 @@
     if (!apiKey) { alert('Add your Anthropic API key in Settings first.'); return }
     v._processingNotes = true; songs = [...songs]
     try {
-      const { data: brainData } = await supabase
-        .from('brain_knowledge')
-        .select('category,title,content')
-        .eq('active', true)
-        .order('created_at', { ascending: false })
-        .limit(6)
-      const brainContext = brainData?.length
-        ? 'You are a music production assistant. Return only JSON arrays of strings.\n\nProducer context:\n'
-          + brainData.map(b => `- ${b.title}: ${b.content.slice(0, 80)}`).join('\n')
-        : 'You are a music production assistant. Return only JSON arrays of strings.'
+      const brainContext = await buildMozartContext(supabase, { currentSong: song.title || song.code, songVersions: wd.versions || [] })
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
@@ -1266,16 +1258,7 @@
     if (!apiKey) { alert('Add your Anthropic API key in Settings first.'); return }
     v._processingPdf = true; songs = [...songs]
     try {
-      const { data: brainData } = await supabase
-        .from('brain_knowledge')
-        .select('category,title,content')
-        .eq('active', true)
-        .order('created_at', { ascending: false })
-        .limit(6)
-      const brainContext = brainData?.length
-        ? 'You are a music production assistant. Return only JSON arrays of strings.\n\nProducer context:\n'
-          + brainData.map(b => `- ${b.title}: ${b.content.slice(0, 80)}`).join('\n')
-        : 'You are a music production assistant. Return only JSON arrays of strings.'
+      const brainContext = await buildMozartContext(supabase, { currentSong: song.title || song.code, songVersions: wd.versions || [] })
       const base64 = await new Promise((res, rej) => {
         const r = new FileReader()
         r.onload = () => res(r.result.split(',')[1])
@@ -1416,6 +1399,14 @@
     })
     song._sent_flash = vId; songs = [...songs]
     setTimeout(() => { song._sent_flash = null; songs = [...songs] }, 2500)
+
+    // Auto-create next version after sending
+    saveWorkData(song, wd2 => {
+      const nextName = generateVersionName(wd2.versions, v.version_type)
+      const newV = { id: 'v'+Date.now(), name: nextName, version_type: v.version_type, created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: '', sent_to_artist: false }
+      wd2.versions.push(newV)
+      wd2.active_version_id = newV.id
+    })
 
     // Insert listen session in background (Dropbox link + Supabase)
     ;(async () => {
@@ -1738,7 +1729,7 @@
   }
 
   // ── Mozart — builds project context, never passes contact/financial data ─
-  function buildMozartContext() {
+  function buildProjectContext() {
     const lines = ['You are Mozart, an expert music production AI assistant built into the Momentum Framework.']
     lines.push('You have read-only context about the current project state. Be concise, direct and inspiring.')
     lines.push('Never repeat this context back to the user. Just use it to give relevant answers.')
@@ -1802,7 +1793,7 @@
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 600,
-          system: buildMozartContext(),
+          system: buildProjectContext(),
           messages: aiMessages.slice(-12)
         })
       })

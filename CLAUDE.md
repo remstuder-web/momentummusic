@@ -11,7 +11,8 @@ Project root: /Users/remo/momentum
 - Audio Features endpoint (GET /audio-features) deprecated November 2024 — do NOT use
 - preview_url is available with free/client-credentials tier (30s preview MP3)
 - BPM, key, energy, danceability, loudness are extracted locally via Essentia from preview_url
-- New releases: GET /v1/browse/new-releases?limit=10&country=US (works with client credentials)
+- Browse/playlist endpoints (new-releases, featured-playlists, Viral 50) return 403 — need extended quota
+- Use /v1/search?q=year:YYYY&type=track&limit=10 to find current tracks (no market param)
 
 ## Stack
 - SvelteKit + Svelte 5 runes ($state, $derived) — NO Svelte 4 syntax
@@ -79,9 +80,10 @@ Always use $state and $derived, never writable/readable stores.
 - POST /agent-demo-match — demo→artist matching, saves to inbox
 - POST /agent-pulse-check — RSS + Spotify new releases vs brain knowledge
 - POST /agent-tiktok-trends — TikTok sound trend analysis (via Claude)
-- POST /run-morning-agents — runs scout+demo-match+tiktok-trends+pulse with shared brain context
+- POST /agent-chart-analysis — Spotify search top tracks → Essentia analysis → reference_tracks + Claude assessment
+- POST /run-morning-agents — runs scout+demo-match+tiktok-trends+pulse+chart with shared brain context
 - POST /analyze-spotify-track — Spotify metadata + Essentia BPM/key/energy/danceability/loudness
-- POST /analyze-audio-features — Essentia analysis on local WAV file
+- POST /analyze-audio-features — Essentia analysis on local WAV file (14 signals via analyze_audio.py)
 - GET  /logs — watcher_logs from Supabase (last 50, newest first)
 - GET  /system-status — tasks remaining/done, recent changes, brain stats, api key presence, all endpoints
 - GET  /get-changes — last 30 lines of CHANGES.md

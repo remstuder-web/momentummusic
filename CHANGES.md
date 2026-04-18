@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] BrainTab.svelte + momentum-watcher.cjs — DONE
+TASK: screenshot-delete + spectral-fields-passthrough
+WHAT: (1) /capture-screen now uses Prefer:return=representation, returns saved_entry_id; BrainTab stores captureEntryId, shows "Saved to Brain · category · delete" note below result; delete link calls deleteEntry() and clears result panel; (2) /analyze-spotify-track: all new Essentia fields (spectral_centroid/contrast/flux, mfcc_mean, bpm_confidence, brightness, bass_energy) collected into esExtended{} and included in response; (3) /analyze-audio: same fields added to response (camelot, loudness_lufs, brightness, bass_energy, bpm_confidence, spectral_centroid/contrast/flux, mfcc_mean)
+RESULT: works — watcher restarted ok
+BLOCKERS: none
+
 ## [2026-04-18] DailyTab.svelte + BrainTab.svelte + momentum-watcher.cjs + analyze_audio.py — DONE
 TASK: helper-search + full-essentia + capture-mixing + camelot-everywhere
 WHAT: (1) Helper search: replaced function-based approach with inline {@const isYoutube/isSpotify/isGemini/isDeepseek} — now works for any URL containing those domains; (2) analyze_audio.py: full rewrite with frame-based spectral features (centroid, flux, rolloff, contrast), MFCCs (13 coefficients), all wrapped in try/except so any failure returns null; (3) /capture-screen: detects DAW context from keywords (mix/daw/session) + analysis text, fires second Haiku call for 3 mixing suggestions, returns mixing_suggestions array; (4) BrainTab: MIXING NOTES section shown below capture result; (5) reference_tracks upsert now includes spectral_centroid, spectral_contrast, spectral_flux, mfcc_mean; (6) startup warns if new columns missing

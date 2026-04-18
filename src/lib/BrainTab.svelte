@@ -8,6 +8,7 @@
   let capturing = $state(false)
   let captureResult = $state(null)
   let captureMixingSuggestions = $state([])
+  let captureEntryId = $state(null)
   let captureContext = $state('')
   let captureCategory = $state('')
   let entries = $state([])
@@ -117,6 +118,7 @@
     capturing = true
     captureResult = null
     captureMixingSuggestions = []
+    captureEntryId = null
     try {
       await new Promise(r => setTimeout(r, 3000))
       const res = await fetch('http://localhost:4242/capture-screen', {
@@ -128,6 +130,7 @@
       if (!d.ok) throw new Error(d.error)
       captureResult = d.analysis
       captureMixingSuggestions = d.mixing_suggestions || []
+      captureEntryId = d.saved_entry_id || null
       await loadEntries()
     } catch(e) {
       alert('Screen capture failed: ' + e.message + '\nMake sure watcher is running.')
@@ -838,6 +841,12 @@ Return ONLY JSON (single item array):
               <div class="brain-mixing-suggestion">• {s}</div>
             {/each}
           {/if}
+          <div class="brain-capture-meta">
+            Saved to Brain · {captureCategory}
+            {#if captureEntryId}
+              · <button class="brain-capture-delete-link" onclick={async () => { await deleteEntry(captureEntryId); captureResult = null; captureMixingSuggestions = []; captureEntryId = null }}>delete</button>
+            {/if}
+          </div>
         </div>
       {/if}
     </div>
@@ -1989,6 +1998,9 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
   .brain-screen-controls { display: flex; gap: 8px; margin-bottom: 8px; }
   .brain-capture-result { margin-top: 8px; padding: 8px 10px; background: #0d0d0d; border: 1px solid #252525; border-radius: 3px; }
   .brain-mixing-suggestion { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300; color: #cec9c1; padding: 3px 0; }
+  .brain-capture-meta { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; margin-top: 8px; padding-top: 6px; border-top: 1px solid #1a1a1a; }
+  .brain-capture-delete-link { background: none; border: none; padding: 0; font-family: 'Space Mono', monospace; font-size: 10px; color: #666; cursor: pointer; text-decoration: underline; }
+  .brain-capture-delete-link:hover { color: #e74c3c; }
 
   /* Brain search */
   .brain-search-row { display: flex; align-items: center; gap: 6px; margin: 8px 0 6px; }

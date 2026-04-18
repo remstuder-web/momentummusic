@@ -2120,6 +2120,7 @@ ${context}` }]
         }
 
         let camelot = null
+        const esExtended = {}
         if (audioReady) {
           try {
             const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
@@ -2131,6 +2132,15 @@ ${context}` }]
             loudness = feat.loudness_lufs; valence = feat.valence
             acousticness = feat.acousticness; duration_seconds = feat.duration_seconds
             camelot = feat.camelot || null
+            Object.assign(esExtended, {
+              spectral_centroid: feat.spectral_centroid || null,
+              spectral_contrast: feat.spectral_contrast || null,
+              spectral_flux: feat.spectral_flux || null,
+              mfcc_mean: feat.mfcc_mean || null,
+              bpm_confidence: feat.bpm_confidence || null,
+              brightness: feat.brightness || null,
+              bass_energy: feat.bass_energy || null,
+            })
             console.log(`  ✓ Essentia (${preview_source}): ${bpm}bpm ${key} ${scale} (${camelot}) nrg:${energy} dnc:${danceability} val:${valence} lufs:${loudness}`)
           } catch(e) {
             console.warn('  Essentia analysis failed:', e.message.slice(0, 50))
@@ -2166,7 +2176,14 @@ ${context}` }]
           duration_seconds,
           preview_url,
           preview_source,
-          camelot
+          camelot,
+          bpm_confidence: esExtended.bpm_confidence || null,
+          brightness: esExtended.brightness || null,
+          bass_energy: esExtended.bass_energy || null,
+          spectral_centroid: esExtended.spectral_centroid || null,
+          spectral_contrast: esExtended.spectral_contrast || null,
+          spectral_flux: esExtended.spectral_flux || null,
+          mfcc_mean: esExtended.mfcc_mean || null,
         }))
       } catch(err) {
         logError('analyze-spotify-track', err.message)
@@ -2751,12 +2768,21 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
           bpm, bpmHalf, bpmDouble, key,
           scale: esFeatures.scale || null,
           key_strength: esFeatures.key_strength || null,
+          camelot: esFeatures.camelot || null,
           energy: esFeatures.energy || null,
           danceability: esFeatures.danceability || null,
           valence: esFeatures.valence || null,
           acousticness: esFeatures.acousticness || null,
           instrumentalness: esFeatures.instrumentalness || null,
-          loudness: esFeatures.loudness || null,
+          loudness_lufs: esFeatures.loudness_lufs || null,
+          loudness: esFeatures.loudness_lufs || null,
+          brightness: esFeatures.brightness || null,
+          bass_energy: esFeatures.bass_energy || null,
+          bpm_confidence: esFeatures.bpm_confidence || null,
+          spectral_centroid: esFeatures.spectral_centroid || null,
+          spectral_contrast: esFeatures.spectral_contrast || null,
+          spectral_flux: esFeatures.spectral_flux || null,
+          mfcc_mean: esFeatures.mfcc_mean || null,
           duration_seconds: esFeatures.duration_seconds || null
         }))
       } catch(err) {
@@ -3498,10 +3524,11 @@ Format: use ALL CAPS section labels, bullet points with •` }
           ? analysis + '\n\nMIXING NOTES:\n' + mixing_suggestions.map(s => '• ' + s).join('\n')
           : analysis
 
+        let saved_entry_id = null
         if (category && analysis) {
-          await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+          const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
             method: 'POST',
-            headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            headers: { ...sbHeaders, 'Prefer': 'return=representation' },
             body: JSON.stringify({
               category,
               title: `Screenshot ${new Date().toLocaleString('de-CH')}`,
@@ -3510,11 +3537,13 @@ Format: use ALL CAPS section labels, bullet points with •` }
               active: true
             })
           })
+          const inserted = await insertRes.json()
+          saved_entry_id = Array.isArray(inserted) ? (inserted[0]?.id || null) : null
         }
 
         console.log(`✓ capture-screen: ${inputT + outputT} tokens${mixing_suggestions.length ? ' + ' + mixing_suggestions.length + ' mixing suggestions' : ''}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, analysis, mixing_suggestions, tokens: inputT + outputT }))
+        res.end(JSON.stringify({ ok: true, analysis, mixing_suggestions, saved_entry_id, tokens: inputT + outputT }))
       } catch(e) {
         if (fs.existsSync(tmpPath)) { try { fs.unlinkSync(tmpPath) } catch(e2) {} }
         logError('capture-screen', e.message)

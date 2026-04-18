@@ -1,20 +1,16 @@
 {
-  "updated": "2026-04-18T21:00:00Z",
-  "last_task": "market-intelligence-camelot",
+  "updated": "2026-04-18T21:30:00Z",
+  "last_task": "five-fixes-helper-essentia-capture",
   "status": "done",
   "working": [
-    "runAgentScout: fetches Pitchfork/FACT/Hypebot RSS (5 headlines each), Spotify new-releases?country=DE, watched artists last 7 days",
-    "Scout prompt: 'do not invent anything outside this data' — real data injected as sections",
-    "Scout saves findings to brain_knowledge category:market_knowledge confidence:weak",
-    "Chart analysis: limit=20, filter by spotify_id AND title+artist, take top 3",
-    "camelot added to analyze_audio.py — CAMELOT dict maps key+scale to Camelot code (8A, 8B etc)",
-    "camelot field in analyze-spotify-track response and reference_tracks upsert",
-    "mozartContext.js formatTrack/formatVersion: shows 'Am (8A)' format",
-    "BrainTab spotifyPreview: shows camelot after key in stats line",
-    "No-bold FORMATTING rule added to all 6 agent prompts: morning-briefing, agent-scout, agent-pulse-check, agent-demo-match, agent-tiktok-trends, agent-chart-analysis, agent-feedback"
+    "FIX 1: Helper search — replaced getHelperSearchConfig() with inline {@const isYoutube/isSpotify/isGemini/isDeepseek} — works for any matching URL",
+    "FIX 2: captureCategory default already done (was '' with loadCategories auto-set)",
+    "FIX 3: analyze_audio.py full rewrite — frame-based spectral (centroid/flux/rolloff/contrast), MFCCs 13 coefficients, all try/except returning null on failure",
+    "FIX 4: /capture-screen detects DAW context, fires Haiku for 3 mixing suggestions, returns mixing_suggestions[], BrainTab shows MIXING NOTES section",
+    "FIX 5: reference_tracks upsert includes spectral_centroid/contrast/flux/mfcc_mean; startup probes for new columns and warns if missing"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run SQL in Supabase: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text; — needed for camelot to persist in reference_tracks",
-  "notes": "Pitchfork returns JSON feed (feed.json). FACT and Hypebot return XML — parsed with <title> CDATA regex. fetchRssTitles() handles both formats. MIK CLI check was NOT implemented (dropped from spec in favor of Essentia-only camelot)."
+  "next": "Run SQL in Supabase for new columns:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, ADD COLUMN IF NOT EXISTS spectral_centroid float, ADD COLUMN IF NOT EXISTS spectral_contrast float, ADD COLUMN IF NOT EXISTS spectral_flux float, ADD COLUMN IF NOT EXISTS mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;",
+  "notes": "Helper search: inline detection triggers for youtube.com|youtu.be, spotify.com, gemini.google.com, deepseek.com. buildSearchUrl is an {@const} arrow fn inside {#each}. MFCCs: 13-coeff array stored as jsonb. Capture-screen mixing suggestions: Haiku call only fires when 'mix'/'daw'/'session' in context OR those keywords in the main analysis text."
 }

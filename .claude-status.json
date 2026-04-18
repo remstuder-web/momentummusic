@@ -1,22 +1,15 @@
 {
-  "updated": "2026-04-18T19:01:00Z",
-  "last_task": "task-29-32",
+  "updated": "2026-04-18T19:03:00Z",
+  "last_task": "chart-analysis-cleanup",
   "status": "done",
   "working": [
-    "TASK 29A: /save-audio calls full analyze_audio.py — returns analysis in response",
-    "TASK 29B: saveSongAudio() uses result.analysis directly — no separate /analyze-audio-features call",
-    "TASK 29C: version-analysis-row shows key+scale+(camelot) with Camelot notation",
-    "TASK 29D: VERSION PROGRESS table compares version vs hit benchmark (avg of reference_tracks)",
-    "TASK 29D: hit benchmark loaded in load() from reference_tracks, excludes my_productions",
-    "TASK 29D: shows BPM, LUFS, energy, dance columns with ↑/✓/– gap indicators, green/red coloring",
-    "TASK 32: WhatsApp detection regex updated to support both / and . date separators",
-    "TASK 32: /analyze-chat now returns entries+count+items (entries is primary, items is fallback alias)",
-    "TASK 32: isNewCategory flag computed server-side and normalized client-side",
-    "TASK 32: Approval panel shows green NEW badge for new categories",
-    "TASK 32: oninput updates isNewCategory live as user edits category field"
+    "/agent-chart-analysis: year:2026&market=DE Spotify search is sole track source",
+    "chart_source field returns 'spotify_top_2026'",
+    "no more 403 errors from editorial playlist attempts in watcher logs",
+    "last_watcher_error now only shows real errors"
   ],
   "broken": [],
   "partial": [],
   "next": "SQL still needed in Supabase:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, ADD COLUMN IF NOT EXISTS spectral_centroid float, ADD COLUMN IF NOT EXISTS spectral_contrast float, ADD COLUMN IF NOT EXISTS spectral_flux float, ADD COLUMN IF NOT EXISTS mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS review_date date;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS reviewed boolean DEFAULT false;",
-  "notes": "hitBenchmark in ProjectsTab loads once on mount from reference_tracks (excludes my_productions). VERSION PROGRESS table only shows when both hitBenchmark and activeVfilt.analysis are present. Gap arrows: ✓ = within tolerance, ↑ = close, – = far."
+  "notes": "Editorial playlists (Viral 50, Today's Top Hits, Global Top 50) all require Spotify Extended Quota Mode and return 403 without it. year:2026&market=DE search returns popular tracks reliably. sorted by popularity desc, top 3 not already in reference_tracks."
 }

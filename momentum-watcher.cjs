@@ -447,17 +447,17 @@ ${brainSummary}` }]
   }).catch(() => {})
 }
 
-// ── Agent: Chart Analysis — Viral 50 + Essentia + brain storage ──────────
+// ── Agent: Chart Analysis — Spotify year:2026 search + Essentia + brain storage ──
 async function runAgentChartAnalysis(apiKey) {
   const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
   const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
   const spToken = await getSpotifyToken()
   const spH = { 'Authorization': `Bearer ${spToken}` }
 
-  // 1. Fetch current popular tracks via search (Viral 50 requires Extended Quota Mode)
+  // 1. Fetch current popular tracks via year search (editorial playlists require Extended Quota Mode)
   const year = new Date().getFullYear()
   const searchRes = await fetch(
-    `https://api.spotify.com/v1/search?q=year:${year}&type=track&limit=20`,
+    `https://api.spotify.com/v1/search?q=year:${year}&type=track&limit=20&market=DE`,
     { headers: spH }
   )
   if (!searchRes.ok) throw new Error('Spotify track search failed: ' + searchRes.status)
@@ -618,7 +618,7 @@ async function runAgentChartAnalysis(apiKey) {
   }
 
   console.log(`✓ chart-analysis: ${analyzedTracks.length} tracks stored, assessment saved`)
-  return { ok: true, chart_source: 'spotify_search', tracks: analyzedTracks, assessment }
+  return { ok: true, chart_source: 'spotify_top_2026', tracks: analyzedTracks, assessment }
 }
 
 // ── Shared brain context fetch ────────────────────────────────────────────
@@ -2855,7 +2855,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
-  // ── POST /agent-chart-analysis — Viral 50 analysis + Essentia + brain storage ──
+  // ── POST /agent-chart-analysis — Spotify year:2026 search + Essentia + brain storage ──
   if (req.method === 'POST' && req.url === '/agent-chart-analysis') {
     const chunks = []; req.on('data', c => chunks.push(c))
     req.on('end', async () => {

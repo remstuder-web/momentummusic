@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] momentum-watcher.cjs — DONE
+TASK: chart-analysis cleanup
+WHAT: /agent-chart-analysis: removed all editorial playlist attempts (Viral 50, Today's Top Hits, Global Top 50 all 403 without Extended Quota); year:2026 Spotify search is now sole method with market=DE param; chart_source updated to 'spotify_top_2026'; comments cleaned up
+RESULT: works — watcher restarted ok
+BLOCKERS: none
+
 ## [2026-04-18] BrainTab.svelte + momentum-watcher.cjs — DONE
 TASK: screenshot-delete + spectral-fields-passthrough
 WHAT: (1) /capture-screen now uses Prefer:return=representation, returns saved_entry_id; BrainTab stores captureEntryId, shows "Saved to Brain · category · delete" note below result; delete link calls deleteEntry() and clears result panel; (2) /analyze-spotify-track: all new Essentia fields (spectral_centroid/contrast/flux, mfcc_mean, bpm_confidence, brightness, bass_energy) collected into esExtended{} and included in response; (3) /analyze-audio: same fields added to response (camelot, loudness_lufs, brightness, bass_energy, bpm_confidence, spectral_centroid/contrast/flux, mfcc_mean)

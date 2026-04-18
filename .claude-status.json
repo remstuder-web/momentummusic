@@ -1,15 +1,18 @@
 {
-  "updated": "2026-04-18T19:55:00Z",
-  "last_task": "agent-output-font-helper-search",
+  "updated": "2026-04-18T20:30:00Z",
+  "last_task": "saveSongAudio-drop-delete-later-versions",
   "status": "done",
   "working": [
-    "parseAgentOutput: agent-header (## headers), agent-bullet (- bullets + numbered), agent-gap ([GAP] lines), agent-ok ([OK] lines), agent-next-move (## Next Move/Step block), agent-p (plain paragraphs)",
-    "colorTagLine: [CONFIRMED]→agent-label-confirmed (gold), [TENSION]→agent-label-tension (orange), [OUTDATED]→agent-label-outdated (dim), [NEW]→agent-label-new (green)",
-    ".agent-output: DM Sans 14px weight 300 #cec9c1 line-height 1.65",
-    "Helper search: already using window.open(url, _blank) on Enter and → button — confirmed correct"
+    "saveSongAudio production block: drop on existing version now deletes all later versions of same type + their audio files",
+    "saveSongAudio mixing block: same fix applied",
+    "sendToArtist: isLatest guard prevents auto-creating new version when sending old version",
+    "ListenPage.svelte: pitch shift [−][0][+] via playbackRate, stars bg, feedback form",
+    "MP3 transcoding: transcodeToMp3() in watcher, fire-and-forget on /share-link",
+    "chart-analysis: year:2026 genre:pop limit=10 as sole search method",
+    "parseAgentOutput: agent-* CSS classes, DM Sans 14px 300"
   ],
   "broken": [],
   "partial": [],
   "next": "SQL needed in Supabase:\nALTER TABLE share_sessions ADD COLUMN IF NOT EXISTS mp3_path text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, spectral_centroid float, spectral_contrast float, spectral_flux float, mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text, review_date date, reviewed boolean DEFAULT false;",
-  "notes": "ao-tag-gap and ao-tag-ok span classes kept in CSS for any lingering references. New agent-label-* classes for [CONFIRMED]/[TENSION]/[OUTDATED]/[NEW] tags — these are inline spans, not line-level divs."
+  "notes": "Both production and mixing blocks now delete later versions on drop. Audio files deleted via POST /delete-audio. Versions filtered from wd.versions array."
 }

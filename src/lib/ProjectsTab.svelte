@@ -139,6 +139,12 @@
         if (existing) {
           existing.feedback = []; existing.notes = ''; existing.sent_to_artist = false; existing.audio_path = filename
           wd.active_version_id = existing.id
+          const existingIndex = wd.versions.indexOf(existing)
+          const toDelete = wd.versions.filter((v, i) => i > existingIndex && v.version_type === 'production')
+          for (const v of toDelete) {
+            if (v.audio_path) fetch(`http://localhost:4242/delete-audio?dir=production&filename=${encodeURIComponent(v.audio_path)}`, { method: 'POST' })
+          }
+          wd.versions = wd.versions.filter((v, i) => !(i > existingIndex && v.version_type === 'production'))
         } else {
           const v = { id: 'v'+Date.now(), name: vName, version_type: 'production', created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: filename, sent_to_artist: false }
           wd.versions.push(v); wd.active_version_id = v.id
@@ -154,6 +160,12 @@
         if (existing) {
           existing.feedback = []; existing.notes = ''; existing.sent_to_artist = false; existing.audio_path = filename
           wd.active_version_id = existing.id
+          const existingIndex = wd.versions.indexOf(existing)
+          const toDelete = wd.versions.filter((v, i) => i > existingIndex && v.version_type === 'mixing')
+          for (const v of toDelete) {
+            if (v.audio_path) fetch(`http://localhost:4242/delete-audio?dir=mixing&filename=${encodeURIComponent(v.audio_path)}`, { method: 'POST' })
+          }
+          wd.versions = wd.versions.filter((v, i) => !(i > existingIndex && v.version_type === 'mixing'))
         } else {
           const v = { id: 'v'+Date.now(), name: vName, version_type: 'mixing', created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: filename, sent_to_artist: false }
           wd.versions.push(v); wd.active_version_id = v.id

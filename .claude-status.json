@@ -1,18 +1,18 @@
 {
-  "updated": "2026-04-18T20:30:00Z",
-  "last_task": "saveSongAudio-drop-delete-later-versions",
+  "updated": "2026-04-18T21:30:00Z",
+  "last_task": "sendToArtist-fix-undo-system",
   "status": "done",
   "working": [
-    "saveSongAudio production block: drop on existing version now deletes all later versions of same type + their audio files",
-    "saveSongAudio mixing block: same fix applied",
-    "sendToArtist: isLatest guard prevents auto-creating new version when sending old version",
-    "ListenPage.svelte: pitch shift [−][0][+] via playbackRate, stars bg, feedback form",
-    "MP3 transcoding: transcodeToMp3() in watcher, fire-and-forget on /share-link",
-    "chart-analysis: year:2026 genre:pop limit=10 as sole search method",
-    "parseAgentOutput: agent-* CSS classes, DM Sans 14px 300"
+    "sendToArtist: isLatest+nextExists guard — only creates next version when at latest with no next; sending old version switches active to latest",
+    "ProjectsTab undoStack: pushUndo(description, songId, snapshot, file) — covers audio_drop, overwrite, addFeedback, toggleFeedback, deleteFeedback, sendToArtist",
+    "ProjectsTab undo button: undo-tab-btn in mid-header, disabled when stack empty, ⌘Z via svelte:window",
+    "BrainTab undoStack: pushBrainUndo/undoBrain — deleteEntry saves full snapshot, saveApproved saves inserted id",
+    "BrainTab undo button: undo-tab-btn next to BRAIN ENTRIES toggle",
+    "DailyTab undoStack: pushDailyUndo/undoDaily — addTask and delTask push before mutating",
+    "DailyTab undo button: undo-tab-btn in tasks-header"
   ],
   "broken": [],
   "partial": [],
   "next": "SQL needed in Supabase:\nALTER TABLE share_sessions ADD COLUMN IF NOT EXISTS mp3_path text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, spectral_centroid float, spectral_contrast float, spectral_flux float, mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text, review_date date, reviewed boolean DEFAULT false;",
-  "notes": "Both production and mixing blocks now delete later versions on drop. Audio files deleted via POST /delete-audio. Versions filtered from wd.versions array."
+  "notes": "All three tabs now have independent undo stacks. ProjectsTab uses work_data snapshot restore. BrainTab restores or deletes brain_knowledge rows. DailyTab restores state.tasks array."
 }

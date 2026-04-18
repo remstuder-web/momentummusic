@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] ProjectsTab + BrainTab + DailyTab — DONE
+TASK: sendToArtist fix + full undo system across all tabs
+WHAT: sendToArtist: correct isLatest/nextExists logic — only auto-creates next version when latest has no next; if sending old version switches active to latest. pushUndo refactored to 4-arg signature. undoFlash added. pushUndo before addFeedback/toggleFeedback/deleteFeedback/sendToArtist. BrainTab: undoStack + pushBrainUndo/undoBrain; deleteEntry saves snapshot; saveApproved saves inserted id for undo. DailyTab: undoStack + pushDailyUndo/undoDaily; delTask and addTask push before mutating. undo-tab-btn in all three tab headers.
+RESULT: works — 0 svelte errors
+BLOCKERS: none
+
 ## [2026-04-18] src/lib/DailyTab.svelte — DONE
 TASK: agent output font + helper search new tab
 WHAT: FIX 1 — rewrote parseAgentOutput to use agent-* CSS classes (agent-header, agent-bullet, agent-gap, agent-ok, agent-next-move, agent-p); updated .agent-output to DM Sans 14px 300 weight; added agent-label-confirmed/tension/outdated/new inline tag spans; replaced ao-* classes with agent-* throughout. FIX 2 — helper search already using window.open(_blank), confirmed correct

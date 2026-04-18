@@ -32,6 +32,7 @@
   let activeSongTab = $state({})
   let lyricsOpen = $state({})
   let undoStack = $state([])
+  let undoFlash = $state(false)
   const MAX_UNDO = 10
 
   function formatMinSec(sec) {
@@ -93,8 +94,8 @@
     } catch(e) {}
   }
 
-  function pushUndo(action) {
-    undoStack = [action, ...undoStack].slice(0, MAX_UNDO)
+  function pushUndo(description, songId, workDataSnapshot, audioFileToDelete = null) {
+    undoStack = [{ description, songId, workDataSnapshot, audioFileToDelete, timestamp: Date.now() }, ...undoStack].slice(0, MAX_UNDO)
   }
 
   async function undo() {
@@ -112,8 +113,10 @@
       fetch(
         `http://localhost:4242/delete-audio?dir=${dir}&filename=${encodeURIComponent(action.audioFileToDelete)}`,
         { method: 'POST' }
-      )
+      ).catch(() => {})
     }
+    undoFlash = true
+    setTimeout(() => undoFlash = false, 1500)
   }
 
   async function saveSongAudio(file, song, dir, overwrite = false) {
@@ -131,13 +134,7 @@
         const title = song.title ? '_' + sanitizeTitle(song.title) : ''
         const verPart = dir === 'mixing' ? `MIX_${activeV.name.replace('MIX_', '')}` : activeV.name
         const filename = `${code}${artist}${title}_${verPart}.${ext}`
-        pushUndo({
-          type: 'version_overwrite',
-          description: 'Overwrote ' + filename + ' on ' + (song.title || song.code),
-          songId: song.id,
-          workDataSnapshot: JSON.parse(JSON.stringify(wd)),
-          audioFileToDelete: filename
-        })
+        pushUndo('Overwrote ' + filename + ' on ' + (song.title || song.code), song.id, JSON.parse(JSON.stringify(wd)), filename)
         const buf = await file.arrayBuffer()
         const res = await fetch(
           `http://localhost:4242/save-audio?dir=${dir}&filename=${encodeURIComponent(filename)}&oldfile=${encodeURIComponent(oldFilename)}`,
@@ -182,13 +179,7 @@
 
     const oldfile = dir === 'mixing' ? (wd.mix_audio || '') : (wd.prod_audio || '')
 
-    pushUndo({
-      type: 'audio_drop',
-      description: 'Dropped ' + filename + ' on ' + (song.title || song.code),
-      songId: song.id,
-      workDataSnapshot: JSON.parse(JSON.stringify(wd)),
-      audioFileToDelete: filename
-    })
+    pushUndo('Dropped ' + filename + ' on ' + (song.title || song.code), song.id, JSON.parse(JSON.stringify(wd)), filename)
 
     const buf = await file.arrayBuffer()
     const res = await fetch(
@@ -1295,12 +1286,14 @@
   }
   function addFeedback(song, vId, text) {
     if (!text.trim()) return
+    pushUndo('Added feedback item', song.id, JSON.parse(JSON.stringify(workData(song))))
     saveWorkData(song, wd => {
       const v = wd.versions.find(v => v.id === vId)
       if (v) v.feedback.push({ id: 'f'+Date.now(), text: text.trim(), done: false })
     })
   }
   function toggleFeedback(song, vId, fId) {
+    pushUndo('Toggled feedback item', song.id, JSON.parse(JSON.stringify(workData(song))))
     saveWorkData(song, wd => {
       const v = wd.versions.find(v => v.id === vId)
       if (!v) return
@@ -1315,6 +1308,7 @@
     })
   }
   function deleteFeedback(song, vId, fId) {
+    pushUndo('Deleted feedback item', song.id, JSON.parse(JSON.stringify(workData(song))))
     saveWorkData(song, wd => {
       const v = wd.versions.find(v => v.id === vId)
       if (v) v.feedback = v.feedback.filter(f => f.id !== fId)
@@ -1507,6 +1501,8 @@
       document.execCommand('copy'); document.body.removeChild(ta)
     }
 
+    pushUndo('Sent ' + v.name + ' to artist', song.id, JSON.parse(JSON.stringify(workData(song))))
+
     saveWorkData(song, wd2 => {
       const v2 = wd2.versions.find(v => v.id === vId)
       if (v2) v2.sent_to_artist = true
@@ -1514,16 +1510,25 @@
     song._sent_flash = vId; songs = [...songs]
     setTimeout(() => { song._sent_flash = null; songs = [...songs] }, 2500)
 
-    // Auto-create next version only when sending the LATEST version of this type
-    saveWorkData(song, wd2 => {
-      const versionsOfType = wd2.versions.filter(v2 => v2.version_type === v.version_type)
-      const isLatest = versionsOfType[versionsOfType.length - 1]?.id === vId
-      if (!isLatest) return
-      const nextName = generateVersionName(wd2.versions, v.version_type)
-      const newV = { id: 'v'+Date.now(), name: nextName, version_type: v.version_type, created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: '', sent_to_artist: false }
-      wd2.versions.push(newV)
-      wd2.active_version_id = newV.id
-    })
+    const v_type = v.version_type
+    const versionsOfType = workData(song).versions.filter(v2 => v2.version_type === v_type)
+    const sentVersion = versionsOfType.find(v2 => v2.id === vId)
+    const sentIndex = versionsOfType.indexOf(sentVersion)
+    const isLatest = sentIndex === versionsOfType.length - 1
+    const nextExists = versionsOfType[sentIndex + 1] !== undefined
+
+    if (isLatest && !nextExists) {
+      await saveWorkData(song, wd3 => {
+        const nextName = generateVersionName(wd3.versions, v_type)
+        const newV = { id: 'v'+Date.now(), name: nextName, version_type: v_type, created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: '', sent_to_artist: false }
+        wd3.versions.push(newV)
+        wd3.active_version_id = newV.id
+      })
+    } else if (!isLatest) {
+      await saveWorkData(song, wd3 => {
+        wd3.active_version_id = versionsOfType[versionsOfType.length - 1].id
+      })
+    }
 
     // Insert listen session in background (Dropbox link + Supabase)
     ;(async () => {
@@ -1986,11 +1991,9 @@
             onchange={e => updateProjectField(selectedProject, 'name', e.target.value)}
             onkeydown={e => e.key==='Enter' && e.target.blur()} />
         </div>
-        {#if undoStack.length}
-          <button class="btn-undo" onclick={undo} title={undoStack[0]?.description}>
-            ↩ {undoStack[0]?.description?.slice(0, 40)}
-          </button>
-        {/if}
+        <button class="undo-tab-btn" onclick={undo} disabled={undoStack.length === 0} title={undoStack[0]?.description || 'Nothing to undo'}>
+          ↩ {undoStack[0] ? undoStack[0].description.slice(0, 20) + '...' : 'undo'}
+        </button>
       </div>
 
       <!-- General project info — tabbed -->
@@ -2842,8 +2845,9 @@
   /* MIDDLE */
   .mid-col { padding: 0 28px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
   .mid-header { display: flex; align-items: center; gap: 12px; padding: 0 0 12px; border-bottom: 1px solid #1c1c1c; margin-bottom: 4px; flex-wrap: wrap; }
-  .btn-undo { margin-left: auto; font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; background: #1c1c1c; border: 1px solid #303030; padding: 3px 8px; cursor: pointer; white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
-  .btn-undo:hover { color: #c9a84c; border-color: #c9a84c; }
+  .undo-tab-btn { margin-left: auto; font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #555; padding: 3px 8px; border-radius: 3px; cursor: pointer; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; transition: all .15s; }
+  .undo-tab-btn:not(:disabled):hover { border-color: #c9a84c; color: #c9a84c; }
+  .undo-tab-btn:disabled { opacity: .3; cursor: default; }
   .color-picker-wrap { display: flex; gap: 5px; align-items: center; }
   .color-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; flex-shrink: 0; padding: 0; transition: transform .1s; }
   .color-dot.active { border-color: #f5f1ea; transform: scale(1.2); }

@@ -51,6 +51,20 @@
   let correctionInputs = $state({}) // keyed by message index
 
   // TTS speak
+  let undoStack = $state([])
+
+  function pushDailyUndo(description, tasksSnapshot) {
+    undoStack = [{ description, tasksSnapshot: JSON.parse(JSON.stringify(tasksSnapshot)), timestamp: Date.now() }, ...undoStack].slice(0, 10)
+  }
+
+  async function undoDaily() {
+    if (!undoStack.length) return
+    const action = undoStack[0]
+    undoStack = undoStack.slice(1)
+    state.tasks = action.tasksSnapshot
+    await save()
+  }
+
   let speakingId = $state(null)
   let currentAudio = $state(null)
   let speakToast = $state('')
@@ -652,6 +666,8 @@
 
     if (!label) return // nothing to save
 
+    pushDailyUndo('Added task: ' + label.slice(0, 30), state.tasks)
+
     // Only recurring if user explicitly toggled the ☀ button
     const isRecurring = newTask.recurring
 
@@ -689,6 +705,8 @@
     state.tasks = state.tasks.map(t => t.id === id ? {...t, hidden_from_upcoming: true} : t); await save()
   }
   async function delTask(id) {
+    const deletedTask = state.tasks.find(t => t.id === id)
+    if (deletedTask) pushDailyUndo('Deleted task: ' + (deletedTask.label || '').slice(0, 30), state.tasks)
     state.tasks = state.tasks.filter(t => t.id !== id)
     await save()
     localStorage.removeItem('mm_daily_backup_' + todayISO)
@@ -1228,6 +1246,9 @@ ${mozartContext}`
         {:else if saveStatus === 'error'}
           <span style="font-size:11px;font-family:'Space Mono',monospace;color:#e74c3c;">⚠ save failed — check connection</span>
         {/if}
+        <button class="undo-tab-btn" onclick={undoDaily} disabled={undoStack.length === 0} title={undoStack[0]?.description || 'Nothing to undo'}>
+          ↩ {undoStack[0] ? undoStack[0].description.slice(0, 20) + '...' : 'undo'}
+        </button>
       </div>
       <!-- Single add row -->
       <div class="add-task-form">
@@ -1973,7 +1994,10 @@ ${mozartContext}`
   .ckb-sm { width: 15px; height: 15px; border: 1px solid #3c3c3c; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #4caf82; cursor: pointer; flex-shrink: 0; background: transparent; padding: 0; }
 
   /* Tasks */
-  .tasks-header { display: flex; align-items: center; justify-content: space-between; }
+  .tasks-header { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .undo-tab-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #555; padding: 3px 8px; border-radius: 3px; cursor: pointer; white-space: nowrap; transition: all .15s; flex-shrink: 0; }
+  .undo-tab-btn:not(:disabled):hover { border-color: #c9a84c; color: #c9a84c; }
+  .undo-tab-btn:disabled { opacity: .3; cursor: default; }
   .cal-btns { display: flex; gap: 4px; }
   .cal-action-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; }
   .cal-action-btn:hover { border-color: #c9a84c; color: #c9a84c; }

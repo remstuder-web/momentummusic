@@ -2,6 +2,24 @@
   import { supabase } from './supabase.js'
   import { buildMozartContext } from './mozartContext.js'
 
+  let undoStack = $state([])
+
+  function pushBrainUndo(description, entryId, entrySnapshot) {
+    undoStack = [{ description, entryId, entrySnapshot, timestamp: Date.now() }, ...undoStack].slice(0, 10)
+  }
+
+  async function undoBrain() {
+    if (!undoStack.length) return
+    const action = undoStack[0]
+    undoStack = undoStack.slice(1)
+    if (action.entrySnapshot) {
+      await supabase.from('brain_knowledge').insert(action.entrySnapshot)
+    } else {
+      await supabase.from('brain_knowledge').delete().eq('id', action.entryId)
+    }
+    await loadEntries()
+  }
+
   let dumpText = $state('')
   let dumpDragging = $state(null)
   let processing = $state(false)
@@ -539,7 +557,7 @@ Return ONLY JSON (single item array):
       }
       const { data: existing } = await supabase.from('brain_knowledge').select('id').eq('category', item.suggestedCategory).eq('title', item.title).maybeSingle()
       if (existing) { console.warn('Duplicate skipped:', item.title); continue }
-      await supabase.from('brain_knowledge').insert({
+      const { data: inserted } = await supabase.from('brain_knowledge').insert({
         category: item.suggestedCategory,
         title: item.title,
         content: item.content,
@@ -548,7 +566,8 @@ Return ONLY JSON (single item array):
         source_url: item.source_url || null,
         verbatim_full: item.entry_type === 'chunk' ? pendingOriginalText : null,
         active: true
-      })
+      }).select('id').single()
+      if (inserted?.id) pushBrainUndo('Added: ' + item.title, inserted.id, null)
     }
     pendingApproval = []
     pendingOriginalText = ''
@@ -717,6 +736,8 @@ Return ONLY JSON (single item array):
   }
 
   async function deleteEntry(id) {
+    const entry = entries.find(e => e.id === id)
+    if (entry) pushBrainUndo('Deleted: ' + entry.title, id, { ...entry })
     await supabase.from('brain_knowledge').delete().eq('id', id)
     entries = entries.filter(e => e.id !== id)
   }
@@ -1113,11 +1134,16 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
 
   <!-- Right: entries -->
   <div class="brain-entries-col">
-    <button class="brain-entries-toggle" onclick={() => entriesOpen = !entriesOpen}>
-      <span>BRAIN ENTRIES</span>
-      <span class="brain-cat-count">{entries.length + watchedArtists.length}</span>
-      <span class="brain-cat-arrow {entriesOpen ? 'open' : ''}">▶</span>
-    </button>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button class="brain-entries-toggle" onclick={() => entriesOpen = !entriesOpen} style="flex:1">
+        <span>BRAIN ENTRIES</span>
+        <span class="brain-cat-count">{entries.length + watchedArtists.length}</span>
+        <span class="brain-cat-arrow {entriesOpen ? 'open' : ''}">▶</span>
+      </button>
+      <button class="undo-tab-btn" onclick={undoBrain} disabled={undoStack.length === 0} title={undoStack[0]?.description || 'Nothing to undo'}>
+        ↩ {undoStack[0] ? undoStack[0].description.slice(0, 20) + '...' : 'undo'}
+      </button>
+    </div>
 
     {#if entriesOpen}
       <!-- Search -->
@@ -1668,6 +1694,9 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
     margin-bottom: 2px;
   }
   .brain-entries-toggle:hover { color: #c9a84c; border-bottom-color: rgba(201,168,76,.25); }
+  .undo-tab-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #555; padding: 3px 8px; border-radius: 3px; cursor: pointer; white-space: nowrap; transition: all .15s; flex-shrink: 0; }
+  .undo-tab-btn:not(:disabled):hover { border-color: #c9a84c; color: #c9a84c; }
+  .undo-tab-btn:disabled { opacity: .3; cursor: default; }
 
   .brain-cat-count { font-size: 8px; color: #444; margin-left: 4px; }
   .brain-cat-arrow { margin-left: auto; font-size: 8px; color: #333; transition: transform .15s; }

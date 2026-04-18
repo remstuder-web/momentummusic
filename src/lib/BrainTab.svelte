@@ -883,7 +883,7 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
           <div class="brain-track-preview-stats">
             {#if spotifyPreview.bpm}
               {spotifyPreview.bpm}bpm ·
-              {spotifyPreview.key || '?'}{#if spotifyPreview.key_confidence === 'low'} <span class="key-confidence-warn" title="Detected from 30s preview — verify manually">⚠</span>{/if}
+              {spotifyPreview.key || '?'}{spotifyPreview.camelot ? ` (${spotifyPreview.camelot})` : ''}{#if spotifyPreview.key_confidence === 'low'} <span class="key-confidence-warn" title="Detected from 30s preview — verify manually">⚠</span>{/if}
             {:else}
               BPM: no preview available
             {/if}

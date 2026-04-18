@@ -28,8 +28,8 @@ export async function buildMozartContext(supabase, options = {}) {
 
   const formatTrack = t =>
     `${t.artist ? t.artist + ' — ' : ''}${t.title}: ` + [
-      t.tempo       ? Math.round(t.tempo) + 'bpm'                              : null,
-      t.key         ? t.key + (t.scale ? ' ' + t.scale : '')                  : null,
+      t.tempo       ? Math.round(t.tempo) + 'bpm'                                             : null,
+      t.key         ? t.key + (t.scale ? ' ' + t.scale : '') + (t.camelot ? ' (' + t.camelot + ')' : '') : null,
       t.energy      != null ? 'nrg ' + Number(t.energy).toFixed(2)            : null,
       t.danceability!= null ? 'dnc ' + Number(t.danceability).toFixed(2)      : null,
       t.valence     != null ? 'val ' + Number(t.valence).toFixed(2)           : null,
@@ -44,7 +44,7 @@ export async function buildMozartContext(supabase, options = {}) {
   const formatVersion = (name, a) =>
     `${name}: ` + [
       a.bpm           ? Math.round(a.bpm) + 'bpm'                             : null,
-      a.key           ? a.key + (a.scale ? ' ' + a.scale : '')                : null,
+      a.key           ? a.key + (a.scale ? ' ' + a.scale : '') + (a.camelot ? ' (' + a.camelot + ')' : '') : null,
       a.energy        != null ? 'nrg ' + Number(a.energy).toFixed(2)         : null,
       a.danceability  != null ? 'dnc ' + Number(a.danceability).toFixed(2)   : null,
       a.valence       != null ? 'val ' + Number(a.valence).toFixed(2)        : null,

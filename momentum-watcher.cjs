@@ -392,8 +392,9 @@ async function runPulseCheck(apiKey, sharedBrainRows) {
       messages: [{ role: 'user', content:
         `You are a music industry analyst. Compare fresh headlines and new releases against this producer's brain knowledge. Only flag REAL contradictions or important NEW developments. If nothing relevant → respond only: "NO_UPDATES"
 
+FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for bullets, [GAP]/[OK]/[CONFIRMED]/[TENSION]/[OUTDATED]/[NEW] for emphasis. Plain text only.
 Format your response using this exact structure:
-- Use ## for section headers (no bold, no asterisks)
+- Use ## for section headers
 - One blank line between sections
 - Bullet points for lists, max 2 lines per bullet
 - Numbers for ranked items
@@ -456,7 +457,7 @@ async function runAgentChartAnalysis(apiKey) {
   // 1. Fetch current popular tracks via search (Viral 50 requires Extended Quota Mode)
   const year = new Date().getFullYear()
   const searchRes = await fetch(
-    `https://api.spotify.com/v1/search?q=year:${year}&type=track&market=DE&limit=10`,
+    `https://api.spotify.com/v1/search?q=year:${year}&type=track&limit=20`,
     { headers: spH }
   )
   if (!searchRes.ok) throw new Error('Spotify track search failed: ' + searchRes.status)
@@ -465,14 +466,21 @@ async function runAgentChartAnalysis(apiKey) {
     .filter(Boolean)
     .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
 
-  // 2. Filter out tracks already in reference_tracks
+  // 2. Filter out tracks already in reference_tracks (by spotify_id or title+artist)
   const existingRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/reference_tracks?collection_name=eq.daily_chart&select=spotify_id`,
+    `${SUPABASE_URL}/rest/v1/reference_tracks?collection_name=eq.daily_chart&select=spotify_id,title,artist`,
     { headers: sbHeaders }
   )
   const existing = existingRes.ok ? await existingRes.json() : []
   const existingIds = new Set((existing || []).map(t => t.spotify_id))
-  const newTracks = viralTracks.filter(t => t && !existingIds.has(t.id)).slice(0, 3)
+  const existingTitles = new Set((existing || []).map(t => (t.title + '|' + t.artist).toLowerCase()))
+  const newTracks = viralTracks.filter(t => {
+    if (!t) return false
+    if (existingIds.has(t.id)) return false
+    const key = (t.name + '|' + t.artists.map(a=>a.name).join(', ')).toLowerCase()
+    if (existingTitles.has(key)) return false
+    return true
+  }).slice(0, 3)
 
   if (!newTracks.length) {
     console.log('✓ chart-analysis: no new tracks today')
@@ -580,7 +588,7 @@ async function runAgentChartAnalysis(apiKey) {
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 200,
           messages: [{ role: 'user', content:
-            `These ${analyzedTracks.length} tracks are currently the most viral globally:\n${chartSummary}\n\n${refSummary}\n\nWhat do these viral tracks have in common? What does Remo need to close the gap? Keep response under 150 words. End with one specific action.`
+            `These ${analyzedTracks.length} tracks are currently the most viral globally:\n${chartSummary}\n\n${refSummary}\n\nWhat do these viral tracks have in common? What does Remo need to close the gap? Keep response under 150 words. End with one specific action.\nFORMATTING: Never use **bold** or *italic* markdown. Use [GAP]/[OK] for emphasis. Plain text and - bullets only.`
           }]
         })
       })
@@ -622,47 +630,127 @@ async function fetchSharedBrainContext() {
   ).then(r => r.json()).catch(() => [])
 }
 
-// ── Agent: Scout — suggest emerging artists ───────────────────────────────
+// ── Agent: Scout — real market intelligence + AI analysis ─────────────────
+async function fetchRssTitles(url, count = 5) {
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' } })
+    if (!res.ok) return []
+    const text = await res.text()
+    // JSON feed (Pitchfork)
+    if (url.endsWith('.json') || text.trimStart().startsWith('{')) {
+      const data = JSON.parse(text)
+      const items = data.items || data.feed?.items || []
+      return items.slice(0, count).map(i => i.title || i.headline).filter(Boolean)
+    }
+    // XML feed — extract <title> tags, skip the first (channel title)
+    const matches = [...text.matchAll(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/gs)]
+    return matches.slice(1, count + 1).map(m => m[1].trim()).filter(Boolean)
+  } catch(e) {
+    console.warn('RSS fetch failed:', url, e.message)
+    return []
+  }
+}
+
 async function runAgentScout(apiKey, sharedBrainRows) {
-  const [connectionsRes, refTracksRes] = await Promise.all([
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const today = new Date().toISOString().slice(0, 10)
+
+  // Fetch all data sources in parallel
+  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/connections?select=name`, { headers: sbHeaders }),
-    fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?order=tempo.desc&limit=5&select=title,artist,genre_tags,tempo,key`, { headers: sbHeaders })
+    fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?order=tempo.desc&limit=5&select=title,artist,genre_tags,tempo,key`, { headers: sbHeaders }),
+    fetch(`${SUPABASE_URL}/rest/v1/watched_artists?active=eq.true&select=*`, { headers: sbHeaders }),
+    getSpotifyToken().catch(() => null),
+    fetchRssTitles('https://pitchfork.com/rss/news/feed.json', 5),
+    fetchRssTitles('https://www.factmag.com/feed/', 5),
+    fetchRssTitles('https://www.hypebot.com/feed', 5),
   ])
-  const [connections, refTracks] = await Promise.all([connectionsRes.json(), refTracksRes.json()])
 
-  const knownNames = (Array.isArray(connections) ? connections : [])
-    .map(b => b.name).filter(Boolean).join(', ') || 'none'
+  const [connections, refTracks, watchedArtists] = await Promise.all([
+    connectionsRes.json(), refTracksRes.json(), watchedRes.json()
+  ])
 
+  // Spotify new releases DE
+  let newReleasesText = ''
+  if (spToken) {
+    try {
+      const spH = { 'Authorization': `Bearer ${spToken}` }
+      const relRes = await fetch('https://api.spotify.com/v1/browse/new-releases?limit=10&country=DE', { headers: spH })
+      if (relRes.ok) {
+        const relData = await relRes.json()
+        const albums = relData.albums?.items || []
+        newReleasesText = albums.map(a => `- ${a.artists.map(x=>x.name).join(', ')} — ${a.name} (${a.release_date})`).join('\n')
+      }
+    } catch(e) { console.warn('Spotify new-releases failed:', e.message) }
+  }
+
+  // Watched artists — flag any released in last 7 days
+  let watchedNewText = ''
+  if (spToken && Array.isArray(watchedArtists) && watchedArtists.length) {
+    const spH = { 'Authorization': `Bearer ${spToken}` }
+    const watchedChecks = await Promise.allSettled(
+      watchedArtists.map(async a => {
+        const r = await fetch(`https://api.spotify.com/v1/artists/${a.spotify_id}/albums?include_groups=single,album&limit=1`, { headers: spH })
+        const d = await r.json()
+        const latest = d.items?.[0]
+        if (latest && latest.release_date >= sevenDaysAgo) {
+          return `- ${a.name}: "${latest.name}" (${latest.release_date}) — NEW THIS WEEK`
+        }
+        return null
+      })
+    )
+    const newThisWeek = watchedChecks.map(r => r.value).filter(Boolean)
+    watchedNewText = newThisWeek.length ? newThisWeek.join('\n') : '- No new releases from watched artists this week'
+  }
+
+  // Build RSS headlines block
+  const rssLines = [
+    ...pitchfork.map(t => `[Pitchfork] ${t}`),
+    ...factmag.map(t => `[FACT] ${t}`),
+    ...hypebot.map(t => `[Hypebot] ${t}`),
+  ].join('\n') || 'No headlines fetched'
+
+  const knownNames = (Array.isArray(connections) ? connections : []).map(b => b.name).filter(Boolean).join(', ') || 'none'
   const brainContext = buildBrainContext(sharedBrainRows)
-
   const refTrackText = (Array.isArray(refTracks) ? refTracks : [])
     .map(t => `- ${t.artist} — ${t.title} | ${t.tempo || '?'}bpm ${t.key || ''} | genres: ${(t.genre_tags || []).slice(0,3).join(', ')}`)
     .join('\n')
 
-  const prompt = `You are an A&R assistant for a music producer. Suggest 5 real emerging artists to scout (under 100k monthly Spotify listeners).
+  const prompt = `Here is this week's REAL music data — do not invent anything outside this data:
 
-Format your response using this exact structure:
-- Use ## for section headers (no bold, no asterisks)
-- One blank line between sections
-- Bullet points for lists, max 2 lines per bullet
-- Numbers for ranked items
-- End with a ## Next Move section: single most important action today
-Keep each section tight — no filler sentences.
+NEW RELEASES ON SPOTIFY:
+${newReleasesText || 'Unavailable'}
 
-Sections to include:
+INDUSTRY HEADLINES THIS WEEK:
+${rssLines}
+
+WATCHED ARTISTS — NEW RELEASES:
+${watchedNewText || 'none this week'}
+
+${refTrackText ? `REFERENCE TRACKS (Remo's taste):\n${refTrackText}\n` : ''}Already known — skip: ${knownNames}
+${brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]\n` : ''}
+Based ONLY on the above real data:
+
 ## Breaking Artists
-## Trending Sounds
-## Opportunities
-## Next Move
+- Name artists actually in the new releases data
+- Only reference real tracks listed above
 
-Already known — skip: ${knownNames}
-${brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]\n` : ''}${refTrackText ? `\nREFERENCE TRACKS:\n${refTrackText}\n` : ''}
-Genres: ${SUB_GENRE_LABELS}`
+## Trending Sounds
+- Patterns visible in the real data only
+
+## Opportunities
+- Based on gaps in the real data vs Remo's sound (genres: ${SUB_GENRE_LABELS})
+
+## Next Step
+- Single most important action today
+
+If data is insufficient to make a claim, say so explicitly. Never invent follower counts, statistics, or trends not in the data.
+FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for bullets, [GAP]/[OK] for emphasis. Plain text only.`
 
   const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
+    body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 700, messages: [{ role: 'user', content: prompt }] })
   })
   const claudeData = await claudeRes.json()
   const scoutText = claudeData.content?.[0]?.text || 'No suggestions generated.'
@@ -674,11 +762,17 @@ Genres: ${SUB_GENRE_LABELS}`
     body: JSON.stringify({ endpoint: '/agent-scout', model, input_tokens: usage.input_tokens||0, output_tokens: usage.output_tokens||0, cost_usd: ((usage.input_tokens||0)*0.000001)+((usage.output_tokens||0)*0.000005) })
   }).catch(() => {})
 
+  // Save scout report to brain_knowledge
+  fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+    method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ category: 'market_knowledge', title: `Scout Report ${today}`, content: scoutText, entry_type: 'observation', confidence: 'weak', active: true })
+  }).catch(() => {})
+
   await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
     method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
     body: JSON.stringify({ type: 'briefing', song_code: null, song_title: 'Artist Scout', artist: null, message: scoutText, patch_name: `Scout ${new Date().toISOString().slice(0,10)}`, read: false })
   })
-  console.log('✓ Agent Scout suggestions saved to inbox')
+  console.log('✓ Agent Scout report saved to inbox + brain_knowledge')
   return { ok: true, suggestions: scoutText }
 }
 
@@ -720,8 +814,8 @@ async function runAgentDemoMatch(apiKey, sharedBrainRows) {
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: `You are a demo pitch specialist for a music producer. Match recent demos to artists and generate pitch recommendations.
 
-Format your response using this exact structure:
-- Use ## for section headers (no bold, no asterisks)
+FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for bullets, [GAP]/[OK] for emphasis. Plain text only.
+- Use ## for section headers
 - One blank line between sections
 - Bullet points for lists, max 2 lines per bullet
 - Numbers for ranked items
@@ -762,8 +856,9 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
 
   const prompt = `You are a music trend analyst focused on TikTok virality. Identify 5 current TikTok sound trends most relevant to this producer's taste profile.
 
+FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for bullets, [GAP]/[OK] for emphasis. Plain text only.
 Format your response using this exact structure:
-- Use ## for section headers (no bold, no asterisks)
+- Use ## for section headers
 - One blank line between sections
 - Bullet points for lists, max 2 lines per bullet
 - Numbers for ranked items
@@ -1742,19 +1837,17 @@ async function restore(input) {
             model: 'claude-haiku-4-5-20251001', max_tokens: 500,
             messages: [{ role: 'user', content: `You are a daily assistant for a music producer. Write a focused morning briefing.
 
-Format your response using this exact structure:
-- Use ## for section headers (no bold, no asterisks)
+FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for bullets, [GAP]/[OK]/[CONFIRMED]/[TENSION]/[OUTDATED]/[NEW] for emphasis. Plain text only.
 - One blank line between sections
 - Bullet points for lists, max 2 lines per bullet
-- Numbers for ranked items
-- End with a ## Next Move section: single most important action today
+- End with a ## Next Step section: single most important action today
 Keep each section tight — no filler sentences.
 
 Sections to include:
 ## Today's Focus
 ## Pipeline Status
 ## Watch Out
-## Next Move
+## Next Step
 
 ${context}` }]
           })
@@ -1913,7 +2006,7 @@ ${context}` }]
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514', max_tokens: 500,
-            messages: [{ role: 'user', content: `Read this version history and feedback. List only what still needs doing, remove duplicates, sort by priority. Max 8 bullet points.\n\n${context}` }]
+            messages: [{ role: 'user', content: `Read this version history and feedback. List only what still needs doing, remove duplicates, sort by priority. Max 8 bullet points. FORMATTING: Never use **bold** or *italic* markdown — plain text, - for bullets only.\n\n${context}` }]
           })
         })
         const claudeData = await claudeRes.json()
@@ -2026,6 +2119,7 @@ ${context}` }]
           }
         }
 
+        let camelot = null
         if (audioReady) {
           try {
             const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
@@ -2036,7 +2130,8 @@ ${context}` }]
             energy = feat.energy; danceability = feat.danceability
             loudness = feat.loudness_lufs; valence = feat.valence
             acousticness = feat.acousticness; duration_seconds = feat.duration_seconds
-            console.log(`  ✓ Essentia (${preview_source}): ${bpm}bpm ${key} ${scale} nrg:${energy} dnc:${danceability} val:${valence} lufs:${loudness}`)
+            camelot = feat.camelot || null
+            console.log(`  ✓ Essentia (${preview_source}): ${bpm}bpm ${key} ${scale} (${camelot}) nrg:${energy} dnc:${danceability} val:${valence} lufs:${loudness}`)
           } catch(e) {
             console.warn('  Essentia analysis failed:', e.message.slice(0, 50))
           }
@@ -2070,7 +2165,8 @@ ${context}` }]
           loudness,
           duration_seconds,
           preview_url,
-          preview_source
+          preview_source,
+          camelot
         }))
       } catch(err) {
         logError('analyze-spotify-track', err.message)
@@ -3099,6 +3195,7 @@ Respond ONLY in JSON:
             tempo: features.tempo,
             key: features.key,
             scale: rawFeat.scale,
+            camelot: rawFeat.camelot || null,
             key_strength: rawFeat.key_strength,
             energy: rawFeat.energy,
             danceability: rawFeat.danceability,
@@ -3116,9 +3213,9 @@ Respond ONLY in JSON:
           })
         })
 
-        console.log(`✓ Audio analyzed: ${body.filename} — ${features.tempo}bpm ${features.key} nrg:${rawFeat.energy} dnc:${rawFeat.danceability} ${rawFeat.loudness_lufs}LUFS`)
+        console.log(`✓ Audio analyzed: ${body.filename} — ${features.tempo}bpm ${features.key} (${rawFeat.camelot||'?'}) nrg:${rawFeat.energy} dnc:${rawFeat.danceability} ${rawFeat.loudness_lufs}LUFS`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, ...rawFeat, tempo: features.tempo, key: features.key }))
+        res.end(JSON.stringify({ ok: true, analysis: rawFeat, ...rawFeat, tempo: features.tempo, key: features.key }))
       } catch(e) {
         console.warn('analyze-audio-features error:', e.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })

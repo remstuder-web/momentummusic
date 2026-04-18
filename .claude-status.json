@@ -1,17 +1,14 @@
 {
-  "updated": "2026-04-18T17:57:00Z",
-  "last_task": "task-32-whatsapp-bulk-entry-connections",
+  "updated": "2026-04-18T20:30:00Z",
+  "last_task": "fix-6-checkout-metadata",
   "status": "done",
   "working": [
-    "/analyze-chat: multi-entry JSON array extraction, existingCategories in prompt, cost tracked",
-    "BrainTab processDump(): WhatsApp detection → /analyze-chat → pendingApproval panel",
-    "approval panel: editable category per item, confidence badge, remove button",
-    "saveApproved: persists confidence field",
-    "DailyTab extractWhatsapp: localStorage + mm-switch-tab → BrainTab picks up on load",
-    "Entry connections: Related: chips in expanded view, JS-only, same-category + title-word match"
+    "FIX 6: saveSpotifyPreview() now stores art_url, artist, spotify_id in metadata jsonb field",
+    "Check Out rows in DailyTab will now show 32px album art and clickable artist name for newly saved tracks",
+    "Existing entries without metadata will still render (art/artist conditionally shown)"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run SQL in Supabase: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text; ADD COLUMN IF NOT EXISTS review_date date;",
-  "notes": "WhatsApp detection regex: /\\d{1,2}\\/\\d{1,2}\\/\\d{2,4}.*[-–].*:/ + >5 lines. Entry connections are pure JS on loaded entries — no DB query. DailyTab WhatsApp button now redirects to Brain tab instead of showing an alert."
+  "next": "All 6 fixes from this session complete. New tasks or test the full flow: add a Spotify track to Brain as reference_current → check Daily page Check Out section shows album art + artist link + ▶ Spotify button.",
+  "notes": "metadata field is jsonb. For reference_mixing type, mixer name is merged into same metadata object alongside art_url/artist/spotify_id."
 }

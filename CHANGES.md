@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] momentum-watcher.cjs + analyze_audio.py + mozartContext.js + BrainTab.svelte — DONE
+TASK: market-intelligence + camelot + scout-real-data + chart-3-tracks + no-bold
+WHAT: (1) runAgentScout: fetches Pitchfork/FACT/Hypebot RSS, Spotify new-releases DE, watched artists new releases this week — injects all as real data, prompt says "do not invent anything outside this data"; (2) Scout saves findings to brain_knowledge category:market_knowledge; (3) Spotify search limit 20, filter by title+artist, take top 3 for chart analysis; (4) camelot notation added to analyze_audio.py (CAMELOT dict key+scale → Camelot code); (5) camelot passed through analyze-spotify-track, analyze-audio-features responses and reference_tracks upsert; (6) formatTrack/formatVersion in mozartContext.js show key (camelot) inline; (7) BrainTab spotifyPreview shows camelot after key; (8) FORMATTING: no-bold rule added to all 6 agent prompts
+RESULT: works — watcher restarted successfully
+BLOCKERS: SQL needed: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text;
+
 ## [2026-04-18] BrainTab.svelte — DONE
 TASK: fix-6 — Check Out album art metadata
 WHAT: saveSpotifyPreview() now includes art_url, artist, spotify_id in metadata field when inserting to brain_knowledge; DailyTab Check Out rows can now display album art and artist link

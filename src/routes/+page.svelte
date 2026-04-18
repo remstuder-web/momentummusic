@@ -9,10 +9,16 @@
   import NotesTab from '$lib/NotesTab.svelte'
   import ReleaseTab from '$lib/ReleaseTab.svelte'
   import BrainTab from '$lib/BrainTab.svelte'
+  import ListenPage from '$lib/ListenPage.svelte'
 
   let activeTab = $state('daily')
+  let listenSessionId = $state(null) // set when ?s= param detected
 
   onMount(() => {
+    // Detect listen session — ?s=XXXX means show public listen page, not admin app
+    const s = new URLSearchParams(window.location.search).get('s')
+    if (s) { listenSessionId = s; return }
+
     const handler = e => { activeTab = e.detail }
     document.addEventListener('mm-switch-tab', handler)
     return () => document.removeEventListener('mm-switch-tab', handler)
@@ -259,6 +265,9 @@
   })
 </script>
 
+{#if listenSessionId}
+  <ListenPage sessionId={listenSessionId} />
+{:else}
 <div class="app">
   <nav>
     {#each tabs as tab}
@@ -475,6 +484,7 @@
     {/if}
   </main>
 </div>
+{/if}
 
 <style>
   :global(*, *::before, *::after) { box-sizing: border-box; margin: 0; padding: 0; }

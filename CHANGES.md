@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] src/lib/ListenPage.svelte + src/routes/+page.svelte — DONE
+TASK: listen page with pitch shift controls
+WHAT: Created ListenPage.svelte — public listen page served at momentummusic.vercel.app?s=XXXX. Loads share_sessions from Supabase, shows patch_name, audio player with <source> preferring MP3 then WAV, pitch shift [−][0][+] buttons (range −3 to +3 semitones) using Web Audio playbackRate, double-click center to reset, stars/void background, feedback textarea+submit, download links. +page.svelte: detects ?s= param on mount and renders ListenPage instead of admin app.
+RESULT: works — 0 svelte errors
+BLOCKERS: SQL needed: ALTER TABLE share_sessions ADD COLUMN IF NOT EXISTS mp3_path text
+
 ## [2026-04-18] momentum-watcher.cjs + ProjectsTab.svelte — DONE
 TASK: MP3 transcoding for share links
 WHAT: Added transcodeToMp3() (ffmpeg 320k); /share-link now fire-and-forgets WAV→MP3 transcode after Dropbox link generation, returns mp3Path+mp3ShareLink; audio serving route prefers .mp3 over .wav when Accept: audio/mpeg header present; ProjectsTab sendToArtist and production listen link now store mp3ShareUrl in songs[] and mp3_path in share_sessions; listen page (separate repo) still needs <source> update

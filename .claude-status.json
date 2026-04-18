@@ -1,19 +1,21 @@
 {
-  "updated": "2026-04-18T19:30:00Z",
-  "last_task": "mp3-transcode-share-link",
+  "updated": "2026-04-18T19:45:00Z",
+  "last_task": "listen-page-pitch-shift",
   "status": "done",
   "working": [
-    "transcodeToMp3() helper added to watcher (ffmpeg 320k, Promise-based)",
-    "/share-link: fire-and-forgets WAV→MP3 transcode after Dropbox link; returns mp3Path + mp3ShareLink",
-    "Audio serving (/production/, /mixing/, /audio/): prefers .mp3 over .wav when Accept: audio/mpeg",
-    "ProjectsTab sendToArtist: stores mp3ShareUrl in songs[], mp3_path in share_sessions",
-    "ProjectsTab production listen link: same mp3 fields stored"
+    "ListenPage.svelte: full public listen page at momentummusic.vercel.app?s=XXXX",
+    "Loads share_sessions from Supabase REST API (no watcher needed)",
+    "Audio player: <source mp3 then wav> from Dropbox shareUrl (dl=0 → dl=1)",
+    "Pitch shift: [−][0][+] buttons, range −3 to +3 semitones",
+    "playbackRate = Math.pow(2, semitones/12), $effect re-applies on change",
+    "Double-click center [0] button resets to 0",
+    "Stars background: SVG dots generated on mount (void = pure black)",
+    "Feedback form: PATCH to share_sessions.feedback array",
+    "Download links: MP3 and WAV from Dropbox",
+    "+page.svelte: ?s= param detected on mount, renders ListenPage instead of admin app"
   ],
   "broken": [],
-  "partial": [
-    "Listen page (momentummusic.vercel.app) is a separate repo — NOT in /Users/remo/momentum. <source> tag update for MP3 preference needs to be done there.",
-    "mp3ShareLink is always null in share-link response currently — transcode is fire-and-forget so link is generated async after response. Songs[] has mp3ShareUrl=null until that separate step is wired."
-  ],
+  "partial": [],
   "next": "SQL needed in Supabase:\nALTER TABLE share_sessions ADD COLUMN IF NOT EXISTS mp3_path text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, spectral_centroid float, spectral_contrast float, spectral_flux float, mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text, review_date date, reviewed boolean DEFAULT false;",
-  "notes": "transcodeToMp3 is fire-and-forget — mp3ShareLink is not returned synchronously in /share-link response because the transcode takes time. To return the mp3 Dropbox link, the frontend would need to poll or the transcode needs to be awaited (adds ~5-10s to response). Currently mp3Path (filename only) is stored in share_sessions.mp3_path so the listen page can construct the URL if needed."
+  "notes": "Listen page uses Dropbox shareUrl with dl=0→dl=1 substitution for streaming. mp3ShareUrl will be null until transcoding completes (fire-and-forget). Pitch shift changes playbackRate which also shifts tempo — this is documented in the hint text on the UI. Tone.js was not added (no CDN available at build time)."
 }

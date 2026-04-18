@@ -894,14 +894,15 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
           <!-- Contextual tag step -->
           <div class="sp-type-row">
             {#each [
-              { id: 'reference_current',     label: 'Check Out (7d)' },
-              { id: 'reference_mixing',      label: 'Mixing Ref' },
-              { id: 'reference_inspiration', label: 'Music Ref' },
-              { id: 'reference_sound',       label: 'Sound Ref' },
+              { id: 'reference_current',     label: 'Aktuelle Ref',  desc: 'surfaces in Daily for 7 days' },
+              { id: 'reference_mixing',      label: 'Mix Ref',       desc: 'for EQ/compression/width decisions' },
+              { id: 'reference_inspiration', label: 'Music Ref',     desc: 'general direction + inspiration' },
+              { id: 'reference_sound',       label: 'Sound Ref',     desc: 'specific sound/texture/element' },
             ] as opt}
               <label class="sp-type-opt {spotifyPreviewType === opt.id ? 'on' : ''}">
                 <input type="radio" name="sp-type" value={opt.id} bind:group={spotifyPreviewType} />
-                {opt.label}
+                <span class="sp-type-label">{opt.label}</span>
+                <span class="sp-type-desc">{opt.desc}</span>
               </label>
             {/each}
           </div>
@@ -1562,10 +1563,14 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
 
   /* Spotify preview type selector */
   .sp-type-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-  .sp-type-opt { display: flex; align-items: center; gap: 4px; font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px; border: 1px solid #252525; border-radius: 2px; color: #555; cursor: pointer; transition: all .15s; }
+  .sp-type-opt { display: flex; flex-direction: column; gap: 2px; padding: 5px 9px; border: 1px solid #252525; border-radius: 2px; color: #555; cursor: pointer; transition: all .15s; }
   .sp-type-opt input[type=radio] { display: none; }
-  .sp-type-opt.on { border-color: #c9a84c; color: #c9a84c; background: rgba(201,168,76,.06); }
-  .sp-type-opt:hover { border-color: #444; color: #9e9690; }
+  .sp-type-opt.on { border-color: #c9a84c; background: rgba(201,168,76,.06); }
+  .sp-type-opt:hover { border-color: #444; }
+  .sp-type-opt .sp-type-label { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .06em; color: #555; }
+  .sp-type-opt.on .sp-type-label { color: #c9a84c; }
+  .sp-type-opt:hover .sp-type-label { color: #9e9690; }
+  .sp-type-opt .sp-type-desc { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; }
   .sp-mixer-inp { font-family: 'DM Sans', sans-serif; font-size: 13px; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; padding: 5px 9px; outline: none; border-radius: 3px; width: 100%; margin-top: 5px; }
   .brain-track-preview-genres { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; }
   .brain-genre-pill { font-family: 'Space Mono', monospace; font-size: 7px; padding: 1px 5px; border-radius: 2px; background: rgba(76,175,130,.1); color: rgba(76,175,130,.7); border: 1px solid rgba(76,175,130,.2); }

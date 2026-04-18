@@ -1,6 +1,6 @@
 import essentia.standard as es
 import essentia
-import sys, json, numpy as np
+import sys, json, numpy as np, math
 
 audio_file = sys.argv[1]
 
@@ -15,18 +15,17 @@ bpm, beats, bpm_confidence, _, _ = rhythm(audio)
 key_extractor = es.KeyExtractor()
 key, scale, key_strength = key_extractor(audio)
 
-# Loudness — ReplayGain gives reasonable values for short clips (LoudnessEBUR128 needs long audio)
-try:
-    loudness_rg = float(es.ReplayGain()(audio))
-    integrated_loudness = round(loudness_rg - 6.0, 1)
-    integrated_loudness = max(-20.0, min(-4.0, integrated_loudness))
-except Exception:
-    integrated_loudness = -14.0
-loudness_range = 0.0
-
 # Energy RMS
 rms = float(es.RMS()(audio))
 energy = round(min(1.0, rms * 10), 3)
+
+# Loudness — RMS-based, calibrated for short clips
+if rms > 0:
+    loudness_lufs = round(20 * math.log10(rms) + 3.0, 1)
+    loudness_lufs = max(-20.0, min(-4.0, loudness_lufs))
+else:
+    loudness_lufs = -20.0
+loudness_range = 0.0
 
 # Danceability
 try:
@@ -68,7 +67,7 @@ result = {
     'key': key,
     'scale': scale,
     'key_strength': round(float(key_strength), 3),
-    'loudness_lufs': round(float(integrated_loudness), 1),
+    'loudness_lufs': round(float(loudness_lufs), 1),
     'loudness_range': dynamic_range,
     'energy': energy,
     'danceability': danceability,

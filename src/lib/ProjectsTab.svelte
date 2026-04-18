@@ -115,13 +115,6 @@
     const result = await res.json()
     if (!result.ok) throw new Error(result.error)
 
-    // Fire-and-forget audio feature analysis (non-blocking)
-    fetch('http://localhost:4242/analyze-audio-features', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, dir })
-    }).catch(e => console.warn('Audio analysis failed:', e.message))
-
     // If this is the FIRST production version, delete the original demo file
     if (dir === 'production' && existingVersions.length === 0 && song.audio_path) {
       await deleteAudioFile('demo', song.audio_path)
@@ -167,6 +160,23 @@
       })
     }
     audioTick++
+
+    // Await audio analysis and store on the new version
+    try {
+      const ar = await fetch('http://localhost:4242/analyze-audio-features', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename, dir })
+      }).then(r => r.json())
+      if (ar?.ok && ar.analysis) {
+        const activeId = workData(song).active_version_id
+        await saveWorkData(song, wd => {
+          const v = wd.versions.find(v => v.id === activeId)
+          if (v) v.analysis = ar.analysis
+        })
+      }
+    } catch(e) { console.warn('Audio analysis failed:', e.message) }
+
     return filename
   }
 
@@ -2379,6 +2389,16 @@
                             <span style="font-family:'Space Mono',monospace;font-size:10px;color:#c9a84c">✦ Reading PDF...</span>
                           {/if}
                         </div>
+                        {#if activeVfilt.analysis}
+                          <div class="version-analysis-row">
+                            {#if activeVfilt.analysis.bpm}<span>{activeVfilt.analysis.bpm}bpm</span>{/if}
+                            {#if activeVfilt.analysis.key}<span>{activeVfilt.analysis.key} {activeVfilt.analysis.scale}</span>{/if}
+                            {#if activeVfilt.analysis.loudness_lufs != null}<span>{activeVfilt.analysis.loudness_lufs}LUFS</span>{/if}
+                            {#if activeVfilt.analysis.energy != null}<span>nrg {activeVfilt.analysis.energy}</span>{/if}
+                            {#if activeVfilt.analysis.danceability != null}<span>dnc {activeVfilt.analysis.danceability}</span>{/if}
+                            {#if activeVfilt.analysis.duration_seconds != null}<span>{Math.floor(activeVfilt.analysis.duration_seconds/60)}:{String(Math.round(activeVfilt.analysis.duration_seconds%60)).padStart(2,'0')}</span>{/if}
+                          </div>
+                        {/if}
                       {/if}
                     {:else}
                       <p class="empty-sm" style="padding:14px">No versions yet.</p>
@@ -2934,6 +2954,8 @@
   .add-btn { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; padding: 7px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
   .all-done-hint { font-family: 'Space Mono', monospace; font-size: 12px; color: #4caf82; padding: 7px 14px; text-align: center; opacity: .7; border-top: 1px solid #1c1c1c; }
   .version-notes-block { padding: 10px 14px; border-top: 1px solid #1c1c1c; display: flex; flex-direction: column; gap: 6px; }
+  .version-analysis-row { display: flex; flex-wrap: wrap; gap: 10px; padding: 6px 14px 8px; border-top: 1px solid #1a1a1a; }
+  .version-analysis-row span { font-family: 'Space Mono', monospace; font-size: 8px; color: #555; letter-spacing: .04em; }
   .notes-ta { min-height: 70px; font-size: 14px; background: #0d0d0d; }
   .notes-drop-wrap { border-radius: 3px; transition: all .15s; }
   .notes-drop-wrap.pdf-drag-over { outline: 1px dashed rgba(201,168,76,.5); background: rgba(201,168,76,.03); }

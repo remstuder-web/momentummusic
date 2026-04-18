@@ -67,8 +67,10 @@ FORMATTING RULES — always follow these:
 - [OK] prefix for every strength
 - End every response with ## Next Step — one specific action only
 - Never write paragraphs of continuous text
-- Never use bold (**text**) — headers and [GAP]/[OK] tags are enough structure
-- Keep each section tight — 3-5 bullets maximum\n\n`
+- Never use bold (**text**) — no asterisks anywhere, not even for emphasis
+- [CONFIRMED]/[TENSION]/[OUTDATED]/[NEW] tags are valid and encouraged for knowledge entries
+- Keep each section tight — 3-5 bullets maximum
+- If LUFS reads below -20 or above -4, flag it as a measurement error — do not use the value\n\n`
 
   if (hitBenchmark) context +=
     `## HIT BENCHMARK (avg of ${hitRefs.length} reference tracks)\n` +

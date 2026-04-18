@@ -1003,6 +1003,13 @@ ${mozartContext}`
       if (inOl) { html += '</ol>'; inOl = false }
     }
 
+    function colorTagLine(s) {
+      return s
+        .replace(/^\[GAP\]/,    '<span class="ao-tag-gap">[GAP]</span>')
+        .replace(/^\[OK\]/,     '<span class="ao-tag-ok">[OK]</span>')
+        .replace(/^\[(CONFIRMED|TENSION|OUTDATED|NEW)\]/, (m, tag) => `<span class="ao-tag-knowledge">[${tag}]</span>`)
+    }
+
     for (const line of lines) {
       const t = line.trim()
       if (!t) { closeList(); continue }
@@ -1011,20 +1018,23 @@ ${mozartContext}`
         closeList()
         if (inNextMove) { html += '</div>'; inNextMove = false }
         const title = esc(t.slice(3).trim())
-        const isNextMove = title.toUpperCase() === 'NEXT MOVE'
-        html += `<div class="ao-header${isNextMove ? ' ao-nm-hdr' : ''}">${title}</div>`
-        if (isNextMove) { html += '<div class="ao-next-move">'; inNextMove = true }
+        const isNextMoveOrStep = /^NEXT (MOVE|STEP)$/i.test(title)
+        html += `<div class="ao-header${isNextMoveOrStep ? ' ao-nm-hdr' : ''}">${title}</div>`
+        if (isNextMoveOrStep) { html += '<div class="ao-next-move">'; inNextMove = true }
       } else if (t.startsWith('- ') || t.startsWith('• ')) {
         if (inOl) { html += '</ol>'; inOl = false }
         if (!inUl) { html += '<ul class="ao-ul">'; inUl = true }
-        html += `<li class="ao-li">${esc(t.replace(/^[-•]\s+/, ''))}</li>`
+        const content = colorTagLine(esc(t.replace(/^[-•]\s+/, '')))
+        html += `<li class="ao-li">${content}</li>`
       } else if (/^\d+\.\s/.test(t)) {
         if (inUl) { html += '</ul>'; inUl = false }
         if (!inOl) { html += '<ol class="ao-ol">'; inOl = true }
-        html += `<li class="ao-li">${esc(t.replace(/^\d+\.\s+/, ''))}</li>`
+        const content = colorTagLine(esc(t.replace(/^\d+\.\s+/, '')))
+        html += `<li class="ao-li">${content}</li>`
       } else {
         closeList()
-        html += `<p class="ao-p">${esc(t)}</p>`
+        const lineClass = t.startsWith('[GAP]') ? 'ao-gap' : t.startsWith('[OK]') ? 'ao-ok' : /^\[(CONFIRMED|TENSION|OUTDATED|NEW)\]/.test(t) ? 'ao-tag' : ''
+        html += `<p class="ao-p${lineClass ? ' ' + lineClass : ''}">${colorTagLine(esc(t))}</p>`
       }
     }
     closeList()
@@ -1102,13 +1112,14 @@ ${mozartContext}`
       .from('brain_knowledge')
       .select('id, title, category, source_url')
       .eq('surfaced_in_daily', true)
-      .gt('surfaced_until', todayISO)
+      .gte('surfaced_until', todayISO)
+      .or('reviewed.is.null,reviewed.eq.false')
       .order('created_at', { ascending: false })
     checkOutItems = data || []
   }
 
   async function dismissCheckOut(id) {
-    await supabase.from('brain_knowledge').update({ surfaced_in_daily: false }).eq('id', id)
+    await supabase.from('brain_knowledge').update({ surfaced_in_daily: false, reviewed: true }).eq('id', id)
     checkOutItems = checkOutItems.filter(i => i.id !== id)
   }
 
@@ -1985,6 +1996,9 @@ ${mozartContext}`
   :global(.ao-next-move .ao-li) { color: #f5f1ea; }
   :global(.ao-p) { color: #cec9c1; font-size: 14px; line-height: 1.65; margin: 4px 0; }
   :global(.ao-next-move .ao-p) { color: #f5f1ea; margin: 0; }
+  :global(.ao-tag-gap) { color: #e74c3c; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; margin-right: 4px; }
+  :global(.ao-tag-ok) { color: #4caf82; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; margin-right: 4px; }
+  :global(.ao-tag-knowledge) { color: #c9a84c; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; margin-right: 4px; }
   .task-scroll { }
   .task-scroll.scrollable { max-height: calc(7 * 50px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .year-scroll { max-height: calc(10 * 32px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }

@@ -454,17 +454,16 @@ async function runAgentChartAnalysis(apiKey) {
   const spToken = await getSpotifyToken()
   const spH = { 'Authorization': `Bearer ${spToken}` }
 
-  // 1. Fetch current popular tracks via year search (editorial playlists require Extended Quota Mode)
-  const year = new Date().getFullYear()
-  const searchRes = await fetch(
-    `https://api.spotify.com/v1/search?q=year:${year}&type=track&limit=20&market=DE`,
-    { headers: spH }
-  )
-  if (!searchRes.ok) throw new Error('Spotify track search failed: ' + searchRes.status)
+  // 1. Fetch current popular tracks (limit capped at 10 with Client Credentials; popularity unavailable in search)
+  const searchUrl = 'https://api.spotify.com/v1/search?' +
+    new URLSearchParams({ q: 'year:2026 genre:pop', type: 'track', limit: '10' }).toString()
+  const searchRes = await fetch(searchUrl, { headers: spH })
+  if (!searchRes.ok) {
+    const errBody = await searchRes.text()
+    throw new Error(`Spotify track search failed: ${searchRes.status} — ${errBody}`)
+  }
   const searchData = await searchRes.json()
-  const viralTracks = (searchData.tracks?.items || [])
-    .filter(Boolean)
-    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+  const viralTracks = (searchData.tracks?.items || []).filter(Boolean)
 
   // 2. Filter out tracks already in reference_tracks (by spotify_id or title+artist)
   const existingRes = await fetch(

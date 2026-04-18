@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-18] momentum-watcher.cjs — DONE
+TASK: chart-analysis search fix
+WHAT: /agent-chart-analysis: fixed Spotify search — limit capped at 10 for Client Credentials (limit=20 returns 400); market=DE also invalid; popularity undefined in search results so sort removed; working query is 'year:2026 genre:pop' limit=10; tested ok:true with 3 analyzed tracks + Claude assessment
+RESULT: works — endpoint returns ok:true, 3 tracks with full Essentia analysis
+BLOCKERS: none
+
+## [2026-04-18] momentum-watcher.cjs — DONE
 TASK: chart-analysis cleanup
 WHAT: /agent-chart-analysis: removed all editorial playlist attempts (Viral 50, Today's Top Hits, Global Top 50 all 403 without Extended Quota); year:2026 Spotify search is now sole method with market=DE param; chart_source updated to 'spotify_top_2026'; comments cleaned up
 RESULT: works — watcher restarted ok

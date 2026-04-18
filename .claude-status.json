@@ -1,15 +1,16 @@
 {
-  "updated": "2026-04-18T19:03:00Z",
-  "last_task": "chart-analysis-cleanup",
+  "updated": "2026-04-18T19:15:00Z",
+  "last_task": "chart-analysis-search-fix",
   "status": "done",
   "working": [
-    "/agent-chart-analysis: year:2026&market=DE Spotify search is sole track source",
-    "chart_source field returns 'spotify_top_2026'",
-    "no more 403 errors from editorial playlist attempts in watcher logs",
-    "last_watcher_error now only shows real errors"
+    "/agent-chart-analysis: returns ok:true with 3 fully-analyzed tracks + Claude assessment",
+    "Spotify search: q='year:2026 genre:pop', limit=10 (Client Credentials caps at 10; limit=20 → 400)",
+    "market=DE removed — causes 400 with Client Credentials token",
+    "popularity sort removed — search results return undefined popularity",
+    "chart_source: 'spotify_top_2026'"
   ],
   "broken": [],
   "partial": [],
   "next": "SQL still needed in Supabase:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, ADD COLUMN IF NOT EXISTS spectral_centroid float, ADD COLUMN IF NOT EXISTS spectral_contrast float, ADD COLUMN IF NOT EXISTS spectral_flux float, ADD COLUMN IF NOT EXISTS mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS review_date date;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS reviewed boolean DEFAULT false;",
-  "notes": "Editorial playlists (Viral 50, Today's Top Hits, Global Top 50) all require Spotify Extended Quota Mode and return 403 without it. year:2026&market=DE search returns popular tracks reliably. sorted by popularity desc, top 3 not already in reference_tracks."
+  "notes": "Spotify Client Credentials limitations discovered: (1) limit capped at 10, not 50; (2) market param causes 400; (3) popularity field is undefined in search results; (4) new-releases and editorial playlists require Extended Quota Mode (403)."
 }

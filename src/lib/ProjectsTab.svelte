@@ -91,9 +91,51 @@
     } catch(e) {}
   }
 
-  async function saveSongAudio(file, song, dir) {
+  async function saveSongAudio(file, song, dir, overwrite = false) {
     const wd = workData(song)
     const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'wav'
+
+    // Overwrite mode: just swap the audio file on the active version, no new version
+    if (overwrite) {
+      const activeId = wd.active_version_id
+      const activeV = wd.versions.find(v => v.id === activeId && v.version_type === dir)
+      if (activeV) {
+        const oldFilename = activeV.audio_path || ''
+        const code = song.code || ''
+        const artist = selectedProject?.artist ? '_' + sanitizeTitle(selectedProject.artist) : ''
+        const title = song.title ? '_' + sanitizeTitle(song.title) : ''
+        const verPart = dir === 'mixing' ? `MIX_${activeV.name.replace('MIX_', '')}` : activeV.name
+        const filename = `${code}${artist}${title}_${verPart}.${ext}`
+        const buf = await file.arrayBuffer()
+        const res = await fetch(
+          `http://localhost:4242/save-audio?dir=${dir}&filename=${encodeURIComponent(filename)}&oldfile=${encodeURIComponent(oldFilename)}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf }
+        )
+        const result = await res.json()
+        if (!result.ok) throw new Error(result.error)
+        if (dir === 'production') {
+          if (prodBlobUrls[song.id]) URL.revokeObjectURL(prodBlobUrls[song.id])
+          prodBlobUrls[song.id] = URL.createObjectURL(file)
+        } else {
+          if (mixBlobUrls[song.id]) URL.revokeObjectURL(mixBlobUrls[song.id])
+          mixBlobUrls[song.id] = URL.createObjectURL(file)
+        }
+        await saveWorkData(song, wd2 => {
+          const v = wd2.versions.find(v => v.id === activeId)
+          if (v) { v.audio_path = filename; v.sent_to_artist = false }
+          if (dir === 'production') wd2.prod_audio = filename
+          else wd2.mix_audio = filename
+        })
+        audioTick++
+        if (result.analysis) {
+          await saveWorkData(song, wd2 => {
+            const v = wd2.versions.find(v => v.id === activeId)
+            if (v) v.analysis = result.analysis
+          })
+        }
+        return filename
+      }
+    }
 
     const existingVersions = wd.versions.filter(v => v.version_type === dir)
     const nextVerNum = existingVersions.length
@@ -230,13 +272,13 @@
   async function handleProdDrop(e, song) {
     e.preventDefault(); song._prodDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
-    try { await saveSongAudio(file, song, 'production') } catch(err) { alert('Error: ' + err.message) }
+    try { await saveSongAudio(file, song, 'production', e.altKey) } catch(err) { alert('Error: ' + err.message) }
   }
 
   async function handleMixDrop(e, song) {
     e.preventDefault(); song._mixDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
-    try { await saveSongAudio(file, song, 'mixing') } catch(err) { alert('Error: ' + err.message) }
+    try { await saveSongAudio(file, song, 'mixing', e.altKey) } catch(err) { alert('Error: ' + err.message) }
   }
 
   async function handleInstrumentalDrop(e, song) {
@@ -2247,9 +2289,10 @@
                         ondrop={e => handleProdDrop(e, song)}>
                         {#if prodBlobUrls[song.id] || wd.prod_audio}
                           <span class="stage-audio-name">🎵 {wd.prod_audio || 'Loaded'}</span>
-                          <span class="drop-rehint">Drop to overwrite</span>
+                          <span class="drop-rehint">Drop new version · <span class="drop-alt-hint">⌥+drop to overwrite</span></span>
                         {:else}
                           <span class="drop-hint">↓ Drop production audio</span>
+                          <span class="drop-alt-hint" style="display:block;margin-top:2px">⌥+drop to overwrite current version</span>
                         {/if}
                       </div>
                     </div>
@@ -2304,9 +2347,10 @@
                     ondrop={e => handleMixDrop(e, song)}>
                     {#if mixBlobUrls[song.id] || wd.mix_audio}
                       <span class="stage-audio-name">🎵 {wd.mix_audio || 'Loaded'}</span>
-                      <span class="drop-rehint">Drop new version to overwrite</span>
+                      <span class="drop-rehint">Drop new version · <span class="drop-alt-hint">⌥+drop to overwrite</span></span>
                     {:else}
                       <span class="drop-hint">↓ Drop mix — saves to Dropbox/Mixing as CODE_Title_MIX_v01</span>
+                      <span class="drop-alt-hint" style="display:block;margin-top:2px">⌥+drop to overwrite current version</span>
                     {/if}
                   </div>
                   <div class="dual-send-grid" style="margin-top:6px">
@@ -2969,6 +3013,7 @@
   .drop-hint { font-family: 'Space Mono', monospace; font-size: 13px; color: #333; flex: 1; text-align: center; }
   .drop-hint-sub { font-family: 'Space Mono', monospace; font-size: 10px; color: #252525; text-align: center; display: block; margin-top: 3px; }
   .drop-rehint { font-family: 'Space Mono', monospace; font-size: 11px; color: #333; }
+  .drop-alt-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; }
   .instr-block { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding: 0 14px; }
   .instr-filename { color: #4caf82 !important; font-family: 'Space Mono', monospace; font-size: 11px; }
   .instr-player-row { padding: 4px 0; }

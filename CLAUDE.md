@@ -23,7 +23,7 @@ Project root: /Users/remo/momentum
 ## Supabase
 URL: https://ukqpnjgvjeduipmdaczn.supabase.co
 Anon key: sb_publishable_4yMwlAo6OLpgGPN_6yWvIw_g5bnjnWS
-Tables: projects, songs, share_sessions, inbox_notifications, brain
+Tables: projects, songs, share_sessions, inbox_notifications, brain_knowledge, watcher_logs, user_settings
 
 ## CSS Standards (ALWAYS match this — never deviate)
 ```
@@ -91,6 +91,9 @@ Always use $state and $derived, never writable/readable stores.
 - GET  /get-env-keys — masked + raw API keys from .env
 - POST /save-env-key — write/replace key in .env
 - POST /speak — OpenAI TTS tts-1 voice:onyx, streams audio/mpeg
+- GET  /status — alias for /system-status (session start health check)
+- POST /suggest-category — suggest brain_knowledge category for a given entry
+- POST /cleanup-brain-dupes — deduplicate brain_knowledge entries
 
 ## Dropbox folder structure
 /!MOMENTUM MUSIC/
@@ -114,16 +117,15 @@ Fields: id, type ('feedback'|'download'|'briefing'), song_code, song_title, arti
 ## brain_knowledge table (key categories)
 Categories: own_production, reference_current, reference_mixing, reference_inspiration,
             reference_sound, market_knowledge, genre_strategy, artist_breaking,
-            production_style, correction, question
+            production_style, correction, question,
+            artist_strategy, mixing_technique, release_strategy,
+            sound_design, industry_insight, social_media,
+            networking, creative_process, business_finance
 Fields include: surfaced_in_daily (bool), surfaced_until (date), metadata (jsonb)
 SQL to add missing columns:
   ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS surfaced_in_daily boolean DEFAULT false;
   ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS surfaced_until date;
   ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}';
-
-## brain table (artist intelligence)
-Fields: id, name, type ('artist'|'label'|'manager'|'sync'),
-        genre, links (jsonb), notes, last_contact, status, created_at
 
 ## CHANGES.md format (always use exactly this structure)
 ```
@@ -160,6 +162,29 @@ After completing every task, write /Users/remo/momentum/.claude-status.json with
 This file is how the chat assistant tracks progress across sessions — always keep it current.
 Read it via GET http://localhost:4242/status at the start of each session.
 
+## Known issues
+- None currently. (Last verified: 2026-04-18)
+
+## System health
+Last verified: 2026-04-18
+Git: initialized, baseline commit 3545fd6
+Tests: 8/8 passing (test-system.cjs)
+Brain entries: see Supabase brain_knowledge table for current count
+
+## Session start checklist
+At the start of every Claude Code session:
+1. Run `node test-system.cjs` and fix any failures before other work
+2. Read `.claude-status.json` for last session handoff
+3. Update SYSTEM.md after completing tasks
+4. Commit to git after every completed task: `git add -A && git commit -m "task: description"`
+
+## Watcher process management (pm2)
+The watcher runs as a pm2 daemon — it starts automatically on boot and does NOT need to be launched from a terminal.
+After ANY change to momentum-watcher.cjs always run:
+  pm2 restart momentum-watcher
+Then verify with: curl -s http://localhost:4242/ping
+(Expected response: {"ok":true,"time":"..."})
+
 ## What NOT to do
 - Never use Tailwind utility classes
 - Never use Svelte 4 reactive syntax ($: etc)
@@ -168,6 +193,11 @@ Read it via GET http://localhost:4242/status at the start of each session.
 - Never break the production send version button
 - Never use max-height on drop zones (breaks drag/drop)
 - Always test that send version buttons work for both production AND mixing independently
+- Never run more than 3 tasks simultaneously
+- Run test-system.cjs before and after every session
+- Git commit after every completed task
+- Update .claude-status.json after every task
+- Update SYSTEM.md when features are added or changed
 
 ## Morning briefing (watcher endpoint)
 Reads Supabase daily: active songs per stage, upcoming deadlines, unread inbox,

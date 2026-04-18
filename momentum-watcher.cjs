@@ -666,6 +666,100 @@ function logError(endpoint, message, level = 'error') {
   console.error(`[${level}] ${endpoint}: ${message}`)
 }
 
+// ── Shared status builder (used by GET /status and GET /system-status alias) ─
+async function buildStatusResponse() {
+  const tasksPath   = path.join(__dirname, 'TASKS.md')
+  const changesPath = path.join(__dirname, 'CHANGES.md')
+  const statusPath  = path.join(__dirname, '.claude-status.json')
+
+  const tasksText   = fs.existsSync(tasksPath)   ? fs.readFileSync(tasksPath,   'utf8') : ''
+  const changesText = fs.existsSync(changesPath)  ? fs.readFileSync(changesPath, 'utf8') : ''
+
+  const tasks_remaining = (tasksText.match(/- \[ \]/g) || []).length
+  const tasks_done      = (tasksText.match(/- \[x\]/gi) || []).length
+  const recent_changes  = changesText.split('\n').slice(-15).join('\n')
+
+  let cs = {}
+  if (fs.existsSync(statusPath)) {
+    try { cs = JSON.parse(fs.readFileSync(statusPath, 'utf8')) } catch(e) {}
+  }
+
+  const endpoints_registered = [
+    'POST /write-component', 'POST /normalize', 'GET /backup', 'POST /restore',
+    'GET /backup-ui', 'GET /dropbox-auth', 'GET /dropbox-callback',
+    'POST /rename-audio', 'POST /delete-audio', 'POST /copy-to-demos',
+    'POST /share-link', 'POST /delete-submission-folder', 'POST /delete-from-submission',
+    'POST /create-release-folder', 'POST /copy-demo-to-production',
+    'POST /delete-release-folder', 'POST /copy-to-release',
+    'POST /save-audio', 'POST /save-stems-zip', 'GET /test-dropbox',
+    'POST /get-share-links', 'POST /morning-briefing', 'POST /agent-scout',
+    'POST /agent-demo-match', 'POST /agent-feedback', 'POST /analyze-spotify-track',
+    'POST /agent-import-spotify', 'GET /get-page-title', 'POST /create-submission',
+    'POST /save-instrumental', 'POST /get-instrumental-link', 'POST /analyze-audio',
+    'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
+    'GET /instrumentals/:filename', 'GET /stems/:filename',
+    'POST /agent-pulse-check', 'POST /run-morning-agents', 'POST /speak',
+    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features',
+    'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
+    'POST /launch-claude-code', 'POST /launch-claude-overnight',
+    'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
+    'GET /get-env-keys', 'POST /save-env-key', 'POST /save-tasks',
+    'GET /status', 'GET /system-status', 'GET /ping',
+    'POST /cleanup-brain-dupes'
+  ]
+
+  const [catsRes, countRes, logRes] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?select=category&order=category.asc`, { headers: sbHeaders }).catch(() => null),
+    fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?select=id&limit=1`, { headers: { ...sbHeaders, 'Prefer': 'count=exact' } }).catch(() => null),
+    fetch(`${SUPABASE_URL}/rest/v1/watcher_logs?select=created_at,endpoint,message,level&order=created_at.desc&limit=1`, { headers: sbHeaders }).catch(() => null)
+  ])
+
+  let brain_categories = []
+  if (catsRes && catsRes.ok) {
+    const rows = await catsRes.json()
+    brain_categories = [...new Set((rows || []).map(r => r.category).filter(Boolean))].sort()
+  }
+
+  let brain_entry_count = 0
+  if (countRes && countRes.ok) {
+    const ct = countRes.headers.get('content-range')
+    if (ct) brain_entry_count = parseInt(ct.split('/')[1]) || 0
+  }
+
+  let last_watcher_error = null
+  if (logRes && logRes.ok) {
+    const rows = await logRes.json()
+    if (rows && rows[0]) {
+      const r = rows[0]
+      last_watcher_error = `[${r.level}] ${r.endpoint}: ${r.message} (${r.created_at})`
+    }
+  }
+
+  const api_keys_present = {
+    anthropic: !!process.env.ANTHROPIC_API_KEY,
+    openai:    !!process.env.OPENAI_API_KEY,
+    spotify:   !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET)
+  }
+
+  return {
+    updated:              cs.updated    || null,
+    last_task:            cs.last_task  || null,
+    working:              cs.working    || [],
+    broken:               cs.broken     || [],
+    partial:              cs.partial    || [],
+    next:                 cs.next       || null,
+    notes:                cs.notes      || null,
+    tasks_remaining,
+    tasks_done,
+    recent_changes,
+    brain_categories,
+    brain_entry_count,
+    api_keys_present,
+    endpoints_registered,
+    last_watcher_error
+  }
+}
+
 // ── HTTP server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -1401,8 +1495,8 @@ async function restore(input) {
     req.on('end', async () => {
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        const apiKey = body.apiKey || ''
-        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ error: 'missing apiKey' })); return }
+        const apiKey = body.apiKey || process.env.ANTHROPIC_API_KEY || ''
+        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set' })); return }
 
         const SUPABASE_URL = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
         const ANON_KEY = 'sb_publishable_4yMwlAo6OLpgGPN_6yWvIw_g5bnjnWS'
@@ -1550,8 +1644,8 @@ ${context}` }]
       res.setHeader('Access-Control-Allow-Origin', '*')
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        const apiKey = body.apiKey || ''
-        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ error: 'missing apiKey' })); return }
+        const apiKey = body.apiKey || process.env.ANTHROPIC_API_KEY || ''
+        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set' })); return }
         const brainRows = await fetchSharedBrainContext()
         const result = await runAgentScout(apiKey, brainRows)
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1573,8 +1667,8 @@ ${context}` }]
       res.setHeader('Access-Control-Allow-Origin', '*')
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        const apiKey = body.apiKey || ''
-        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ error: 'missing apiKey' })); return }
+        const apiKey = body.apiKey || process.env.ANTHROPIC_API_KEY || ''
+        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set' })); return }
         const brainRows = await fetchSharedBrainContext()
         const result = await runAgentDemoMatch(apiKey, brainRows)
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -2417,8 +2511,9 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     req.on('end', async () => {
       res.setHeader('Access-Control-Allow-Origin', '*')
       try {
-        const { apiKey } = JSON.parse(Buffer.concat(chunks).toString())
-        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing apiKey' })); return }
+        const body2 = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        const apiKey = body2.apiKey || process.env.ANTHROPIC_API_KEY || ''
+        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'ANTHROPIC_API_KEY not set' })); return }
         await runPulseCheck(apiKey)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true }))
@@ -2438,8 +2533,9 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     req.on('end', async () => {
       res.setHeader('Access-Control-Allow-Origin', '*')
       try {
-        const { apiKey } = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing apiKey' })); return }
+        const body3 = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        const apiKey = body3.apiKey || process.env.ANTHROPIC_API_KEY || ''
+        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'ANTHROPIC_API_KEY not set' })); return }
 
         // Fetch brain context once — shared across all agents
         const sharedBrainContext = await fetchSharedBrainContext()
@@ -3355,131 +3451,15 @@ ${chatText.slice(0, 3000)}`
     return
   }
 
-  // ── GET /status — read .claude-status.json ───────────────────────────────
-  if (req.method === 'GET' && req.url === '/status') {
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    const statusPath = path.join(__dirname, '.claude-status.json')
-    if (!fs.existsSync(statusPath)) {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'no status yet' }))
-    } else {
-      try {
-        const data = JSON.parse(fs.readFileSync(statusPath, 'utf8'))
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify(data))
-      } catch(e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'invalid json: ' + e.message }))
-      }
-    }
-    return
-  }
-
-  // ── GET /system-status — health + project overview ───────────────────────
-  if (req.method === 'GET' && req.url === '/system-status') {
+  // ── GET /status — merged status + health ─────────────────────────────────
+  if (req.method === 'GET' && (req.url === '/status' || req.url === '/system-status')) {
     res.setHeader('Access-Control-Allow-Origin', '*')
     try {
-      const tasksPath  = path.join(__dirname, 'TASKS.md')
-      const changesPath = path.join(__dirname, 'CHANGES.md')
-      const statusPath  = path.join(__dirname, '.claude-status.json')
-
-      const tasksText   = fs.existsSync(tasksPath)   ? fs.readFileSync(tasksPath,   'utf8') : ''
-      const changesText = fs.existsSync(changesPath)  ? fs.readFileSync(changesPath, 'utf8') : ''
-
-      const tasks_remaining = (tasksText.match(/- \[ \]/g) || []).length
-      const tasks_done      = (tasksText.match(/- \[x\]/gi) || []).length
-
-      // Parse last 20 CHANGES.md entries (each entry starts with "## [")
-      const changeBlocks = changesText.split(/(?=^## \[)/m).filter(b => b.trim())
-      const recent_changes = changeBlocks.slice(-20).map(b => b.trim())
-
-      // Read .claude-status.json if present
-      let claude_status = null
-      if (fs.existsSync(statusPath)) {
-        try { claude_status = JSON.parse(fs.readFileSync(statusPath, 'utf8')) } catch(e) {}
-      }
-
-      // Collect all registered route strings
-      const endpoints_registered = [
-        'POST /write-component', 'POST /normalize', 'GET /backup', 'POST /restore',
-        'GET /backup-ui', 'GET /dropbox-auth', 'GET /dropbox-callback',
-        'POST /rename-audio', 'POST /delete-audio', 'POST /copy-to-demos',
-        'POST /share-link', 'POST /delete-submission-folder', 'POST /delete-from-submission',
-        'POST /create-release-folder', 'POST /copy-demo-to-production',
-        'POST /delete-release-folder', 'POST /copy-to-release',
-        'POST /save-audio', 'POST /save-stems-zip', 'GET /test-dropbox',
-        'POST /get-share-links', 'POST /morning-briefing', 'POST /agent-scout',
-        'POST /agent-demo-match', 'POST /agent-feedback', 'POST /analyze-spotify-track',
-        'POST /agent-import-spotify', 'GET /get-page-title', 'POST /create-submission',
-        'POST /save-instrumental', 'POST /get-instrumental-link', 'POST /analyze-audio',
-        'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
-        'GET /instrumentals/:filename', 'GET /stems/:filename',
-        'POST /agent-pulse-check', 'POST /run-morning-agents', 'POST /speak',
-        'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features',
-        'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
-        'POST /launch-claude-code', 'POST /launch-claude-overnight',
-        'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
-        'GET /get-env-keys', 'POST /save-env-key', 'POST /save-tasks',
-        'GET /status', 'GET /system-status', 'GET /ping',
-        'POST /cleanup-brain-dupes'
-      ]
-
-      // Probe all known tables + brain/log queries in parallel
-      const knownTables = [
-        'projects', 'songs', 'share_sessions', 'inbox_notifications',
-        'brain_knowledge', 'watcher_logs', 'api_usage', 'user_settings',
-        'daily_state', 'brain', 'work_sessions', 'work_tip_sections'
-      ]
-      const tableProbes = knownTables.map(t =>
-        fetch(`${SUPABASE_URL}/rest/v1/${t}?select=id&limit=0`, { headers: sbHeaders })
-          .then(r => r.ok ? t : null).catch(() => null)
-      )
-      const [tableResults, catsRes, countRes, logRes] = await Promise.all([
-        Promise.all(tableProbes),
-        fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?select=category&order=category.asc`, { headers: sbHeaders }).catch(() => null),
-        fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?select=id&limit=1`, { headers: { ...sbHeaders, 'Prefer': 'count=exact' } }).catch(() => null),
-        fetch(`${SUPABASE_URL}/rest/v1/watcher_logs?select=created_at,endpoint,message,level&order=created_at.desc&limit=1`, { headers: sbHeaders }).catch(() => null)
-      ])
-      let supabase_tables = tableResults.filter(Boolean)
-
-      supabase_tables = supabase_tables.sort()
-
-      let brain_categories = []
-      if (catsRes && catsRes.ok) {
-        const rows = await catsRes.json()
-        brain_categories = [...new Set((rows || []).map(r => r.category).filter(Boolean))].sort()
-      }
-
-      let brain_entry_count = 0
-      if (countRes && countRes.ok) {
-        const ct = countRes.headers.get('content-range')
-        if (ct) brain_entry_count = parseInt(ct.split('/')[1]) || 0
-      }
-
-      let last_watcher_error = null
-      if (logRes && logRes.ok) {
-        const rows = await logRes.json()
-        if (rows && rows[0]) {
-          const r = rows[0]
-          last_watcher_error = `[${r.level}] ${r.endpoint}: ${r.message} (${r.created_at})`
-        }
-      }
-
-      const api_keys_present = {
-        anthropic: !!process.env.ANTHROPIC_API_KEY,
-        openai:    !!process.env.OPENAI_API_KEY,
-        spotify:   !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET)
-      }
-
+      const data = await buildStatusResponse()
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({
-        tasks_remaining, tasks_done, recent_changes,
-        supabase_tables, brain_categories, brain_entry_count,
-        api_keys_present, endpoints_registered,
-        last_watcher_error, claude_status
-      }))
+      res.end(JSON.stringify(data))
     } catch(e) {
-      logError('/system-status', e.message)
+      logError('/status', e.message)
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: e.message }))
     }
@@ -3490,7 +3470,7 @@ ${chatText.slice(0, 3000)}`
   if (req.method === 'GET' && req.url === '/ping') {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ ok: true }))
+    res.end(JSON.stringify({ ok: true, time: new Date().toISOString() }))
     return
   }
 

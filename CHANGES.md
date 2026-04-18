@@ -1,5 +1,35 @@
 # CHANGES
 
+## [2026-04-18] pm2 setup + Start Momentum.command + watcher /ping — DONE
+TASK: pm2 watcher daemon setup
+WHAT: installed pm2 globally, started momentum-watcher as pm2 daemon, updated Start Momentum.command (removed watcher tab, now 2 tabs: dev + claude), updated /ping to include time field, added pm2 restart rule to CLAUDE.md
+RESULT: works — pm2 running, /ping returns {ok:true,time:...}, desktop script updated
+BLOCKERS: pm2 startup launchd command requires manual sudo (run in terminal to enable reboot persistence)
+
+## [2026-04-18] momentum-watcher.cjs — DONE
+TASK: agent endpoints fall back to process.env.ANTHROPIC_API_KEY
+WHAT: /morning-briefing, /agent-scout, /agent-demo-match, /agent-pulse-check, /run-morning-agents now use `body.apiKey || process.env.ANTHROPIC_API_KEY || ''`; error message changed to 'ANTHROPIC_API_KEY not set'
+RESULT: works — browser calls still use body.apiKey; terminal/cron calls with no body use .env key
+BLOCKERS: none
+
+## [2026-04-18] momentum-watcher.cjs — DONE
+TASK: Merge /status and /system-status into single GET /status endpoint
+WHAT: Extracted buildStatusResponse() helper; merged both handlers into one (req.url === '/status' || '/system-status'); returns all .claude-status.json fields + tasks/changes/brain/api_keys/endpoints/last_watcher_error; removed ~80 lines of duplicated logic
+RESULT: works — /status and /system-status both return full merged payload
+BLOCKERS: none
+
+## [2026-04-18] CLAUDE.md — DONE
+TASK: CLAUDE.md housekeeping — reflect current system state
+WHAT: Updated tables list (removed brain/taste_profiles, added watcher_logs/user_settings); added 3 missing watcher endpoints; expanded brain_knowledge categories; removed stale brain table section; added Known Issues, System Health, Session Start Checklist sections; added permanent rules to What NOT to do
+RESULT: CLAUDE.md now matches actual system state
+BLOCKERS: none
+
+## [2026-04-18] ProjectsTab.svelte — DONE
+TASK: sendToArtist auto-next-version + V01 numbering
+WHAT: (1) generateVersionName now starts at V01 not V00 for production/vocal_rec/fallback types; (2) sendToArtist auto-creates next version + sets it active after send completes
+RESULT: works — first version is now v01, sending auto-advances to next empty version
+BLOCKERS: none
+
 ## [2026-04-18] momentum-watcher.cjs — DONE
 TASK: Hypebot RSS feed URL fix
 WHAT: Hypebot moved their RSS from /feed to /latest/rss/ — old URL returned 301 (not followed by fetchJSON) then 404. Fixed URL. Both MBW and Hypebot now return HTTP 200 with real headlines. Pulse check confirmed fetching real data; Claude returning NO_UPDATES is correct behavior (no contradictions vs brain today).
@@ -312,4 +342,10 @@ BLOCKERS: none
 TASK: #28
 WHAT: Added CHANGES.md format rule and session handoff rule; updated watcher endpoints list
 RESULT: works
+BLOCKERS: none
+
+## [2026-04-18] momentum-watcher.cjs — DONE
+TASK: /status live data fix
+WHAT: Restarted watcher so buildStatusResponse() loads (was running stale process from before code landed); all live fields now present
+RESULT: works — brain_categories, brain_entry_count, tasks_remaining, recent_changes, api_keys_present, endpoints_registered all populated
 BLOCKERS: none

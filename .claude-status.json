@@ -1,15 +1,19 @@
 {
-  "updated": "2026-04-18T00:02:00Z",
-  "last_task": "end-to-end pulse check + Hypebot RSS fix",
-  "status": "done",
+  "updated": "2026-04-18T16:06:30Z",
+  "last_task": "pm2 setup + Start Momentum.command + watcher /ping",
+  "status": "partial",
   "working": [
-    "Pulse check: fetches real data — MBW HTTP 200, Hypebot HTTP 200 (fixed URL)",
-    "Morning briefing: reads real Supabase data, no hardcoded categories",
-    "NO_UPDATES response from Claude is correct — no contradictions vs brain today",
-    "fetchJSON works correctly for RSS XML (returns _raw field)"
+    "pm2 installed globally",
+    "momentum-watcher running as pm2 daemon (pm2 status: online)",
+    "/ping returns {ok:true, time:...}",
+    "Start Momentum.command updated — 2 tabs only (dev server + claude)",
+    "CLAUDE.md updated with pm2 restart rule",
+    "pm2 save done — process list persisted"
   ],
   "broken": [],
-  "partial": [],
-  "next": "Continue with TASKS.md — all systems verified working",
-  "notes": "Hypebot RSS moved from /feed to /latest/rss/. fetchJSON does not follow HTTP redirects — fix by always using the correct final URL. Pulse check is fire-and-forget: returns {ok:true} immediately, saves to inbox only when Claude finds updates worth flagging."
+  "partial": [
+    "pm2 startup launchd — requires manual sudo to enable reboot persistence (run: sudo env PATH=$PATH:/opt/homebrew/Cellar/node/25.8.2/bin /opt/homebrew/lib/node_modules/pm2/bin/pm2 startup launchd -u remo --hp /Users/remo)"
+  ],
+  "next": "User must run pm2 startup sudo command in terminal to make watcher survive reboots",
+  "notes": "Everything is working. Only blocker: pm2 startup launchd needs sudo — cannot run non-interactively."
 }

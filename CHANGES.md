@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] DailyTab.svelte + BrainTab.svelte + momentum-watcher.cjs + analyze_audio.py — DONE
+TASK: helper-search + full-essentia + capture-mixing + camelot-everywhere
+WHAT: (1) Helper search: replaced function-based approach with inline {@const isYoutube/isSpotify/isGemini/isDeepseek} — now works for any URL containing those domains; (2) analyze_audio.py: full rewrite with frame-based spectral features (centroid, flux, rolloff, contrast), MFCCs (13 coefficients), all wrapped in try/except so any failure returns null; (3) /capture-screen: detects DAW context from keywords (mix/daw/session) + analysis text, fires second Haiku call for 3 mixing suggestions, returns mixing_suggestions array; (4) BrainTab: MIXING NOTES section shown below capture result; (5) reference_tracks upsert now includes spectral_centroid, spectral_contrast, spectral_flux, mfcc_mean; (6) startup warns if new columns missing
+RESULT: works — watcher restarted ok
+BLOCKERS: SQL needed in Supabase (see .claude-status.json next field)
+
 ## [2026-04-18] momentum-watcher.cjs + analyze_audio.py + mozartContext.js + BrainTab.svelte — DONE
 TASK: market-intelligence + camelot + scout-real-data + chart-3-tracks + no-bold
 WHAT: (1) runAgentScout: fetches Pitchfork/FACT/Hypebot RSS, Spotify new-releases DE, watched artists new releases this week — injects all as real data, prompt says "do not invent anything outside this data"; (2) Scout saves findings to brain_knowledge category:market_knowledge; (3) Spotify search limit 20, filter by title+artist, take top 3 for chart analysis; (4) camelot notation added to analyze_audio.py (CAMELOT dict key+scale → Camelot code); (5) camelot passed through analyze-spotify-track, analyze-audio-features responses and reference_tracks upsert; (6) formatTrack/formatVersion in mozartContext.js show key (camelot) inline; (7) BrainTab spotifyPreview shows camelot after key; (8) FORMATTING: no-bold rule added to all 6 agent prompts

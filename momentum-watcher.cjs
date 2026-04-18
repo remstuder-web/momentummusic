@@ -3207,6 +3207,10 @@ Respond ONLY in JSON:
             loudness: rawFeat.loudness_lufs,
             loudness_range: rawFeat.loudness_range,
             duration_seconds: rawFeat.duration_seconds,
+            spectral_centroid: rawFeat.spectral_centroid || null,
+            spectral_contrast: rawFeat.spectral_contrast || null,
+            spectral_flux: rawFeat.spectral_flux || null,
+            mfcc_mean: rawFeat.mfcc_mean ? JSON.stringify(rawFeat.mfcc_mean) : null,
             popularity: null,
             collection_name: 'my_productions',
             approved: true
@@ -3454,6 +3458,46 @@ Format: use ALL CAPS section labels, bullet points with •` }
           })
         })
 
+        // Second pass: mixing suggestions if context suggests DAW/mix session
+        let mixing_suggestions = []
+        const ctxLower = (context || '').toLowerCase()
+        const looksLikeDaw = ctxLower.includes('mix') || ctxLower.includes('daw') || ctxLower.includes('session')
+          || /arrangement|track|plugin|fader|channel|compressor|eq/i.test(analysis)
+        if (looksLikeDaw && apiKey) {
+          try {
+            const mixRes = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+              body: JSON.stringify({
+                model: 'claude-haiku-4-5-20251001', max_tokens: 300,
+                messages: [{ role: 'user', content:
+                  `Based on this DAW session analysis:\n${analysis}\n\nGive 3 specific mixing suggestions. Be concrete — mention specific frequencies, levels, or techniques. Return as a JSON array of strings, nothing else. Example: ["Boost 3kHz on vocals by 2dB", "Reduce bass below 60Hz", "Add parallel compression to drums"]\nFORMATTING: Plain text strings only, no bold, no markdown inside strings.`
+                }]
+              })
+            })
+            const mixData = await mixRes.json()
+            const mixText = mixData.content?.[0]?.text || '[]'
+            try {
+              mixing_suggestions = JSON.parse(mixText.trim())
+              if (!Array.isArray(mixing_suggestions)) mixing_suggestions = []
+            } catch(e) {
+              // Extract bullet lines as fallback
+              mixing_suggestions = mixText.split('\n').filter(l => l.trim().startsWith('-') || l.trim().match(/^\d+\./))
+                .map(l => l.replace(/^[-\d.]\s*/, '').trim()).filter(Boolean).slice(0, 3)
+            }
+            if (mixData.usage) {
+              fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
+                method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+                body: JSON.stringify({ endpoint: '/capture-screen-mix', model: 'claude-haiku-4-5-20251001', input_tokens: mixData.usage.input_tokens, output_tokens: mixData.usage.output_tokens, cost_usd: (mixData.usage.input_tokens * 0.000001) + (mixData.usage.output_tokens * 0.000005) })
+              }).catch(() => {})
+            }
+          } catch(e) { console.warn('Mixing suggestions failed:', e.message.slice(0, 60)) }
+        }
+
+        const fullContent = mixing_suggestions.length
+          ? analysis + '\n\nMIXING NOTES:\n' + mixing_suggestions.map(s => '• ' + s).join('\n')
+          : analysis
+
         if (category && analysis) {
           await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
             method: 'POST',
@@ -3461,16 +3505,16 @@ Format: use ALL CAPS section labels, bullet points with •` }
             body: JSON.stringify({
               category,
               title: `Screenshot ${new Date().toLocaleString('de-CH')}`,
-              content: analysis,
+              content: fullContent,
               entry_type: 'screenshot',
               active: true
             })
           })
         }
 
-        console.log(`✓ capture-screen: ${inputT + outputT} tokens`)
+        console.log(`✓ capture-screen: ${inputT + outputT} tokens${mixing_suggestions.length ? ' + ' + mixing_suggestions.length + ' mixing suggestions' : ''}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, analysis, tokens: inputT + outputT }))
+        res.end(JSON.stringify({ ok: true, analysis, mixing_suggestions, tokens: inputT + outputT }))
       } catch(e) {
         if (fs.existsSync(tmpPath)) { try { fs.unlinkSync(tmpPath) } catch(e2) {} }
         logError('capture-screen', e.message)
@@ -3904,9 +3948,14 @@ server.listen(PORT, '127.0.0.1', () => {
     if (err) console.warn('⚠ Essentia not available — BPM/key analysis disabled')
     else console.log('✓ Essentia ready')
   })
-  // Check reference_tracks has all signal columns — run this SQL if not:
-  fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=scale,key_strength,valence,acousticness,instrumentalness,duration_seconds&limit=1`, { headers: sbHeaders })
-    .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing columns — run SQL:\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS scale text;\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS key_strength float;\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS valence float;\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS acousticness float;\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS instrumentalness float;\n  ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS duration_seconds float;') })
+  // Check new columns exist — warn with SQL if missing
+  fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=scale,key_strength,valence,acousticness,instrumentalness,duration_seconds,camelot,spectral_centroid,spectral_contrast,spectral_flux,mfcc_mean&limit=1`, { headers: sbHeaders })
+    .then(r => {
+      if (r.status === 400) console.warn('⚠ reference_tracks missing columns — run SQL in Supabase:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS scale text, ADD COLUMN IF NOT EXISTS key_strength float, ADD COLUMN IF NOT EXISTS valence float, ADD COLUMN IF NOT EXISTS acousticness float, ADD COLUMN IF NOT EXISTS instrumentalness float, ADD COLUMN IF NOT EXISTS duration_seconds float, ADD COLUMN IF NOT EXISTS camelot text, ADD COLUMN IF NOT EXISTS spectral_centroid float, ADD COLUMN IF NOT EXISTS spectral_contrast float, ADD COLUMN IF NOT EXISTS spectral_flux float, ADD COLUMN IF NOT EXISTS mfcc_mean jsonb;')
+    })
+    .catch(() => {})
+  fetch(`${SUPABASE_URL}/rest/v1/songs?select=audio_analysis&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ songs table missing audio_analysis column — run SQL:\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;') })
     .catch(() => {})
 })
 

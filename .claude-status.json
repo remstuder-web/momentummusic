@@ -1,14 +1,20 @@
 {
-  "updated": "2026-04-18T20:30:00Z",
-  "last_task": "fix-6-checkout-metadata",
+  "updated": "2026-04-18T21:00:00Z",
+  "last_task": "market-intelligence-camelot",
   "status": "done",
   "working": [
-    "FIX 6: saveSpotifyPreview() now stores art_url, artist, spotify_id in metadata jsonb field",
-    "Check Out rows in DailyTab will now show 32px album art and clickable artist name for newly saved tracks",
-    "Existing entries without metadata will still render (art/artist conditionally shown)"
+    "runAgentScout: fetches Pitchfork/FACT/Hypebot RSS (5 headlines each), Spotify new-releases?country=DE, watched artists last 7 days",
+    "Scout prompt: 'do not invent anything outside this data' — real data injected as sections",
+    "Scout saves findings to brain_knowledge category:market_knowledge confidence:weak",
+    "Chart analysis: limit=20, filter by spotify_id AND title+artist, take top 3",
+    "camelot added to analyze_audio.py — CAMELOT dict maps key+scale to Camelot code (8A, 8B etc)",
+    "camelot field in analyze-spotify-track response and reference_tracks upsert",
+    "mozartContext.js formatTrack/formatVersion: shows 'Am (8A)' format",
+    "BrainTab spotifyPreview: shows camelot after key in stats line",
+    "No-bold FORMATTING rule added to all 6 agent prompts: morning-briefing, agent-scout, agent-pulse-check, agent-demo-match, agent-tiktok-trends, agent-chart-analysis, agent-feedback"
   ],
   "broken": [],
   "partial": [],
-  "next": "All 6 fixes from this session complete. New tasks or test the full flow: add a Spotify track to Brain as reference_current → check Daily page Check Out section shows album art + artist link + ▶ Spotify button.",
-  "notes": "metadata field is jsonb. For reference_mixing type, mixer name is merged into same metadata object alongside art_url/artist/spotify_id."
+  "next": "Run SQL in Supabase: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text; — needed for camelot to persist in reference_tracks",
+  "notes": "Pitchfork returns JSON feed (feed.json). FACT and Hypebot return XML — parsed with <title> CDATA regex. fetchRssTitles() handles both formats. MIK CLI check was NOT implemented (dropped from spec in favor of Essentia-only camelot)."
 }

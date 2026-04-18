@@ -1640,7 +1640,13 @@ ${mozartContext}`
 
       {#if activeSection === 'helpers'}
         {#each (state.helpers||[]) as item (item.id)}
-          {@const searchCfg = getHelperSearchConfig(item.url)}
+          {@const isYoutube  = /youtube\.com|youtu\.be/.test(item.url||'')}
+          {@const isSpotify  = /spotify\.com/.test(item.url||'')}
+          {@const isGemini   = /gemini\.google\.com/.test(item.url||'')}
+          {@const isDeepseek = /deepseek\.com/.test(item.url||'')}
+          {@const hasSearch  = isYoutube || isSpotify || isGemini || isDeepseek}
+          {@const searchPlaceholder = isYoutube ? 'Search YouTube...' : isSpotify ? 'Search Spotify...' : isGemini ? 'Ask Gemini...' : 'Ask DeepSeek...'}
+          {@const buildSearchUrl = (q) => isYoutube ? 'https://youtube.com/results?search_query=' + encodeURIComponent(q) : isSpotify ? 'https://open.spotify.com/search/' + encodeURIComponent(q) : isGemini ? 'https://gemini.google.com/app?q=' + encodeURIComponent(q) : 'https://chat.deepseek.com/?q=' + encodeURIComponent(q)}
           <div class="check-item {state.helperTicks[item.id]?'done':''}">
             <button class="ckb" onclick={() => tickHelper(item.id)}>{state.helperTicks[item.id]?'✓':''}</button>
             {#if item.url}
@@ -1648,15 +1654,15 @@ ${mozartContext}`
             {:else}
               <span class="item-label">{item.label}</span>
             {/if}
-            {#if searchCfg}
+            {#if hasSearch}
               <input
                 class="helper-search-inp"
-                placeholder={searchCfg.placeholder}
+                placeholder={searchPlaceholder}
                 value={helperSearchInputs[item.id] || ''}
                 oninput={e => helperSearchInputs = {...helperSearchInputs, [item.id]: e.target.value}}
-                onkeydown={e => { if (e.key === 'Enter') { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? searchCfg.buildUrl(q) : item.url, '_blank') } }}
+                onkeydown={e => { if (e.key === 'Enter') { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? buildSearchUrl(q) : item.url, '_blank') } }}
               />
-              <button class="helper-search-go" onclick={() => { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? searchCfg.buildUrl(q) : item.url, '_blank') }}>→</button>
+              <button class="helper-search-go" onclick={() => { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? buildSearchUrl(q) : item.url, '_blank') }}>→</button>
             {/if}
             <div class="reorder-col"><button class="reorder-micro" onclick={() => moveHelper(item.id,-1)}>▲</button><button class="reorder-micro" onclick={() => moveHelper(item.id,1)}>▼</button></div>
             <button class="del-btn" onclick={() => delHelper(item.id)}>×</button>
@@ -2108,10 +2114,11 @@ ${mozartContext}`
   .routine-divider { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.4); padding: 10px 0 4px; border-top: 1px solid #1a1a1a; margin-top: 6px; }
   .check-item { display: flex; align-items: center; gap: 8px; padding: 2px 8px; border-bottom: 1px solid #111; background: transparent; min-height: 0; }
   .check-item.done { opacity: .38; }
-  .helper-search-inp { background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 4px 8px; border-radius: 3px; width: 160px; flex-shrink: 0; outline: none; }
+  .helper-search-inp { background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 3px 8px; border-radius: 3px; width: 150px; flex-shrink: 0; outline: none; }
   .helper-search-inp::placeholder { color: #555; }
-  .helper-search-go { font-family: 'Space Mono', monospace; font-size: 11px; padding: 4px 8px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
-  .helper-search-go:hover { border-color: #c9a84c; color: #c9a84c; }
+  .helper-search-inp:focus { border-color: rgba(201,168,76,.4); }
+  .helper-search-go { font-family: 'Space Mono', monospace; font-size: 12px; padding: 3px 8px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+  .helper-search-go:hover { color: #c9a84c; border-color: #c9a84c; }
   .reorder-col { display: flex; flex-direction: row; gap: 2px; flex-shrink: 0; }
   .reorder-micro { font-size: 9px; padding: 2px 4px; background: transparent; border: none; color: #2a2a2a; cursor: pointer; line-height: 1; }
   .reorder-micro:hover { color: #c9a84c; }

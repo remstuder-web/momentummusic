@@ -7,6 +7,7 @@
   let processing = $state(false)
   let capturing = $state(false)
   let captureResult = $state(null)
+  let captureMixingSuggestions = $state([])
   let captureContext = $state('')
   let captureCategory = $state('')
   let entries = $state([])
@@ -115,6 +116,7 @@
     if (!apiKey) { alert('Add API key in Settings.'); return }
     capturing = true
     captureResult = null
+    captureMixingSuggestions = []
     try {
       await new Promise(r => setTimeout(r, 3000))
       const res = await fetch('http://localhost:4242/capture-screen', {
@@ -125,6 +127,7 @@
       const d = await res.json()
       if (!d.ok) throw new Error(d.error)
       captureResult = d.analysis
+      captureMixingSuggestions = d.mixing_suggestions || []
       await loadEntries()
     } catch(e) {
       alert('Screen capture failed: ' + e.message + '\nMake sure watcher is running.')
@@ -829,6 +832,12 @@ Return ONLY JSON (single item array):
         <div class="brain-capture-result">
           <div class="brain-preview-title">CAPTURED & SAVED TO BRAIN</div>
           <div class="brain-approval-content">{captureResult}</div>
+          {#if captureMixingSuggestions.length}
+            <div class="brain-preview-title" style="margin-top:10px">MIXING NOTES</div>
+            {#each captureMixingSuggestions as s}
+              <div class="brain-mixing-suggestion">• {s}</div>
+            {/each}
+          {/if}
         </div>
       {/if}
     </div>
@@ -1979,6 +1988,7 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
   .brain-screen-section { padding-bottom: 16px; border-bottom: 1px solid #1c1c1c; margin-bottom: 16px; }
   .brain-screen-controls { display: flex; gap: 8px; margin-bottom: 8px; }
   .brain-capture-result { margin-top: 8px; padding: 8px 10px; background: #0d0d0d; border: 1px solid #252525; border-radius: 3px; }
+  .brain-mixing-suggestion { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300; color: #cec9c1; padding: 3px 0; }
 
   /* Brain search */
   .brain-search-row { display: flex; align-items: center; gap: 6px; margin: 8px 0 6px; }

@@ -31,6 +31,8 @@
   let audioTick = $state(0) // increment to force header player re-render
   let activeSongTab = $state({})
   let lyricsOpen = $state({})
+  let undoStack = $state([])
+  const MAX_UNDO = 10
 
   function formatMinSec(sec) {
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60)
@@ -91,6 +93,29 @@
     } catch(e) {}
   }
 
+  function pushUndo(action) {
+    undoStack = [action, ...undoStack].slice(0, MAX_UNDO)
+  }
+
+  async function undo() {
+    if (!undoStack.length) return
+    const action = undoStack[0]
+    undoStack = undoStack.slice(1)
+    const song = songs.find(s => s.id === action.songId)
+    if (!song) return
+    await supabase.from('songs').update({ work_data: action.workDataSnapshot }).eq('id', action.songId)
+    song.work_data = action.workDataSnapshot
+    songs = [...songs]
+    audioTick++
+    if (action.audioFileToDelete) {
+      const dir = action.audioFileToDelete.includes('_MIX_') ? 'mixing' : 'production'
+      fetch(
+        `http://localhost:4242/delete-audio?dir=${dir}&filename=${encodeURIComponent(action.audioFileToDelete)}`,
+        { method: 'POST' }
+      )
+    }
+  }
+
   async function saveSongAudio(file, song, dir, overwrite = false) {
     const wd = workData(song)
     const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'wav'
@@ -106,6 +131,13 @@
         const title = song.title ? '_' + sanitizeTitle(song.title) : ''
         const verPart = dir === 'mixing' ? `MIX_${activeV.name.replace('MIX_', '')}` : activeV.name
         const filename = `${code}${artist}${title}_${verPart}.${ext}`
+        pushUndo({
+          type: 'version_overwrite',
+          description: 'Overwrote ' + filename + ' on ' + (song.title || song.code),
+          songId: song.id,
+          workDataSnapshot: JSON.parse(JSON.stringify(wd)),
+          audioFileToDelete: filename
+        })
         const buf = await file.arrayBuffer()
         const res = await fetch(
           `http://localhost:4242/save-audio?dir=${dir}&filename=${encodeURIComponent(filename)}&oldfile=${encodeURIComponent(oldFilename)}`,
@@ -149,6 +181,14 @@
       : `${code}${artist}${title}_${ver}.${ext}`
 
     const oldfile = dir === 'mixing' ? (wd.mix_audio || '') : (wd.prod_audio || '')
+
+    pushUndo({
+      type: 'audio_drop',
+      description: 'Dropped ' + filename + ' on ' + (song.title || song.code),
+      songId: song.id,
+      workDataSnapshot: JSON.parse(JSON.stringify(wd)),
+      audioFileToDelete: filename
+    })
 
     const buf = await file.arrayBuffer()
     const res = await fetch(
@@ -1887,6 +1927,8 @@
   load()
 </script>
 
+<svelte:window onkeydown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && !e.target.closest('input, textarea')) { e.preventDefault(); undo() } }} />
+
 {#if loading}
   <p class="empty">Loading...</p>
 {:else}
@@ -1944,6 +1986,11 @@
             onchange={e => updateProjectField(selectedProject, 'name', e.target.value)}
             onkeydown={e => e.key==='Enter' && e.target.blur()} />
         </div>
+        {#if undoStack.length}
+          <button class="btn-undo" onclick={undo} title={undoStack[0]?.description}>
+            ↩ {undoStack[0]?.description?.slice(0, 40)}
+          </button>
+        {/if}
       </div>
 
       <!-- General project info — tabbed -->
@@ -2795,6 +2842,8 @@
   /* MIDDLE */
   .mid-col { padding: 0 28px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
   .mid-header { display: flex; align-items: center; gap: 12px; padding: 0 0 12px; border-bottom: 1px solid #1c1c1c; margin-bottom: 4px; flex-wrap: wrap; }
+  .btn-undo { margin-left: auto; font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; background: #1c1c1c; border: 1px solid #303030; padding: 3px 8px; cursor: pointer; white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+  .btn-undo:hover { color: #c9a84c; border-color: #c9a84c; }
   .color-picker-wrap { display: flex; gap: 5px; align-items: center; }
   .color-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; flex-shrink: 0; padding: 0; transition: transform .1s; }
   .color-dot.active { border-color: #f5f1ea; transform: scale(1.2); }

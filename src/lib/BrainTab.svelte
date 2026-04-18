@@ -645,9 +645,12 @@ Return ONLY JSON (single item array):
     const surfacedUntil = isCurrent
       ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
       : null
-    const metadata = (spotifyPreviewType === 'reference_mixing' && spotifyMixerName.trim())
-      ? { mixer: spotifyMixerName.trim() }
-      : null
+    const metadata = {
+      ...(spotifyPreviewType === 'reference_mixing' && spotifyMixerName.trim() ? { mixer: spotifyMixerName.trim() } : {}),
+      art_url: t.art_url || null,
+      artist: t.artist || null,
+      spotify_id: t.spotify_id || null
+    }
 
     await supabase.from('brain_knowledge').insert({
       category: cat,

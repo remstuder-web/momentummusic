@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] BrainTab.svelte — DONE
+TASK: fix-6 — Check Out album art metadata
+WHAT: saveSpotifyPreview() now includes art_url, artist, spotify_id in metadata field when inserting to brain_knowledge; DailyTab Check Out rows can now display album art and artist link
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-18] BrainTab.svelte + DailyTab.svelte + momentum-watcher.cjs — DONE
 TASK: 32 — WhatsApp bulk import + entry connections
 WHAT: (1) /analyze-chat replaced: multi-entry extraction via Claude Haiku, returns JSON array [{title, content, suggestedCategory, entry_type, confidence}], cost tracked, no auto-save; (2) BrainTab processDump(): WhatsApp export detection (\d/\d/\d pattern + >5 lines), calls /analyze-chat with existingCategories, shows pendingApproval panel; (3) approval panel enhanced: editable category input per item, confidence badge, remove single item button; (4) saveApproved: now persists confidence field; (5) DailyTab extractWhatsapp: stores items to localStorage + dispatches mm-switch-tab → BrainTab picks up on load; (6) Entry connections: "Related:" chips in expanded view — JS-only matching on same category + title word overlap (>4 chars), max 3, click to expand that entry

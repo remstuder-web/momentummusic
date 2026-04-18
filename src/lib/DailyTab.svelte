@@ -381,8 +381,13 @@
           const backupTasks = JSON.parse(backup)
           const supabaseTasks = state.tasks || []
           const newInBackup = backupTasks.filter(b => !supabaseTasks.some(s => s.id === b.id))
-          if (newInBackup.length > 0) { showRestoreBanner = true; pendingBackupTasks = newInBackup }
-        } catch(e) {}
+          if (newInBackup.length > 0) {
+            showRestoreBanner = true
+            pendingBackupTasks = newInBackup
+          } else {
+            localStorage.removeItem('mm_daily_backup_' + todayISO)
+          }
+        } catch(e) { localStorage.removeItem('mm_daily_backup_' + todayISO) }
       }
     } catch(e) { console.error('LOAD ERROR:', e) }
     loading = false
@@ -475,6 +480,20 @@
 
   let newHelper = $state(''), newHelperUrl = $state('')
   let newPrivate = $state(''), newPrivateUrl = $state('')
+  let helperSearchInputs = $state({})
+
+  function getHelperSearchConfig(url) {
+    if (!url) return null
+    if (url.includes('youtube.com') || url.includes('youtu.be'))
+      return { placeholder: 'Search YouTube...', buildUrl: q => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q) }
+    if (url.includes('open.spotify.com') || url.includes('spotify.com'))
+      return { placeholder: 'Search Spotify...', buildUrl: q => 'https://open.spotify.com/search/' + encodeURIComponent(q) }
+    if (url.includes('gemini.google.com'))
+      return { placeholder: 'Ask Gemini...', buildUrl: q => 'https://gemini.google.com/app?q=' + encodeURIComponent(q) }
+    if (url.includes('deepseek.com'))
+      return { placeholder: 'Ask DeepSeek...', buildUrl: q => 'https://chat.deepseek.com/?q=' + encodeURIComponent(q) }
+    return null
+  }
 
   async function tickHelper(id) { state.helperTicks = {...state.helperTicks, [id]: !state.helperTicks[id]}; await save() }
   async function addHelper() {
@@ -1110,7 +1129,7 @@ ${mozartContext}`
   async function loadCheckOut() {
     const { data } = await supabase
       .from('brain_knowledge')
-      .select('id, title, category, source_url')
+      .select('id, title, category, source_url, metadata')
       .eq('surfaced_in_daily', true)
       .gte('surfaced_until', todayISO)
       .or('reviewed.is.null,reviewed.eq.false')
@@ -1165,27 +1184,40 @@ ${mozartContext}`
       </div>
     {/if}
 
-    <div class="day-header">
-      <span class="day-title">{new Date().toLocaleDateString('de-CH', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</span>
-    </div>
-
-    <!-- CHECK OUT — surfaced brain entries -->
+    <!-- CHECK OUT — surfaced brain entries (top of page) -->
     {#if checkOutItems.length}
-      <div class="section-block">
+      <div class="section-block checkout-section">
         <div class="sh" style="margin-bottom:6px">🎧 Check Out</div>
         {#each checkOutItems as item (item.id)}
+          {@const artUrl = item.metadata?.art_url || item.metadata?.image_url || null}
+          {@const artist = item.metadata?.artist || (item.title?.includes('—') ? item.title.split('—')[0].trim() : null)}
+          {@const isSpotify = item.source_url?.includes('spotify.com')}
           <div class="checkout-row">
             <input type="checkbox" class="checkout-cb" onchange={() => dismissCheckOut(item.id)} />
-            {#if item.source_url}
-              <a href={item.source_url} target="_blank" rel="noopener" class="checkout-title-link">{item.title}</a>
-            {:else}
-              <span class="checkout-title-txt">{item.title}</span>
+            {#if artUrl}
+              <img src={artUrl} alt="" class="checkout-art" />
             {/if}
-            <span class="checkout-cat-badge">{item.category}</span>
+            <span class="checkout-title-txt">
+              {#if artist}
+                <button class="checkout-artist-btn" onclick={() => window.open('https://open.spotify.com/search/' + encodeURIComponent(artist), '_blank')}>{artist}</button>
+                <span style="color:#555"> — </span>
+                <span>{item.title?.includes('—') ? item.title.split('—').slice(1).join('—').trim() : item.title}</span>
+              {:else}
+                {item.title}
+              {/if}
+            </span>
+            <span class="checkout-cat-badge">{item.category?.replace('reference_', '')}</span>
+            {#if isSpotify}
+              <button class="checkout-spotify-btn" onclick={() => window.open(item.source_url, '_blank')}>▶ Spotify</button>
+            {/if}
           </div>
         {/each}
       </div>
     {/if}
+
+    <div class="day-header">
+      <span class="day-title">{new Date().toLocaleDateString('de-CH', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</span>
+    </div>
 
     <!-- TASKS -->
     <div class="section-block">
@@ -1608,12 +1640,23 @@ ${mozartContext}`
 
       {#if activeSection === 'helpers'}
         {#each (state.helpers||[]) as item (item.id)}
+          {@const searchCfg = getHelperSearchConfig(item.url)}
           <div class="check-item {state.helperTicks[item.id]?'done':''}">
             <button class="ckb" onclick={() => tickHelper(item.id)}>{state.helperTicks[item.id]?'✓':''}</button>
             {#if item.url}
               <a href={item.url} target="_blank" class="item-label">{item.label}</a>
             {:else}
               <span class="item-label">{item.label}</span>
+            {/if}
+            {#if searchCfg}
+              <input
+                class="helper-search-inp"
+                placeholder={searchCfg.placeholder}
+                value={helperSearchInputs[item.id] || ''}
+                oninput={e => helperSearchInputs = {...helperSearchInputs, [item.id]: e.target.value}}
+                onkeydown={e => { if (e.key === 'Enter') { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? searchCfg.buildUrl(q) : item.url, '_blank') } }}
+              />
+              <button class="helper-search-go" onclick={() => { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? searchCfg.buildUrl(q) : item.url, '_blank') }}>→</button>
             {/if}
             <div class="reorder-col"><button class="reorder-micro" onclick={() => moveHelper(item.id,-1)}>▲</button><button class="reorder-micro" onclick={() => moveHelper(item.id,1)}>▼</button></div>
             <button class="del-btn" onclick={() => delHelper(item.id)}>×</button>
@@ -1906,11 +1949,14 @@ ${mozartContext}`
   .day-title { font-family: 'Space Mono', monospace; font-size: 13px; color: #555; letter-spacing: .06em; }
 
   .section-block { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #1c1c1c; padding-top: 16px; }
+  .checkout-section { border-top: none; padding-top: 0; margin-bottom: 4px; }
   .checkout-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
   .checkout-cb { accent-color: #c9a84c; width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
-  .checkout-title-link { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #4a9fd4; text-decoration: none; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .checkout-title-link:hover { text-decoration: underline; }
-  .checkout-title-txt { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #cec9c1; flex: 1; }
+  .checkout-art { width: 32px; height: 32px; border-radius: 2px; object-fit: cover; flex-shrink: 0; }
+  .checkout-title-txt { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #cec9c1; flex: 1; min-width: 0; }
+  .checkout-artist-btn { background: none; border: none; padding: 0; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #4a9fd4; cursor: pointer; }
+  .checkout-artist-btn:hover { text-decoration: underline; }
+  .checkout-spotify-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .05em; padding: 3px 7px; border-radius: 2px; background: rgba(29,185,84,.1); border: 1px solid rgba(29,185,84,.3); color: #1DB954; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
   .checkout-cat-badge { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .06em; padding: 2px 7px; border-radius: 2px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.2); color: rgba(201,168,76,.6); white-space: nowrap; flex-shrink: 0; }
   .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); padding-bottom: 6px; border-bottom: 1px solid #303030; margin-bottom: 4px; }
 
@@ -2062,7 +2108,11 @@ ${mozartContext}`
   .routine-divider { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.4); padding: 10px 0 4px; border-top: 1px solid #1a1a1a; margin-top: 6px; }
   .check-item { display: flex; align-items: center; gap: 8px; padding: 2px 8px; border-bottom: 1px solid #111; background: transparent; min-height: 0; }
   .check-item.done { opacity: .38; }
-  .reorder-col { display: flex; flex-direction: row; gap: 2px; flex-shrink: 0; margin-left: auto; }
+  .helper-search-inp { background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 4px 8px; border-radius: 3px; width: 160px; flex-shrink: 0; outline: none; }
+  .helper-search-inp::placeholder { color: #555; }
+  .helper-search-go { font-family: 'Space Mono', monospace; font-size: 11px; padding: 4px 8px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+  .helper-search-go:hover { border-color: #c9a84c; color: #c9a84c; }
+  .reorder-col { display: flex; flex-direction: row; gap: 2px; flex-shrink: 0; }
   .reorder-micro { font-size: 9px; padding: 2px 4px; background: transparent; border: none; color: #2a2a2a; cursor: pointer; line-height: 1; }
   .reorder-micro:hover { color: #c9a84c; }
   .ckb.blue { color: #4a90e2; }

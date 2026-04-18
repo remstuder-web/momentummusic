@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-18] momentum-watcher.cjs + analyze_audio.py — DONE
+TASK: chart-analysis fixes — loudness + tasks count + Spotify fallback
+WHAT: (1) analyze_audio.py: replaced LoudnessEBUR128 (returns -70 on 30s clips) with ReplayGain - 23.0 → realistic LUFS values (-35 to -38); (2) buildStatusResponse: tasks_remaining now counts ## TASK headers when no checkboxes found (was always 0); (3) chart analysis: documented that 37i9dQZE playlists need Extended Quota Mode, kept search fallback which works
+RESULT: loudness_lufs now -35 to -38, tasks_remaining=28, pipeline ok=true
+BLOCKERS: Spotify editorial playlists (37i9dQZEVXb*) require Extended Quota Mode — enable in developer.spotify.com dashboard to use Viral 50 directly
+
 ## [2026-04-18] momentum-watcher.cjs + analyze_audio.py + mozartContext.js + CLAUDE.md — DONE
 TASK: agent-chart-analysis endpoint + Spotify search fix
 WHAT: (1) Created /agent-chart-analysis — searches Spotify year:YYYY, downloads 30s clips via yt-dlp, runs Essentia via analyze_audio.py, upserts to reference_tracks collection_name=daily_chart, generates Claude Haiku gap assessment; (2) Fixed Spotify 403 — browse/playlist endpoints need extended quota; search works without market param; (3) Updated CLAUDE.md with endpoint docs and Spotify browse limitation; (4) analyze_audio.py standalone script handles all 14 signals

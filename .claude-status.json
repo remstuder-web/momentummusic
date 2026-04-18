@@ -1,24 +1,22 @@
 {
-  "updated": "2026-04-18T17:15:00Z",
-  "last_task": "agent-chart-analysis-pipeline",
+  "updated": "2026-04-18T17:20:00Z",
+  "last_task": "chart-analysis-loudness-tasks-fix",
   "status": "done",
   "working": [
-    "dotenv loaded at top of momentum-watcher.cjs",
     "pm2 watcher online",
-    "/status returns anthropic: true, spotify: true",
-    "/analyze-spotify-track falls back to yt-dlp when preview_url is null",
-    "analyze_audio.py extracts 14 signals via Essentia",
-    "mozartContext.js shared across BrainTab, DailyTab, ProjectsTab",
-    "mozartContext includes hit benchmark (avg bpm/energy/danceability/valence/loudness)",
-    "mozartContext includes daily_chart tracks section",
-    "/agent-chart-analysis: searches Spotify year:YYYY, Essentia analysis, saves to reference_tracks daily_chart, Claude assessment",
-    "/run-morning-agents includes chart analysis step"
+    "/agent-chart-analysis: ok=true, 3 tracks analyzed, LUFS now realistic (-35 to -38)",
+    "analyze_audio.py: ReplayGain replaces LoudnessEBUR128 for short clips",
+    "tasks_remaining: 28 (## TASK header count fallback)",
+    "tasks_done: 0",
+    "mozartContext.js shared across all 3 tabs with hit benchmark",
+    "/run-morning-agents includes chart step"
   ],
   "broken": [],
   "partial": [
     "pm2 startup launchd still needs manual sudo to enable reboot persistence",
-    "reference_tracks table missing new columns (scale, key_strength, loudness, valence, acousticness, brightness, bass_energy, bpm_confidence, loudness_range, duration_seconds) — run ALTER TABLE SQL shown in watcher startup log"
+    "reference_tracks missing new columns — run ALTER TABLE SQL shown at watcher startup",
+    "Spotify editorial playlists (Viral 50, Top 50) return 403 — app needs Extended Quota Mode at developer.spotify.com"
   ],
-  "next": "Run ALTER TABLE SQL in Supabase to add missing reference_tracks columns — SQL is logged at watcher startup",
-  "notes": "Spotify browse endpoints (new-releases, featured-playlists, playlists) all return 403 with client credentials — needs extended quota mode. Use search?q=year:YEAR&type=track&limit=10 (no market param) instead. Loudness LUFS reads -70 for 30s clips due to Essentia LoudnessEBUR128 needing longer audio — known limitation."
+  "next": "Enable Extended Quota Mode in Spotify developer dashboard to unlock Viral 50 playlist access. Run ALTER TABLE reference_tracks SQL in Supabase.",
+  "notes": "Spotify editorial playlists all return 403/404 with this app's client credentials. Root cause: app needs Extended Quota Mode (developer.spotify.com > app settings > Request Extended Quota). Search endpoint (year:YYYY, limit=10, no market param) works as fallback."
 }

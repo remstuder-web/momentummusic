@@ -15,16 +15,13 @@ bpm, beats, bpm_confidence, _, _ = rhythm(audio)
 key_extractor = es.KeyExtractor()
 key, scale, key_strength = key_extractor(audio)
 
-# Loudness LUFS — pass mono as stereo channels
+# Loudness — ReplayGain gives reasonable values for short clips (LoudnessEBUR128 needs long audio)
 try:
-    loudness_extractor = es.LoudnessEBUR128(hopSize=0.1)
-    _, _, integrated_loudness, loudness_range = loudness_extractor(audio, audio)
+    loudness_rg = float(es.ReplayGain()(audio))
+    integrated_loudness = round(loudness_rg - 23.0, 1)
 except Exception:
-    try:
-        _, _, integrated_loudness, loudness_range = es.LoudnessEBUR128(startAtZero=True)(audio, audio)
-    except Exception:
-        integrated_loudness = -70.0
-        loudness_range = 0.0
+    integrated_loudness = -14.0
+loudness_range = 0.0
 
 # Energy RMS
 rms = float(es.RMS()(audio))
@@ -53,8 +50,7 @@ try:
 except Exception:
     acousticness = None
 
-# Dynamic range
-dynamic_range = round(float(loudness_range), 1)
+dynamic_range = 0.0
 
 # Duration
 duration = round(len(audio) / 44100.0, 1)

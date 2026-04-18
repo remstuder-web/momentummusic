@@ -137,7 +137,7 @@
         const vName = ver
         const existing = wd.versions.find(v => v.version_type === 'production' && v.name === vName)
         if (existing) {
-          existing.feedback = []; existing.notes = ''; existing.sent_to_artist = false; existing.audio_path = filename
+          existing.audio_path = filename; existing.sent_to_artist = false
           wd.active_version_id = existing.id
           const existingIndex = wd.versions.indexOf(existing)
           const toDelete = wd.versions.filter((v, i) => i > existingIndex && v.version_type === 'production')
@@ -158,7 +158,7 @@
         const vName = 'MIX_' + ver
         const existing = wd.versions.find(v => v.version_type === 'mixing' && v.name === vName)
         if (existing) {
-          existing.feedback = []; existing.notes = ''; existing.sent_to_artist = false; existing.audio_path = filename
+          existing.audio_path = filename; existing.sent_to_artist = false
           wd.active_version_id = existing.id
           const existingIndex = wd.versions.indexOf(existing)
           const toDelete = wd.versions.filter((v, i) => i > existingIndex && v.version_type === 'mixing')

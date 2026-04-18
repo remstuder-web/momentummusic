@@ -14,6 +14,7 @@
   let cards = $state([])
   let releasedSongIds = $state([])
   let loading = $state(true)
+  let hitBenchmark = $state(null) // avg of reference tracks for comparison
 
   let selectedProjectId = $state(null)
   let expandedSongId = $state(null)
@@ -161,21 +162,14 @@
     }
     audioTick++
 
-    // Await audio analysis and store on the new version
-    try {
-      const ar = await fetch('http://localhost:4242/analyze-audio-features', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename, dir })
-      }).then(r => r.json())
-      if (ar?.ok && ar.analysis) {
-        const activeId = workData(song).active_version_id
-        await saveWorkData(song, wd => {
-          const v = wd.versions.find(v => v.id === activeId)
-          if (v) v.analysis = ar.analysis
-        })
-      }
-    } catch(e) { console.warn('Audio analysis failed:', e.message) }
+    // Use analysis already returned by save-audio (full Essentia via analyze_audio.py)
+    if (result.analysis) {
+      const activeId = workData(song).active_version_id
+      await saveWorkData(song, wd => {
+        const v = wd.versions.find(v => v.id === activeId)
+        if (v) v.analysis = result.analysis
+      })
+    }
 
     return filename
   }
@@ -618,13 +612,14 @@
 
   async function load() {
     try {
-      const [projRes, songsRes, sanityRes, tipsRes, cardsRes, releasesRes] = await Promise.all([
+      const [projRes, songsRes, sanityRes, tipsRes, cardsRes, releasesRes, refRes] = await Promise.all([
         supabase.from('projects').select('*').neq('status','archived').order('position'),
         supabase.from('songs').select('id,title,code,project_id,work_data,position,key,tempo,tags,reference_links,audio_path,notes,feedback,status,release_date,spotify_url').not('project_id','is',null).order('position'),
         supabase.from('work_checklist').select('*').eq('stage_num',6).order('position'),
         supabase.from('work_tip_sections').select('*, work_tips(*)').order('stage_num').order('position'),
         supabase.from('work_cards').select('*').order('position'),
         supabase.from('releases').select('song_id,song_code'),
+        supabase.from('reference_tracks').select('tempo,energy,danceability,loudness,brightness,valence').neq('collection_name','my_productions'),
       ])
       projects = projRes.data || []
       songs = songsRes.data || []
@@ -636,6 +631,18 @@
         '## ' + s.label + '\n' + (s.work_tips||[]).map(t => t.tip).join('\n')
       ).join('\n\n')
       cards = cardsRes.data || []
+      const refs = refRes.data || []
+      if (refs.length) {
+        const avg = (arr, key) => { const vals = arr.map(r => r[key]).filter(v => v != null); return vals.length ? vals.reduce((s,v) => s+v, 0)/vals.length : null }
+        hitBenchmark = {
+          bpm: avg(refs, 'tempo') ? Math.round(avg(refs, 'tempo')) : null,
+          loudness_lufs: avg(refs, 'loudness') ? Math.round(avg(refs, 'loudness') * 10) / 10 : null,
+          energy: avg(refs, 'energy') ? Math.round(avg(refs, 'energy') * 100) / 100 : null,
+          danceability: avg(refs, 'danceability') ? Math.round(avg(refs, 'danceability') * 100) / 100 : null,
+          brightness: avg(refs, 'brightness') ? Math.round(avg(refs, 'brightness') * 1000) / 1000 : null,
+          count: refs.length
+        }
+      }
       const rels = releasesRes.data || []
       releasedSongIds = [
         ...rels.filter(r => r.song_id).map(r => r.song_id),
@@ -2392,12 +2399,38 @@
                         {#if activeVfilt.analysis}
                           <div class="version-analysis-row">
                             {#if activeVfilt.analysis.bpm}<span>{activeVfilt.analysis.bpm}bpm</span>{/if}
-                            {#if activeVfilt.analysis.key}<span>{activeVfilt.analysis.key} {activeVfilt.analysis.scale}</span>{/if}
+                            {#if activeVfilt.analysis.key}<span>{activeVfilt.analysis.key} {activeVfilt.analysis.scale}{activeVfilt.analysis.camelot ? ' (' + activeVfilt.analysis.camelot + ')' : ''}</span>{/if}
                             {#if activeVfilt.analysis.loudness_lufs != null}<span>{activeVfilt.analysis.loudness_lufs}LUFS</span>{/if}
                             {#if activeVfilt.analysis.energy != null}<span>nrg {activeVfilt.analysis.energy}</span>{/if}
                             {#if activeVfilt.analysis.danceability != null}<span>dnc {activeVfilt.analysis.danceability}</span>{/if}
                             {#if activeVfilt.analysis.duration_seconds != null}<span>{Math.floor(activeVfilt.analysis.duration_seconds/60)}:{String(Math.round(activeVfilt.analysis.duration_seconds%60)).padStart(2,'0')}</span>{/if}
                           </div>
+                          {#if hitBenchmark}
+                            {@const a = activeVfilt.analysis}
+                            {@const bpmDiff = hitBenchmark.bpm && a.bpm ? Math.abs(a.bpm - hitBenchmark.bpm) : null}
+                            {@const lufsDiff = hitBenchmark.loudness_lufs && a.loudness_lufs != null ? Math.abs(a.loudness_lufs - hitBenchmark.loudness_lufs) : null}
+                            {@const nrgDiff = hitBenchmark.energy && a.energy != null ? Math.abs(a.energy - hitBenchmark.energy) : null}
+                            {@const dncDiff = hitBenchmark.danceability && a.danceability != null ? Math.abs(a.danceability - hitBenchmark.danceability) : null}
+                            <div class="ver-progress-block">
+                              <div class="ver-progress-header">VERSION PROGRESS</div>
+                              <div class="ver-progress-table">
+                                <div class="vp-row vp-header-row"><span>SIGNAL</span><span>THIS MIX</span><span>HIT AVG</span><span>GAP</span></div>
+                                {#if a.bpm && hitBenchmark.bpm}
+                                  <div class="vp-row"><span>BPM</span><span>{Math.round(a.bpm)}</span><span>{hitBenchmark.bpm}</span><span class:vp-close={bpmDiff <= 5} class:vp-far={bpmDiff > 10}>{bpmDiff <= 2 ? '✓' : bpmDiff <= 5 ? '↑' : '–'} {bpmDiff}</span></div>
+                                {/if}
+                                {#if a.loudness_lufs != null && hitBenchmark.loudness_lufs != null}
+                                  <div class="vp-row"><span>LUFS</span><span>{a.loudness_lufs}</span><span>{hitBenchmark.loudness_lufs}</span><span class:vp-close={lufsDiff <= 1} class:vp-far={lufsDiff > 3}>{lufsDiff <= 0.5 ? '✓' : lufsDiff <= 2 ? '↑' : '–'} {lufsDiff?.toFixed(1)}</span></div>
+                                {/if}
+                                {#if a.energy != null && hitBenchmark.energy != null}
+                                  <div class="vp-row"><span>ENERGY</span><span>{a.energy}</span><span>{hitBenchmark.energy}</span><span class:vp-close={nrgDiff <= 0.05} class:vp-far={nrgDiff > 0.15}>{nrgDiff <= 0.03 ? '✓' : nrgDiff <= 0.1 ? '↑' : '–'} {nrgDiff?.toFixed(2)}</span></div>
+                                {/if}
+                                {#if a.danceability != null && hitBenchmark.danceability != null}
+                                  <div class="vp-row"><span>DANCE</span><span>{a.danceability}</span><span>{hitBenchmark.danceability}</span><span class:vp-close={dncDiff <= 0.05} class:vp-far={dncDiff > 0.15}>{dncDiff <= 0.03 ? '✓' : dncDiff <= 0.1 ? '↑' : '–'} {dncDiff?.toFixed(2)}</span></div>
+                                {/if}
+                              </div>
+                              <div class="vp-ref-count">{hitBenchmark.count} reference tracks</div>
+                            </div>
+                          {/if}
                         {/if}
                       {/if}
                     {:else}
@@ -2956,6 +2989,14 @@
   .version-notes-block { padding: 10px 14px; border-top: 1px solid #1c1c1c; display: flex; flex-direction: column; gap: 6px; }
   .version-analysis-row { display: flex; flex-wrap: wrap; gap: 10px; padding: 6px 14px 8px; border-top: 1px solid #1a1a1a; }
   .version-analysis-row span { font-family: 'Space Mono', monospace; font-size: 8px; color: #555; letter-spacing: .04em; }
+  .ver-progress-block { padding: 8px 14px 10px; border-top: 1px solid #1a1a1a; }
+  .ver-progress-header { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: #c9a84c; letter-spacing: .08em; margin-bottom: 6px; }
+  .ver-progress-table { display: flex; flex-direction: column; gap: 2px; }
+  .vp-row { display: grid; grid-template-columns: 70px 60px 60px 60px; font-family: 'Space Mono', monospace; font-size: 8px; color: #555; }
+  .vp-header-row { color: #404040; margin-bottom: 3px; }
+  .vp-close { color: #4caf82; }
+  .vp-far { color: #9e4c4c; }
+  .vp-ref-count { font-family: 'Space Mono', monospace; font-size: 7px; color: #383838; margin-top: 5px; }
   .notes-ta { min-height: 70px; font-size: 14px; background: #0d0d0d; }
   .notes-drop-wrap { border-radius: 3px; transition: all .15s; }
   .notes-drop-wrap.pdf-drag-over { outline: 1px dashed rgba(201,168,76,.5); background: rgba(201,168,76,.03); }

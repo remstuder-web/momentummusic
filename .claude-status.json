@@ -1,16 +1,22 @@
 {
-  "updated": "2026-04-18T21:30:00Z",
-  "last_task": "five-fixes-helper-essentia-capture",
+  "updated": "2026-04-18T19:01:00Z",
+  "last_task": "task-29-32",
   "status": "done",
   "working": [
-    "FIX 1: Helper search — replaced getHelperSearchConfig() with inline {@const isYoutube/isSpotify/isGemini/isDeepseek} — works for any matching URL",
-    "FIX 2: captureCategory default already done (was '' with loadCategories auto-set)",
-    "FIX 3: analyze_audio.py full rewrite — frame-based spectral (centroid/flux/rolloff/contrast), MFCCs 13 coefficients, all try/except returning null on failure",
-    "FIX 4: /capture-screen detects DAW context, fires Haiku for 3 mixing suggestions, returns mixing_suggestions[], BrainTab shows MIXING NOTES section",
-    "FIX 5: reference_tracks upsert includes spectral_centroid/contrast/flux/mfcc_mean; startup probes for new columns and warns if missing"
+    "TASK 29A: /save-audio calls full analyze_audio.py — returns analysis in response",
+    "TASK 29B: saveSongAudio() uses result.analysis directly — no separate /analyze-audio-features call",
+    "TASK 29C: version-analysis-row shows key+scale+(camelot) with Camelot notation",
+    "TASK 29D: VERSION PROGRESS table compares version vs hit benchmark (avg of reference_tracks)",
+    "TASK 29D: hit benchmark loaded in load() from reference_tracks, excludes my_productions",
+    "TASK 29D: shows BPM, LUFS, energy, dance columns with ↑/✓/– gap indicators, green/red coloring",
+    "TASK 32: WhatsApp detection regex updated to support both / and . date separators",
+    "TASK 32: /analyze-chat now returns entries+count+items (entries is primary, items is fallback alias)",
+    "TASK 32: isNewCategory flag computed server-side and normalized client-side",
+    "TASK 32: Approval panel shows green NEW badge for new categories",
+    "TASK 32: oninput updates isNewCategory live as user edits category field"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run SQL in Supabase for new columns:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, ADD COLUMN IF NOT EXISTS spectral_centroid float, ADD COLUMN IF NOT EXISTS spectral_contrast float, ADD COLUMN IF NOT EXISTS spectral_flux float, ADD COLUMN IF NOT EXISTS mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;",
-  "notes": "Helper search: inline detection triggers for youtube.com|youtu.be, spotify.com, gemini.google.com, deepseek.com. buildSearchUrl is an {@const} arrow fn inside {#each}. MFCCs: 13-coeff array stored as jsonb. Capture-screen mixing suggestions: Haiku call only fires when 'mix'/'daw'/'session' in context OR those keywords in the main analysis text."
+  "next": "SQL still needed in Supabase:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, ADD COLUMN IF NOT EXISTS spectral_centroid float, ADD COLUMN IF NOT EXISTS spectral_contrast float, ADD COLUMN IF NOT EXISTS spectral_flux float, ADD COLUMN IF NOT EXISTS mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS review_date date;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS reviewed boolean DEFAULT false;",
+  "notes": "hitBenchmark in ProjectsTab loads once on mount from reference_tracks (excludes my_productions). VERSION PROGRESS table only shows when both hitBenchmark and activeVfilt.analysis are present. Gap arrows: ✓ = within tolerance, ↑ = close, – = far."
 }

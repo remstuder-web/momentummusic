@@ -1616,26 +1616,27 @@ async function restore(input) {
         fs.writeFileSync(destPath, buf)
         console.log(`  ✓ Saved ${dir}: ${fname} (${(buf.length/1024/1024).toFixed(1)}MB)`)
 
-        // Essentia BPM+key analysis for WAV files — returns suggest_brain flag
+        // Full Essentia analysis for WAV files
+        let analysis = null
         let bpm = null, esKey = null
         if (fname.toLowerCase().endsWith('.wav')) {
           const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
-          const esTmp = path.join(os.tmpdir(), `mm_sa_${Date.now()}.py`)
+          const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
           try {
-            fs.writeFileSync(esTmp, [
-              'import essentia.standard as es, json',
-              `audio = es.MonoLoader(filename=${JSON.stringify(destPath)}, sampleRate=44100)()`,
-              'bpm_val, _, _, _, _ = es.RhythmExtractor2013(method="multifeature")(audio)',
-              'k, scale, _ = es.KeyExtractor(profileType="edma")(audio)',
-              'print(json.dumps({"bpm": round(float(bpm_val)), "key": k + (" minor" if scale=="minor" else " major")}))'
-            ].join('\n'))
-            const esOut = execSync(`"${ESSENTIA_PYTHON}" "${esTmp}" 2>/dev/null`, { encoding: 'utf8', timeout: 35000 }).trim()
-            try { fs.unlinkSync(esTmp) } catch(e) {}
+            const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${destPath}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
             const feat = JSON.parse(esOut)
-            bpm = feat.bpm; esKey = feat.key
-            console.log(`  ✓ Essentia: ${fname} → ${bpm}bpm ${esKey}`)
+            bpm = feat.bpm ? Math.round(feat.bpm) : null
+            esKey = feat.key && feat.scale ? feat.key + ' ' + feat.scale : null
+            analysis = {
+              bpm: feat.bpm, key: feat.key, scale: feat.scale, camelot: feat.camelot || null,
+              energy: feat.energy, danceability: feat.danceability, valence: feat.valence,
+              loudness_lufs: feat.loudness_lufs, brightness: feat.brightness,
+              spectral_centroid: feat.spectral_centroid || null,
+              spectral_contrast: feat.spectral_contrast || null,
+              bass_energy: feat.bass_energy, duration_seconds: feat.duration_seconds
+            }
+            console.log(`  ✓ Essentia: ${fname} → ${bpm}bpm ${esKey} (${feat.camelot}) nrg:${feat.energy}`)
           } catch(e) {
-            try { fs.unlinkSync(esTmp) } catch(e2) {}
             console.warn(`  Essentia skipped for ${fname}:`, e.message.slice(0, 60))
           }
         }
@@ -1646,6 +1647,7 @@ async function restore(input) {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
           ok: true, filename: fname, path: destPath,
+          ...(analysis ? { analysis } : {}),
           ...(bpm ? { suggest_brain: true, brain_prefill: { category: 'own_production', title: titleParsed, bpm, key: esKey } } : {})
         }))
       } catch(err) {
@@ -3632,13 +3634,14 @@ ${chatText.slice(0, 4000)}`
           title: it.title || 'untitled',
           content: it.content || '',
           suggestedCategory: it.category || 'collaboration',
+          isNewCategory: !existingCategories.includes(it.category || 'collaboration'),
           entry_type: it.entry_type || 'knowledge',
           confidence: it.confidence || 'medium'
         }))
 
         console.log(`✓ analyze-chat: ${normalised.length} items from ${chatName || 'chat'}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, items: normalised, chatName: chatName || 'chat' }))
+        res.end(JSON.stringify({ ok: true, entries: normalised, items: normalised, count: normalised.length, chatName: chatName || 'chat' }))
       } catch(e) {
         logError('analyze-chat', e.message)
         console.error('analyze-chat error:', e.message)

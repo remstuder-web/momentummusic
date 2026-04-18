@@ -274,8 +274,8 @@ Return ONLY JSON:
 
     if (!apiKey) { alert('Add API key in Settings.'); return }
 
-    // 1a0. WHATSAPP EXPORT — multi-entry extraction
-    if (/\d{1,2}\/\d{1,2}\/\d{2,4}.*[-–].*:/.test(dumpText) && dumpText.split('\n').length > 5) {
+    // 1a0. WHATSAPP EXPORT — multi-entry extraction (supports / and . date separators)
+    if (/\d{1,2}[/.]\d{1,2}[/.]\d{2,4}.*[-–].*:/.test(dumpText) && dumpText.split('\n').length > 5) {
       processing = true
       const chatText = dumpText
       dumpText = ''
@@ -287,7 +287,12 @@ Return ONLY JSON:
         })
         const d = await r.json()
         if (!d.ok) throw new Error(d.error)
-        pendingApproval = d.items
+        const rawEntries = d.entries || d.items || []
+        pendingApproval = rawEntries.map(e => ({
+          ...e,
+          suggestedCategory: e.suggestedCategory || e.category || 'collaboration',
+          isNewCategory: e.isNewCategory ?? !existingCategories.includes(e.suggestedCategory || e.category || 'collaboration')
+        }))
         showApproval = true
       } catch(e) { alert('Chat analysis failed: ' + e.message) }
       processing = false
@@ -1071,9 +1076,12 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
                 class="brain-approval-cat-inp"
                 list="brain-cats-dl"
                 value={item.suggestedCategory}
-                oninput={e => pendingApproval = pendingApproval.map((it, i) => i === idx ? { ...it, suggestedCategory: e.target.value } : it)}
+                oninput={e => pendingApproval = pendingApproval.map((it, i) => i === idx ? { ...it, suggestedCategory: e.target.value, isNewCategory: !existingCategories.includes(e.target.value) } : it)}
                 placeholder="category"
               />
+              {#if item.isNewCategory}
+                <span class="brain-approval-new-badge">NEW</span>
+              {/if}
               {#if item.confidence}
                 <span class="brain-approval-conf conf-badge-{item.confidence}">{item.confidence}</span>
               {/if}
@@ -2108,6 +2116,11 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
   .conf-badge-weak   { background: rgba(68,68,68,.4); color: #666; }
   .conf-badge-medium { background: rgba(201,168,76,.15); color: rgba(201,168,76,.8); }
   .conf-badge-strong { background: rgba(76,175,130,.15); color: #4caf82; }
+  .brain-approval-new-badge {
+    font-family: 'Space Mono', monospace; font-size: 8px; padding: 1px 4px;
+    border-radius: 2px; flex-shrink: 0; letter-spacing: .08em;
+    background: rgba(76,175,130,.12); color: #4caf82; border: 1px solid rgba(76,175,130,.25);
+  }
   .brain-approval-remove {
     background: transparent; border: none; color: #444; font-size: 13px;
     cursor: pointer; padding: 0 2px; flex-shrink: 0;

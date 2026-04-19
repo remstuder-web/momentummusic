@@ -788,12 +788,21 @@
   let brainReviewCount = $state(0)
   let generatingBriefing = $state(false)
   let autoBriefingLoading = $state(false)
+  let agentLastRun = $state({})
   let todayBriefing = $derived(inboxItems.find(n => n.type === 'briefing' && n.created_at?.slice(0,10) === todayISO))
   let scoutingArtists = $state(false)
   let matchingDemos = $state(false)
   let runningPulseCheck = $state(false)
   let whatsappName = $state('')
   let readingWhatsapp = $state(false)
+
+  function timeAgo(iso) {
+    const mins = Math.round((Date.now() - new Date(iso)) / 60000)
+    if (mins < 60) return mins + 'm ago'
+    const hrs = Math.round(mins / 60)
+    if (hrs < 24) return hrs + 'h ago'
+    return Math.round(hrs / 24) + 'd ago'
+  }
 
   async function generateBriefing() {
     const apiKey = localStorage.getItem('mm_api_key') || ''
@@ -808,6 +817,7 @@
       })
       const data = await res.json()
       if (!data.ok) throw new Error(data.error)
+      agentLastRun = { ...agentLastRun, briefing: new Date().toISOString() }
       await loadInbox()
     } catch(e) {
       alert('Briefing error: ' + e.message + '\nMake sure watcher is running.')
@@ -827,6 +837,7 @@
       })
       const data = await res.json()
       if (!data.ok) throw new Error(data.error)
+      agentLastRun = { ...agentLastRun, scout: new Date().toISOString() }
       await loadInbox()
     } catch(e) {
       alert('Scout error: ' + e.message + '\nMake sure watcher is running.')
@@ -846,6 +857,7 @@
       })
       const data = await res.json()
       if (!data.ok) throw new Error(data.error)
+      agentLastRun = { ...agentLastRun, match: new Date().toISOString() }
       await loadInbox()
     } catch(e) {
       alert('Demo match error: ' + e.message + '\nMake sure watcher is running.')
@@ -864,7 +876,10 @@
         body: JSON.stringify({ apiKey })
       })
       const data = await res.json()
-      if (data.ok) await loadInbox()
+      if (data.ok) {
+        agentLastRun = { ...agentLastRun, pulse: new Date().toISOString() }
+        await loadInbox()
+      }
     } catch(e) { alert('Watcher not running') }
     runningPulseCheck = false
   }
@@ -908,6 +923,15 @@
       .select('*').order('created_at', { ascending: false }).limit(50)
     inboxItems = data || []
     inboxUnread = inboxItems.filter(n => !n.read).length
+
+    // Seed last-run timestamps from most recent notification per agent
+    const titleToKey = { 'Morning Briefing': 'briefing', 'Artist Scout': 'scout', 'Demo Match': 'match', 'Pulse Check': 'pulse' }
+    const seeded = {}
+    for (const n of inboxItems) {
+      const key = titleToKey[n.song_title]
+      if (key && !seeded[key]) seeded[key] = n.created_at
+    }
+    agentLastRun = { ...agentLastRun, ...seeded }
   }
 
   // Check share_sessions for new downloads and create inbox notifications
@@ -1337,18 +1361,30 @@ ${mozartContext}`
 
         <!-- Agent buttons row -->
         <div class="agent-row">
-          <button class="briefing-btn {generatingBriefing?'loading':''}" onclick={() => generateBriefing()}>
-            {generatingBriefing ? '✦ Generating...' : '✦ Morning Briefing'}
-          </button>
-          <button class="briefing-btn {scoutingArtists?'loading':''}" onclick={() => scoutArtists()}>
-            {scoutingArtists ? '✦ Scouting...' : '✦ Scout Artists'}
-          </button>
-          <button class="briefing-btn {matchingDemos?'loading':''}" onclick={() => matchDemos()}>
-            {matchingDemos ? '✦ Matching...' : '✦ Match Demos'}
-          </button>
-          <button class="briefing-btn {runningPulseCheck?'loading':''}" onclick={generatePulseCheck}>
-            {runningPulseCheck ? '⚡ Checking...' : '⚡ Pulse Check'}
-          </button>
+          <div class="agent-btn-wrap">
+            <button class="briefing-btn agent-brief {generatingBriefing?'loading':''}" onclick={() => generateBriefing()}>
+              {generatingBriefing ? '✦ Generating...' : '✦ Morning Briefing'}
+            </button>
+            {#if agentLastRun.briefing}<div class="agent-last-run">{timeAgo(agentLastRun.briefing)}</div>{/if}
+          </div>
+          <div class="agent-btn-wrap">
+            <button class="briefing-btn agent-scout {scoutingArtists?'loading':''}" onclick={() => scoutArtists()}>
+              {scoutingArtists ? '✦ Scouting...' : '✦ Scout Artists'}
+            </button>
+            {#if agentLastRun.scout}<div class="agent-last-run">{timeAgo(agentLastRun.scout)}</div>{/if}
+          </div>
+          <div class="agent-btn-wrap">
+            <button class="briefing-btn agent-match {matchingDemos?'loading':''}" onclick={() => matchDemos()}>
+              {matchingDemos ? '✦ Matching...' : '✦ Match Demos'}
+            </button>
+            {#if agentLastRun.match}<div class="agent-last-run">{timeAgo(agentLastRun.match)}</div>{/if}
+          </div>
+          <div class="agent-btn-wrap">
+            <button class="briefing-btn agent-pulse {runningPulseCheck?'loading':''}" onclick={generatePulseCheck}>
+              {runningPulseCheck ? '⚡ Checking...' : '⚡ Pulse Check'}
+            </button>
+            {#if agentLastRun.pulse}<div class="agent-last-run">{timeAgo(agentLastRun.pulse)}</div>{/if}
+          </div>
           <button class="briefing-btn {readingWhatsapp?'loading':''}" onclick={extractWhatsapp}>
             {readingWhatsapp ? '💬 Analyzing...' : '💬 WhatsApp'}
           </button>
@@ -2138,6 +2174,12 @@ ${mozartContext}`
   .inbox-type-badge.dl { background: rgba(76,175,130,.12); color: #4caf82; border: 1px solid rgba(76,175,130,.25); }
   .inbox-type-badge.fb { background: rgba(201,168,76,.08); color: rgba(201,168,76,.7); border: 1px solid rgba(201,168,76,.2); }
   .inbox-type-badge.br { background: rgba(120,80,200,.12); color: rgba(180,140,255,.8); border: 1px solid rgba(140,100,220,.25); }
+  .agent-btn-wrap { display: flex; flex-direction: column; align-items: center; }
+  .agent-last-run { font-family: 'Space Mono', monospace; font-size: 8px; color: #444; text-align: center; margin-top: 2px; }
+  .agent-brief { border-left: 3px solid #c9a84c !important; }
+  .agent-scout { border-left: 3px solid #4caf82 !important; }
+  .agent-pulse { border-left: 3px solid #4a9fd4 !important; }
+  .agent-match { border-left: 3px solid #9b59b6 !important; }
   .auto-briefing-loading { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(180,140,255,.6); padding: 6px 0 2px; letter-spacing: .06em; }
   .today-briefing-block { background: rgba(120,80,200,.05); border: 1px solid rgba(140,100,220,.15); border-radius: 3px; padding: 10px 12px; margin: 8px 0; }
   .today-briefing-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }

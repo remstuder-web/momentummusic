@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] DailyTab.svelte — DONE
+TASK: agent buttons distinct colors + last run timestamp
+WHAT: Brief/Scout/Match/Pulse get distinct left border colors; agentLastRun seeded from inbox_notifications on load and updated after each agent runs; timeAgo() helper displays "Xm/h/d ago" under each button
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] momentum-watcher.cjs + DailyTab.svelte — DONE
 TASK: morning briefing auto-shows on daily load
 WHAT: watcher already saves briefing to inbox_notifications (confirmed, no change needed); DailyTab: on load checks for today's briefing in inbox, auto-triggers generateBriefing() if none exists and hour >= 8, shows briefing expanded at top of agents section with speak button; filters briefing from inbox stream to avoid duplication

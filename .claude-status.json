@@ -1,13 +1,13 @@
 {
-  "updated": "2026-04-19T09:10:00.000Z",
-  "last_task": "morning briefing auto-shows on daily load",
+  "updated": "2026-04-19T09:35:00.000Z",
+  "last_task": "agent buttons distinct colors + last run timestamp",
   "status": "done",
   "working": [
-    "Watcher /morning-briefing already saves to inbox_notifications — no change needed",
-    "DailyTab: todayBriefing $derived finds today's briefing in inboxItems",
-    "DailyTab: on load, if no today briefing and hour >= 8, auto-triggers generateBriefing() silently",
-    "DailyTab: today's briefing shown expanded at top of agents section with speak button",
-    "DailyTab: briefing filtered from todayInbox stream to avoid duplication",
+    "DailyTab: Brief=gold, Scout=green, Pulse=blue, Match=purple left border",
+    "DailyTab: agentLastRun seeded from inbox_notifications on loadInbox()",
+    "DailyTab: agentLastRun updated after each agent runs successfully",
+    "DailyTab: timeAgo() shows Xm/h/d ago under each button",
+    "DailyTab: morning briefing auto-shows expanded on load",
     "BrainTab: goal/rule text auto-routes to goal + locked confidence",
     "DailyTab/ProjectsTab sendAI: brain-save prompt on research responses",
     "Download notification dedup uses Supabase not localStorage"
@@ -17,5 +17,5 @@
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "Morning briefing has NO scheduled cron job in watcher — it only runs when manually triggered or auto-triggered by DailyTab on mount. If a true 8am scheduled job is needed, it would require node-cron or pm2 cron mode."
+  "notes": "agent-last-run seeding uses song_title matching: 'Morning Briefing'=briefing, 'Artist Scout'=scout, 'Demo Match'=match, 'Pulse Check'=pulse"
 }

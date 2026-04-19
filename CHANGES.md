@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] BrainTab.svelte — DONE
+TASK: brain: rotating placeholder, confidence pills, hover preview
+WHAT: (1) DUMP_HINTS array rotates every 4s via onMount setInterval; (2) confidence dots replaced with single pill cycling weak→medium→strong→locked, tooltip only for locked; (3) title attr on entry title span for native hover preview (120 chars)
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] DailyTab.svelte + mozartContext.js — DONE
 TASK: today focus — pin one task highlighted gold
 WHAT: pinnedTask $derived; togglePin() clears all then toggles one; ◎/◉ pin button per task row; focus-block shown above task list when pinned; mozartContext receives tasks option and prepends TODAY'S FOCUS TASK to context

@@ -1,6 +1,21 @@
 <script>
+  import { onMount } from 'svelte'
   import { supabase } from './supabase.js'
   import { buildMozartContext } from './mozartContext.js'
+
+  const DUMP_HINTS = [
+    "Paste a Spotify link to analyze a track...",
+    "Drop an image or screenshot here...",
+    "Write a rule: 'I never release without...'",
+    "Paste a YouTube link to analyze...",
+    "What did you learn from the last session?",
+    "Which artist inspires your current sound?",
+    "Paste a WhatsApp conversation to extract info...",
+    "What's a production technique you keep coming back to?",
+    "Drop a PDF for feedback extraction...",
+    "What's a business opportunity you noticed today?"
+  ]
+  let placeholderIndex = $state(0)
 
   let undoStack = $state([])
 
@@ -797,20 +812,19 @@ Return ONLY JSON (single item array):
   }
 
   const CONF_LEVELS = ['low', 'medium', 'strong', 'locked']
+  const CONF_DISPLAY = { low: 'weak', medium: 'medium', strong: 'strong', locked: 'locked' }
   const CONF_PROMOTE_MSG = {
     strong: "Mark as confirmed pattern? Mozart will apply this consistently.",
     locked: "Lock as permanent rule? You can unlock anytime."
   }
 
-  function handleConfidenceClick(entry, newVal) {
+  function cycleConfidence(entry) {
     const cur = CONF_LEVELS.indexOf(entry.confidence || 'low')
-    const nxt = CONF_LEVELS.indexOf(newVal)
-    if (nxt <= cur) {
-      // Demotion — instant save
-      saveConfidence(entry.id, newVal)
+    const next = CONF_LEVELS[(cur + 1) % CONF_LEVELS.length]
+    if (next === 'locked') {
+      confidenceTooltip = { entryId: entry.id, to: next, label: CONF_PROMOTE_MSG.locked }
     } else {
-      // Promotion to strong/locked — confirm first
-      confidenceTooltip = { entryId: entry.id, to: newVal, label: CONF_PROMOTE_MSG[newVal] }
+      saveConfidence(entry.id, next)
     }
   }
 
@@ -860,6 +874,13 @@ Return ONLY JSON (single item array):
 
   loadEntries()
   loadDueReview().then(items => dueReviewItems = items)
+
+  onMount(() => {
+    const interval = setInterval(() => {
+      placeholderIndex = (placeholderIndex + 1) % DUMP_HINTS.length
+    }, 4000)
+    return () => clearInterval(interval)
+  })
 
   // Pick up items dispatched from DailyTab WhatsApp button
   const pending = localStorage.getItem('mm_pending_chat_items')
@@ -939,8 +960,7 @@ Return ONLY JSON (single item array):
     <textarea
       class="brain-textarea {dumpDragging === 'image' ? 'drag-image' : ''}"
       bind:value={dumpText}
-      placeholder="Paste text, Spotify links, articles, thoughts...
-Or DROP AN IMAGE (screenshot, chart, conversation)"
+      placeholder={DUMP_HINTS[placeholderIndex]}
     ></textarea>
     {#if dumpDragging === 'image'}
       <p class="brain-image-drop-hint">📷 Drop image — Claude will read and extract info</p>
@@ -1294,17 +1314,13 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
                 >{entry.active ? '◉' : '○'}</button>
                 <span
                   class="brain-entry-title clickable-title"
+                  title={entry.content?.slice(0, 120)}
                   onclick={() => expandedEntries = { ...expandedEntries, [entry.id]: !expandedEntries[entry.id] }}
                 >{entry.title}</span>
-                <div class="brain-conf-row">
-                  {#each CONF_LEVELS as lvl}
-                    <button
-                      class="brain-conf-dot {(entry.confidence || 'low') === lvl ? 'active' : ''} conf-{lvl}"
-                      onclick={() => handleConfidenceClick(entry, lvl)}
-                      title={lvl}
-                    ></button>
-                  {/each}
-                </div>
+                <button
+                  class="conf-pill conf-pill-{entry.confidence || 'low'}"
+                  onclick={() => cycleConfidence(entry)}
+                >{CONF_DISPLAY[entry.confidence || 'low']}</button>
                 <button class="brain-del" onclick={() => deleteEntry(entry.id)}>×</button>
               </div>
               {#if expandedEntries[entry.id]}
@@ -2223,19 +2239,13 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
     margin-bottom: 8px;
   }
 
-  /* Confidence dots */
-  .brain-conf-row { display: flex; gap: 3px; align-items: center; flex-shrink: 0; }
-  .brain-conf-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    border: 1px solid #333; background: #1c1c1c;
-    cursor: pointer; padding: 0; flex-shrink: 0;
-    transition: transform .1s;
-  }
-  .brain-conf-dot:hover { transform: scale(1.3); }
-  .brain-conf-dot.conf-low.active    { background: #444; border-color: #555; }
-  .brain-conf-dot.conf-medium.active { background: #c9a84c; border-color: #c9a84c; }
-  .brain-conf-dot.conf-strong.active { background: #4caf82; border-color: #4caf82; }
-  .brain-conf-dot.conf-locked.active { background: #e05a4a; border-color: #e05a4a; }
+  /* Confidence pills */
+  .conf-pill { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .06em; padding: 2px 6px; border-radius: 10px; cursor: pointer; flex-shrink: 0; text-transform: uppercase; border: none; transition: opacity .15s; }
+  .conf-pill:hover { opacity: .75; }
+  .conf-pill-low    { background: rgba(255,255,255,.05); color: #444; }
+  .conf-pill-medium { background: rgba(206,201,193,.1);  color: #9e9690; }
+  .conf-pill-strong { background: rgba(201,168,76,.15);  color: #c9a84c; }
+  .conf-pill-locked { background: rgba(76,175,130,.15);  color: #4caf82; }
 
   /* Confidence tooltip */
   .brain-conf-tooltip {

@@ -2270,14 +2270,15 @@ ${mozartContext}`
     line-height: 1.65;
   }
   :global(.agent-next-move) {
+    background: transparent;
+    border: none;
+    border-left: 2px solid #c9a84c;
+    padding: 8px 14px;
+    margin-top: 10px;
+    color: #cec9c1;
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     font-weight: 300;
-    color: #cec9c1;
-    background: transparent;
-    border-left: 2px solid #c9a84c;
-    padding: 10px 14px;
-    margin-top: 10px;
     line-height: 1.65;
   }
   :global(.agent-p) { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #9e9690; line-height: 1.65; margin: 3px 0; }

@@ -1,19 +1,19 @@
 {
-  "updated": "2026-04-19T11:55:00.000Z",
-  "last_task": "persistent cost indicator in nav bar",
+  "updated": "2026-04-19T12:15:00.000Z",
+  "last_task": "agent output less bright, download notifs permanent delete, tag colors",
   "status": "done",
   "working": [
-    "+page.svelte: todayCost fetched on mount + every 5min from api_usage table",
-    "+page.svelte: cost-indicator shows $X.XX in nav, grey default, amber >$0.50, red >$2.00",
-    "+page.svelte: cost-indicator click opens settings panel",
-    "ProjectsTab: auto Mozart on song open, readable analysis stats, HIT BENCHMARK in sendAI",
-    "BrainTab: rotating placeholder, confidence pills, hover preview",
-    "DailyTab: today focus pin task"
+    "DailyTab: agent-output/bullet/p color #9e9690 (dimmer), next-move color #cec9c1 no background",
+    "DailyTab: mm_sub_dismiss localStorage removed — sub reminders dismissed in-session only",
+    "DailyTab: mm_dl_notified localStorage already removed in prior session",
+    "DailyTab: [GAP]=#e05a4a [OK]=#4caf82 [CONFIRMED]=#c9a84c [TENSION]=#e8a838 [OUTDATED]=#9e9690 [NEW]=#4a9fd4, font-weight:500 all tags",
+    "ProjectsTab: auto Mozart on song open, readable analysis stats",
+    "BrainTab: rotating placeholder, confidence pills, hover preview"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "clearInterval added to onMount cleanup to avoid memory leak on unmount"
+  "notes": "Sub reminders now dismiss only for the current session (no localStorage). They return on reload until the patch is marked sent/deleted in the Submissions tab."
 }

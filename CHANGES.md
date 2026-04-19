@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] DailyTab.svelte — DONE
+TASK: agent output less bright, download notifs permanent delete, tag colors
+WHAT: (1) agent-output/bullet/p #9e9690, next-move #cec9c1 no bg; (2) removed mm_sub_dismiss localStorage set/get; (3) [GAP]=#e05a4a [OK]=#4caf82 [CONFIRMED]=#c9a84c [TENSION]=#e8a838 [OUTDATED]=#9e9690 [NEW]=#4a9fd4, all font-weight:500
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] +page.svelte — DONE
 TASK: persistent cost indicator in nav bar
 WHAT: todayCost fetched on mount + every 5min from api_usage; cost-indicator div in nav shows $X.XX, amber >$0.50, red >$2.00, clicks open settings

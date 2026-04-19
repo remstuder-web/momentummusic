@@ -232,7 +232,6 @@
   }
 
   function dismissSubReminder(key) {
-    try { localStorage.setItem('mm_sub_dismiss_' + key, '1') } catch(e) {}
     subReminders = subReminders.filter(r => r.key !== key)
   }
 
@@ -254,8 +253,6 @@
         // week number since creation (0 = first week, 1 = second week...)
         const weekNum = Math.floor(daysSince / 7)
         const key = `sub_${p.id}_w${weekNum}`
-        if (localStorage.getItem('mm_sub_dismiss_' + key)) continue
-
         found.push({ key, name: p.name, weekNum, daysSince })
       }
       subReminders = found
@@ -2233,7 +2230,7 @@ ${mozartContext}`
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     font-weight: 300;
-    color: #cec9c1;
+    color: #9e9690;
     line-height: 1.65;
   }
   :global(.agent-header) {
@@ -2251,7 +2248,7 @@ ${mozartContext}`
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     font-weight: 300;
-    color: #cec9c1;
+    color: #9e9690;
     line-height: 1.65;
     padding: 2px 0 2px 12px;
     margin: 0;
@@ -2276,21 +2273,20 @@ ${mozartContext}`
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     font-weight: 300;
-    color: #f5f1ea;
-    background: #141414;
+    color: #cec9c1;
+    background: transparent;
     border-left: 2px solid #c9a84c;
     padding: 10px 14px;
     margin-top: 10px;
-    border-radius: 0 3px 3px 0;
     line-height: 1.65;
   }
-  :global(.agent-p) { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #cec9c1; line-height: 1.65; margin: 3px 0; }
-  :global(.ao-tag-gap) { color: #e74c3c; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; margin-right: 4px; }
-  :global(.ao-tag-ok) { color: #4caf82; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; margin-right: 4px; }
-  :global(.agent-label-confirmed) { color: #c9a84c; font-weight: 400; }
-  :global(.agent-label-tension)   { color: #e8a838; font-weight: 400; }
-  :global(.agent-label-outdated)  { color: #9e9690; font-weight: 400; }
-  :global(.agent-label-new)       { color: #4caf82; font-weight: 400; }
+  :global(.agent-p) { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #9e9690; line-height: 1.65; margin: 3px 0; }
+  :global(.ao-tag-gap) { color: #e05a4a; font-weight: 500; margin-right: 4px; }
+  :global(.ao-tag-ok)  { color: #4caf82; font-weight: 500; margin-right: 4px; }
+  :global(.agent-label-confirmed) { color: #c9a84c; font-weight: 500; }
+  :global(.agent-label-tension)   { color: #e8a838; font-weight: 500; }
+  :global(.agent-label-outdated)  { color: #9e9690; font-weight: 500; }
+  :global(.agent-label-new)       { color: #4a9fd4; font-weight: 500; }
   .task-scroll { }
   .task-scroll.scrollable { max-height: calc(7 * 50px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .year-scroll { max-height: calc(10 * 32px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }

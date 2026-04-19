@@ -1,21 +1,24 @@
 {
-  "updated": "2026-04-19T11:31:00.000Z",
-  "last_task": "five fixes: purple, demo count, kworb, agent font, newlines",
+  "updated": "2026-04-19T11:39:00.000Z",
+  "last_task": "briefing on demand, top 10 tracks playable, tiktok real data, song refs",
   "status": "done",
   "working": [
-    "DailyTab: briefing block background transparent, border #252525 (no purple)",
-    "DailyTab: briefing label color gold rgba(201,168,76,.6)",
-    "DailyTab: .agent-output * inherits DM Sans weight 300; agent-header Space Mono preserved",
-    "parseAgentOutput: splits embedded '- ' bullet runs within a single line",
-    "mozartContext: 4 formatting rules enforcing one-point-per-line + section spacing",
-    "morning-briefing: demoCount/projectSongCount via PostgREST count=exact header",
-    "fetchKworbSpotify: stateful regex returns {position, artist, title, streams}",
-    "kworbSPText formatted as 'N. Artist — Title' in scout prompt"
+    "PART 1: Auto-briefing trigger removed — briefing only runs on click or watcher schedule",
+    "PART 2: chart-analysis top 3→10 tracks; scout+chart+tiktok encode tracks in inbox message",
+    "PART 2: DailyTab renders agent-tracks section with ▶ Play (green) + Brain (gold) buttons",
+    "PART 2: getTracksFromMessage / stripTracksFromMessage helpers",
+    "PART 2: addTrackToBrain saves to brain_knowledge directly from frontend",
+    "PART 3: fetchTikTokRealData() tries tokboard.com then kworb YouTube",
+    "PART 3: runAgentTikTokTrends: Spotify search + Essentia for top 5 trends",
+    "PART 3: stores in reference_tracks (collection_name=tiktok_trending) + brain_knowledge",
+    "PART 4: ProjectsTab sendAI extracts spotify IDs from reference_links",
+    "PART 4: mozartContext renders songSpecificRefs as 'THIS SONG'S REFERENCES (primary)'"
   ],
   "broken": [],
   "partial": [
-    "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
+    "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';",
+    "tokboard.com may 403 or change structure — if no real trends fetched, TikTok agent falls back to kworb YouTube only"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "kworb scrapers depend on kworb HTML structure — if they return empty, the scout prompt gracefully shows 'Unavailable'. Test by running /agent-scout manually."
+  "notes": "Track encoding uses <!--TRACKS:JSON--> sentinel in inbox message — invisible in parseAgentOutput (stripped), parsed by getTracksFromMessage. Each track row shows play link (spotify or youtube fallback) + one-click brain save."
 }

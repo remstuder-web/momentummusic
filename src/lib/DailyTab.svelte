@@ -297,9 +297,6 @@
     }
 
     if (map.helper_ticks) state.helperTicks = map.helper_ticks
-
-    console.log('user_settings customs:', state.customs.map(c => c.label))
-    console.log('user_settings helpers:', state.helpers.map(h => h.label))
   }
 
   async function load() {

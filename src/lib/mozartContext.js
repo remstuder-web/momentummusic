@@ -1,5 +1,5 @@
 export async function buildMozartContext(supabase, options = {}) {
-  const { songVersions = [], currentSong = null } = options
+  const { songVersions = [], currentSong = null, tasks = [] } = options
 
   const [{ data: ownProds }, { data: allRefs }, { data: goals }, { data: brain }] = await Promise.all([
     supabase.from('reference_tracks').select('*').eq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(5),
@@ -105,6 +105,9 @@ FORMATTING RULES — always follow these:
 
   if (chartRefs.length) context +=
     `## MARKET CONTEXT (auto-tracked charts — background only)\n` + chartRefs.slice(0, 3).map(formatTrack).join('\n') + '\n\n'
+
+  const pinnedTask = tasks?.find(t => t.pinned)
+  if (pinnedTask) context += `TODAY'S FOCUS TASK: ${pinnedTask.label}\n\n`
 
   if (goals?.length) context +=
     `## ACTIVE GOALS\n` + goals.map(g => '- ' + g.title).join('\n') + '\n\n'

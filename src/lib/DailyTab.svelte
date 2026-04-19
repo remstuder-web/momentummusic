@@ -724,6 +724,12 @@
   async function dismissFromUpcoming(id) {
     state.tasks = state.tasks.map(t => t.id === id ? {...t, hidden_from_upcoming: true} : t); await save()
   }
+  async function togglePin(id) {
+    const alreadyPinned = state.tasks.find(t => t.id === id)?.pinned
+    state.tasks = state.tasks.map(t => ({ ...t, pinned: t.id === id ? !alreadyPinned : false }))
+    await save()
+  }
+
   async function delTask(id) {
     const deletedTask = state.tasks.find(t => t.id === id)
     if (deletedTask) pushDailyUndo('Deleted task: ' + (deletedTask.label || '').slice(0, 30), state.tasks)
@@ -790,6 +796,7 @@
   let autoBriefingLoading = $state(false)
   let agentLastRun = $state({})
   let todayBriefing = $derived(inboxItems.find(n => n.type === 'briefing' && n.created_at?.slice(0,10) === todayISO))
+  let pinnedTask = $derived((state.tasks || []).find(t => t.pinned))
   let scoutingArtists = $state(false)
   let matchingDemos = $state(false)
   let runningPulseCheck = $state(false)
@@ -1045,7 +1052,7 @@
     if (!apiKey) { aiMessages = [...aiMessages, { role: 'assistant', content: 'No API key set — add it in Settings ⚙.' }]; aiLoading = false; return }
     const openTasks = (state.tasks||[]).filter(t=>!t.done).slice(0,6).map(t=>t.label+(t.project?' ['+t.project+']':'')).join(', ')
 
-    const mozartContext = await buildMozartContext(supabase)
+    const mozartContext = await buildMozartContext(supabase, { tasks: state.tasks })
 
     const system = `You are this producer's co-intelligence.
 A sharp, direct thinking partner for music production decisions.
@@ -1451,6 +1458,12 @@ ${mozartContext}`
         {/if}
 
         <!-- Today's tasks -->
+        {#if pinnedTask}
+          <div class="focus-block">
+            <div class="focus-label">TODAY'S FOCUS</div>
+            <div class="focus-task">{pinnedTask.label}</div>
+          </div>
+        {/if}
         {#each [getUpcomingItems('week').filter(t => t.date === todayISO && !t._recurring)] as todayTaskItems}
         {#if todayTaskItems.length}
           <div class="today-tasks-list">
@@ -1461,6 +1474,7 @@ ${mozartContext}`
                   {#if t.project}<span class="tfl-prefix" style="color:{t._color||'#c9a84c'}">{t.project.toUpperCase()}</span>{/if}
                   <span class="tfl-label">{t.label}</span>
                 {:else}
+                  <button class="pin-btn {t.pinned ? 'pinned' : ''}" onclick={() => togglePin(t.id)} title={t.pinned ? 'Unpin' : 'Set as focus'}>{t.pinned ? '◉' : '◎'}</button>
                   {#each [resolveTaskPrefix(t)] as prefix}
                     <span class="tfl-prefix" style="color:{prefix.color}">{prefix.label}</span>
                   {/each}
@@ -2313,6 +2327,12 @@ ${mozartContext}`
   .tfl-done:hover { border-color: #4caf82; color: #4caf82; }
   .del-flat { background: transparent; border: none; color: #333; font-size: 14px; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
   .del-flat:hover { color: #e05a4a; }
+  .pin-btn { background: transparent; border: none; color: #333; font-size: 13px; cursor: pointer; padding: 0 3px; flex-shrink: 0; line-height: 1; }
+  .pin-btn.pinned { color: #c9a84c; }
+  .pin-btn:hover { color: #c9a84c; }
+  .focus-block { background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.3); border-left: 3px solid #c9a84c; border-radius: 4px; padding: 10px 14px; margin-bottom: 12px; }
+  .focus-label { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-bottom: 4px; }
+  .focus-task { font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 400; color: #f5f1ea; }
   .edit-time-btn { background: transparent; border: none; color: #444; font-size: 12px; cursor: pointer; padding: 0 3px; flex-shrink: 0; }
   .edit-time-btn:hover, .edit-time-btn.on { color: #c9a84c; }
   .task-edit-row { display: flex; align-items: center; gap: 6px; padding: 4px 10px 6px; background: #111; border-bottom: 1px solid #0f0f0f; }

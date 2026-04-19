@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] DailyTab.svelte + mozartContext.js — DONE
+TASK: today focus — pin one task highlighted gold
+WHAT: pinnedTask $derived; togglePin() clears all then toggles one; ◎/◉ pin button per task row; focus-block shown above task list when pinned; mozartContext receives tasks option and prepends TODAY'S FOCUS TASK to context
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] DailyTab.svelte — DONE
 TASK: delete agent outputs + permanent download notification dismiss
 WHAT: FIX1 — × delete button (position:absolute top-right) added to today-briefing-block; FIX2 — deleteInboxItem now clears song_code from share_sessions.downloads when deleting a download notification, preventing syncDownloadNotifications from re-creating it

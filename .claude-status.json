@@ -1,19 +1,19 @@
 {
-  "updated": "2026-04-19T10:20:00.000Z",
-  "last_task": "delete agent outputs + permanent download notification dismiss",
+  "updated": "2026-04-19T10:45:00.000Z",
+  "last_task": "today focus: pin one task highlighted gold",
   "status": "done",
   "working": [
-    "DailyTab: × delete button on today-briefing-block (position absolute top-right, red on hover)",
-    "DailyTab: inbox stream items already had × delete buttons — unchanged",
-    "DailyTab: deleteInboxItem clears download from share_sessions.downloads before deleting row — won't re-appear on sync",
-    "DailyTab: syncDownloadNotifications uses Supabase not localStorage for dedup",
-    "Check Out section gold-bordered, prominent at top, pulsing dot in tab bar",
-    "Agent buttons distinct colors + last run timestamps"
+    "DailyTab: pinnedTask = $derived(state.tasks.find(t => t.pinned))",
+    "DailyTab: togglePin() unsets all pinned flags then toggles target (toggle-off if re-clicking same)",
+    "DailyTab: ◎/◉ pin button before prefix on each non-deadline task row; gold when pinned",
+    "DailyTab: focus-block with TODAY'S FOCUS label shows above task list when pinned task exists",
+    "mozartContext.js: accepts tasks option, prepends TODAY'S FOCUS TASK to context when pinned task found",
+    "DailyTab sendAI: passes state.tasks to buildMozartContext"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "Download permanent dismiss works by clearing share_sessions.downloads[song_code] on notification delete. This is the only reliable way since syncDownloadNotifications re-inserts based on share_sessions data."
+  "notes": "pinned field is stored in task objects in daily_state.tasks JSON — no schema change needed"
 }

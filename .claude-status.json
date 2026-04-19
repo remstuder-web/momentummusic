@@ -1,12 +1,12 @@
 {
-  "updated": "2026-04-19T11:35:00.000Z",
-  "last_task": "projects: readable analysis stats, auto Mozart on song open",
+  "updated": "2026-04-19T11:55:00.000Z",
+  "last_task": "persistent cost indicator in nav bar",
   "status": "done",
   "working": [
-    "ProjectsTab: analysis row 11px #9e9690, two lines (BPM·Key·LUFS / nrg·dnc·val)",
-    "ProjectsTab: expandSong() replaces inline onclick — auto-fires Mozart with gap analysis when song has analysis",
-    "ProjectsTab: sendAI accepts overrideMsg param for programmatic trigger",
-    "ProjectsTab: sendAI system prompt = buildMozartContext (HIT BENCHMARK + brain) + buildProjectContext (song notes, stages, feedback)",
+    "+page.svelte: todayCost fetched on mount + every 5min from api_usage table",
+    "+page.svelte: cost-indicator shows $X.XX in nav, grey default, amber >$0.50, red >$2.00",
+    "+page.svelte: cost-indicator click opens settings panel",
+    "ProjectsTab: auto Mozart on song open, readable analysis stats, HIT BENCHMARK in sendAI",
     "BrainTab: rotating placeholder, confidence pills, hover preview",
     "DailyTab: today focus pin task"
   ],
@@ -15,5 +15,5 @@
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "Auto Mozart fires only if latest version has analysis data. Both song-head-left click and arrow click go through expandSong(). valence shown if present (may be null for local Essentia analysis)."
+  "notes": "clearInterval added to onMount cleanup to avoid memory leak on unmount"
 }

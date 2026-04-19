@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] +page.svelte — DONE
+TASK: persistent cost indicator in nav bar
+WHAT: todayCost fetched on mount + every 5min from api_usage; cost-indicator div in nav shows $X.XX, amber >$0.50, red >$2.00, clicks open settings
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] ProjectsTab.svelte — DONE
 TASK: projects: readable analysis stats, auto Mozart on song open
 WHAT: (1) analysis row 11px/#9e9690, two lines: BPM·Key·LUFS / nrg·dnc·val; (2) expandSong() triggers auto Mozart message with song stats on open if analysis exists; (3) sendAI now uses buildMozartContext (HIT BENCHMARK + brain) combined with buildProjectContext

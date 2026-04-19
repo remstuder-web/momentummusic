@@ -128,17 +128,7 @@
   // Check Out — brain_knowledge entries surfaced for daily review
   let checkOutItems = $state([])
 
-  const FIXED_SEED = [
-    { id: 'seed_gemini',    label: 'GOOGLE GEMINI',   url: 'https://gemini.google.com/app?hl=de' },
-    { id: 'seed_spotify',   label: 'SPOTIFY',          url: 'https://open.spotify.com/intl-de/' },
-    { id: 'seed_instagram', label: 'INSTAGRAM midas',  url: 'https://www.instagram.com/prod.by.midas/' },
-    { id: 'seed_untitled',  label: 'UNTITLED',         url: 'https://untitled.stream/' },
-    { id: 'seed_audioz',    label: 'AUDIOZ',           url: 'https://audioz.download/' },
-    { id: 'seed_youtube',   label: 'YOUTUBE',          url: 'https://www.youtube.com/' },
-    { id: 'seed_suno',      label: 'SUNO',             url: 'https://suno.com/studio-welcome' },
-    { id: 'seed_audimee',   label: 'AUDIMEE',          url: 'https://audimee.com/' },
-    { id: 'seed_lalalai',   label: 'LALALAI',          url: 'https://www.lalal.ai/de/' },
-  ]
+  const FIXED_SEED = []
   const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa']
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
   const TASK_TYPES = [

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] BrainTab.svelte — DONE
+TASK: remove sync all refs button
+WHAT: removed brain-sync-btn button, syncAllRefs() function, and brain-sync-btn CSS class
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] BrainTab.svelte + momentum-watcher.cjs — DONE
 TASK: reference tracks visible in brain entries
 WHAT: (1) Reference tracks now show in BRAIN ENTRIES section grouped by collection_name with dividers; (2) saveSpotifyPreview + saveTrackImport now dedup-check before brain_knowledge insert; (3) agent-chart-analysis saves individual brain_knowledge entry per track

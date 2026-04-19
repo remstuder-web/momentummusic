@@ -754,20 +754,6 @@ Return ONLY JSON (single item array):
     await loadEntries()
   }
 
-  async function syncAllRefs() {
-    try {
-      const r = await fetch('http://localhost:4242/sync-all-refs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: localStorage.getItem('mm_api_key') || '' })
-      })
-      const d = await r.json()
-      if (!d.ok) throw new Error(d.error)
-      alert(`Synced: ${d.added} new tracks added (${d.skipped} already existed)`)
-      await loadEntries()
-    } catch(e) { alert('Sync failed: ' + e.message) }
-  }
-
   async function saveExtracted() {
     if (!lastExtracted?.length) return
     for (const item of lastExtracted) {
@@ -951,7 +937,6 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
       {/each}
     {/if}
     <div class="brain-actions">
-      <button class="brain-sync-btn" onclick={syncAllRefs}>↺ Sync All System Refs</button>
       <button
         class="brain-process-btn {processing ? 'loading' : ''}"
         onclick={processDump}
@@ -1565,9 +1550,6 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
   .brain-image-drop-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; margin: 4px 0 0; letter-spacing: .04em; }
 
   .brain-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
-  .brain-sync-btn { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; background: transparent; border: 1px solid #252525; padding: 4px 10px; border-radius: 2px; cursor: pointer; }
-  .brain-sync-btn:hover { color: #c9a84c; border-color: #c9a84c; }
-
   .brain-process-btn {
     font-family: 'Space Mono', monospace;
     font-size: 11px;

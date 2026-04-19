@@ -1,19 +1,14 @@
 {
-  "updated": "2026-04-19T06:31:00.000Z",
-  "last_task": "reference tracks visible in brain entries",
+  "updated": "2026-04-19T06:35:00.000Z",
+  "last_task": "remove sync all refs button",
   "status": "done",
   "working": [
-    "Reference tracks shown in BRAIN ENTRIES section grouped by collection_name (DAILY CHART TRACKS, AKTUELLE REFS, MIX REFS, MUSIC REFS, SOUND REFS, MY PRODUCTIONS)",
-    "Search filter applies to reference tracks rows too",
-    "Source badge shows chart/spotify/youtube per track",
-    "Delete button removes from reference_tracks table",
-    "saveSpotifyPreview dedup-checks by source_url before inserting brain_knowledge",
-    "saveTrackImport dedup-checks by source_url or title before inserting brain_knowledge",
-    "agent-chart-analysis saves individual brain_knowledge entries per chart track",
-    "Watcher restarted OK"
+    "brain-sync-btn button removed from dump area",
+    "syncAllRefs() function removed from script",
+    "brain-sync-btn CSS class removed"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test Brain tab with existing reference tracks to confirm they appear in BRAIN ENTRIES section",
-  "notes": "CHANGE 1 adds ref tracks to brain entries panel from already-loaded referenceTrackEntries. CHANGE 2 adds dedup guards. Separate REFERENCE TRACKS toggle section is unchanged."
+  "next": "Test Brain tab to confirm button gone and no regressions",
+  "notes": "Sync is now automatic — button was manual trigger, no longer needed"
 }

@@ -756,22 +756,31 @@ async function fetchKworbTrending() {
 
 async function fetchKworbSpotify() {
   try {
-    const res = await fetch('https://kworb.net/spotify/country/global/daily.html', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' }
-    })
-    if (!res.ok) return []
+    const res = await fetch(
+      'https://kworb.net/spotify/country/global/daily.html',
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    )
     const html = await res.text()
-    const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
-    const items = []
-    for (const row of rows) {
-      const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
-      const text = cells.map(c => c[1].replace(/<[^>]+>/g, '').trim()).filter(Boolean)
-      if (text.length >= 2 && !/^(pos|#|rank)/i.test(text[0])) {
-        items.push(text.slice(0, 3).join(' · '))
-        if (items.length >= 10) break
+    const results = []
+    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+    let match
+    while ((match = rowRegex.exec(html)) !== null) {
+      const cells = []
+      const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi
+      let cell
+      while ((cell = cellRegex.exec(match[1])) !== null) {
+        cells.push(cell[1].replace(/<[^>]+>/g, '').trim())
+      }
+      if (cells.length >= 3) {
+        results.push({
+          position: results.length + 1,
+          artist: cells[1] || '',
+          title: cells[2] || '',
+          streams: cells[0] || ''
+        })
       }
     }
-    return items
+    return results.slice(0, 10)
   } catch(e) {
     console.warn('kworb Spotify global failed:', e.message)
     return []
@@ -844,7 +853,9 @@ async function runAgentScout(apiKey, sharedBrainRows) {
   ].filter(Boolean).join('\n') || 'No headlines fetched'
 
   const kworbYTText = kworbYT.length ? kworbYT.map((l, i) => `${i+1}. ${l}`).join('\n') : 'Unavailable'
-  const kworbSPText = kworbSP.length ? kworbSP.map((l, i) => `${i+1}. ${l}`).join('\n') : 'Unavailable'
+  const kworbSPText = kworbSP.length
+    ? kworbSP.map(t => `${t.position}. ${t.artist} — ${t.title}`).join('\n')
+    : 'Unavailable'
 
   const knownNames = (Array.isArray(connections) ? connections : []).map(b => b.name).filter(Boolean).join(', ') || 'none'
   const brainContext = buildBrainContext(sharedBrainRows)
@@ -1977,15 +1988,19 @@ async function restore(input) {
         const ago30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
         // Fetch data from Supabase in parallel
-        const [songsRes, inboxRes, connectionsRes, brainKnowRes, goalsRes, demosRes] = await Promise.all([
+        const countHeaders = { ...sbHeaders, 'Prefer': 'count=exact' }
+        const [songsRes, inboxRes, connectionsRes, brainKnowRes, goalsRes, demoCountRes, projectSongCountRes] = await Promise.all([
           fetch(`${SUPABASE_URL}/rest/v1/songs?select=title,code,work_data,project_id&not.project_id=is.null`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?read=eq.false&order=created_at.desc&limit=20`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/connections?select=name,genre,group_types,last_contact,notes,status`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=category,title,content&order=created_at.desc&limit=10`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&category=eq.goal&select=title,content&order=created_at.desc&limit=10`, { headers: sbHeaders }),
-          fetch(`${SUPABASE_URL}/rest/v1/share_sessions?select=created_at&session_type=eq.demo&created_at=gte.${todayISO.slice(0,7)+'-01'}`, { headers: sbHeaders })
+          fetch(`${SUPABASE_URL}/rest/v1/songs?project_id=is.null&select=id`, { headers: countHeaders }),
+          fetch(`${SUPABASE_URL}/rest/v1/songs?not.project_id=is.null&select=id`, { headers: countHeaders })
         ])
-        const [songs, inbox, brain, brainKnow, goals, demos] = await Promise.all([songsRes.json(), inboxRes.json(), connectionsRes.json(), brainKnowRes.json(), goalsRes.json(), demosRes.json()])
+        const [songs, inbox, brain, brainKnow, goals] = await Promise.all([songsRes.json(), inboxRes.json(), connectionsRes.json(), brainKnowRes.json(), goalsRes.json()])
+        const demoCount = parseInt(demoCountRes.headers.get('content-range')?.split('/')[1] || '0')
+        const projectSongCount = parseInt(projectSongCountRes.headers.get('content-range')?.split('/')[1] || '0')
 
         // Build context summary
         const stageCounts = {}
@@ -2009,7 +2024,6 @@ async function restore(input) {
           const wd = s.work_data || {}
           if (wd.current_stage === 'done' && (wd.completed_at || '').slice(0, 7) === todayISO.slice(0, 7)) done_this_month++
         }
-        const demos_sent_this_month = Array.isArray(demos) ? demos.length : 0
 
         const overdueArtists = (Array.isArray(brain) ? brain : [])
           .filter(b => b.status !== 'inactive' && (!b.last_contact || b.last_contact < ago30))
@@ -2029,7 +2043,7 @@ async function restore(input) {
         const context = [
           `Today: ${todayISO}`,
           `Songs by stage: ${Object.entries(stageCounts).map(([k,v]) => `${k}(${v})`).join(', ') || 'none'}`,
-          `Finished this month: ${done_this_month} | Demos sent this month: ${demos_sent_this_month}`,
+          `Demos in pipeline: ${demoCount} | Songs in projects: ${projectSongCount} | Finished this month: ${done_this_month}`,
           `Upcoming deadlines (7 days): ${upcomingDeadlines.join('; ') || 'none'}`,
           `Unread feedback: ${unreadFeedback.join('; ') || 'none'}`,
           `Artists to follow up (30+ days no contact): ${overdueArtists.slice(0,5).join('; ') || 'none'}`,

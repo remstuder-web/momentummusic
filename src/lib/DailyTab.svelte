@@ -1102,8 +1102,8 @@ ${mozartContext}`
         .replace(/\[NEW\]/g,       '<span class="agent-label-new">[NEW]</span>')
     }
 
-    for (const line of lines) {
-      const t = line.trim()
+    for (const rawLine of lines) {
+      const t = rawLine.trim()
       if (!t) continue
 
       if (t.startsWith('## ')) {
@@ -1113,8 +1113,11 @@ ${mozartContext}`
         html += `<div class="agent-header">${title}</div>`
         if (isNextMoveOrStep) { html += '<div class="agent-next-move">'; inNextMove = true }
       } else if (t.startsWith('- ') || t.startsWith('• ')) {
-        const content = colorTagLine(esc(t.replace(/^[-•]\s+/, '')))
-        html += `<div class="agent-bullet">${content}</div>`
+        // Split on embedded bullet runs (e.g. "point. - another point")
+        const parts = t.replace(/^[-•]\s+/, '').split(/\s+[-•]\s+/)
+        for (const part of parts) {
+          if (part.trim()) html += `<div class="agent-bullet">${colorTagLine(esc(part.trim()))}</div>`
+        }
       } else if (/^\d+\.\s/.test(t)) {
         const content = colorTagLine(esc(t.replace(/^\d+\.\s+/, '')))
         html += `<div class="agent-bullet">${content}</div>`
@@ -2207,10 +2210,10 @@ ${mozartContext}`
   .agent-scout { border-left: 3px solid #4caf82 !important; }
   .agent-pulse { border-left: 3px solid #4a9fd4 !important; }
   .agent-match { border-left: 3px solid #9b59b6 !important; }
-  .auto-briefing-loading { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(180,140,255,.6); padding: 6px 0 2px; letter-spacing: .06em; }
-  .today-briefing-block { background: rgba(120,80,200,.05); border: 1px solid rgba(140,100,220,.15); border-radius: 3px; padding: 10px 12px; margin: 8px 0; }
+  .auto-briefing-loading { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; padding: 6px 0 2px; letter-spacing: .06em; }
+  .today-briefing-block { background: transparent; border: 1px solid #252525; border-radius: 3px; padding: 10px 12px; margin: 8px 0; }
   .today-briefing-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .today-briefing-label { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(180,140,255,.6); letter-spacing: .1em; flex: 1; }
+  .today-briefing-label { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(201,168,76,.6); letter-spacing: .1em; flex: 1; }
   .agent-output-del { position: absolute; top: 6px; right: 6px; background: transparent; border: none; color: #444; font-size: 14px; cursor: pointer; line-height: 1; padding: 2px 4px; }
   .agent-output-del:hover { color: #e05a4a; }
   .briefing-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; padding: 4px 10px; background: transparent; border: 1px solid rgba(201,168,76,.25); color: rgba(201,168,76,.5); border-radius: 2px; cursor: pointer; transition: all .15s; }
@@ -2233,8 +2236,12 @@ ${mozartContext}`
     color: #9e9690;
     line-height: 1.65;
   }
+  .agent-output * {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+  }
   :global(.agent-header) {
-    font-family: 'Space Mono', monospace;
+    font-family: 'Space Mono', monospace !important;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: .08em;

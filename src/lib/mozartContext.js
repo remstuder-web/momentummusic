@@ -72,7 +72,11 @@ FORMATTING RULES — always follow these:
 - Never use bold (**text**) — no asterisks anywhere, not even for emphasis
 - [CONFIRMED]/[TENSION]/[OUTDATED]/[NEW] tags are valid and encouraged for knowledge entries
 - Keep each section tight — 3-5 bullets maximum
-- If LUFS reads below -20 or above -4, flag it as a measurement error — do not use the value\n\n`
+- If LUFS reads below -20 or above -4, flag it as a measurement error — do not use the value
+- Every bullet point or numbered item MUST start on its own line
+- Never run multiple points together in one paragraph
+- After every period that ends a point, start a new line if another point follows
+- Sections must have a blank line between them\n\n`
 
   if (hitBenchmark) context +=
     `## HIT BENCHMARK (avg of ${benchmarkRefs.length} ref tracks${userRefs.length < 2 ? ' — add personal refs for better accuracy' : ''})\n` +

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] ProjectsTab.svelte — DONE
+TASK: projects: readable analysis stats, auto Mozart on song open
+WHAT: (1) analysis row 11px/#9e9690, two lines: BPM·Key·LUFS / nrg·dnc·val; (2) expandSong() triggers auto Mozart message with song stats on open if analysis exists; (3) sendAI now uses buildMozartContext (HIT BENCHMARK + brain) combined with buildProjectContext
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] BrainTab.svelte — DONE
 TASK: brain: rotating placeholder, confidence pills, hover preview
 WHAT: (1) DUMP_HINTS array rotates every 4s via onMount setInterval; (2) confidence dots replaced with single pill cycling weak→medium→strong→locked, tooltip only for locked; (3) title attr on entry title span for native hover preview (120 chars)

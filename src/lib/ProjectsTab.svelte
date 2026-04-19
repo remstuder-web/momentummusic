@@ -1901,9 +1901,30 @@
     return lines.join('\n')
   }
 
-  async function sendAI() {
-    if (!aiInput.trim() || aiLoading) return
-    const msg = aiInput.trim(); aiInput = ''
+  async function expandSong(song, isExpanding) {
+    saveActiveTips(); activeTipSectionId = null; activeTipText = ''
+    expandedSongId = isExpanding ? song.id : null
+    if (!isExpanding) return
+    const wd = workData(song)
+    const latestWithAnalysis = (wd.versions || []).filter(v => v.analysis).slice(-1)[0]
+    if (!latestWithAnalysis) return
+    const a = latestWithAnalysis.analysis
+    const autoMsg =
+      'Auto-analysis for ' + (song.title || song.code) + ' ' + latestWithAnalysis.name + ': ' +
+      Math.round(a.bpm) + 'bpm · ' + a.key + ' ' + a.scale +
+      ' (' + a.camelot + ') · nrg ' + a.energy +
+      ' · dnc ' + a.danceability +
+      ' · ' + a.loudness_lufs + 'LUFS. ' +
+      'Compare to my references and flag gaps. ' +
+      'What is the single most important thing to fix next?'
+    aiMessages = []
+    await sendAI(autoMsg)
+  }
+
+  async function sendAI(overrideMsg = null) {
+    const msg = overrideMsg ?? aiInput.trim()
+    if (!msg || aiLoading) return
+    if (!overrideMsg) aiInput = ''
     aiMessages = [...aiMessages, { role: 'user', content: msg }]
     aiLoading = true
     const apiKey = localStorage.getItem('mm_api_key') || ''
@@ -1912,13 +1933,19 @@
       aiLoading = false; return
     }
     try {
+      const wd = expandedSong ? workData(expandedSong) : null
+      const brainContext = await buildMozartContext(supabase, {
+        currentSong: expandedSong?.title || expandedSong?.code,
+        songVersions: wd?.versions || []
+      })
+      const system = brainContext + '\n\n' + buildProjectContext()
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 600,
-          system: buildProjectContext(),
+          system,
           messages: aiMessages.slice(-12)
         })
       })
@@ -2069,7 +2096,7 @@
                 <button class="reorder-btn" onclick={e => moveSong(e, song, 1)}>▼</button>
               </div>
               <!-- LEFT: info + pills, grows -->
-              <div class="song-head-left" onclick={() => { saveActiveTips(); activeTipSectionId = null; activeTipText = ''; expandedSongId = expanded ? null : song.id }}>
+              <div class="song-head-left" onclick={() => expandSong(song, !expanded)}>
                 <div class="song-info">
                   <div class="code-stars-row">
                     <span class="song-code">{song.code}</span>
@@ -2136,7 +2163,7 @@
                   {/key}
                 </div>
                 <button class="daw-capture-btn" title="Capture DAW session for this song" onclick={e => { e.stopPropagation(); captureDawSession(song) }}>📸</button>
-                <span class="arr {expanded?'open':''}" onclick={() => { saveActiveTips(); activeTipSectionId = null; activeTipText = ''; expandedSongId = expanded ? null : song.id }}>▶</span>
+                <span class="arr {expanded?'open':''}" onclick={() => expandSong(song, !expanded)}>▶</span>
               </div>
             </div>
 
@@ -2517,12 +2544,20 @@
                         </div>
                         {#if activeVfilt.analysis}
                           <div class="version-analysis-row">
-                            {#if activeVfilt.analysis.bpm}<span>{activeVfilt.analysis.bpm}bpm</span>{/if}
-                            {#if activeVfilt.analysis.key}<span>{activeVfilt.analysis.key} {activeVfilt.analysis.scale}{activeVfilt.analysis.camelot ? ' (' + activeVfilt.analysis.camelot + ')' : ''}</span>{/if}
-                            {#if activeVfilt.analysis.loudness_lufs != null}<span>{activeVfilt.analysis.loudness_lufs}LUFS</span>{/if}
-                            {#if activeVfilt.analysis.energy != null}<span>nrg {activeVfilt.analysis.energy}</span>{/if}
-                            {#if activeVfilt.analysis.danceability != null}<span>dnc {activeVfilt.analysis.danceability}</span>{/if}
-                            {#if activeVfilt.analysis.duration_seconds != null}<span>{Math.floor(activeVfilt.analysis.duration_seconds/60)}:{String(Math.round(activeVfilt.analysis.duration_seconds%60)).padStart(2,'0')}</span>{/if}
+                            <div class="analysis-line">
+                              {[
+                                activeVfilt.analysis.bpm ? Math.round(activeVfilt.analysis.bpm) + 'bpm' : null,
+                                activeVfilt.analysis.key ? activeVfilt.analysis.key + ' ' + (activeVfilt.analysis.scale||'') + (activeVfilt.analysis.camelot ? ' (' + activeVfilt.analysis.camelot + ')' : '') : null,
+                                activeVfilt.analysis.loudness_lufs != null ? activeVfilt.analysis.loudness_lufs + 'LUFS' : null
+                              ].filter(Boolean).join(' · ')}
+                            </div>
+                            <div class="analysis-line">
+                              {[
+                                activeVfilt.analysis.energy != null ? 'nrg ' + activeVfilt.analysis.energy : null,
+                                activeVfilt.analysis.danceability != null ? 'dnc ' + activeVfilt.analysis.danceability : null,
+                                activeVfilt.analysis.valence != null ? 'val ' + activeVfilt.analysis.valence : null
+                              ].filter(Boolean).join(' · ')}
+                            </div>
                           </div>
                           {#if hitBenchmark}
                             {@const a = activeVfilt.analysis}
@@ -3114,8 +3149,8 @@
   .add-btn { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; padding: 7px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
   .all-done-hint { font-family: 'Space Mono', monospace; font-size: 12px; color: #4caf82; padding: 7px 14px; text-align: center; opacity: .7; border-top: 1px solid #1c1c1c; }
   .version-notes-block { padding: 10px 14px; border-top: 1px solid #1c1c1c; display: flex; flex-direction: column; gap: 6px; }
-  .version-analysis-row { display: flex; flex-wrap: wrap; gap: 10px; padding: 6px 14px 8px; border-top: 1px solid #1a1a1a; }
-  .version-analysis-row span { font-family: 'Space Mono', monospace; font-size: 8px; color: #555; letter-spacing: .04em; }
+  .version-analysis-row { display: flex; flex-direction: column; gap: 3px; padding: 6px 14px 8px; border-top: 1px solid #1a1a1a; }
+  .analysis-line { font-family: 'Space Mono', monospace; font-size: 11px; color: #9e9690; letter-spacing: .04em; }
   .ver-progress-block { padding: 8px 14px 10px; border-top: 1px solid #1a1a1a; }
   .ver-progress-header { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: #c9a84c; letter-spacing: .08em; margin-bottom: 6px; }
   .ver-progress-table { display: flex; flex-direction: column; gap: 2px; }

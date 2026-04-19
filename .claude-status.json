@@ -1,19 +1,19 @@
 {
-  "updated": "2026-04-19T11:10:00.000Z",
-  "last_task": "brain: rotating placeholder, confidence pills, hover preview",
+  "updated": "2026-04-19T11:35:00.000Z",
+  "last_task": "projects: readable analysis stats, auto Mozart on song open",
   "status": "done",
   "working": [
-    "BrainTab: DUMP_HINTS rotates every 4s via onMount setInterval, bound to textarea placeholder",
-    "BrainTab: cycleConfidence() replaces handleConfidenceClick — single pill cycles levels, tooltip only for locked",
-    "BrainTab: conf-pill CSS — weak=grey, medium=dim, strong=gold, locked=green",
-    "BrainTab: brain-entry-title gets title attr for native 120-char hover preview",
-    "DailyTab: today focus pin task with gold focus-block",
-    "DailyTab: delete agent outputs + permanent download dismiss"
+    "ProjectsTab: analysis row 11px #9e9690, two lines (BPM·Key·LUFS / nrg·dnc·val)",
+    "ProjectsTab: expandSong() replaces inline onclick — auto-fires Mozart with gap analysis when song has analysis",
+    "ProjectsTab: sendAI accepts overrideMsg param for programmatic trigger",
+    "ProjectsTab: sendAI system prompt = buildMozartContext (HIT BENCHMARK + brain) + buildProjectContext (song notes, stages, feedback)",
+    "BrainTab: rotating placeholder, confidence pills, hover preview",
+    "DailyTab: today focus pin task"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "CONF_DISPLAY maps low→weak for display only; stored value in DB is still 'low'"
+  "notes": "Auto Mozart fires only if latest version has analysis data. Both song-head-left click and arrow click go through expandSong(). valence shown if present (may be null for local Essentia analysis)."
 }

@@ -272,6 +272,36 @@
     } catch(e) {}
   }
 
+  async function loadStaticData() {
+    const keys = ['customs', 'helpers', 'helper_ticks']
+    const { data } = await supabase.from('user_settings').select('key, value').in('key', keys)
+    const map = {}
+    for (const row of (data || [])) map[row.key] = JSON.parse(row.value)
+
+    if (map.customs) {
+      state.customs = map.customs
+    } else {
+      const { data: fb } = await supabase.from('daily_state')
+        .select('customs').not('customs', 'eq', '[]').order('date', { ascending: false }).limit(1).maybeSingle()
+      state.customs = fb?.customs || []
+      await saveCustoms()
+    }
+
+    if (map.helpers) {
+      state.helpers = map.helpers
+    } else {
+      const { data: fb } = await supabase.from('daily_state')
+        .select('helpers').not('helpers', 'eq', '[]').order('date', { ascending: false }).limit(1).maybeSingle()
+      state.helpers = fb?.helpers || []
+      await saveHelpers()
+    }
+
+    if (map.helper_ticks) state.helperTicks = map.helper_ticks
+
+    console.log('user_settings customs:', state.customs.map(c => c.label))
+    console.log('user_settings helpers:', state.helpers.map(h => h.label))
+  }
+
   async function load() {
     try {
       const { data: proj } = await supabase.from('projects').select('id,name,artist,color,deadlines').order('position')
@@ -318,28 +348,6 @@
           }
         }
       }
-      // Load customs from user_settings (permanent store)
-      const { data: customsRow } = await supabase.from('user_settings').select('value').eq('key', 'customs').maybeSingle()
-      if (customsRow?.value) {
-        state.customs = JSON.parse(customsRow.value)
-      } else {
-        const { data: customsFb } = await supabase.from('daily_state')
-          .select('customs').not('customs', 'eq', '[]').order('date', { ascending: false }).limit(1).maybeSingle()
-        state.customs = customsFb?.customs || []
-        await supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' })
-      }
-
-      // Load helpers from user_settings (permanent store)
-      const { data: helpersRow } = await supabase.from('user_settings').select('value').eq('key', 'helpers').maybeSingle()
-      if (helpersRow?.value) {
-        state.helpers = JSON.parse(helpersRow.value)
-      } else {
-        const { data: helpersFb } = await supabase.from('daily_state')
-          .select('helpers').not('helpers', 'eq', '[]').order('date', { ascending: false }).limit(1).maybeSingle()
-        state.helpers = helpersFb?.helpers || []
-        await supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
-      }
-
       // Fallback for private_items, check_items, refs (still per-day)
       let fallback = null
       if (!data?.private_items?.length && !data?.check_items?.length) {
@@ -425,6 +433,16 @@
     loading = false
   }
 
+  async function saveCustoms() {
+    await supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' })
+  }
+  async function saveHelpers() {
+    await supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
+  }
+  async function saveHelperTicks() {
+    await supabase.from('user_settings').upsert({ key: 'helper_ticks', value: JSON.stringify(state.helperTicks) }, { onConflict: 'key' })
+  }
+
   async function save() {
     saveStatus = 'saving'
     const { error } = await supabase.from('daily_state').upsert({
@@ -433,7 +451,6 @@
       dismissed_reminders: state.dismissedReminders,
       ticks: state.ticks,
       health_ticks: state.healthTicks,
-      helper_ticks: state.helperTicks,
       private_ticks: state.privateTicks,
       refs: state.refs
     }, { onConflict: 'date' })
@@ -495,13 +512,9 @@
   async function addCustom() {
     if (!newCustom.trim()) return
     state.customs = [...state.customs, { id: 'c'+Date.now(), label: newCustom.trim(), url: newCustomUrl.trim() }]
-    newCustom = ''; newCustomUrl = ''; await save()
-    await supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' })
+    newCustom = ''; newCustomUrl = ''; await saveCustoms()
   }
-  async function delCustom(id) {
-    state.customs = state.customs.filter(c => c.id !== id); await save()
-    await supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' })
-  }
+  async function delCustom(id) { state.customs = state.customs.filter(c => c.id !== id); await saveCustoms() }
   async function addHealth() {
     if (!newHealth.trim()) return
     state.healthChecks = [...(state.healthChecks||[]), { id: 'h'+Date.now(), label: newHealth.trim() }]
@@ -529,23 +542,18 @@
     return null
   }
 
-  async function tickHelper(id) { state.helperTicks = {...state.helperTicks, [id]: !state.helperTicks[id]}; await save() }
+  async function tickHelper(id) { state.helperTicks = {...state.helperTicks, [id]: !state.helperTicks[id]}; await saveHelperTicks() }
   async function addHelper() {
     if (!newHelper.trim()) return
     state.helpers = [...(state.helpers||[]), { id: 'h'+Date.now(), label: newHelper.trim(), url: newHelperUrl.trim() }]
-    newHelper = ''; newHelperUrl = ''; await save()
-    await supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
+    newHelper = ''; newHelperUrl = ''; await saveHelpers()
   }
-  async function delHelper(id) {
-    state.helpers = (state.helpers||[]).filter(h => h.id !== id); await save()
-    await supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
-  }
+  async function delHelper(id) { state.helpers = (state.helpers||[]).filter(h => h.id !== id); await saveHelpers() }
   async function moveHelper(id, dir) {
     const arr = [...(state.helpers||[])]
     const idx = arr.findIndex(h => h.id === id), ni = idx + dir
     if (ni < 0 || ni >= arr.length) return
-    const tmp = arr[idx]; arr[idx] = arr[ni]; arr[ni] = tmp; state.helpers = arr; await save()
-    await supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
+    const tmp = arr[idx]; arr[idx] = arr[ni]; arr[ni] = tmp; state.helpers = arr; await saveHelpers()
   }
 
   async function tickPrivate(id) { state.privateTicks = {...state.privateTicks, [id]: !state.privateTicks[id]}; await save() }
@@ -567,8 +575,7 @@
     const ni = idx + dir
     if (ni < 0 || ni >= arr.length) return
     const tmp = arr[idx]; arr[idx] = arr[ni]; arr[ni] = tmp
-    state.customs = arr; await save()
-    await supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' })
+    state.customs = arr; await saveCustoms()
   }
   async function moveHealth(id, dir) {
     const arr = [...(state.healthChecks||[])]
@@ -1184,6 +1191,7 @@ ${mozartContext}`
     checkOutItems = checkOutItems.filter(i => i.id !== id)
   }
 
+  loadStaticData()
   load()
   loadInbox()
   loadCheckOut()

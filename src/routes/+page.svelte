@@ -14,13 +14,6 @@
   let activeTab = $state('daily')
   let listenSessionId = $state(null) // set when ?s= param detected
   let checkoutCount = $state(0)
-  let todayCost = $state(0)
-
-  async function loadTodayCost() {
-    const today = new Date().toISOString().slice(0, 10)
-    const { data } = await supabase.from('api_usage').select('cost_usd').gte('created_at', today)
-    todayCost = (data || []).reduce((sum, r) => sum + (r.cost_usd || 0), 0)
-  }
 
   onMount(() => {
     // Detect listen session — ?s=XXXX means show public listen page, not admin app
@@ -31,14 +24,9 @@
     document.addEventListener('mm-switch-tab', handler)
     const checkoutHandler = e => { checkoutCount = e.detail }
     document.addEventListener('mm-checkout-count', checkoutHandler)
-
-    loadTodayCost()
-    const costInterval = setInterval(loadTodayCost, 5 * 60 * 1000)
-
     return () => {
       document.removeEventListener('mm-switch-tab', handler)
       document.removeEventListener('mm-checkout-count', checkoutHandler)
-      clearInterval(costInterval)
     }
   })
   let showSettings = $state(false)
@@ -298,12 +286,6 @@
     {/each}
     <a class="pizza-btn" href="https://www.just-eat.ch/speisekarte/central-pizza-kebap#pre-order" target="_blank" title="Central Pizza Kebap">🍕</a>
     <button class="cost-btn" onclick={() => showCosts = !showCosts} title="API costs">$</button>
-    <div
-      class="cost-indicator"
-      style={todayCost > 2 ? 'color:#e05a4a;border-color:#e05a4a' : todayCost > 0.5 ? 'color:#e8a838;border-color:#e8a838' : ''}
-      onclick={() => showSettings = true}
-      title="Today's API cost — click for details"
-    >${todayCost < 0.01 ? '<0.01' : todayCost.toFixed(2)}</div>
     <button class="settings-btn" onclick={() => showSettings = !showSettings}>⚙</button>
   </nav>
 
@@ -556,8 +538,6 @@
 
   .settings-btn { font-family: 'Space Mono', monospace; font-size: 16px; padding: 10px 14px; background: transparent; border: none; color: #555; cursor: pointer; flex-shrink: 0; }
   .settings-btn:hover { color: #c9a84c; }
-  .cost-indicator { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; cursor: pointer; padding: 2px 6px; border: 1px solid #252525; border-radius: 3px; transition: color .15s, border-color .15s; flex-shrink: 0; }
-  .cost-indicator:hover { color: #c9a84c; border-color: #c9a84c; }
   .pizza-btn { font-size: 18px; padding: 6px 10px; text-decoration: none; flex-shrink: 0; cursor: pointer; opacity: .7; transition: opacity .2s; }
   .pizza-btn:hover { opacity: 1; }
   .cost-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 4px 8px; background: transparent; border: 1px solid #252525; color: #444; cursor: pointer; border-radius: 2px; transition: all .15s; flex-shrink: 0; margin-left: auto; }

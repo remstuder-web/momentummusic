@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-19] DailyTab.svelte — DONE
+TASK: next step no background, download delete permanent, text dimmer
+WHAT: agent-next-move padding 6px 12px, margin-top 8px, color #9e9690 (was #cec9c1/10px/14px); confirmed deleteInboxItem already does Supabase delete for all types; confirmed body text already #9e9690
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-19] DailyTab.svelte — DONE
 TASK: agent output less bright, download notifs permanent delete, tag colors
 WHAT: (1) agent-output/bullet/p #9e9690, next-move #cec9c1 no bg; (2) removed mm_sub_dismiss localStorage set/get; (3) [GAP]=#e05a4a [OK]=#4caf82 [CONFIRMED]=#c9a84c [TENSION]=#e8a838 [OUTDATED]=#9e9690 [NEW]=#4a9fd4, all font-weight:500
 RESULT: works

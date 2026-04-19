@@ -2273,9 +2273,9 @@ ${mozartContext}`
     background: transparent;
     border: none;
     border-left: 2px solid #c9a84c;
-    padding: 8px 14px;
-    margin-top: 10px;
-    color: #cec9c1;
+    padding: 6px 12px;
+    margin-top: 8px;
+    color: #9e9690;
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     font-weight: 300;

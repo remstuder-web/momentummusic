@@ -1,18 +1,18 @@
 {
-  "updated": "2026-04-19T07:55:00.000Z",
-  "last_task": "fix: customs/helpers never loaded from daily_state",
+  "updated": "2026-04-19T08:30:00.000Z",
+  "last_task": "Mozart suggests saving research to brain",
   "status": "done",
   "working": [
-    "DailyTab: NO customs: or helpers: lines in load() daily_state or fallback blocks — confirmed clean",
-    "DailyTab: loadStaticData() awaited first via IIFE before load() fires",
-    "DailyTab: customs/helpers set ONLY by loadStaticData(), addCustom/delCustom/moveCustom, addHelper/delHelper/moveHelper",
-    "DailyTab: console.log debug lines removed from loadStaticData()",
-    "DailyTab: saveCustoms()/saveHelpers()/saveHelperTicks() are the only write paths to user_settings"
+    "DailyTab sendAI: appends brain-save prompt when response >300 chars + research keywords",
+    "ProjectsTab sendAI: same brain-save prompt logic",
+    "BrainTab: no sendAI/chat function — not applicable",
+    "Download notification dedup now uses Supabase not localStorage — deleted notifs stay deleted",
+    "FIXED_SEED emptied — customs managed via user_settings"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "customs/helpers load path is now airtight. All daily_state references to customs/helpers removed. user_settings is the single source of truth."
+  "notes": "BrainTab Mozart/sendAI does not exist — AI calls in BrainTab are dump processors (processDump, processImageDump), not conversational chat."
 }

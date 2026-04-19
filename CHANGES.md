@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] DailyTab.svelte, ProjectsTab.svelte — DONE
+TASK: Mozart suggests saving research to brain
+WHAT: After every Mozart response >300 chars containing research keywords, appends "💡 Worth saving to Brain?" prompt
+RESULT: works
+BLOCKERS: BrainTab has no Mozart chat (only dump processing) — not applicable there
+
 ## [2026-04-19] DailyTab.svelte — DONE
 TASK: fix: customs/helpers never loaded from daily_state
 WHAT: audited all state.customs= and state.helpers= lines; confirmed no customs/helpers in load() daily_state or fallback blocks; removed leftover console.log debug lines from loadStaticData()

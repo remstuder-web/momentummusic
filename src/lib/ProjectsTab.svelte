@@ -1924,7 +1924,11 @@
       })
       const d = await res.json()
       if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/project-chat', model: 'claude-sonnet-4-20250514', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
-      aiMessages = [...aiMessages, { role: 'assistant', content: d.content?.[0]?.text || 'No response.' }]
+      let reply = d.content?.[0]?.text || 'No response.'
+      if (reply.length > 300 && /research|found|analysis|suggests|shows|according|trend|data|insight|indicates/i.test(reply)) {
+        reply += '\n\n---\n💡 Worth saving to Brain? Paste the key insight in Brain dump.'
+      }
+      aiMessages = [...aiMessages, { role: 'assistant', content: reply }]
     } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
     aiLoading = false
   }

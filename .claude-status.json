@@ -1,18 +1,21 @@
 {
-  "updated": "2026-04-19T08:50:00.000Z",
-  "last_task": "goal/rule text auto-routes to goal category with locked confidence",
+  "updated": "2026-04-19T09:10:00.000Z",
+  "last_task": "morning briefing auto-shows on daily load",
   "status": "done",
   "working": [
-    "BrainTab fetchCatSuggestion: skips API for goal/rule keywords, sets catSuggestion directly",
-    "BrainTab saveApproved: auto confidence='locked' when category is 'goal'",
-    "DailyTab/ProjectsTab sendAI: appends brain-save prompt on research responses",
-    "Download notification dedup uses Supabase not localStorage",
-    "FIXED_SEED emptied"
+    "Watcher /morning-briefing already saves to inbox_notifications — no change needed",
+    "DailyTab: todayBriefing $derived finds today's briefing in inboxItems",
+    "DailyTab: on load, if no today briefing and hour >= 8, auto-triggers generateBriefing() silently",
+    "DailyTab: today's briefing shown expanded at top of agents section with speak button",
+    "DailyTab: briefing filtered from todayInbox stream to avoid duplication",
+    "BrainTab: goal/rule text auto-routes to goal + locked confidence",
+    "DailyTab/ProjectsTab sendAI: brain-save prompt on research responses",
+    "Download notification dedup uses Supabase not localStorage"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "goal category entries always get confidence=locked automatically via saveApproved()"
+  "notes": "Morning briefing has NO scheduled cron job in watcher — it only runs when manually triggered or auto-triggered by DailyTab on mount. If a true 8am scheduled job is needed, it would require node-cron or pm2 cron mode."
 }

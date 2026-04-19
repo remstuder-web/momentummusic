@@ -787,6 +787,8 @@
   let inboxUnread = $state(0)
   let brainReviewCount = $state(0)
   let generatingBriefing = $state(false)
+  let autoBriefingLoading = $state(false)
+  let todayBriefing = $derived(inboxItems.find(n => n.type === 'briefing' && n.created_at?.slice(0,10) === todayISO))
   let scoutingArtists = $state(false)
   let matchingDemos = $state(false)
   let runningPulseCheck = $state(false)
@@ -1173,7 +1175,18 @@ ${mozartContext}`
 
   // loadStaticData MUST complete before load() so customs/helpers aren't lost to the state spread
   ;(async () => { await loadStaticData(); load() })()
-  loadInbox()
+  ;(async () => {
+    await loadInbox()
+    const hasTodayBriefing = inboxItems.some(n => n.type === 'briefing' && n.created_at?.slice(0,10) === todayISO)
+    if (!hasTodayBriefing && new Date().getHours() >= 8) {
+      const apiKey = localStorage.getItem('mm_api_key') || ''
+      if (apiKey) {
+        autoBriefingLoading = true
+        await generateBriefing()
+        autoBriefingLoading = false
+      }
+    }
+  })()
   loadCheckOut()
   loadGoals()
   ;(async () => {
@@ -1344,6 +1357,27 @@ ${mozartContext}`
           </button>
         </div>
 
+        <!-- Auto briefing indicator -->
+        {#if autoBriefingLoading}
+          <div class="auto-briefing-loading">✦ Generating briefing...</div>
+        {/if}
+
+        <!-- Today's briefing — auto-expanded at top -->
+        {#if todayBriefing}
+          <div class="today-briefing-block">
+            <div class="today-briefing-header">
+              <span class="inbox-type-badge br">✦ AI</span>
+              <span class="today-briefing-label">TODAY'S BRIEFING</span>
+              {#if todayBriefing.message}
+                <button class="inbox-speak-btn {speakingId === todayBriefing.id ? 'playing' : ''}" onclick={() => speakText(todayBriefing.id, todayBriefing.message)} title={speakingId === todayBriefing.id ? 'Stop' : 'Read aloud'}>
+                  {speakingId === todayBriefing.id ? '■' : '▶'}
+                </button>
+              {/if}
+            </div>
+            <div class="agent-output">{@html parseAgentOutput(todayBriefing.message)}</div>
+          </div>
+        {/if}
+
         <!-- Brain review banner -->
         {#if brainReviewCount > 0}
           <button
@@ -1409,7 +1443,7 @@ ${mozartContext}`
         {#if !inboxItems.length}
           <p class="empty-sm" style="padding:10px 0;color:#333">No notifications yet. Run an agent or send a listen link.</p>
         {:else}
-          {@const todayInbox = inboxItems.filter(n => n.created_at?.slice(0,10) === todayISO)}
+          {@const todayInbox = inboxItems.filter(n => n.created_at?.slice(0,10) === todayISO && !(n.type === 'briefing' && n.id === todayBriefing?.id))}
           {@const olderInbox = inboxItems.filter(n => n.created_at?.slice(0,10) !== todayISO)}
           <div class="inbox-scroll">
             {#if todayInbox.length}
@@ -2104,6 +2138,10 @@ ${mozartContext}`
   .inbox-type-badge.dl { background: rgba(76,175,130,.12); color: #4caf82; border: 1px solid rgba(76,175,130,.25); }
   .inbox-type-badge.fb { background: rgba(201,168,76,.08); color: rgba(201,168,76,.7); border: 1px solid rgba(201,168,76,.2); }
   .inbox-type-badge.br { background: rgba(120,80,200,.12); color: rgba(180,140,255,.8); border: 1px solid rgba(140,100,220,.25); }
+  .auto-briefing-loading { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(180,140,255,.6); padding: 6px 0 2px; letter-spacing: .06em; }
+  .today-briefing-block { background: rgba(120,80,200,.05); border: 1px solid rgba(140,100,220,.15); border-radius: 3px; padding: 10px 12px; margin: 8px 0; }
+  .today-briefing-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .today-briefing-label { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(180,140,255,.6); letter-spacing: .1em; flex: 1; }
   .briefing-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; padding: 4px 10px; background: transparent; border: 1px solid rgba(201,168,76,.25); color: rgba(201,168,76,.5); border-radius: 2px; cursor: pointer; transition: all .15s; }
   .briefing-btn:hover { border-color: rgba(201,168,76,.5); color: rgba(201,168,76,.8); }
   .briefing-btn.loading { opacity: .5; cursor: default; }

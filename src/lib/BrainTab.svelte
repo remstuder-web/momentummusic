@@ -251,6 +251,19 @@ Return ONLY JSON:
     catSuggestion = null
     catSuggestOverride = ''
     splitEdits = []
+
+    // Goal/rule text — skip API call, route directly to goal category
+    if (/main goal|always|never|rule:|goal:|north star|principle|philosophy/i.test(dumpText)) {
+      catSuggestion = {
+        action: 'existing',
+        suggestion: 'goal',
+        reason: 'This looks like a personal goal or rule — saved directly to goal category.',
+        alternatives: []
+      }
+      catSuggestLoading = false
+      return
+    }
+
     try {
       // Always refresh categories before suggesting — never use a stale list
       await loadCategories()
@@ -581,7 +594,7 @@ Return ONLY JSON (single item array):
         title: item.title,
         content: item.content,
         entry_type: item.entry_type || 'knowledge',
-        confidence: item.confidence || null,
+        confidence: item.suggestedCategory === 'goal' ? 'locked' : (item.confidence || null),
         source_url: item.source_url || null,
         verbatim_full: item.entry_type === 'chunk' ? pendingOriginalText : null,
         active: true

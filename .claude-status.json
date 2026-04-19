@@ -1,18 +1,18 @@
 {
-  "updated": "2026-04-19T08:30:00.000Z",
-  "last_task": "Mozart suggests saving research to brain",
+  "updated": "2026-04-19T08:50:00.000Z",
+  "last_task": "goal/rule text auto-routes to goal category with locked confidence",
   "status": "done",
   "working": [
-    "DailyTab sendAI: appends brain-save prompt when response >300 chars + research keywords",
-    "ProjectsTab sendAI: same brain-save prompt logic",
-    "BrainTab: no sendAI/chat function — not applicable",
-    "Download notification dedup now uses Supabase not localStorage — deleted notifs stay deleted",
-    "FIXED_SEED emptied — customs managed via user_settings"
+    "BrainTab fetchCatSuggestion: skips API for goal/rule keywords, sets catSuggestion directly",
+    "BrainTab saveApproved: auto confidence='locked' when category is 'goal'",
+    "DailyTab/ProjectsTab sendAI: appends brain-save prompt on research responses",
+    "Download notification dedup uses Supabase not localStorage",
+    "FIXED_SEED emptied"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "BrainTab Mozart/sendAI does not exist — AI calls in BrainTab are dump processors (processDump, processImageDump), not conversational chat."
+  "notes": "goal category entries always get confidence=locked automatically via saveApproved()"
 }

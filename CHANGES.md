@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] BrainTab.svelte — DONE
+TASK: goal/rule text auto-routes to goal category with locked confidence
+WHAT: fetchCatSuggestion() skips API if text matches goal/rule keywords and sets catSuggestion directly; saveApproved() auto-sets confidence='locked' when category is 'goal'
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] DailyTab.svelte, ProjectsTab.svelte — DONE
 TASK: Mozart suggests saving research to brain
 WHAT: After every Mozart response >300 chars containing research keywords, appends "💡 Worth saving to Brain?" prompt

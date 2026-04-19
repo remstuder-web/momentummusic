@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] DailyTab.svelte — DONE
+TASK: search inputs in routine items too
+WHAT: added YouTube/Spotify/Gemini/DeepSeek search input+button to customs and checkItems sections, reusing helper-search-inp/go CSS and helperSearchInputs state
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] BrainTab.svelte — DONE
 TASK: spotify link opens + copies simultaneously
 WHAT: track-dl-btn now opens Spotify in new tab AND copies URL; label changed ↓→▶; title updated

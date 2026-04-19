@@ -1,17 +1,16 @@
 {
-  "updated": "2026-04-19T06:58:00.000Z",
-  "last_task": "spotify link opens + copies simultaneously",
+  "updated": "2026-04-19T07:05:00.000Z",
+  "last_task": "search inputs in routine items too",
   "status": "partial",
   "working": [
-    "BrainTab: track-dl-btn now opens Spotify in new tab AND copies URL to clipboard",
-    "BrainTab: button label changed from ↓ to ▶, title updated to 'Play in Spotify + copy link'",
-    "DailyTab: helper search CSS placeholder color corrected",
-    "DailyTab: fallback save condition fixed"
+    "DailyTab: routine (customs) items with YouTube/Spotify/Gemini/DeepSeek URLs now show search input + → button",
+    "DailyTab: checkItems section same search input logic added",
+    "Reuses existing helperSearchInputs state and helper-search-inp/go CSS"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns",
-  "notes": "Pending SQL migration for reference_tracks source/promoted columns from earlier session."
+  "notes": "Pending SQL migration for reference_tracks source/promoted columns."
 }

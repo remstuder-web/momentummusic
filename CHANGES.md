@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] DailyTab.svelte + +page.svelte — DONE
+TASK: check out section prominent at top of daily
+WHAT: Check Out already at top — gold border/bg styling, bigger rows (36px/36x36art/13px/bigger spotify btn), hidden when 0 items; pulsing gold dot in DAILY tab via mm-checkout-count custom event; $effect broadcasts count whenever checkOutItems changes
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] DailyTab.svelte — DONE
 TASK: agent buttons distinct colors + last run timestamp
 WHAT: Brief/Scout/Match/Pulse get distinct left border colors; agentLastRun seeded from inbox_notifications on load and updated after each agent runs; timeAgo() helper displays "Xm/h/d ago" under each button

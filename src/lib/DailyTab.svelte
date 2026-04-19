@@ -1222,6 +1222,10 @@ ${mozartContext}`
     brainReviewCount = (data || []).length
   })()
 
+  $effect(() => {
+    document.dispatchEvent(new CustomEvent('mm-checkout-count', { detail: checkOutItems.length }))
+  })
+
   onMount(() => {
     syncDownloadNotifications()
     const onFocus = () => reloadProjectData()
@@ -1253,8 +1257,8 @@ ${mozartContext}`
 
     <!-- CHECK OUT — surfaced brain entries (top of page) -->
     {#if checkOutItems.length}
-      <div class="section-block checkout-section">
-        <div class="sh" style="margin-bottom:6px">🎧 Check Out</div>
+      <div class="checkout-section">
+        <div class="checkout-section-header">🎧 CHECK OUT TODAY</div>
         {#each checkOutItems as item (item.id)}
           {@const artUrl = item.metadata?.art_url || item.metadata?.image_url || null}
           {@const artist = item.metadata?.artist || (item.title?.includes('—') ? item.title.split('—')[0].trim() : null)}
@@ -2104,14 +2108,15 @@ ${mozartContext}`
   .day-title { font-family: 'Space Mono', monospace; font-size: 13px; color: #555; letter-spacing: .06em; }
 
   .section-block { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #1c1c1c; padding-top: 16px; }
-  .checkout-section { border-top: none; padding-top: 0; margin-bottom: 4px; }
-  .checkout-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+  .checkout-section { background: rgba(201,168,76,.06); border: 1px solid rgba(201,168,76,.2); border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; }
+  .checkout-section-header { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .14em; color: #c9a84c; margin-bottom: 8px; }
+  .checkout-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; min-height: 36px; }
   .checkout-cb { accent-color: #c9a84c; width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
-  .checkout-art { width: 32px; height: 32px; border-radius: 2px; object-fit: cover; flex-shrink: 0; }
-  .checkout-title-txt { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #cec9c1; flex: 1; min-width: 0; }
-  .checkout-artist-btn { background: none; border: none; padding: 0; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #4a9fd4; cursor: pointer; }
+  .checkout-art { width: 36px; height: 36px; border-radius: 2px; object-fit: cover; flex-shrink: 0; }
+  .checkout-title-txt { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300; color: #cec9c1; flex: 1; min-width: 0; }
+  .checkout-artist-btn { background: none; border: none; padding: 0; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300; color: #4a9fd4; cursor: pointer; }
   .checkout-artist-btn:hover { text-decoration: underline; }
-  .checkout-spotify-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .05em; padding: 3px 7px; border-radius: 2px; background: rgba(29,185,84,.1); border: 1px solid rgba(29,185,84,.3); color: #1DB954; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
+  .checkout-spotify-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .05em; padding: 5px 10px; border-radius: 2px; background: rgba(29,185,84,.1); border: 1px solid rgba(29,185,84,.3); color: #1DB954; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
   .checkout-cat-badge { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .06em; padding: 2px 7px; border-radius: 2px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.2); color: rgba(201,168,76,.6); white-space: nowrap; flex-shrink: 0; }
   .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); padding-bottom: 6px; border-bottom: 1px solid #303030; margin-bottom: 4px; }
 

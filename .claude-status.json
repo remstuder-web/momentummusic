@@ -1,21 +1,19 @@
 {
-  "updated": "2026-04-19T09:35:00.000Z",
-  "last_task": "agent buttons distinct colors + last run timestamp",
+  "updated": "2026-04-19T10:00:00.000Z",
+  "last_task": "check out section prominent at top of daily",
   "status": "done",
   "working": [
-    "DailyTab: Brief=gold, Scout=green, Pulse=blue, Match=purple left border",
-    "DailyTab: agentLastRun seeded from inbox_notifications on loadInbox()",
-    "DailyTab: agentLastRun updated after each agent runs successfully",
-    "DailyTab: timeAgo() shows Xm/h/d ago under each button",
-    "DailyTab: morning briefing auto-shows expanded on load",
-    "BrainTab: goal/rule text auto-routes to goal + locked confidence",
-    "DailyTab/ProjectsTab sendAI: brain-save prompt on research responses",
-    "Download notification dedup uses Supabase not localStorage"
+    "DailyTab: Check Out has gold border/bg, CHECK OUT TODAY header, 36px rows, 36x36 art, 13px font, bigger spotify btn",
+    "DailyTab: hidden when 0 items (already was)",
+    "DailyTab: $effect broadcasts mm-checkout-count event whenever checkOutItems changes",
+    "+page.svelte: listens to mm-checkout-count, shows pulsing gold dot on DAILY tab when count > 0",
+    "DailyTab: agent buttons distinct colors + last run timestamps",
+    "DailyTab: morning briefing auto-shows expanded on load"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "agent-last-run seeding uses song_title matching: 'Morning Briefing'=briefing, 'Artist Scout'=scout, 'Demo Match'=match, 'Pulse Check'=pulse"
+  "notes": "Checkout count broadcast uses document custom event mm-checkout-count, same pattern as mm-switch-tab"
 }

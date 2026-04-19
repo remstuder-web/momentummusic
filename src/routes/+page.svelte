@@ -13,6 +13,7 @@
 
   let activeTab = $state('daily')
   let listenSessionId = $state(null) // set when ?s= param detected
+  let checkoutCount = $state(0)
 
   onMount(() => {
     // Detect listen session — ?s=XXXX means show public listen page, not admin app
@@ -21,7 +22,12 @@
 
     const handler = e => { activeTab = e.detail }
     document.addEventListener('mm-switch-tab', handler)
-    return () => document.removeEventListener('mm-switch-tab', handler)
+    const checkoutHandler = e => { checkoutCount = e.detail }
+    document.addEventListener('mm-checkout-count', checkoutHandler)
+    return () => {
+      document.removeEventListener('mm-switch-tab', handler)
+      document.removeEventListener('mm-checkout-count', checkoutHandler)
+    }
   })
   let showSettings = $state(false)
   let showCosts = $state(false)
@@ -275,7 +281,7 @@
         class="tab {activeTab === tab.id ? 'active' : ''}"
         onclick={() => activeTab = tab.id}
       >
-        {tab.label}
+        {tab.label}{#if tab.id === 'daily' && checkoutCount > 0}<span class="checkout-alert-dot"></span>{/if}
       </button>
     {/each}
     <a class="pizza-btn" href="https://www.just-eat.ch/speisekarte/central-pizza-kebap#pre-order" target="_blank" title="Central Pizza Kebap">🍕</a>
@@ -521,6 +527,12 @@
 
   .tab:hover { color: #c9a84c; }
   .tab.active { color: #c9a84c; border-bottom-color: #c9a84c; }
+
+  .checkout-alert-dot { display: inline-block; width: 6px; height: 6px; background: #c9a84c; border-radius: 50%; margin-left: 4px; vertical-align: middle; animation: pulse-dot 2s ease-in-out infinite; }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
 
   main { flex: 1; padding: 24px 32px; }
 

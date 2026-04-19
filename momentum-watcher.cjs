@@ -692,19 +692,107 @@ async function fetchRssTitles(url, count = 5) {
   }
 }
 
+async function fetchRssWithBody(url, count = 3) {
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' } })
+    if (!res.ok) return []
+    const text = await res.text()
+    let items = []
+    if (url.endsWith('.json') || text.trimStart().startsWith('{')) {
+      const data = JSON.parse(text)
+      const feedItems = data.items || data.feed?.items || []
+      items = feedItems.slice(0, count).map(i => ({ title: i.title || i.headline || '', url: i.url || i.link || '' }))
+    } else {
+      const titleMatches = [...text.matchAll(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/gs)]
+      const linkMatches = [...text.matchAll(/<link>([^<]+)<\/link>/gs)]
+      const titles = titleMatches.slice(1).map(m => m[1].trim())
+      const links = linkMatches.slice(1).map(m => m[1].trim())
+      items = titles.slice(0, count).map((t, i) => ({ title: t, url: links[i] || '' }))
+    }
+    const withBodies = await Promise.allSettled(items.map(async item => {
+      if (!item.url) return item
+      try {
+        const artRes = await fetch(item.url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' },
+          signal: AbortSignal.timeout(5000)
+        })
+        if (!artRes.ok) return item
+        const html = await artRes.text()
+        const pTags = [...html.matchAll(/<p[^>]*>(.*?)<\/p>/gs)]
+        const body = pTags.map(m => m[1].replace(/<[^>]+>/g, '').trim()).filter(s => s.length > 30).slice(0, 3).join(' ').slice(0, 400)
+        return { ...item, body }
+      } catch { return item }
+    }))
+    return withBodies.map(r => r.status === 'fulfilled' ? r.value : { title: '', url: '' })
+  } catch(e) {
+    console.warn('RSS+body fetch failed:', url, e.message)
+    return []
+  }
+}
+
+async function fetchKworbTrending() {
+  try {
+    const res = await fetch('https://kworb.net/youtube/trending.html', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' }
+    })
+    if (!res.ok) return []
+    const html = await res.text()
+    const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
+    const items = []
+    for (const row of rows) {
+      const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
+      const text = cells.map(c => c[1].replace(/<[^>]+>/g, '').trim()).filter(Boolean)
+      if (text.length >= 2 && !/^(pos|#|rank)/i.test(text[0])) {
+        items.push(text.slice(0, 3).join(' · '))
+        if (items.length >= 10) break
+      }
+    }
+    return items
+  } catch(e) {
+    console.warn('kworb YouTube trending failed:', e.message)
+    return []
+  }
+}
+
+async function fetchKworbSpotify() {
+  try {
+    const res = await fetch('https://kworb.net/spotify/country/global/daily.html', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' }
+    })
+    if (!res.ok) return []
+    const html = await res.text()
+    const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
+    const items = []
+    for (const row of rows) {
+      const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
+      const text = cells.map(c => c[1].replace(/<[^>]+>/g, '').trim()).filter(Boolean)
+      if (text.length >= 2 && !/^(pos|#|rank)/i.test(text[0])) {
+        items.push(text.slice(0, 3).join(' · '))
+        if (items.length >= 10) break
+      }
+    }
+    return items
+  } catch(e) {
+    console.warn('kworb Spotify global failed:', e.message)
+    return []
+  }
+}
+
 async function runAgentScout(apiKey, sharedBrainRows) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today = new Date().toISOString().slice(0, 10)
 
   // Fetch all data sources in parallel
-  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot] = await Promise.all([
+  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/connections?select=name`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?order=tempo.desc&limit=5&select=title,artist,genre_tags,tempo,key`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/watched_artists?active=eq.true&select=*`, { headers: sbHeaders }),
     getSpotifyToken().catch(() => null),
-    fetchRssTitles('https://pitchfork.com/rss/news/feed.json', 5),
-    fetchRssTitles('https://www.factmag.com/feed/', 5),
-    fetchRssTitles('https://www.hypebot.com/feed', 5),
+    fetchRssWithBody('https://pitchfork.com/rss/news/feed.json', 3),
+    fetchRssWithBody('https://www.factmag.com/feed/', 3),
+    fetchRssWithBody('https://www.hypebot.com/feed', 3),
+    fetchKworbTrending(),
+    fetchKworbSpotify(),
   ])
 
   const [connections, refTracks, watchedArtists] = await Promise.all([
@@ -744,12 +832,19 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     watchedNewText = newThisWeek.length ? newThisWeek.join('\n') : '- No new releases from watched artists this week'
   }
 
-  // Build RSS headlines block
+  // Build RSS headlines block with article snippets
+  const formatRss = (items, label) => items
+    .filter(i => i.title)
+    .map(i => `[${label}] ${i.title}${i.body ? `\n  "${i.body.slice(0, 200)}"` : ''}`)
+    .join('\n')
   const rssLines = [
-    ...pitchfork.map(t => `[Pitchfork] ${t}`),
-    ...factmag.map(t => `[FACT] ${t}`),
-    ...hypebot.map(t => `[Hypebot] ${t}`),
-  ].join('\n') || 'No headlines fetched'
+    formatRss(pitchfork, 'Pitchfork'),
+    formatRss(factmag, 'FACT'),
+    formatRss(hypebot, 'Hypebot'),
+  ].filter(Boolean).join('\n') || 'No headlines fetched'
+
+  const kworbYTText = kworbYT.length ? kworbYT.map((l, i) => `${i+1}. ${l}`).join('\n') : 'Unavailable'
+  const kworbSPText = kworbSP.length ? kworbSP.map((l, i) => `${i+1}. ${l}`).join('\n') : 'Unavailable'
 
   const knownNames = (Array.isArray(connections) ? connections : []).map(b => b.name).filter(Boolean).join(', ') || 'none'
   const brainContext = buildBrainContext(sharedBrainRows)
@@ -757,12 +852,20 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     .map(t => `- ${t.artist} — ${t.title} | ${t.tempo || '?'}bpm ${t.key || ''} | genres: ${(t.genre_tags || []).slice(0,3).join(', ')}`)
     .join('\n')
 
+  const sourcesUsed = ['spotify_new_releases', 'pitchfork', 'factmag', 'hypebot', 'kworb_youtube', 'kworb_spotify', 'watched_artists']
+
   const prompt = `Here is this week's REAL music data — do not invent anything outside this data:
 
 NEW RELEASES ON SPOTIFY:
 ${newReleasesText || 'Unavailable'}
 
-INDUSTRY HEADLINES THIS WEEK:
+KWORB — YouTube Trending (global):
+${kworbYTText}
+
+KWORB — Spotify Global Daily Chart:
+${kworbSPText}
+
+INDUSTRY HEADLINES THIS WEEK (with article snippets):
 ${rssLines}
 
 WATCHED ARTISTS — NEW RELEASES:
@@ -773,11 +876,11 @@ ${brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainCon
 Based ONLY on the above real data:
 
 ## Breaking Artists
-- Name artists actually in the new releases data
+- Name artists actually in the new releases or chart data
 - Only reference real tracks listed above
 
 ## Trending Sounds
-- Patterns visible in the real data only
+- Patterns visible across Spotify chart + YouTube trending + new releases
 
 ## Opportunities
 - Based on gaps in the real data vs Remo's sound (genres: ${SUB_GENRE_LABELS})
@@ -803,10 +906,14 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     body: JSON.stringify({ endpoint: '/agent-scout', model, input_tokens: usage.input_tokens||0, output_tokens: usage.output_tokens||0, cost_usd: ((usage.input_tokens||0)*0.000001)+((usage.output_tokens||0)*0.000005) })
   }).catch(() => {})
 
-  // Save scout report to brain_knowledge
+  // Save scout report to brain_knowledge with source metadata
   fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
     method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ category: 'market_knowledge', title: `Scout Report ${today}`, content: scoutText, entry_type: 'observation', confidence: 'weak', active: true })
+    body: JSON.stringify({
+      category: 'market_knowledge', title: `Scout Report ${today}`, content: scoutText,
+      entry_type: 'observation', confidence: 'weak', active: true,
+      metadata: { source_type: 'scout_agent', sources: sourcesUsed, date: today }
+    })
   }).catch(() => {})
 
   await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
@@ -1677,40 +1784,78 @@ async function restore(input) {
         fs.writeFileSync(destPath, buf)
         console.log(`  ✓ Saved ${dir}: ${fname} (${(buf.length/1024/1024).toFixed(1)}MB)`)
 
-        // Full Essentia analysis for WAV files
-        let analysis = null
-        let bpm = null, esKey = null
-        if (fname.toLowerCase().endsWith('.wav')) {
-          const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
-          const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
-          try {
-            const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${destPath}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
-            const feat = JSON.parse(esOut)
-            bpm = feat.bpm ? Math.round(feat.bpm) : null
-            esKey = feat.key && feat.scale ? feat.key + ' ' + feat.scale : null
-            analysis = {
-              bpm: feat.bpm, key: feat.key, scale: feat.scale, camelot: feat.camelot || null,
-              energy: feat.energy, danceability: feat.danceability, valence: feat.valence,
-              loudness_lufs: feat.loudness_lufs, brightness: feat.brightness,
-              spectral_centroid: feat.spectral_centroid || null,
-              spectral_contrast: feat.spectral_contrast || null,
-              bass_energy: feat.bass_energy, duration_seconds: feat.duration_seconds
-            }
-            console.log(`  ✓ Essentia: ${fname} → ${bpm}bpm ${esKey} (${feat.camelot}) nrg:${feat.energy}`)
-          } catch(e) {
-            console.warn(`  Essentia skipped for ${fname}:`, e.message.slice(0, 60))
-          }
-        }
-
-        // Parse human title from filename: CODE_ARTIST_TITLE_v00.wav → ARTIST TITLE
-        const titleParsed = fname.replace(/\.[^.]+$/, '').replace(/_/g, ' ')
-
+        // Respond immediately — Essentia runs in background
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({
-          ok: true, filename: fname, path: destPath,
-          ...(analysis ? { analysis } : {}),
-          ...(bpm ? { suggest_brain: true, brain_prefill: { category: 'own_production', title: titleParsed, bpm, key: esKey } } : {})
-        }))
+        res.end(JSON.stringify({ ok: true, filename: fname, path: destPath }))
+
+        // Background Essentia analysis for WAV files
+        if (fname.toLowerCase().endsWith('.wav')) {
+          setImmediate(async () => {
+            const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
+            const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
+            try {
+              const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${destPath}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+              const feat = JSON.parse(esOut)
+              const bpm = feat.bpm ? Math.round(feat.bpm) : null
+              const esKey = feat.key && feat.scale ? feat.key + ' ' + feat.scale : null
+              const analysis = {
+                bpm: feat.bpm, key: feat.key, scale: feat.scale, camelot: feat.camelot || null,
+                energy: feat.energy, danceability: feat.danceability, valence: feat.valence,
+                loudness_lufs: feat.loudness_lufs, brightness: feat.brightness,
+                spectral_centroid: feat.spectral_centroid || null,
+                spectral_contrast: feat.spectral_contrast || null,
+                bass_energy: feat.bass_energy, duration_seconds: feat.duration_seconds
+              }
+              console.log(`  ✓ Essentia (bg): ${fname} → ${bpm}bpm ${esKey} (${feat.camelot}) nrg:${feat.energy}`)
+
+              // Find song by code prefix and update work_data
+              const code = fname.split('_')[0]
+              if (code) {
+                const songRes = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=id,code,work_data&code=eq.${encodeURIComponent(code)}&limit=1`, { headers: sbHeaders })
+                const songs = await songRes.json()
+                const song = Array.isArray(songs) ? songs[0] : null
+                if (song) {
+                  const wd = song.work_data || {}
+                  const versions = wd.versions || []
+                  const vIdx = versions.findIndex(v => v.name === fname || (v.audio_path || '').endsWith(fname))
+                  if (vIdx >= 0) {
+                    versions[vIdx] = { ...versions[vIdx], analysis }
+                  } else if (versions.length > 0) {
+                    versions[versions.length - 1] = { ...versions[versions.length - 1], analysis }
+                  }
+                  wd.versions = versions
+                  await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, {
+                    method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+                    body: JSON.stringify({ work_data: wd })
+                  })
+                  console.log(`  ✓ Essentia (bg): updated work_data for song ${code}`)
+                }
+              }
+
+              // Save to brain_knowledge as own_production if not yet stored
+              if (bpm && esKey) {
+                const titleParsed = fname.replace(/\.[^.]+$/, '').replace(/_/g, ' ')
+                const today = new Date().toISOString().slice(0, 10)
+                const exRes = await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?category=eq.own_production&title=eq.${encodeURIComponent(titleParsed)}&limit=1`, { headers: sbHeaders })
+                const exRows = await exRes.json()
+                if (!Array.isArray(exRows) || exRows.length === 0) {
+                  await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+                    method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+                    body: JSON.stringify({
+                      category: 'own_production', title: titleParsed,
+                      content: `${bpm}bpm · ${esKey} (${feat.camelot || '?'}) · nrg ${feat.energy} · dnc ${feat.danceability} · ${feat.loudness_lufs}LUFS`,
+                      entry_type: 'observation', confidence: 'medium', active: true,
+                      metadata: { source_type: 'essentia', date: today, file: fname }
+                    })
+                  })
+                  console.log(`  ✓ Essentia (bg): brain entry saved for ${titleParsed}`)
+                }
+              }
+            } catch(e) {
+              console.warn(`  Essentia (bg) failed for ${fname}:`, e.message.slice(0, 80))
+            }
+          })
+        }
       } catch(err) {
         logError('save-audio', err.message)
         console.error('✗ save-audio error:', err.message)

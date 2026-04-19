@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-19] DailyTab.svelte — DONE
+TASK: fix load order: customs from user_settings only
+WHAT: wrapped loadStaticData()+load() in async IIFE so loadStaticData is awaited before load() fires — race condition was causing state spread in load() to capture customs:[] before user_settings resolved, then seedFixed() running with empty customs
+RESULT: customs/helpers now guaranteed to be set before daily_state spread overwrites state
+BLOCKERS: none
+
+## [2026-04-19] DailyTab.svelte — DONE
 TASK: customs/helpers fully static via loadStaticData() + dedicated save functions
 WHAT: added loadStaticData() called before load() on mount; saveCustoms()/saveHelpers()/saveHelperTicks() are the only write paths; save() upsert no longer includes customs/helpers/helper_ticks; handlers call dedicated functions only
 RESULT: works — customs/helpers load exclusively from user_settings, never from old daily_state rows

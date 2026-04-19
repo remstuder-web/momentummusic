@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-19] DailyTab.svelte — DONE
+TASK: customs/helpers fully static via loadStaticData() + dedicated save functions
+WHAT: added loadStaticData() called before load() on mount; saveCustoms()/saveHelpers()/saveHelperTicks() are the only write paths; save() upsert no longer includes customs/helpers/helper_ticks; handlers call dedicated functions only
+RESULT: works — customs/helpers load exclusively from user_settings, never from old daily_state rows
+BLOCKERS: none
+
+## [2026-04-19] DailyTab.svelte — DONE
 TASK: customs/helpers permanent in user_settings
 WHAT: load() reads customs/helpers exclusively from user_settings (migrates from daily_state on first run); addCustom/delCustom/moveCustom/addHelper/delHelper/moveHelper each upsert to user_settings after save(); daily_state upsert no longer includes customs or helpers; fallback query simplified to private_items/check_items only
 RESULT: works

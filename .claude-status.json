@@ -1,18 +1,33 @@
 {
-  "updated": "2026-04-19T07:25:00.000Z",
-  "last_task": "customs/helpers permanent in user_settings",
-  "status": "partial",
+  "updated": "2026-04-19T07:35:00.000Z",
+  "last_task": "customs/helpers fully static via user_settings",
+  "status": "done",
   "working": [
-    "DailyTab: customs/helpers load exclusively from user_settings; auto-migrate from daily_state on first run",
-    "DailyTab: addCustom/delCustom/moveCustom each upsert key='customs' to user_settings",
-    "DailyTab: addHelper/delHelper/moveHelper each upsert key='helpers' to user_settings",
-    "DailyTab: daily_state upsert no longer includes customs or helpers fields",
-    "DailyTab: fallback query simplified to only fetch private_items/check_items/refs"
+    "DailyTab: loadStaticData() called before load() on mount",
+    "DailyTab: customs/helpers/helper_ticks load exclusively from user_settings",
+    "DailyTab: auto-migrates from daily_state on first run if user_settings row missing",
+    "DailyTab: saveCustoms()/saveHelpers()/saveHelperTicks() are dedicated save functions",
+    "DailyTab: addCustom/delCustom/moveCustom call saveCustoms() only",
+    "DailyTab: addHelper/delHelper/moveHelper call saveHelpers() only",
+    "DailyTab: tickHelper calls saveHelperTicks() only",
+    "DailyTab: save() upsert no longer includes customs, helpers, or helper_ticks",
+    "DailyTab: fallback query only fetches private_items/check_items/refs",
+    "BrainTab: reference_tracks grouped by collection_name in Brain Entries section",
+    "BrainTab: source indicator dots (●/◑/○) and [+] promote button per track",
+    "BrainTab: track-dl-btn opens Spotify in new tab AND copies URL",
+    "BrainTab: saveSpotifyPreview deduplicates by source_url",
+    "BrainTab: Sync All System Refs button removed",
+    "mozartContext: userRefs (source=user or promoted) vs chartRefs (source=agent, not promoted)",
+    "mozartContext: benchmarkRefs uses userRefs if 2+, else falls back to all non-daily-chart",
+    "momentum-watcher: runAgentChartAnalysis saves source='agent' on reference_tracks rows",
+    "momentum-watcher: inserts per-track brain_knowledge entry after chart analysis",
+    "DailyTab: routine (customs) items have YouTube/Spotify/Gemini/DeepSeek search input",
+    "DailyTab: checkItems have YouTube/Spotify/Gemini/DeepSeek search input"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
-  "next": "Run SQL migration in Supabase dashboard for source/promoted columns",
-  "notes": "user_settings table: key text UNIQUE, value text. Tasks/ticks/health/private stay per-day in daily_state."
+  "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
+  "notes": "user_settings table: key text UNIQUE, value text. Tasks/ticks/health/private stay per-day in daily_state. All session work committed to main."
 }

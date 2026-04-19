@@ -557,6 +557,7 @@ async function runAgentChartAnalysis(apiKey) {
       popularity: track.popularity || null,
       album_art: track.album?.images?.[0]?.url || null,
       collection_name: 'daily_chart',
+      source: 'agent',
       approved: true
     }
     await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
@@ -4059,6 +4060,9 @@ server.listen(PORT, '127.0.0.1', () => {
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/songs?select=audio_analysis&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ songs table missing audio_analysis column — run SQL:\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;') })
+    .catch(() => {})
+  fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=source,promoted&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing source/promoted columns — run SQL in Supabase:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT \'agent\', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false;\nUPDATE reference_tracks SET source = \'agent\' WHERE collection_name = \'daily_chart\';') })
     .catch(() => {})
 })
 

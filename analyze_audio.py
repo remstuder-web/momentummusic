@@ -45,24 +45,22 @@ except Exception:
     results['scale'] = None
     results['camelot'] = None
 
-# Loudness (RMS-based, reliable for short clips)
+# Loudness + RMS + Energy (single RMS call shared across all three)
 try:
-    rms = float(es.RMS()(audio))
-    if rms > 0:
-        loudness_lufs = round(20 * math.log10(rms) + 3.0, 1)
+    rms_val = float(es.RMS()(audio))
+    results['rms'] = round(rms_val, 4)
+    if rms_val > 0:
+        loudness_lufs = round(20 * math.log10(rms_val) + 3.0, 1)
         loudness_lufs = max(-20.0, min(-4.0, loudness_lufs))
     else:
         loudness_lufs = -20.0
     results['loudness_lufs'] = loudness_lufs
-    results['rms'] = round(rms, 4)
-except Exception:
+    results['energy'] = round(min(1.0, rms_val * 10), 3)
+except Exception as e:
+    results['rms'] = None
     results['loudness_lufs'] = None
-
-# Energy
-try:
-    results['energy'] = round(min(1.0, float(es.RMS()(audio)) * 10), 3)
-except Exception:
     results['energy'] = None
+    print('LUFS error:', str(e), file=sys.stderr)
 
 # Danceability
 try:

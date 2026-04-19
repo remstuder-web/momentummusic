@@ -697,6 +697,7 @@ Return ONLY JSON (single item array):
       artist_followers: t.artist_followers,
       preview_url: t.preview_url,
       album_art: t.art_url,
+      source: 'user',
       approved: true
     }, { onConflict: 'spotify_id' })
 
@@ -1366,6 +1367,17 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
             <div class="brain-cat-divider">{COL_LABELS[col] || col.toUpperCase()}</div>
             {#each filteredTracks as track}
               <div class="brain-reftrack-row">
+                {#if track.source === 'user' || track.promoted}
+                  <span class="brain-reftrack-dot user" title={track.promoted ? 'Promoted chart track' : 'Your reference'}>
+                    {track.promoted ? '◑' : '●'}
+                  </span>
+                {:else}
+                  <span class="brain-reftrack-dot agent" title="Auto-added chart track">○</span>
+                  <button class="brain-reftrack-promote" title="Promote to personal reference" onclick={async () => {
+                    await supabase.from('reference_tracks').update({ promoted: true, source: 'user' }).eq('id', track.id)
+                    referenceTrackEntries = referenceTrackEntries.map(t => t.id === track.id ? { ...t, promoted: true, source: 'user' } : t)
+                  }}>+</button>
+                {/if}
                 <span class="brain-reftrack-info">
                   {track.artist ? track.artist + ' — ' : ''}{track.title}
                   <span class="brain-reftrack-stats">
@@ -1831,6 +1843,26 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
     text-transform: uppercase;
     letter-spacing: .06em;
   }
+  .brain-reftrack-dot {
+    font-size: 10px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .brain-reftrack-dot.user { color: #c9a84c; }
+  .brain-reftrack-dot.agent { color: #444; }
+  .brain-reftrack-promote {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: #444;
+    background: transparent;
+    border: 1px solid #2a2a2a;
+    border-radius: 2px;
+    padding: 0 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    line-height: 14px;
+  }
+  .brain-reftrack-promote:hover { color: #4caf82; border-color: #4caf82; }
 
   .brain-entry {
     background: #1c1c1c;

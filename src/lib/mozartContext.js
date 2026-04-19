@@ -1,27 +1,29 @@
 export async function buildMozartContext(supabase, options = {}) {
   const { songVersions = [], currentSong = null } = options
 
-  const [{ data: ownProds }, { data: refs }, { data: chartTracks }, { data: goals }, { data: brain }] = await Promise.all([
+  const [{ data: ownProds }, { data: allRefs }, { data: goals }, { data: brain }] = await Promise.all([
     supabase.from('reference_tracks').select('*').eq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(5),
-    supabase.from('reference_tracks').select('*').neq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(10),
-    supabase.from('reference_tracks').select('*').eq('collection_name', 'daily_chart').order('created_at', { ascending: false }).limit(3),
+    supabase.from('reference_tracks').select('*').neq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(20),
     supabase.from('brain_knowledge').select('title,content').eq('category', 'goal').limit(5),
     supabase.from('brain_knowledge').select('category,title,content').eq('active', true).order('created_at', { ascending: false }).limit(6)
   ])
 
-  const hitRefs = refs?.filter(t => t.collection_name !== 'daily_chart') || []
+  const userRefs = (allRefs || []).filter(t => t.source === 'user' || t.promoted)
+  const chartRefs = (allRefs || []).filter(t => t.source === 'agent' && !t.promoted)
+
+  const benchmarkRefs = userRefs.length >= 2 ? userRefs : (allRefs || []).filter(t => t.collection_name !== 'daily_chart')
   const avg = (arr, key) => arr.filter(t => t[key] != null).reduce((s, t) => s + t[key], 0) / (arr.filter(t => t[key] != null).length || 1)
 
-  const hitBenchmark = hitRefs.length ? {
-    avg_bpm:          Math.round(avg(hitRefs, 'tempo')),
-    avg_loudness:     avg(hitRefs, 'loudness').toFixed(1),
-    avg_energy:       avg(hitRefs, 'energy').toFixed(2),
-    avg_danceability: avg(hitRefs, 'danceability').toFixed(2),
-    avg_valence:      avg(hitRefs, 'valence').toFixed(2),
-    avg_brightness:   avg(hitRefs, 'brightness').toFixed(2),
-    avg_bass_energy:  avg(hitRefs, 'bass_energy').toFixed(2),
-    avg_acousticness: avg(hitRefs, 'acousticness').toFixed(2),
-    common_keys:      [...new Set(hitRefs.map(t => t.key).filter(Boolean))].slice(0, 3)
+  const hitBenchmark = benchmarkRefs.length ? {
+    avg_bpm:          Math.round(avg(benchmarkRefs, 'tempo')),
+    avg_loudness:     avg(benchmarkRefs, 'loudness').toFixed(1),
+    avg_energy:       avg(benchmarkRefs, 'energy').toFixed(2),
+    avg_danceability: avg(benchmarkRefs, 'danceability').toFixed(2),
+    avg_valence:      avg(benchmarkRefs, 'valence').toFixed(2),
+    avg_brightness:   avg(benchmarkRefs, 'brightness').toFixed(2),
+    avg_bass_energy:  avg(benchmarkRefs, 'bass_energy').toFixed(2),
+    avg_acousticness: avg(benchmarkRefs, 'acousticness').toFixed(2),
+    common_keys:      [...new Set(benchmarkRefs.map(t => t.key).filter(Boolean))].slice(0, 3)
   } : null
 
   const fmtDur = s => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : null
@@ -73,7 +75,7 @@ FORMATTING RULES — always follow these:
 - If LUFS reads below -20 or above -4, flag it as a measurement error — do not use the value\n\n`
 
   if (hitBenchmark) context +=
-    `## HIT BENCHMARK (avg of ${hitRefs.length} reference tracks)\n` +
+    `## HIT BENCHMARK (avg of ${benchmarkRefs.length} ref tracks${userRefs.length < 2 ? ' — add personal refs for better accuracy' : ''})\n` +
     `${hitBenchmark.avg_bpm}bpm · ` +
     `nrg ${hitBenchmark.avg_energy} · ` +
     `dnc ${hitBenchmark.avg_danceability} · ` +
@@ -95,14 +97,14 @@ FORMATTING RULES — always follow these:
     }
   }
 
-  if (chartTracks?.length) context +=
-    `## TODAY'S CHART TRACKS\n` + chartTracks.map(formatTrack).join('\n') + '\n\n'
-
   if (ownProds?.length) context +=
     `## MY PRODUCTIONS\n` + ownProds.map(formatTrack).join('\n') + '\n\n'
 
-  if (refs?.length) context +=
-    `## MY REFERENCE TRACKS\n` + refs.map(formatTrack).join('\n') + '\n\n'
+  if (userRefs.length) context +=
+    `## MY REFERENCE TRACKS (personal choices)\n` + userRefs.map(formatTrack).join('\n') + '\n\n'
+
+  if (chartRefs.length) context +=
+    `## MARKET CONTEXT (auto-tracked charts — background only)\n` + chartRefs.slice(0, 3).map(formatTrack).join('\n') + '\n\n'
 
   if (goals?.length) context +=
     `## ACTIVE GOALS\n` + goals.map(g => '- ' + g.title).join('\n') + '\n\n'

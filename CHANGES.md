@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] BrainTab.svelte + mozartContext.js + momentum-watcher.cjs — PARTIAL
+TASK: reference track source weighting: user vs agent
+WHAT: added source/promoted fields to reference_tracks rows; saveSpotifyPreview sets source='user'; chart analysis sets source='agent'; brain entries show ●/◑/○ indicators + [+] promote button; mozartContext splits into MY REFERENCE TRACKS (personal) vs MARKET CONTEXT (charts)
+RESULT: code done, watcher restarted; SQL migration pending (columns not yet in DB)
+BLOCKERS: need to run SQL in Supabase dashboard — ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source='agent' WHERE collection_name='daily_chart';
+
 ## [2026-04-19] BrainTab.svelte — DONE
 TASK: remove sync all refs button
 WHAT: removed brain-sync-btn button, syncAllRefs() function, and brain-sync-btn CSS class

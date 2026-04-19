@@ -1,14 +1,21 @@
 {
-  "updated": "2026-04-19T06:35:00.000Z",
-  "last_task": "remove sync all refs button",
-  "status": "done",
+  "updated": "2026-04-19T06:43:00.000Z",
+  "last_task": "reference track source weighting: user vs agent",
+  "status": "partial",
   "working": [
-    "brain-sync-btn button removed from dump area",
-    "syncAllRefs() function removed from script",
-    "brain-sync-btn CSS class removed"
+    "saveSpotifyPreview sets source='user' on reference_tracks upsert",
+    "agent-chart-analysis sets source='agent' on reference_tracks upsert",
+    "Brain entries show ●(user)/◑(promoted)/○(agent) indicators",
+    "○ agent tracks show [+] promote button — updates source='user', promoted=true instantly",
+    "mozartContext splits userRefs vs chartRefs into separate sections",
+    "Hit benchmark uses userRefs when >= 2 exist, falls back to all non-chart refs",
+    "Watcher startup warns if source/promoted columns missing",
+    "Watcher restarted OK"
   ],
   "broken": [],
-  "partial": [],
-  "next": "Test Brain tab to confirm button gone and no regressions",
-  "notes": "Sync is now automatic — button was manual trigger, no longer needed"
+  "partial": [
+    "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
+  ],
+  "next": "User needs to run SQL migration in Supabase dashboard, then all source/promoted features will activate",
+  "notes": "All code is null-safe — when source is null (pre-migration), tracks fall into neither user nor agent bucket, so benchmark falls back gracefully. After migration, existing chart tracks will get source='agent'."
 }

@@ -1191,8 +1191,8 @@ ${mozartContext}`
     checkOutItems = checkOutItems.filter(i => i.id !== id)
   }
 
-  loadStaticData()
-  load()
+  // loadStaticData MUST complete before load() so customs/helpers aren't lost to the state spread
+  ;(async () => { await loadStaticData(); load() })()
   loadInbox()
   loadCheckOut()
   loadGoals()

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] DailyTab.svelte — DONE
+TASK: delete agent outputs + permanent download notification dismiss
+WHAT: FIX1 — × delete button (position:absolute top-right) added to today-briefing-block; FIX2 — deleteInboxItem now clears song_code from share_sessions.downloads when deleting a download notification, preventing syncDownloadNotifications from re-creating it
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] DailyTab.svelte + +page.svelte — DONE
 TASK: check out section prominent at top of daily
 WHAT: Check Out already at top — gold border/bg styling, bigger rows (36px/36x36art/13px/bigger spotify btn), hidden when 0 items; pulsing gold dot in DAILY tab via mm-checkout-count custom event; $effect broadcasts count whenever checkOutItems changes

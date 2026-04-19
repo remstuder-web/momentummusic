@@ -1,19 +1,19 @@
 {
-  "updated": "2026-04-19T10:00:00.000Z",
-  "last_task": "check out section prominent at top of daily",
+  "updated": "2026-04-19T10:20:00.000Z",
+  "last_task": "delete agent outputs + permanent download notification dismiss",
   "status": "done",
   "working": [
-    "DailyTab: Check Out has gold border/bg, CHECK OUT TODAY header, 36px rows, 36x36 art, 13px font, bigger spotify btn",
-    "DailyTab: hidden when 0 items (already was)",
-    "DailyTab: $effect broadcasts mm-checkout-count event whenever checkOutItems changes",
-    "+page.svelte: listens to mm-checkout-count, shows pulsing gold dot on DAILY tab when count > 0",
-    "DailyTab: agent buttons distinct colors + last run timestamps",
-    "DailyTab: morning briefing auto-shows expanded on load"
+    "DailyTab: × delete button on today-briefing-block (position absolute top-right, red on hover)",
+    "DailyTab: inbox stream items already had × delete buttons — unchanged",
+    "DailyTab: deleteInboxItem clears download from share_sessions.downloads before deleting row — won't re-appear on sync",
+    "DailyTab: syncDownloadNotifications uses Supabase not localStorage for dedup",
+    "Check Out section gold-bordered, prominent at top, pulsing dot in tab bar",
+    "Agent buttons distinct colors + last run timestamps"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "Checkout count broadcast uses document custom event mm-checkout-count, same pattern as mm-switch-tab"
+  "notes": "Download permanent dismiss works by clearing share_sessions.downloads[song_code] on notification delete. This is the only reliable way since syncDownloadNotifications re-inserts based on share_sessions data."
 }

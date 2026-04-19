@@ -986,6 +986,16 @@
   }
 
   async function deleteInboxItem(id) {
+    // For download notifications: also remove from share_sessions.downloads so sync won't re-create it
+    const notif = inboxItems.find(n => n.id === id)
+    if (notif?.type === 'download' && notif.session_id && notif.song_code) {
+      const { data: sess } = await supabase.from('share_sessions').select('downloads').eq('id', notif.session_id).maybeSingle()
+      if (sess?.downloads) {
+        const updated = { ...sess.downloads }
+        delete updated[notif.song_code]
+        await supabase.from('share_sessions').update({ downloads: updated }).eq('id', notif.session_id)
+      }
+    }
     await supabase.from('inbox_notifications').delete().eq('id', id)
     inboxItems = [...inboxItems.filter(n => n.id !== id)]
     inboxUnread = inboxItems.filter(n => !n.read).length
@@ -1404,7 +1414,7 @@ ${mozartContext}`
 
         <!-- Today's briefing — auto-expanded at top -->
         {#if todayBriefing}
-          <div class="today-briefing-block">
+          <div class="today-briefing-block" style="position:relative">
             <div class="today-briefing-header">
               <span class="inbox-type-badge br">✦ AI</span>
               <span class="today-briefing-label">TODAY'S BRIEFING</span>
@@ -1415,6 +1425,7 @@ ${mozartContext}`
               {/if}
             </div>
             <div class="agent-output">{@html parseAgentOutput(todayBriefing.message)}</div>
+            <button class="agent-output-del" onclick={() => deleteInboxItem(todayBriefing.id)}>×</button>
           </div>
         {/if}
 
@@ -2189,6 +2200,8 @@ ${mozartContext}`
   .today-briefing-block { background: rgba(120,80,200,.05); border: 1px solid rgba(140,100,220,.15); border-radius: 3px; padding: 10px 12px; margin: 8px 0; }
   .today-briefing-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .today-briefing-label { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(180,140,255,.6); letter-spacing: .1em; flex: 1; }
+  .agent-output-del { position: absolute; top: 6px; right: 6px; background: transparent; border: none; color: #444; font-size: 14px; cursor: pointer; line-height: 1; padding: 2px 4px; }
+  .agent-output-del:hover { color: #e05a4a; }
   .briefing-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; padding: 4px 10px; background: transparent; border: 1px solid rgba(201,168,76,.25); color: rgba(201,168,76,.5); border-radius: 2px; cursor: pointer; transition: all .15s; }
   .briefing-btn:hover { border-color: rgba(201,168,76,.5); color: rgba(201,168,76,.8); }
   .briefing-btn.loading { opacity: .5; cursor: default; }

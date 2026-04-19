@@ -1934,9 +1934,26 @@
     }
     try {
       const wd = expandedSong ? workData(expandedSong) : null
+
+      // Extract song-specific reference tracks from reference_links
+      let songSpecificRefs = []
+      const refLinks = expandedSong?.reference_links || []
+      if (refLinks.length) {
+        const spotifyIds = refLinks.map(r => {
+          const url = typeof r === 'string' ? r : r.url
+          const m = url?.match(/track\/([A-Za-z0-9]+)/)
+          return m?.[1]
+        }).filter(Boolean)
+        if (spotifyIds.length) {
+          const { data } = await supabase.from('reference_tracks').select('*').in('spotify_id', spotifyIds)
+          songSpecificRefs = data || []
+        }
+      }
+
       const brainContext = await buildMozartContext(supabase, {
         currentSong: expandedSong?.title || expandedSong?.code,
-        songVersions: wd?.versions || []
+        songVersions: wd?.versions || [],
+        songSpecificRefs
       })
       const system = brainContext + '\n\n' + buildProjectContext()
       const res = await fetch('https://api.anthropic.com/v1/messages', {

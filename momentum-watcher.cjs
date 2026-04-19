@@ -489,7 +489,7 @@ async function runAgentChartAnalysis(apiKey) {
     const key = (t.name + '|' + t.artists.map(a=>a.name).join(', ')).toLowerCase()
     if (existingTitles.has(key)) return false
     return true
-  }).slice(0, 3)
+  }).slice(0, 10)
 
   if (!newTracks.length) {
     console.log('✓ chart-analysis: no new tracks today')
@@ -654,6 +654,25 @@ async function runAgentChartAnalysis(apiKey) {
         content: assessment,
         entry_type: 'FACT',
         active: true
+      })
+    })
+  }
+
+  // Save to inbox with structured tracks encoded
+  if (assessment) {
+    const today = new Date().toISOString().slice(0, 10)
+    const structuredTracks = analyzedTracks.map(t => ({
+      title: t.title, artist: t.artist, spotify_id: t.spotify_id,
+      spotify_url: t.spotify_id ? `https://open.spotify.com/track/${t.spotify_id}` : null,
+      bpm: t.bpm, key: t.key, scale: t.scale, camelot: t.camelot,
+      energy: t.energy, source: 'spotify_chart'
+    }))
+    const tracksJson = structuredTracks.length ? `\n<!--TRACKS:${JSON.stringify(structuredTracks)}-->` : ''
+    await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+      method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        type: 'briefing', song_code: null, song_title: 'Chart Analysis', artist: null,
+        message: assessment + tracksJson, patch_name: `Charts ${today}`, read: false
       })
     })
   }
@@ -927,12 +946,26 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     })
   }).catch(() => {})
 
+  // Encode kworb tracks as structured data in inbox message
+  const kworbTracks = (Array.isArray(kworbSP) ? kworbSP : []).slice(0, 10).map(t => ({
+    title: t.title, artist: t.artist,
+    youtube_url: `https://www.youtube.com/results?search_query=${encodeURIComponent((t.artist || '') + ' ' + (t.title || ''))}`,
+    spotify_url: `https://open.spotify.com/search/${encodeURIComponent((t.artist || '') + ' ' + (t.title || ''))}`,
+    source: 'spotify_global'
+  }))
+  const kworbYTTracks = (Array.isArray(kworbYT) ? kworbYT : []).slice(0, 5).map(line => {
+    const parts = line.split(' · ')
+    return { title: parts[1] || line, artist: parts[0] || '', youtube_url: `https://www.youtube.com/results?search_query=${encodeURIComponent(line)}`, source: 'youtube_trending' }
+  })
+  const allTracks = [...kworbTracks, ...kworbYTTracks].slice(0, 10)
+  const tracksJson = allTracks.length ? `\n<!--TRACKS:${JSON.stringify(allTracks)}-->` : ''
+
   await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
     method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ type: 'briefing', song_code: null, song_title: 'Artist Scout', artist: null, message: scoutText, patch_name: `Scout ${new Date().toISOString().slice(0,10)}`, read: false })
+    body: JSON.stringify({ type: 'briefing', song_code: null, song_title: 'Artist Scout', artist: null, message: scoutText + tracksJson, patch_name: `Scout ${today}`, read: false })
   })
   console.log('✓ Agent Scout report saved to inbox + brain_knowledge')
-  return { ok: true, suggestions: scoutText }
+  return { ok: true, suggestions: scoutText, tracks: allTracks }
 }
 
 // ── Agent: Demo Match — match demos to artists ────────────────────────────
@@ -1010,27 +1043,144 @@ ${context}` }] })
 }
 
 // ── Agent: TikTok Trends — surface viral sounds aligned to taste profile ──
+async function fetchTikTokRealData() {
+  const results = []
+
+  // 1. Try tokboard.com — mirrors TikTok trending sounds
+  try {
+    const res = await fetch('https://www.tokboard.com/trending', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+      signal: AbortSignal.timeout(8000)
+    })
+    if (res.ok) {
+      const html = await res.text()
+      // Extract song/artist pairs from various card patterns
+      const titleMatches = [...html.matchAll(/class="[^"]*(?:song|track|title|name)[^"]*"[^>]*>([^<]{3,60})</gi)]
+      for (const m of titleMatches.slice(0, 15)) {
+        const text = m[1].trim()
+        if (text && !/^(trending|music|tik|tok|board)/i.test(text)) {
+          results.push({ title: text, artist: '', source: 'tokboard' })
+        }
+      }
+    }
+  } catch(e) { console.warn('tokboard fetch failed:', e.message) }
+
+  // 2. Try YouTube Music trending via kworb (already have this data in scout)
+  try {
+    const kworbYT = await fetchKworbTrending()
+    for (const line of kworbYT.slice(0, 5)) {
+      const parts = line.split(' · ')
+      if (parts.length >= 2) results.push({ title: parts[1] || line, artist: parts[0] || '', source: 'youtube_trending' })
+      else results.push({ title: line, artist: '', source: 'youtube_trending' })
+    }
+  } catch(e) {}
+
+  return results.slice(0, 10)
+}
+
 async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
   const brainContext = buildBrainContext(sharedBrainRows)
+  const today = new Date().toISOString().slice(0, 10)
+  const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
+  const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
 
-  const prompt = `You are a music trend analyst focused on TikTok virality. Identify 5 current TikTok sound trends most relevant to this producer's taste profile.
+  // 1. Fetch real trend data
+  const realTrends = await fetchTikTokRealData()
+  console.log(`  TikTok agent: ${realTrends.length} real trends fetched`)
+
+  // 2. For each trend, search Spotify + run Essentia if preview available
+  const analyzedTrends = []
+  let spToken = null
+  try { spToken = await getSpotifyToken() } catch(e) {}
+
+  if (spToken && realTrends.length) {
+    const spH = { 'Authorization': `Bearer ${spToken}` }
+    for (const trend of realTrends.slice(0, 5)) {
+      if (!trend.title) continue
+      try {
+        const q = encodeURIComponent((trend.artist ? trend.artist + ' ' : '') + trend.title)
+        const srRes = await fetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`, { headers: spH })
+        if (!srRes.ok) continue
+        const srData = await srRes.json()
+        const spTrack = srData.tracks?.items?.[0]
+        if (!spTrack) continue
+
+        let feat = {}
+        const tmpAudio = `/tmp/tiktok_${Date.now()}.mp3`
+        if (spTrack.preview_url) {
+          try {
+            execSync(`curl -s -o "${tmpAudio}" "${spTrack.preview_url}"`, { timeout: 15000 })
+            const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+            feat = JSON.parse(esOut)
+          } catch(e) { console.warn('  TikTok Essentia skipped:', e.message.slice(0, 60)) }
+          finally { try { fs.unlinkSync(tmpAudio) } catch(e) {} }
+        }
+
+        const trackData = {
+          title: spTrack.name,
+          artist: spTrack.artists.map(a => a.name).join(', '),
+          spotify_id: spTrack.id,
+          spotify_url: `https://open.spotify.com/track/${spTrack.id}`,
+          bpm: feat.bpm || null, key: feat.key || null, scale: feat.scale || null,
+          camelot: feat.camelot || null, energy: feat.energy || null,
+          source: trend.source || 'tiktok'
+        }
+        analyzedTrends.push(trackData)
+
+        // Store in reference_tracks
+        await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
+          method: 'POST', headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({
+            spotify_id: spTrack.id, title: spTrack.name,
+            artist: spTrack.artists.map(a => a.name).join(', '),
+            collection_name: 'tiktok_trending', source: 'agent', approved: true,
+            tempo: feat.bpm || null, key: feat.key || null, scale: feat.scale || null,
+            energy: feat.energy || null, danceability: feat.danceability || null
+          })
+        })
+
+        // Store in brain_knowledge
+        await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+          method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            category: 'market_knowledge',
+            title: `TikTok trending ${today}: ${spTrack.name} by ${spTrack.artists[0]?.name || ''}`,
+            content: [
+              feat.bpm ? `${Math.round(feat.bpm)}bpm · ${feat.key || '?'} ${feat.scale || ''}${feat.camelot ? ' (' + feat.camelot + ')' : ''}` : 'No Essentia data',
+              feat.energy != null ? `nrg ${Number(feat.energy).toFixed(2)}` : null,
+            ].filter(Boolean).join(' · '),
+            entry_type: 'observation', confidence: 'weak', active: true,
+            metadata: { source_type: 'tiktok', date: today, spotify_id: spTrack.id }
+          })
+        })
+      } catch(e) { console.warn('  TikTok track analysis failed:', e.message.slice(0, 80)) }
+    }
+  }
+
+  // 3. Build real data context for Claude
+  const realDataText = realTrends.length
+    ? realTrends.map((t, i) => `${i+1}. ${t.artist ? t.artist + ' — ' : ''}${t.title} [${t.source}]`).join('\n')
+    : 'No real trend data available this run'
+
+  const analyzedText = analyzedTrends.length
+    ? analyzedTrends.map(t => `- ${t.artist} — ${t.title}${t.bpm ? ': ' + Math.round(t.bpm) + 'bpm ' + (t.key||'') + (t.camelot ? ' (' + t.camelot + ')' : '') : ''}`).join('\n')
+    : ''
+
+  const prompt = `You are a music trend analyst. Here is REAL data about trending sounds right now:
+
+TRENDING SOUNDS (${today}):
+${realDataText}
+
+${analyzedText ? `ANALYZED TRACKS (Essentia signals):\n${analyzedText}\n` : ''}
+${brainContext ? `[TASTE PROFILE — read silently]\n${brainContext}\n[END PROFILE]\n` : ''}
+Based on this real data, analyze the trends for a producer working in: ${SUB_GENRE_LABELS}
 
 FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for bullets, [GAP]/[OK] for emphasis. Plain text only.
-Format your response using this exact structure:
-- Use ## for section headers
-- One blank line between sections
-- Bullet points for lists, max 2 lines per bullet
-- Numbers for ranked items
-- End with a ## Next Move section: single most important action today
-Keep each section tight — no filler sentences.
 
-Sections to include:
 ## Viral Sounds
 ## Why It's Blowing Up
 ## Production Angles
-## Next Move
-
-${brainContext ? `[TASTE PROFILE — read silently]\n${brainContext}\n[END PROFILE]\n` : ''}Genres to focus on: ${SUB_GENRE_LABELS}`
+## Next Move`
 
   const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1047,12 +1197,13 @@ ${brainContext ? `[TASTE PROFILE — read silently]\n${brainContext}\n[END PROFI
     body: JSON.stringify({ endpoint: '/agent-tiktok-trends', model, input_tokens: usage.input_tokens||0, output_tokens: usage.output_tokens||0, cost_usd: ((usage.input_tokens||0)*0.000001)+((usage.output_tokens||0)*0.000005) })
   }).catch(() => {})
 
+  const tracksJson = analyzedTrends.length ? `\n<!--TRACKS:${JSON.stringify(analyzedTrends)}-->` : ''
   await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
     method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ type: 'briefing', song_code: null, song_title: 'TikTok Trends', artist: null, message: trendsText, patch_name: `Trends ${new Date().toISOString().slice(0,10)}`, read: false })
+    body: JSON.stringify({ type: 'briefing', song_code: null, song_title: 'TikTok Trends', artist: null, message: trendsText + tracksJson, patch_name: `Trends ${today}`, read: false })
   })
-  console.log('✓ Agent TikTok Trends saved to inbox')
-  return { ok: true, trends: trendsText }
+  console.log(`✓ Agent TikTok Trends: ${analyzedTrends.length} tracks analyzed, saved to inbox`)
+  return { ok: true, trends: trendsText, trend_tracks: analyzedTrends }
 }
 
 console.log('Spotify ID:', SPOTIFY_CLIENT_ID ? 'set' : 'EMPTY')

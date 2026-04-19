@@ -1,5 +1,5 @@
 export async function buildMozartContext(supabase, options = {}) {
-  const { songVersions = [], currentSong = null, tasks = [] } = options
+  const { songVersions = [], currentSong = null, tasks = [], songSpecificRefs = [] } = options
 
   const [{ data: ownProds }, { data: allRefs }, { data: goals }, { data: brain }] = await Promise.all([
     supabase.from('reference_tracks').select('*').eq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(5),
@@ -100,6 +100,10 @@ FORMATTING RULES — always follow these:
       context += '\n'
     }
   }
+
+  if (songSpecificRefs.length) context +=
+    `## THIS SONG'S REFERENCES (primary — compare against these first)\n` +
+    songSpecificRefs.map(formatTrack).join('\n') + '\n\n'
 
   if (ownProds?.length) context +=
     `## MY PRODUCTIONS\n` + ownProds.map(formatTrack).join('\n') + '\n\n'

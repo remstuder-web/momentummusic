@@ -1081,8 +1081,39 @@ ${mozartContext}`
   }
 
 
+  function getTracksFromMessage(msg) {
+    if (!msg) return []
+    const m = msg.match(/<!--TRACKS:([\s\S]*?)-->/)
+    if (!m) return []
+    try { return JSON.parse(m[1]) } catch { return [] }
+  }
+
+  function stripTracksFromMessage(msg) {
+    return (msg || '').replace(/\n*<!--TRACKS:[\s\S]*?-->/g, '')
+  }
+
+  async function addTrackToBrain(track) {
+    const { error } = await supabase.from('brain_knowledge').insert({
+      category: 'reference_current',
+      title: `${track.artist} — ${track.title}`,
+      content: [
+        track.bpm ? `${Math.round(track.bpm)}bpm` : null,
+        track.key ? `${track.key}${track.scale ? ' ' + track.scale : ''}${track.camelot ? ' (' + track.camelot + ')' : ''}` : null,
+        track.energy != null ? `nrg ${Number(track.energy).toFixed(2)}` : null,
+        track.source ? `source: ${track.source}` : null,
+      ].filter(Boolean).join(' · '),
+      entry_type: 'reference_track',
+      confidence: 'medium',
+      active: true,
+      metadata: { source_type: track.source, spotify_id: track.spotify_id }
+    })
+    if (!error) alert(`Saved to Brain: ${track.artist} — ${track.title}`)
+    else alert('Error saving: ' + error.message)
+  }
+
   function parseAgentOutput(text) {
     if (!text) return ''
+    text = stripTracksFromMessage(text)
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const lines = text.split('\n')
     let html = ''
@@ -1216,18 +1247,7 @@ ${mozartContext}`
 
   // loadStaticData MUST complete before load() so customs/helpers aren't lost to the state spread
   ;(async () => { await loadStaticData(); load() })()
-  ;(async () => {
-    await loadInbox()
-    const hasTodayBriefing = inboxItems.some(n => n.type === 'briefing' && n.created_at?.slice(0,10) === todayISO)
-    if (!hasTodayBriefing && new Date().getHours() >= 8) {
-      const apiKey = localStorage.getItem('mm_api_key') || ''
-      if (apiKey) {
-        autoBriefingLoading = true
-        await generateBriefing()
-        autoBriefingLoading = false
-      }
-    }
-  })()
+  ;(async () => { await loadInbox() })()
   loadCheckOut()
   loadGoals()
   ;(async () => {
@@ -1414,11 +1434,6 @@ ${mozartContext}`
           </button>
         </div>
 
-        <!-- Auto briefing indicator -->
-        {#if autoBriefingLoading}
-          <div class="auto-briefing-loading">✦ Generating briefing...</div>
-        {/if}
-
         <!-- Today's briefing — auto-expanded at top -->
         {#if todayBriefing}
           <div class="today-briefing-block" style="position:relative">
@@ -1432,6 +1447,17 @@ ${mozartContext}`
               {/if}
             </div>
             <div class="agent-output">{@html parseAgentOutput(todayBriefing.message)}</div>
+            {#if getTracksFromMessage(todayBriefing.message).length}
+              <div class="agent-tracks">
+                {#each getTracksFromMessage(todayBriefing.message) as track}
+                  <div class="agent-track-row">
+                    <button class="track-play-btn" onclick={() => window.open(track.spotify_url || track.youtube_url, '_blank')} title="Play">▶</button>
+                    <span class="track-info">{track.artist} — {track.title}{track.bpm ? ' · ' + Math.round(track.bpm) + 'bpm' : ''}{track.key ? ' · ' + track.key : ''}{track.camelot ? ' (' + track.camelot + ')' : ''}</span>
+                    <button class="track-brain-btn" onclick={() => addTrackToBrain(track)}>+ Brain</button>
+                  </div>
+                {/each}
+              </div>
+            {/if}
             <button class="agent-output-del" onclick={() => deleteInboxItem(todayBriefing.id)}>×</button>
           </div>
         {/if}
@@ -1531,6 +1557,17 @@ ${mozartContext}`
                   </div>
                   {#if n.type === 'briefing'}
                     <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
+                    {#if getTracksFromMessage(n.message).length}
+                      <div class="agent-tracks">
+                        {#each getTracksFromMessage(n.message) as track}
+                          <div class="agent-track-row">
+                            <button class="track-play-btn" onclick={() => window.open(track.spotify_url || track.youtube_url, '_blank')} title="Play">▶</button>
+                            <span class="track-info">{track.artist} — {track.title}{track.bpm ? ' · ' + Math.round(track.bpm) + 'bpm' : ''}{track.key ? ' · ' + track.key : ''}{track.camelot ? ' (' + track.camelot + ')' : ''}</span>
+                            <button class="track-brain-btn" onclick={() => addTrackToBrain(track)}>+ Brain</button>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
                   {:else}
                     <div class="inbox-msg">{n.message}</div>
                   {/if}
@@ -2289,6 +2326,14 @@ ${mozartContext}`
     line-height: 1.65;
   }
   :global(.agent-p) { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #9e9690; line-height: 1.65; margin: 3px 0; }
+  .agent-tracks { margin-top: 8px; border-top: 1px solid #1c1c1c; padding-top: 6px; }
+  .agent-track-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #111; }
+  .agent-track-row:last-child { border-bottom: none; }
+  .track-play-btn { background: transparent; border: 1px solid #4caf82; color: #4caf82; font-size: 9px; padding: 2px 6px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .track-play-btn:hover { background: rgba(76,175,130,.12); }
+  .track-brain-btn { background: transparent; border: 1px solid #c9a84c; color: #c9a84c; font-size: 9px; padding: 2px 6px; border-radius: 2px; cursor: pointer; margin-left: auto; flex-shrink: 0; }
+  .track-brain-btn:hover { background: rgba(201,168,76,.1); }
+  .track-info { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :global(.ao-tag-gap) { color: #e05a4a; font-weight: 500; margin-right: 4px; }
   :global(.ao-tag-ok)  { color: #4caf82; font-weight: 500; margin-right: 4px; }
   :global(.agent-label-confirmed) { color: #c9a84c; font-weight: 500; }

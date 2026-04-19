@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] DailyTab.svelte — DONE
+TASK: fix helper search CSS, fix helper order persistence
+WHAT: placeholder color corrected to #3a3a3a; fallback save condition now always fires when a previous row was loaded (fallback || ...) to prevent stale helpers reappearing
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] BrainTab.svelte + mozartContext.js + momentum-watcher.cjs — PARTIAL
 TASK: reference track source weighting: user vs agent
 WHAT: added source/promoted fields to reference_tracks rows; saveSpotifyPreview sets source='user'; chart analysis sets source='agent'; brain entries show ●/◑/○ indicators + [+] promote button; mozartContext splits into MY REFERENCE TRACKS (personal) vs MARKET CONTEXT (charts)

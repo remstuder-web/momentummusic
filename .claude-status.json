@@ -1,21 +1,20 @@
 {
-  "updated": "2026-04-19T06:43:00.000Z",
-  "last_task": "reference track source weighting: user vs agent",
+  "updated": "2026-04-19T06:52:00.000Z",
+  "last_task": "fix helper search CSS, fix helper order persistence",
   "status": "partial",
   "working": [
+    "DailyTab: helper-search-inp placeholder color corrected to #3a3a3a",
+    "DailyTab: fallback save condition now includes `fallback ||` so save always fires when a previous row was loaded",
     "saveSpotifyPreview sets source='user' on reference_tracks upsert",
     "agent-chart-analysis sets source='agent' on reference_tracks upsert",
-    "Brain entries show ●(user)/◑(promoted)/○(agent) indicators",
-    "○ agent tracks show [+] promote button — updates source='user', promoted=true instantly",
-    "mozartContext splits userRefs vs chartRefs into separate sections",
-    "Hit benchmark uses userRefs when >= 2 exist, falls back to all non-chart refs",
-    "Watcher startup warns if source/promoted columns missing",
+    "Brain entries show ●/◑/○ indicators with [+] promote button for agent tracks",
+    "mozartContext splits userRefs vs chartRefs",
     "Watcher restarted OK"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
-  "next": "User needs to run SQL migration in Supabase dashboard, then all source/promoted features will activate",
-  "notes": "All code is null-safe — when source is null (pre-migration), tracks fall into neither user nor agent bucket, so benchmark falls back gracefully. After migration, existing chart tracks will get source='agent'."
+  "next": "Run SQL migration in Supabase dashboard for source/promoted columns",
+  "notes": "Helper search CSS was already present but placeholder was #555 (too visible); corrected to #3a3a3a. Fallback save fix: added fallback || to line 391 condition so save() always fires when helpers were loaded from a previous row, locking them into today's row."
 }

@@ -388,7 +388,8 @@
       seedFixed()
       loadSubReminders()
       // Persist helpers/refs AND recurring tasks into today's row
-      if (state.helpers?.length || state.refs?.length || recurringTasks.length || futureTasks.length) await save()
+      // fallback || ensures save always fires when helpers were loaded from a previous row
+      if (fallback || state.helpers?.length || state.refs?.length || recurringTasks.length || futureTasks.length) await save()
       // Restore banner: only show tasks in backup that are missing from Supabase (truly lost)
       if (backup) {
         try {
@@ -2183,7 +2184,7 @@ ${mozartContext}`
   .check-item { display: flex; align-items: center; gap: 8px; padding: 2px 8px; border-bottom: 1px solid #111; background: transparent; min-height: 0; }
   .check-item.done { opacity: .38; }
   .helper-search-inp { background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 3px 8px; border-radius: 3px; width: 150px; flex-shrink: 0; outline: none; }
-  .helper-search-inp::placeholder { color: #555; }
+  .helper-search-inp::placeholder { color: #3a3a3a; }
   .helper-search-inp:focus { border-color: rgba(201,168,76,.4); }
   .helper-search-go { font-family: 'Space Mono', monospace; font-size: 12px; padding: 3px 8px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
   .helper-search-go:hover { color: #c9a84c; border-color: #c9a84c; }

@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-19] DailyTab.svelte — DONE
+TASK: fix: customs/helpers never loaded from daily_state
+WHAT: audited all state.customs= and state.helpers= lines; confirmed no customs/helpers in load() daily_state or fallback blocks; removed leftover console.log debug lines from loadStaticData()
+RESULT: customs/helpers exclusively from user_settings via loadStaticData(); load order guaranteed by async IIFE
+BLOCKERS: none
+
+## [2026-04-19] DailyTab.svelte — DONE
 TASK: fix load order: customs from user_settings only
 WHAT: wrapped loadStaticData()+load() in async IIFE so loadStaticData is awaited before load() fires — race condition was causing state spread in load() to capture customs:[] before user_settings resolved, then seedFixed() running with empty customs
 RESULT: customs/helpers now guaranteed to be set before daily_state spread overwrites state

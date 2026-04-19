@@ -69,6 +69,25 @@
     return groups
   })
 
+  const COL_LABELS = {
+    daily_chart: 'DAILY CHART TRACKS',
+    my_productions: 'MY PRODUCTIONS',
+    reference_current: 'AKTUELLE REFS',
+    reference_mixing: 'MIX REFS',
+    reference_inspiration: 'MUSIC REFS',
+    reference_sound: 'SOUND REFS'
+  }
+
+  let refByCollection = $derived.by(() => {
+    const acc = {}
+    for (const t of referenceTrackEntries) {
+      const col = t.collection_name || 'other'
+      if (!acc[col]) acc[col] = []
+      acc[col].push(t)
+    }
+    return acc
+  })
+
   // Categories derived from loaded entries — used for Claude prompts inside processDump
   let distinctCategories = $derived([...new Set(entries.map(e => e.category).filter(Boolean))].sort())
 
@@ -611,13 +630,35 @@ Return ONLY JSON (single item array):
       `Followers: ${trackData.artistFollowers?.toLocaleString()}`
     ].join('\n')
 
-    await supabase.from('brain_knowledge').insert({
-      category: cat,
-      title: `${trackData.title} — ${trackData.artist}`,
-      content,
-      entry_type: 'reference_track',
-      active: true
-    })
+    const importTitle = `${trackData.title} — ${trackData.artist}`
+    const importSpotifyId = importResult?.trackData?.spotifyId
+    let importBrainExists = false
+    if (importSpotifyId) {
+      const { data: eb } = await supabase
+        .from('brain_knowledge')
+        .select('id')
+        .ilike('source_url', `%${importSpotifyId}%`)
+        .maybeSingle()
+      importBrainExists = !!eb
+    } else {
+      const { data: eb2 } = await supabase
+        .from('brain_knowledge')
+        .select('id')
+        .eq('title', importTitle)
+        .maybeSingle()
+      importBrainExists = !!eb2
+    }
+
+    if (!importBrainExists) {
+      await supabase.from('brain_knowledge').insert({
+        category: cat,
+        title: importTitle,
+        content,
+        entry_type: 'reference_track',
+        source_url: importSpotifyId ? `https://open.spotify.com/track/${importSpotifyId}` : null,
+        active: true
+      })
+    }
 
     importResult = null
     importCategory = 'reference_tracks'
@@ -682,17 +723,30 @@ Return ONLY JSON (single item array):
       spotify_id: t.spotify_id || null
     }
 
-    await supabase.from('brain_knowledge').insert({
-      category: cat,
-      title: `${t.title} — ${t.artist}`,
-      content,
-      entry_type: 'FACT',
-      source_url: `https://open.spotify.com/track/${t.spotify_id}`,
-      active: true,
-      surfaced_in_daily: isCurrent,
-      surfaced_until: surfacedUntil,
-      metadata,
-    })
+    const spotifyUrl = `https://open.spotify.com/track/${t.spotify_id}`
+    let brainAlreadyExists = false
+    if (t.spotify_id) {
+      const { data: existBrain } = await supabase
+        .from('brain_knowledge')
+        .select('id')
+        .ilike('source_url', `%${t.spotify_id}%`)
+        .maybeSingle()
+      brainAlreadyExists = !!existBrain
+    }
+
+    if (!brainAlreadyExists) {
+      await supabase.from('brain_knowledge').insert({
+        category: cat,
+        title: `${t.title} — ${t.artist}`,
+        content,
+        entry_type: 'FACT',
+        source_url: spotifyUrl,
+        active: true,
+        surfaced_in_daily: isCurrent,
+        surfaced_until: surfacedUntil,
+        metadata,
+      })
+    }
 
     spotifyPreview = null
     spotifyPreviewType = 'reference_current'
@@ -1137,7 +1191,7 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
     <div style="display:flex;align-items:center;gap:8px;">
       <button class="brain-entries-toggle" onclick={() => entriesOpen = !entriesOpen} style="flex:1">
         <span>BRAIN ENTRIES</span>
-        <span class="brain-cat-count">{entries.length + watchedArtists.length}</span>
+        <span class="brain-cat-count">{entries.length + watchedArtists.length + referenceTrackEntries.length}</span>
         <span class="brain-cat-arrow {entriesOpen ? 'open' : ''}">▶</span>
       </button>
       <button class="undo-tab-btn" onclick={undoBrain} disabled={undoStack.length === 0} title={undoStack[0]?.description || 'Nothing to undo'}>
@@ -1314,6 +1368,37 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
             <span class="brain-watched-checked">{artist.last_checked ? new Date(artist.last_checked).toLocaleDateString('en-GB', {day:'2-digit',month:'short'}) : 'never'}</span>
             <button class="brain-del" onclick={() => unwatchArtist(artist.id)} title="Stop watching">×</button>
           </div>
+        {/each}
+      {/if}
+
+      <!-- Reference Tracks grouped by collection -->
+      {#if referenceTrackEntries.length}
+        {#each Object.entries(refByCollection) as [col, tracks]}
+          {@const filteredTracks = brainSearch
+            ? tracks.filter(t => (t.artist + ' ' + t.title).toLowerCase().includes(brainSearch.toLowerCase()))
+            : tracks}
+          {#if filteredTracks.length}
+            <div class="brain-cat-divider">{COL_LABELS[col] || col.toUpperCase()}</div>
+            {#each filteredTracks as track}
+              <div class="brain-reftrack-row">
+                <span class="brain-reftrack-info">
+                  {track.artist ? track.artist + ' — ' : ''}{track.title}
+                  <span class="brain-reftrack-stats">
+                    {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
+                    {track.key ? ' · ' + track.key + (track.scale ? ' ' + track.scale : '') : ''}
+                    {track.energy != null ? ' · nrg ' + Number(track.energy).toFixed(2) : ''}
+                    {track.danceability != null ? ' · dnc ' + Number(track.danceability).toFixed(2) : ''}
+                    {track.loudness != null ? ' · ' + track.loudness + 'LUFS' : ''}
+                  </span>
+                </span>
+                <span class="brain-reftrack-source">{col === 'daily_chart' ? 'chart' : !track.spotify_id ? 'youtube' : 'spotify'}</span>
+                <button class="brain-del" onclick={async () => {
+                  await supabase.from('reference_tracks').delete().eq('id', track.id)
+                  referenceTrackEntries = referenceTrackEntries.filter(t => t.id !== track.id)
+                }}>×</button>
+              </div>
+            {/each}
+          {/if}
         {/each}
       {/if}
     {/if}
@@ -1724,6 +1809,45 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
     padding: 14px 0 5px;
     border-bottom: 1px solid #1a1a1a;
     margin-bottom: 4px;
+  }
+
+  .brain-reftrack-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 0;
+    border-bottom: 1px solid #111;
+  }
+  .brain-reftrack-info {
+    flex: 1;
+    min-width: 0;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 300;
+    color: #cec9c1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .brain-reftrack-stats {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .brain-reftrack-source {
+    font-family: 'Space Mono', monospace;
+    font-size: 8px;
+    color: #444;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 2px;
+    padding: 1px 4px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: .06em;
   }
 
   .brain-entry {

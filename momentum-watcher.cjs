@@ -565,6 +565,37 @@ async function runAgentChartAnalysis(apiKey) {
       body: JSON.stringify(row)
     })
     analyzedTracks.push({ title: track.name, artist: track.artists.map(a => a.name).join(', '), ...feat })
+
+    // Also save individual brain_knowledge entry if not already present
+    const chartArtist = track.artists.map(a => a.name).join(', ')
+    const chartBrainTitle = track.name + ' — ' + chartArtist
+    const checkRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/brain_knowledge?source_url=ilike.*${trackId}*&select=id&limit=1`,
+      { headers: sbHeaders }
+    )
+    const checkRows = checkRes.ok ? await checkRes.json() : []
+    if (!checkRows.length) {
+      const chartContent = [
+        `Artist: ${chartArtist}`,
+        feat.bpm ? `BPM: ${feat.bpm} · Key: ${feat.key || '?'}${feat.scale ? ' ' + feat.scale : ''}` : null,
+        feat.energy != null ? `Energy: ${Number(feat.energy).toFixed(2)} · Dance: ${Number(feat.danceability ?? 0).toFixed(2)}` : null,
+        feat.loudness_lufs != null ? `Loudness: ${feat.loudness_lufs}LUFS` : null,
+        `Popularity: ${track.popularity || '?'}/100`,
+        genres.length ? `Genres: ${genres.slice(0, 4).join(', ')}` : null,
+      ].filter(Boolean).join('\n')
+      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+        method: 'POST',
+        headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          category: 'reference_current',
+          title: chartBrainTitle,
+          content: chartContent,
+          entry_type: 'reference_track',
+          source_url: `https://open.spotify.com/track/${trackId}`,
+          active: true
+        })
+      })
+    }
   }
 
   // 4. Get reference benchmark for Claude comparison
@@ -2171,6 +2202,8 @@ ${context}` }]
               bpm_confidence: feat.bpm_confidence || null,
               brightness: feat.brightness || null,
               bass_energy: feat.bass_energy || null,
+              rms: feat.rms != null ? feat.rms : null,
+              loudness_lufs: feat.loudness_lufs != null ? feat.loudness_lufs : null,
             })
             console.log(`  ✓ Essentia (${preview_source}): ${bpm}bpm ${key} ${scale} (${camelot}) nrg:${energy} dnc:${danceability} val:${valence} lufs:${loudness}`)
           } catch(e) {
@@ -2215,6 +2248,8 @@ ${context}` }]
           spectral_contrast: esExtended.spectral_contrast || null,
           spectral_flux: esExtended.spectral_flux || null,
           mfcc_mean: esExtended.mfcc_mean || null,
+          rms: esExtended.rms != null ? esExtended.rms : null,
+          loudness_lufs: esExtended.loudness_lufs != null ? esExtended.loudness_lufs : null,
         }))
       } catch(err) {
         logError('analyze-spotify-track', err.message)

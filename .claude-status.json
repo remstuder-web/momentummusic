@@ -1,18 +1,19 @@
 {
-  "updated": "2026-04-18T21:30:00Z",
-  "last_task": "sendToArtist-fix-undo-system",
+  "updated": "2026-04-19T06:31:00.000Z",
+  "last_task": "reference tracks visible in brain entries",
   "status": "done",
   "working": [
-    "sendToArtist: isLatest+nextExists guard — only creates next version when at latest with no next; sending old version switches active to latest",
-    "ProjectsTab undoStack: pushUndo(description, songId, snapshot, file) — covers audio_drop, overwrite, addFeedback, toggleFeedback, deleteFeedback, sendToArtist",
-    "ProjectsTab undo button: undo-tab-btn in mid-header, disabled when stack empty, ⌘Z via svelte:window",
-    "BrainTab undoStack: pushBrainUndo/undoBrain — deleteEntry saves full snapshot, saveApproved saves inserted id",
-    "BrainTab undo button: undo-tab-btn next to BRAIN ENTRIES toggle",
-    "DailyTab undoStack: pushDailyUndo/undoDaily — addTask and delTask push before mutating",
-    "DailyTab undo button: undo-tab-btn in tasks-header"
+    "Reference tracks shown in BRAIN ENTRIES section grouped by collection_name (DAILY CHART TRACKS, AKTUELLE REFS, MIX REFS, MUSIC REFS, SOUND REFS, MY PRODUCTIONS)",
+    "Search filter applies to reference tracks rows too",
+    "Source badge shows chart/spotify/youtube per track",
+    "Delete button removes from reference_tracks table",
+    "saveSpotifyPreview dedup-checks by source_url before inserting brain_knowledge",
+    "saveTrackImport dedup-checks by source_url or title before inserting brain_knowledge",
+    "agent-chart-analysis saves individual brain_knowledge entries per chart track",
+    "Watcher restarted OK"
   ],
   "broken": [],
   "partial": [],
-  "next": "SQL needed in Supabase:\nALTER TABLE share_sessions ADD COLUMN IF NOT EXISTS mp3_path text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text, spectral_centroid float, spectral_contrast float, spectral_flux float, mfcc_mean jsonb;\nALTER TABLE songs ADD COLUMN IF NOT EXISTS audio_analysis jsonb;\nALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS confidence text, review_date date, reviewed boolean DEFAULT false;",
-  "notes": "All three tabs now have independent undo stacks. ProjectsTab uses work_data snapshot restore. BrainTab restores or deletes brain_knowledge rows. DailyTab restores state.tasks array."
+  "next": "Test Brain tab with existing reference tracks to confirm they appear in BRAIN ENTRIES section",
+  "notes": "CHANGE 1 adds ref tracks to brain entries panel from already-loaded referenceTrackEntries. CHANGE 2 adds dedup guards. Separate REFERENCE TRACKS toggle section is unchanged."
 }

@@ -1,5 +1,17 @@
 # CHANGES
 
+## [2026-04-19] BrainTab.svelte + momentum-watcher.cjs — DONE
+TASK: reference tracks visible in brain entries
+WHAT: (1) Reference tracks now show in BRAIN ENTRIES section grouped by collection_name with dividers; (2) saveSpotifyPreview + saveTrackImport now dedup-check before brain_knowledge insert; (3) agent-chart-analysis saves individual brain_knowledge entry per track
+RESULT: works — watcher restarted OK
+BLOCKERS: none
+
+## [2026-04-19] analyze_audio.py + momentum-watcher.cjs — DONE
+TASK: fix loudness_lufs and rms returning null
+WHAT: consolidated RMS into single shared call for loudness_lufs/rms/energy; watcher now extracts rms+loudness_lufs from Essentia output and includes both in /analyze-spotify-track response
+RESULT: works — LUFS: -13.5 RMS: 0.1503
+BLOCKERS: none
+
 ## [2026-04-18] ProjectsTab + BrainTab + DailyTab — DONE
 TASK: sendToArtist fix + full undo system across all tabs
 WHAT: sendToArtist: correct isLatest/nextExists logic — only auto-creates next version when latest has no next; if sending old version switches active to latest. pushUndo refactored to 4-arg signature. undoFlash added. pushUndo before addFeedback/toggleFeedback/deleteFeedback/sendToArtist. BrainTab: undoStack + pushBrainUndo/undoBrain; deleteEntry saves snapshot; saveApproved saves inserted id for undo. DailyTab: undoStack + pushDailyUndo/undoDaily; delTask and addTask push before mutating. undo-tab-btn in all three tab headers.

@@ -1,16 +1,18 @@
 {
-  "updated": "2026-04-19T07:05:00.000Z",
-  "last_task": "search inputs in routine items too",
+  "updated": "2026-04-19T07:15:00.000Z",
+  "last_task": "customs/helpers stored in user_settings not daily rows",
   "status": "partial",
   "working": [
-    "DailyTab: routine (customs) items with YouTube/Spotify/Gemini/DeepSeek URLs now show search input + → button",
-    "DailyTab: checkItems section same search input logic added",
-    "Reuses existing helperSearchInputs state and helper-search-inp/go CSS"
+    "DailyTab: customs and helpers now read from user_settings table first",
+    "DailyTab: save() upserts customs/helpers to user_settings in parallel with daily_state",
+    "DailyTab: daily_state fallback only runs when user_settings has no customs/helpers yet (one-time migration)",
+    "DailyTab: on first load after deploy, existing customs/helpers migrate to user_settings automatically via save()",
+    "DailyTab: fixed bare fallback.xxx references in else branch to use optional chaining"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns",
-  "notes": "Pending SQL migration for reference_tracks source/promoted columns."
+  "notes": "user_settings table schema: key text UNIQUE, value text. Upsert uses onConflict: 'key'. Tasks, ticks, health items unchanged — still per-day in daily_state only."
 }

@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-19] DailyTab.svelte — DONE
+TASK: customs/helpers stored in user_settings not daily rows
+WHAT: load() fetches customs/helpers from user_settings first; save() upserts to user_settings in parallel with daily_state; daily_state fallback only used for one-time migration; fixed optional chaining in else branch
+RESULT: works — on first load, migrates existing customs/helpers to user_settings automatically
+BLOCKERS: none
+
+## [2026-04-19] DailyTab.svelte — DONE
 TASK: search inputs in routine items too
 WHAT: added YouTube/Spotify/Gemini/DeepSeek search input+button to customs and checkItems sections, reusing helper-search-inp/go CSS and helperSearchInputs state
 RESULT: works

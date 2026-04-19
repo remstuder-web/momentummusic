@@ -318,9 +318,17 @@
           }
         }
       }
-      // Load helpers/customs/refs from most recent row that actually has them
+      // Load customs/helpers from user_settings (permanent, not per-day)
+      const [{ data: customsRow }, { data: helpersRow }] = await Promise.all([
+        supabase.from('user_settings').select('value').eq('key', 'customs').maybeSingle(),
+        supabase.from('user_settings').select('value').eq('key', 'helpers').maybeSingle()
+      ])
+      const settingsCustoms = customsRow?.value ? JSON.parse(customsRow.value) : null
+      const settingsHelpers = helpersRow?.value ? JSON.parse(helpersRow.value) : null
+
+      // Only fall back to old daily rows if user_settings doesn't have customs/helpers yet
       let fallback = null
-      if (!data?.helpers?.length || !data?.customs?.length) {
+      if ((!settingsCustoms || !settingsHelpers) && (!data?.helpers?.length || !data?.customs?.length)) {
         const { data: fb } = await supabase.from('daily_state')
           .select('helpers, helper_ticks, private_items, private_ticks, customs, check_items, check_ticks, refs')
           .neq('date', today)
@@ -343,9 +351,9 @@
 
       if (data) {
         state = { ...state,
-          ticks: data.ticks||{}, customs: data.customs?.length ? data.customs : (fallback?.customs||[]),
+          ticks: data.ticks||{}, customs: settingsCustoms ?? (data.customs?.length ? data.customs : (fallback?.customs||[])),
           healthChecks: data.health_checks||[], healthTicks: data.health_ticks||{},
-          helpers: data.helpers?.length ? data.helpers : (fallback?.helpers||[]),
+          helpers: settingsHelpers ?? (data.helpers?.length ? data.helpers : (fallback?.helpers||[])),
           helperTicks: data.helper_ticks||{},
           privateItems: data.private_items?.length ? data.private_items : (fallback?.private_items||[]),
           privateTicks: data.private_ticks||{},
@@ -369,17 +377,17 @@
         if (data.cal_year) calDate = new Date(data.cal_year, data.cal_month||0, 1)
         localStorage.removeItem('mm_daily_backup_' + todayISO)
       } else {
-        // No row for today — load helpers/customs/private from most recent day
-        if (fallback) {
+        // No row for today — load helpers/customs from user_settings (or fallback for migration)
+        if (settingsHelpers !== null || settingsCustoms !== null || fallback) {
           state = { ...state,
-            helpers: fallback.helpers||[],
+            helpers: settingsHelpers ?? (fallback?.helpers||[]),
             helperTicks: {},
-            customs: fallback.customs||[],
-            privateItems: fallback.private_items||[],
+            customs: settingsCustoms ?? (fallback?.customs||[]),
+            privateItems: fallback?.private_items||[],
             privateTicks: {},
-            checkItems: fallback.check_items||[],
+            checkItems: fallback?.check_items||[],
             checkTicks: {},
-            refs: fallback.refs?.length ? fallback.refs : refsFallback,
+            refs: fallback?.refs?.length ? fallback.refs : refsFallback,
             tasks: [...recurringTasks, ...futureTasks],
           }
         }
@@ -387,9 +395,9 @@
       }
       seedFixed()
       loadSubReminders()
-      // Persist helpers/refs AND recurring tasks into today's row
-      // fallback || ensures save always fires when helpers were loaded from a previous row
-      if (fallback || state.helpers?.length || state.refs?.length || recurringTasks.length || futureTasks.length) await save()
+      // Persist into today's row + migrate customs/helpers to user_settings on first load
+      const needsMigration = !settingsCustoms || !settingsHelpers
+      if (needsMigration || fallback || state.helpers?.length || state.refs?.length || recurringTasks.length || futureTasks.length) await save()
       // Restore banner: only show tasks in backup that are missing from Supabase (truly lost)
       if (backup) {
         try {
@@ -410,18 +418,22 @@
 
   async function save() {
     saveStatus = 'saving'
-    const { error } = await supabase.from('daily_state').upsert({
-      date: today,
-      tasks: state.tasks,
-      dismissed_reminders: state.dismissedReminders,
-      ticks: state.ticks,
-      health_ticks: state.healthTicks,
-      helper_ticks: state.helperTicks,
-      private_ticks: state.privateTicks,
-      customs: state.customs,
-      helpers: state.helpers,
-      refs: state.refs
-    }, { onConflict: 'date' })
+    const [{ error }, , ] = await Promise.all([
+      supabase.from('daily_state').upsert({
+        date: today,
+        tasks: state.tasks,
+        dismissed_reminders: state.dismissedReminders,
+        ticks: state.ticks,
+        health_ticks: state.healthTicks,
+        helper_ticks: state.helperTicks,
+        private_ticks: state.privateTicks,
+        customs: state.customs,
+        helpers: state.helpers,
+        refs: state.refs
+      }, { onConflict: 'date' }),
+      supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' }),
+      supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
+    ])
     if (error) {
       saveStatus = 'error'
       console.error('DailyTab save failed:', error)

@@ -1,20 +1,17 @@
 {
-  "updated": "2026-04-19T06:52:00.000Z",
-  "last_task": "fix helper search CSS, fix helper order persistence",
+  "updated": "2026-04-19T06:58:00.000Z",
+  "last_task": "spotify link opens + copies simultaneously",
   "status": "partial",
   "working": [
-    "DailyTab: helper-search-inp placeholder color corrected to #3a3a3a",
-    "DailyTab: fallback save condition now includes `fallback ||` so save always fires when a previous row was loaded",
-    "saveSpotifyPreview sets source='user' on reference_tracks upsert",
-    "agent-chart-analysis sets source='agent' on reference_tracks upsert",
-    "Brain entries show ●/◑/○ indicators with [+] promote button for agent tracks",
-    "mozartContext splits userRefs vs chartRefs",
-    "Watcher restarted OK"
+    "BrainTab: track-dl-btn now opens Spotify in new tab AND copies URL to clipboard",
+    "BrainTab: button label changed from ↓ to ▶, title updated to 'Play in Spotify + copy link'",
+    "DailyTab: helper search CSS placeholder color corrected",
+    "DailyTab: fallback save condition fixed"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns",
-  "notes": "Helper search CSS was already present but placeholder was #555 (too visible); corrected to #3a3a3a. Fallback save fix: added fallback || to line 391 condition so save() always fires when helpers were loaded from a previous row, locking them into today's row."
+  "notes": "Pending SQL migration for reference_tracks source/promoted columns from earlier session."
 }

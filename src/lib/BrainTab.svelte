@@ -1474,17 +1474,18 @@ Or DROP AN IMAGE (screenshot, chart, conversation)"
                 {/if}
               </div>
               <button class="track-dl-btn"
-                title="Copy Spotify link"
+                title="Play in Spotify + copy link"
                 onclick={async () => {
                   const url = 'https://open.spotify.com/track/' + track.spotify_id
                   await navigator.clipboard.writeText(url)
+                  window.open(url, '_blank')
                   track._copied = true; referenceTrackEntries = [...referenceTrackEntries]
                   setTimeout(() => {
                     track._copied = false
                     referenceTrackEntries = [...referenceTrackEntries]
                   }, 1500)
                 }}>
-                {track._copied ? '✓' : '↓'}
+                {track._copied ? '✓' : '▶'}
               </button>
               <button class="track-del-btn"
                 onclick={async () => {

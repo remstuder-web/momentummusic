@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-19] BrainTab.svelte — DONE
+TASK: spotify link opens + copies simultaneously
+WHAT: track-dl-btn now opens Spotify in new tab AND copies URL; label changed ↓→▶; title updated
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-19] DailyTab.svelte — DONE
 TASK: fix helper search CSS, fix helper order persistence
 WHAT: placeholder color corrected to #3a3a3a; fallback save condition now always fires when a previous row was loaded (fallback || ...) to prevent stale helpers reappearing

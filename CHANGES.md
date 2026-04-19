@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-19] DailyTab.svelte — DONE
+TASK: customs/helpers permanent in user_settings
+WHAT: load() reads customs/helpers exclusively from user_settings (migrates from daily_state on first run); addCustom/delCustom/moveCustom/addHelper/delHelper/moveHelper each upsert to user_settings after save(); daily_state upsert no longer includes customs or helpers; fallback query simplified to private_items/check_items only
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-19] DailyTab.svelte — DONE
 TASK: customs/helpers stored in user_settings not daily rows
 WHAT: load() fetches customs/helpers from user_settings first; save() upserts to user_settings in parallel with daily_state; daily_state fallback only used for one-time migration; fixed optional chaining in else branch
 RESULT: works — on first load, migrates existing customs/helpers to user_settings automatically

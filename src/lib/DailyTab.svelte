@@ -318,21 +318,34 @@
           }
         }
       }
-      // Load customs/helpers from user_settings (permanent, not per-day)
-      const [{ data: customsRow }, { data: helpersRow }] = await Promise.all([
-        supabase.from('user_settings').select('value').eq('key', 'customs').maybeSingle(),
-        supabase.from('user_settings').select('value').eq('key', 'helpers').maybeSingle()
-      ])
-      const settingsCustoms = customsRow?.value ? JSON.parse(customsRow.value) : null
-      const settingsHelpers = helpersRow?.value ? JSON.parse(helpersRow.value) : null
+      // Load customs from user_settings (permanent store)
+      const { data: customsRow } = await supabase.from('user_settings').select('value').eq('key', 'customs').maybeSingle()
+      if (customsRow?.value) {
+        state.customs = JSON.parse(customsRow.value)
+      } else {
+        const { data: customsFb } = await supabase.from('daily_state')
+          .select('customs').not('customs', 'eq', '[]').order('date', { ascending: false }).limit(1).maybeSingle()
+        state.customs = customsFb?.customs || []
+        await supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' })
+      }
 
-      // Only fall back to old daily rows if user_settings doesn't have customs/helpers yet
+      // Load helpers from user_settings (permanent store)
+      const { data: helpersRow } = await supabase.from('user_settings').select('value').eq('key', 'helpers').maybeSingle()
+      if (helpersRow?.value) {
+        state.helpers = JSON.parse(helpersRow.value)
+      } else {
+        const { data: helpersFb } = await supabase.from('daily_state')
+          .select('helpers').not('helpers', 'eq', '[]').order('date', { ascending: false }).limit(1).maybeSingle()
+        state.helpers = helpersFb?.helpers || []
+        await supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
+      }
+
+      // Fallback for private_items, check_items, refs (still per-day)
       let fallback = null
-      if ((!settingsCustoms || !settingsHelpers) && (!data?.helpers?.length || !data?.customs?.length)) {
+      if (!data?.private_items?.length && !data?.check_items?.length) {
         const { data: fb } = await supabase.from('daily_state')
-          .select('helpers, helper_ticks, private_items, private_ticks, customs, check_items, check_ticks, refs')
+          .select('helper_ticks, private_items, private_ticks, check_items, check_ticks, refs')
           .neq('date', today)
-          .not('helpers', 'eq', '[]')
           .order('id', { ascending: false }).limit(1).maybeSingle()
         fallback = fb
       }
@@ -351,9 +364,8 @@
 
       if (data) {
         state = { ...state,
-          ticks: data.ticks||{}, customs: settingsCustoms ?? (data.customs?.length ? data.customs : (fallback?.customs||[])),
+          ticks: data.ticks||{},
           healthChecks: data.health_checks||[], healthTicks: data.health_ticks||{},
-          helpers: settingsHelpers ?? (data.helpers?.length ? data.helpers : (fallback?.helpers||[])),
           helperTicks: data.helper_ticks||{},
           privateItems: data.private_items?.length ? data.private_items : (fallback?.private_items||[]),
           privateTicks: data.private_ticks||{},
@@ -377,12 +389,10 @@
         if (data.cal_year) calDate = new Date(data.cal_year, data.cal_month||0, 1)
         localStorage.removeItem('mm_daily_backup_' + todayISO)
       } else {
-        // No row for today — load helpers/customs from user_settings (or fallback for migration)
-        if (settingsHelpers !== null || settingsCustoms !== null || fallback) {
+        // No row for today — load private/check/refs from fallback
+        if (fallback) {
           state = { ...state,
-            helpers: settingsHelpers ?? (fallback?.helpers||[]),
             helperTicks: {},
-            customs: settingsCustoms ?? (fallback?.customs||[]),
             privateItems: fallback?.private_items||[],
             privateTicks: {},
             checkItems: fallback?.check_items||[],
@@ -395,9 +405,8 @@
       }
       seedFixed()
       loadSubReminders()
-      // Persist into today's row + migrate customs/helpers to user_settings on first load
-      const needsMigration = !settingsCustoms || !settingsHelpers
-      if (needsMigration || fallback || state.helpers?.length || state.refs?.length || recurringTasks.length || futureTasks.length) await save()
+      // Persist ticks/tasks/refs into today's daily_state row
+      if (fallback || state.refs?.length || recurringTasks.length || futureTasks.length) await save()
       // Restore banner: only show tasks in backup that are missing from Supabase (truly lost)
       if (backup) {
         try {
@@ -418,22 +427,16 @@
 
   async function save() {
     saveStatus = 'saving'
-    const [{ error }, , ] = await Promise.all([
-      supabase.from('daily_state').upsert({
-        date: today,
-        tasks: state.tasks,
-        dismissed_reminders: state.dismissedReminders,
-        ticks: state.ticks,
-        health_ticks: state.healthTicks,
-        helper_ticks: state.helperTicks,
-        private_ticks: state.privateTicks,
-        customs: state.customs,
-        helpers: state.helpers,
-        refs: state.refs
-      }, { onConflict: 'date' }),
-      supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' }),
-      supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
-    ])
+    const { error } = await supabase.from('daily_state').upsert({
+      date: today,
+      tasks: state.tasks,
+      dismissed_reminders: state.dismissedReminders,
+      ticks: state.ticks,
+      health_ticks: state.healthTicks,
+      helper_ticks: state.helperTicks,
+      private_ticks: state.privateTicks,
+      refs: state.refs
+    }, { onConflict: 'date' })
     if (error) {
       saveStatus = 'error'
       console.error('DailyTab save failed:', error)
@@ -493,8 +496,12 @@
     if (!newCustom.trim()) return
     state.customs = [...state.customs, { id: 'c'+Date.now(), label: newCustom.trim(), url: newCustomUrl.trim() }]
     newCustom = ''; newCustomUrl = ''; await save()
+    await supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' })
   }
-  async function delCustom(id) { state.customs = state.customs.filter(c => c.id !== id); await save() }
+  async function delCustom(id) {
+    state.customs = state.customs.filter(c => c.id !== id); await save()
+    await supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' })
+  }
   async function addHealth() {
     if (!newHealth.trim()) return
     state.healthChecks = [...(state.healthChecks||[]), { id: 'h'+Date.now(), label: newHealth.trim() }]
@@ -527,13 +534,18 @@
     if (!newHelper.trim()) return
     state.helpers = [...(state.helpers||[]), { id: 'h'+Date.now(), label: newHelper.trim(), url: newHelperUrl.trim() }]
     newHelper = ''; newHelperUrl = ''; await save()
+    await supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
   }
-  async function delHelper(id) { state.helpers = (state.helpers||[]).filter(h => h.id !== id); await save() }
+  async function delHelper(id) {
+    state.helpers = (state.helpers||[]).filter(h => h.id !== id); await save()
+    await supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
+  }
   async function moveHelper(id, dir) {
     const arr = [...(state.helpers||[])]
     const idx = arr.findIndex(h => h.id === id), ni = idx + dir
     if (ni < 0 || ni >= arr.length) return
     const tmp = arr[idx]; arr[idx] = arr[ni]; arr[ni] = tmp; state.helpers = arr; await save()
+    await supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
   }
 
   async function tickPrivate(id) { state.privateTicks = {...state.privateTicks, [id]: !state.privateTicks[id]}; await save() }
@@ -556,6 +568,7 @@
     if (ni < 0 || ni >= arr.length) return
     const tmp = arr[idx]; arr[idx] = arr[ni]; arr[ni] = tmp
     state.customs = arr; await save()
+    await supabase.from('user_settings').upsert({ key: 'customs', value: JSON.stringify(state.customs) }, { onConflict: 'key' })
   }
   async function moveHealth(id, dir) {
     const arr = [...(state.healthChecks||[])]

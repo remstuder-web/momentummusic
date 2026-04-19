@@ -1,18 +1,18 @@
 {
-  "updated": "2026-04-19T07:15:00.000Z",
-  "last_task": "customs/helpers stored in user_settings not daily rows",
+  "updated": "2026-04-19T07:25:00.000Z",
+  "last_task": "customs/helpers permanent in user_settings",
   "status": "partial",
   "working": [
-    "DailyTab: customs and helpers now read from user_settings table first",
-    "DailyTab: save() upserts customs/helpers to user_settings in parallel with daily_state",
-    "DailyTab: daily_state fallback only runs when user_settings has no customs/helpers yet (one-time migration)",
-    "DailyTab: on first load after deploy, existing customs/helpers migrate to user_settings automatically via save()",
-    "DailyTab: fixed bare fallback.xxx references in else branch to use optional chaining"
+    "DailyTab: customs/helpers load exclusively from user_settings; auto-migrate from daily_state on first run",
+    "DailyTab: addCustom/delCustom/moveCustom each upsert key='customs' to user_settings",
+    "DailyTab: addHelper/delHelper/moveHelper each upsert key='helpers' to user_settings",
+    "DailyTab: daily_state upsert no longer includes customs or helpers fields",
+    "DailyTab: fallback query simplified to only fetch private_items/check_items/refs"
   ],
   "broken": [],
   "partial": [
     "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';"
   ],
   "next": "Run SQL migration in Supabase dashboard for source/promoted columns",
-  "notes": "user_settings table schema: key text UNIQUE, value text. Upsert uses onConflict: 'key'. Tasks, ticks, health items unchanged — still per-day in daily_state only."
+  "notes": "user_settings table: key text UNIQUE, value text. Tasks/ticks/health/private stay per-day in daily_state."
 }

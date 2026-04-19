@@ -911,7 +911,6 @@
   // Check share_sessions for new downloads and create inbox notifications
   async function syncDownloadNotifications() {
     try {
-      // Get all sessions that have at least one download
       const { data: sessions } = await supabase
         .from('share_sessions')
         .select('id, patch_name, songs, downloads, feedback_enabled, created_at')
@@ -919,21 +918,18 @@
         .not('downloads', 'is', null)
       if (!sessions?.length) return
 
-      // Track which downloads we've already notified — stored in localStorage
-      const notified = JSON.parse((typeof window !== 'undefined' ? localStorage.getItem('mm_dl_notified') : null) || '{}')
+      // Use Supabase as source of truth — not localStorage — so deleting a notification is permanent
+      const { data: existing } = await supabase
+        .from('inbox_notifications')
+        .select('session_id, song_code')
+        .eq('type', 'download')
+      const alreadyNotified = new Set((existing || []).map(r => `${r.session_id}::${r.song_code}`))
+
       const toInsert = []
-
       for (const session of sessions) {
-        const dl = session.downloads || {}
-        const dlCodes = Object.keys(dl)
-        if (!dlCodes.length) continue
-
-        const alreadyNotified = notified[session.id] || []
-        const newDls = dlCodes.filter(code => !alreadyNotified.includes(code))
-        if (!newDls.length) continue
-
-        // Build notification for each newly downloaded song
-        for (const code of newDls) {
+        const dlCodes = Object.keys(session.downloads || {})
+        for (const code of dlCodes) {
+          if (alreadyNotified.has(`${session.id}::${code}`)) continue
           const songEntry = (session.songs || []).find(s => s.code === code)
           toInsert.push({
             type: 'download',
@@ -946,18 +942,11 @@
             read: false
           })
         }
-
-        // Mark these as notified in localStorage
-        notified[session.id] = [...alreadyNotified, ...newDls]
       }
 
       if (toInsert.length) {
         await supabase.from('inbox_notifications').insert(toInsert)
-        if (typeof window !== 'undefined') localStorage.setItem('mm_dl_notified', JSON.stringify(notified))
-        // Reload inbox to show new items
         await loadInbox()
-      } else {
-        if (typeof window !== 'undefined') localStorage.setItem('mm_dl_notified', JSON.stringify(notified))
       }
     } catch(e) { console.warn('syncDownloadNotifications error:', e.message) }
   }

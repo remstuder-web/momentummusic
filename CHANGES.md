@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-20] momentum-watcher.cjs — DONE
+TASK: whatsapp-epoch-fix
+WHAT: readWhatsAppMessages now stores lastWhatsAppCheck as Unix ms (standard JS), converts to CoreData seconds at query time via (since/1000) - 978307200; SQL uses partner_name + is_from_me aliases; pollWhatsApp display uses partner_name || jid.split('@')[0]; /whatsapp-contacts returns 254 contacts alphabetically; lastWhatsAppCheck update converts CoreData secs back to Unix ms correctly
+RESULT: works — 254 contacts, monitored names (Raphael/Luca/Stefania/Ciro) matched correctly including groups
+BLOCKERS: none
+
+## [2026-04-20] momentum-watcher.cjs — DONE
 TASK: telegram-whatsapp-analysis, whatsapp-desktop-monitor
 WHAT: Telegram bot handles forwarded messages (auto-extract + save), photos (Claude vision OCR), /whatsapp command; WhatsApp Desktop auto-monitor reads ChatStorage.sqlite every 2min via better-sqlite3, AI analysis + brain/inbox save + Telegram push; GET /find-whatsapp-db + POST /setup-whatsapp endpoints; Gemini API support for cheaper analysis
 RESULT: works — /setup-whatsapp returns 18 tables + 45059 messages

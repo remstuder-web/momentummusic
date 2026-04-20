@@ -5018,7 +5018,7 @@ ${chatText.slice(0, 4000)}`
         db.close()
 
         whatsappDbPath = targetPath
-        lastWhatsAppCheck = Date.now() / 1000 - COREDATA_EPOCH_OFFSET - 3600
+        lastWhatsAppCheck = Date.now() - 3600000 // Unix ms — 1 hour ago
         console.log('✓ WhatsApp DB set:', whatsappDbPath)
 
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -5040,13 +5040,10 @@ ${chatText.slice(0, 4000)}`
       if (!fs.existsSync(dbPath)) { res.writeHead(404); res.end(JSON.stringify({ ok: false, error: 'WhatsApp DB not found' })); return }
       const db = new Database(dbPath, { readonly: true, fileMustExist: true })
       const rows = db.prepare(`
-        SELECT DISTINCT ZPARTNERNAME as name, ZCONTACTJID as jid, ZLASTMESSAGEDATE as last_date
+        SELECT DISTINCT ZPARTNERNAME as name, ZCONTACTJID as jid
         FROM ZWACHATSESSION
         WHERE ZPARTNERNAME IS NOT NULL AND ZPARTNERNAME != ''
-          AND ZCONTACTJID NOT LIKE '%@status%'
-          AND ZCONTACTJID NOT LIKE '%@broadcast%'
-        ORDER BY ZLASTMESSAGEDATE DESC
-        LIMIT 200
+        ORDER BY ZPARTNERNAME
       `).all()
       db.close()
       const monitored = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
@@ -5248,32 +5245,32 @@ ${chatText.slice(0, 4000)}`
 
 // ── WhatsApp Desktop auto-monitor ────────────────────────────────────────────
 const WHATSAPP_DB_PATH = '/Users/remo/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite'
-// Core Data epoch offset: WhatsApp timestamps are seconds since 2001-01-01
+// CoreData epoch: WhatsApp ZMESSAGEDATE = Unix seconds - 978307200
 const COREDATA_EPOCH_OFFSET = 978307200
 let whatsappDbPath = null
-let lastWhatsAppCheck = Date.now() / 1000 - COREDATA_EPOCH_OFFSET - 3600 // 1 hour ago in CoreData seconds
+let lastWhatsAppCheck = Date.now() - 3600000 // Unix ms — 1 hour ago
 
 function readWhatsAppMessages(dbPath, since) {
   if (!Database) throw new Error('better-sqlite3 not available')
   const db = new Database(dbPath, { readonly: true, fileMustExist: true })
+  // since = Unix ms → convert to CoreData seconds for the WHERE clause
+  const waSince = (since / 1000) - COREDATA_EPOCH_OFFSET
   try {
     const msgs = db.prepare(`
       SELECT
         m.ZTEXT        AS text,
-        m.ZISFROMME    AS from_me,
         m.ZMESSAGEDATE AS date,
-        m.ZPUSHNAME    AS push_name,
-        s.ZPARTNERNAME AS contact,
-        s.ZCONTACTJID  AS jid
+        s.ZCONTACTJID  AS contact,
+        m.ZISFROMME    AS is_from_me,
+        s.ZPARTNERNAME AS partner_name
       FROM ZWAMESSAGE m
       JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK
       WHERE m.ZMESSAGEDATE > ?
         AND m.ZTEXT IS NOT NULL
         AND m.ZTEXT != ''
-        AND m.ZMESSAGETYPE = 0
-      ORDER BY m.ZMESSAGEDATE ASC
+      ORDER BY m.ZMESSAGEDATE DESC
       LIMIT 100
-    `).all(since)
+    `).all(waSince)
     return msgs
   } finally { db.close() }
 }
@@ -5287,8 +5284,9 @@ async function pollWhatsApp() {
     // Group by contact JID
     const byContact = {}
     for (const msg of newMsgs) {
-      const key = msg.jid || msg.contact || 'unknown'
-      if (!byContact[key]) byContact[key] = { contact: msg.contact || msg.push_name || key, msgs: [] }
+      const key = msg.contact || 'unknown'
+      const displayName = msg.partner_name || msg.contact?.split('@')[0] || 'unknown'
+      if (!byContact[key]) byContact[key] = { contact: displayName, jid: msg.contact, msgs: [] }
       byContact[key].msgs.push(msg)
     }
 
@@ -5303,8 +5301,8 @@ async function pollWhatsApp() {
       )
     }
 
-    for (const { contact, msgs } of entries) {
-      const text = msgs.map(m => (m.from_me ? 'Remo' : (m.push_name || contact)) + ': ' + m.text).join('\n')
+    for (const { contact, jid, msgs } of entries) {
+      const text = msgs.map(m => (m.is_from_me ? 'Remo' : contact) + ': ' + m.text).join('\n')
 
       // Save raw to inbox
       await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
@@ -5321,7 +5319,6 @@ async function pollWhatsApp() {
       }).catch(() => {})
 
       // AI analysis — only for non-group, non-status chats with meaningful content
-      const jid = msgs[0]?.jid || ''
       if (!jid.includes('@g.us') && !jid.includes('@status') && text.length > 20) {
         try {
           const items = await analyzeWhatsappText(text, contact)
@@ -5353,7 +5350,8 @@ async function pollWhatsApp() {
       }
     }
 
-    lastWhatsAppCheck = newMsgs[newMsgs.length - 1].date
+    // Convert CoreData seconds back to Unix ms for next poll
+    lastWhatsAppCheck = (newMsgs[0].date + COREDATA_EPOCH_OFFSET) * 1000
   } catch(e) { console.warn('pollWhatsApp error:', e.message) }
 }
 

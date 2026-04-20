@@ -1,13 +1,25 @@
 export async function buildMozartContext(supabase, options = {}) {
   const { songVersions = [], currentSong = null, tasks = [], songSpecificRefs = [] } = options
 
-  const [{ data: ownProds }, { data: allRefs }, { data: goals }, { data: brain }, { data: contactProfiles }, { data: recentMessages }] = await Promise.all([
+  const [
+    { data: ownProds }, { data: allRefs }, { data: goals }, { data: brain },
+    { data: contactProfiles }, { data: recentMessages },
+    { data: projectSongs }, { data: demoSongs },
+    { data: pendingInbox }, { data: marketNews },
+    { data: watchedArtists }, { data: activeProjects }
+  ] = await Promise.all([
     supabase.from('reference_tracks').select('*').eq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(5),
     supabase.from('reference_tracks').select('*').neq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(20),
     supabase.from('brain_knowledge').select('title,content').eq('category', 'goal').limit(5),
     supabase.from('brain_knowledge').select('category,title,content').eq('active', true).order('created_at', { ascending: false }).limit(6),
     supabase.from('brain_knowledge').select('title,content').eq('category', 'contact_profile').eq('active', true).order('created_at', { ascending: false }).limit(10),
-    supabase.from('inbox_notifications').select('message,metadata,created_at').eq('metadata->>platform', 'whatsapp').order('created_at', { ascending: false }).limit(5)
+    supabase.from('inbox_notifications').select('message,metadata,created_at').eq('metadata->>platform', 'whatsapp').order('created_at', { ascending: false }).limit(5),
+    supabase.from('songs').select('id,title,code,work_data,status').not('project_id', 'is', null).order('updated_at', { ascending: false }).limit(10),
+    supabase.from('songs').select('id,title,code').is('project_id', null).limit(5),
+    supabase.from('inbox_notifications').select('type,message,metadata,created_at').neq('metadata->>platform', 'whatsapp').eq('read', false).order('created_at', { ascending: false }).limit(5),
+    supabase.from('brain_knowledge').select('title,content,created_at').eq('category', 'market_knowledge').order('created_at', { ascending: false }).limit(3),
+    supabase.from('watched_artists').select('artist_name,genres').eq('active', true).limit(5),
+    supabase.from('projects').select('name,artist,status,deadlines').eq('status', 'active').limit(5)
   ])
 
   const userRefs = (allRefs || []).filter(t => t.source === 'user' || t.promoted)
@@ -121,6 +133,67 @@ FORMATTING RULES — always follow these:
 
   if (goals?.length) context +=
     `## ACTIVE GOALS\n` + goals.map(g => '- ' + g.title).join('\n') + '\n\n'
+
+  if (activeProjects?.length) {
+    context += '## ACTIVE PROJECTS\n'
+    context += activeProjects.map(p =>
+      p.artist + ' — ' + p.name +
+      (p.deadlines?.filter(d => !d.done).length ?
+        ' · ' + p.deadlines.filter(d => !d.done).length + ' deadlines' : '')
+    ).join('\n') + '\n\n'
+  }
+
+  if (projectSongs?.length) {
+    context += '## SONGS IN PIPELINE\n'
+    const byStage = {}
+    for (const s of projectSongs) {
+      const stage = s.work_data?.current_stage || 'unknown'
+      if (!byStage[stage]) byStage[stage] = []
+      byStage[stage].push(s.title || s.code)
+    }
+    context += Object.entries(byStage)
+      .map(([stage, songs]) => stage.toUpperCase() + ': ' + songs.join(', '))
+      .join('\n') + '\n\n'
+  }
+
+  if (demoSongs?.length) {
+    context += '## DEMOS IN MARKET\n'
+    context += demoSongs.length + ' demos sent · '
+    context += demoSongs.slice(0, 3).map(s => s.title || s.code).join(', ') + '\n\n'
+  }
+
+  if (tasks?.length) {
+    const todayTasks = tasks.filter(t => !t.done).slice(0, 5)
+    if (todayTasks.length) {
+      context += '## TODAY\'S TASKS\n'
+      context += todayTasks.map(t => '- ' + t.label).join('\n') + '\n\n'
+    }
+  }
+
+  if (pendingInbox?.length) {
+    context += '## PENDING INBOX\n'
+    context += pendingInbox.map(n =>
+      n.type.toUpperCase() + ': ' +
+      (n.metadata?.from ? n.metadata.from + ' — ' : '') +
+      (n.message || '').slice(0, 80)
+    ).join('\n') + '\n\n'
+  }
+
+  if (marketNews?.length) {
+    context += '## MARKET INTELLIGENCE (latest)\n'
+    context += marketNews.map(n =>
+      new Date(n.created_at).toLocaleDateString() + ': ' +
+      n.title + ' — ' + n.content.slice(0, 100)
+    ).join('\n') + '\n\n'
+  }
+
+  if (watchedArtists?.length) {
+    context += '## WATCHED ARTISTS\n'
+    context += watchedArtists.map(a =>
+      a.artist_name +
+      (a.genres?.length ? ' (' + a.genres.slice(0, 2).join(', ') + ')' : '')
+    ).join(', ') + '\n\n'
+  }
 
   if (brain?.length) context +=
     `## BRAIN KNOWLEDGE\n` + brain.map(b => `[${b.category}] ${b.title}: ${b.content.slice(0, 80)}`).join('\n')

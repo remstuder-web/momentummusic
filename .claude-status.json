@@ -1,17 +1,20 @@
 {
-  "updated": "2026-04-20T22:35:00.000Z",
-  "last_task": "mozart-whatsapp-context",
+  "updated": "2026-04-20T22:40:00.000Z",
+  "last_task": "mozart-full-system-context",
   "status": "done",
   "working": [
-    "Mozart context includes ARTIST/CONTACT PROFILES from brain_knowledge",
-    "Mozart context includes RECENT WHATSAPP ACTIVITY with real_intent + HIGH URGENCY flags",
-    "analyzeArtistMessage returns urgency field + {analysis, usage}",
-    "pollWhatsApp upserts contact_profile, saves full metadata to inbox, sends structured Telegram, tracks cost",
-    "DailyTab: urgency badge, boundary alert red border, reply suggestion with Copy button",
-    "WhatsApp contacts stored in whatsapp-contacts.json (no Vite HMR reload)"
+    "Mozart knows active projects with deadline counts",
+    "Mozart knows songs in pipeline grouped by stage",
+    "Mozart knows demos in market (count + titles)",
+    "Mozart knows today's undone tasks",
+    "Mozart knows pending unread inbox (non-whatsapp)",
+    "Mozart knows latest market_knowledge brain entries",
+    "Mozart knows watched artists with genres",
+    "Mozart knows artist/contact profiles + recent whatsapp activity",
+    "All queries run in parallel via Promise.all"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test full pipeline: receive WhatsApp message from monitored contact, check inbox display, ask Mozart about the contact",
-  "notes": "Mozart query uses metadata->>platform filter for whatsapp inbox items. Contact profiles keyed by title 'Profile: [name]'."
+  "next": "Test Mozart with full context — ask about pipeline, projects, or market. Tables watched_artists may not exist yet; query will return null gracefully.",
+  "notes": "watched_artists table may not exist — Supabase will return error but destructuring catches it as null. Same for any missing columns."
 }

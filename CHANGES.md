@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-20] src/lib/mozartContext.js — DONE
+TASK: mozart-full-system-context
+WHAT: Added 6 new parallel queries to buildMozartContext(): project songs by stage, demos in market, unread non-whatsapp inbox, market_knowledge brain entries, watched_artists, active projects. Added 7 new context sections after ACTIVE GOALS: ACTIVE PROJECTS, SONGS IN PIPELINE, DEMOS IN MARKET, TODAY'S TASKS, PENDING INBOX, MARKET INTELLIGENCE, WATCHED ARTISTS.
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-20] src/lib/mozartContext.js — DONE
 TASK: mozart-whatsapp-context
 WHAT: Added contact_profile + whatsapp inbox queries to buildMozartContext(). Mozart now sees ARTIST/CONTACT PROFILES (last 10) and RECENT WHATSAPP ACTIVITY (last 5, showing real_intent + [HIGH URGENCY] flag).
 RESULT: works

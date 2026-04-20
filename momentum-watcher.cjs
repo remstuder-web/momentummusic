@@ -20,6 +20,9 @@ const { execSync, exec } = require('child_process')
 const { Readable } = require('stream')
 const chokidar = require('chokidar')
 
+let Database = null
+try { Database = require('better-sqlite3') } catch(e) { console.warn('better-sqlite3 not available:', e.message) }
+
 // ── CONFIG ────────────────────────────────────────────────────────────────
 // Dropbox OAuth2 — fill in App Key and App Secret from your Dropbox App Console
 // https://www.dropbox.com/developers/apps → your app → Settings
@@ -34,6 +37,9 @@ const SPOTIFY_CLIENT_SECRET = 'ab5d6290dc404f48b261870262f23a0c'
 const TELEGRAM_TOKEN    = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_OWNER_ID = 33858745
 const TELEGRAM_API      = 'https://api.telegram.org/bot' + TELEGRAM_TOKEN
+
+// Gemini API (optional — used for cheap WhatsApp analysis)
+const GEMINI_API_KEY    = process.env.GEMINI_API_KEY
 
 // Obsidian vault
 const OBSIDIAN_VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || '/Users/remo/ObsidianVault/Momentum'
@@ -1298,7 +1304,8 @@ async function buildStatusResponse() {
     'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
     'GET /get-env-keys', 'POST /save-env-key', 'POST /save-tasks',
     'GET /status', 'GET /system-status', 'GET /ping',
-    'POST /cleanup-brain-dupes'
+    'POST /cleanup-brain-dupes',
+    'GET /find-whatsapp-db', 'POST /setup-whatsapp'
   ]
 
   const [catsRes, countRes, logRes] = await Promise.all([
@@ -1417,6 +1424,198 @@ async function sendTelegram(chatId, text) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
   })
+}
+
+// ── WhatsApp / forwarded message analysis helpers ───────────────────────────
+
+async function analyzeWhatsappText(chatText, chatName) {
+  const prompt = `Extract all useful information from this WhatsApp chat for a music producer named Remo.
+
+Extract separately:
+- Action items (things to do)
+- Artist mentions and context
+- Feedback received on music
+- Decisions made
+- Interesting observations
+- Questions raised
+
+For each item return:
+{"title":"short label max 8 words","content":"verbatim relevant text or summary","category":"one of: collaboration, artist_strategy, mixing_technique, production_style, market_knowledge, industry_insight, networking, question","entry_type":"observation|pattern|rule|reference|question","confidence":"weak|medium|strong","action_item":"one concrete next step if applicable"}
+
+Return ONLY a JSON array. No explanation. No markdown. Start with [.
+
+Chat from ${chatName || 'contact'}:
+${chatText.slice(0, 4000)}`
+
+  // Prefer Gemini (cheaper) if key present
+  if (GEMINI_API_KEY) {
+    try {
+      const gr = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 1500 } })
+        }
+      )
+      const gd = await gr.json()
+      const raw = gd.candidates?.[0]?.content?.parts?.[0]?.text || '[]'
+      const jsonStart = raw.indexOf('[')
+      return JSON.parse(jsonStart >= 0 ? raw.slice(jsonStart) : raw)
+    } catch(e) { console.warn('Gemini analyze failed, falling back to Claude:', e.message) }
+  }
+
+  // Fall back to Claude Haiku
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  const cr = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001', max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  })
+  const cd = await cr.json()
+  const raw = cd.content?.[0]?.text || '[]'
+  const jsonStart = raw.indexOf('[')
+  return JSON.parse(jsonStart >= 0 ? raw.slice(jsonStart) : raw)
+}
+
+async function saveWhatsappResults(chatId, items, chatName, source) {
+  const saved = []
+  for (const it of items) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+        method: 'POST',
+        headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          category: it.category || 'collaboration',
+          title: it.title || 'untitled',
+          content: it.content || '',
+          entry_type_v2: it.entry_type || 'observation',
+          confidence: it.confidence || 'medium',
+          source_type: source || 'telegram_whatsapp',
+          active: true,
+          metadata: { action_item: it.action_item || null, chat_name: chatName || null }
+        })
+      })
+      saved.push(it)
+    } catch(e) { console.warn('saveWhatsappResults brain error:', e.message) }
+  }
+
+  // Save summary to inbox
+  const actionItems = items.filter(i => i.action_item).map(i => `• ${i.action_item}`).join('\n')
+  const summary = items.slice(0, 5).map(i => `• ${i.title}`).join('\n')
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        type: 'message',
+        song_title: `WhatsApp: ${chatName || 'chat'}`,
+        message: `Source: ${source || 'forwarded'}\nExtracted ${items.length} items:\n${summary}${actionItems ? '\n\nActions:\n' + actionItems : ''}`,
+        patch_name: 'Telegram WhatsApp',
+        read: false
+      })
+    })
+  } catch(e) { console.warn('saveWhatsappResults inbox error:', e.message) }
+
+  // Build Telegram reply
+  const artistItems = items.filter(i => i.category === 'artist_strategy' || i.category === 'collaboration')
+  const firstArtist = artistItems[0]?.title || '—'
+  const firstAction = items.find(i => i.action_item)?.action_item || items[0]?.content?.slice(0, 80) || '—'
+  const firstNext = items.find(i => i.entry_type === 'question' || i.action_item)?.action_item || '—'
+
+  return (
+    `📱 Extracted from WhatsApp:\n` +
+    `Artist: ${firstArtist}\n` +
+    `Action: ${firstAction}\n` +
+    `Next step: ${firstNext}\n` +
+    `\n${items.length} items saved to brain + inbox ✓`
+  )
+}
+
+async function handleOwnerForward(chatId, msg) {
+  const chatName = msg.forward_from
+    ? (msg.forward_from.first_name || '') + ' ' + (msg.forward_from.last_name || '')
+    : (msg.forward_sender_name || 'forwarded')
+  const text = msg.text || msg.caption || ''
+  if (!text.trim()) {
+    await sendTelegram(chatId, '⚠️ Forwarded message has no text to analyze.')
+    return
+  }
+  await sendTelegram(chatId, '⏳ Analyzing forwarded message...')
+  try {
+    const items = await analyzeWhatsappText(text, chatName.trim())
+    if (!items.length) { await sendTelegram(chatId, '🤷 No actionable items found.'); return }
+    const reply = await saveWhatsappResults(chatId, items, chatName.trim(), 'telegram_forward')
+    await sendTelegram(chatId, reply)
+  } catch(e) { await sendTelegram(chatId, '❌ Forward analysis error: ' + e.message) }
+}
+
+async function handleOwnerPhoto(chatId, msg) {
+  await sendTelegram(chatId, '⏳ Reading photo...')
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    // Get largest photo
+    const photos = msg.photo
+    const largest = photos[photos.length - 1]
+    const fileRes = await fetch(`${TELEGRAM_API}/getFile?file_id=${largest.file_id}`)
+    const fileData = await fileRes.json()
+    const filePath = fileData.result?.file_path
+    if (!filePath) { await sendTelegram(chatId, '❌ Could not get file path from Telegram.'); return }
+
+    const fileUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${filePath}`
+    const imgRes = await fetch(fileUrl)
+    const imgBuf = await imgRes.arrayBuffer()
+    const base64 = Buffer.from(imgBuf).toString('base64')
+    const mimeType = filePath.endsWith('.png') ? 'image/png' : 'image/jpeg'
+
+    // Ask Claude to extract text and determine if it's a WhatsApp screenshot
+    const visionRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+            { type: 'text', text: `This is a screenshot sent by a music producer.
+If this is a WhatsApp or messaging app screenshot, extract the full conversation text exactly as written, then reply with:
+IS_WHATSAPP: true
+CHAT_NAME: [contact name if visible, else "unknown"]
+TEXT:
+[full conversation text]
+
+If it is not a messaging screenshot, reply with:
+IS_WHATSAPP: false
+DESCRIPTION: [brief description of what it is]` }
+          ]
+        }]
+      })
+    })
+
+    const vd = await visionRes.json()
+    const visionText = vd.content?.[0]?.text || ''
+
+    if (visionText.includes('IS_WHATSAPP: true')) {
+      const nameMatch = visionText.match(/CHAT_NAME:\s*(.+)/)
+      const chatName = nameMatch ? nameMatch[1].trim() : 'screenshot'
+      const textStart = visionText.indexOf('TEXT:')
+      const extractedText = textStart >= 0 ? visionText.slice(textStart + 5).trim() : visionText
+
+      const items = await analyzeWhatsappText(extractedText, chatName)
+      if (!items.length) { await sendTelegram(chatId, '🤷 Photo read but no actionable items found.'); return }
+      const reply = await saveWhatsappResults(chatId, items, chatName, 'telegram_photo')
+      await sendTelegram(chatId, reply)
+    } else {
+      const descMatch = visionText.match(/DESCRIPTION:\s*(.+)/)
+      const desc = descMatch ? descMatch[1].trim() : visionText.slice(0, 200)
+      await sendTelegram(chatId, `📸 Not a WhatsApp screenshot.\nI see: ${desc}\n\nForward a WhatsApp screenshot to extract conversations.`)
+    }
+  } catch(e) { await sendTelegram(chatId, '❌ Photo error: ' + e.message) }
 }
 
 async function handleOwnerCommand(chatId, text) {
@@ -1619,6 +1818,17 @@ async function handleOwnerCommand(chatId, text) {
       await sendTelegram(chatId, '✅ Morning agents complete — check inbox for full results.')
     } catch(e) { await sendTelegram(chatId, '❌ Morning run error: ' + e.message) }
   }
+  else if (text.startsWith('/whatsapp ')) {
+    const chatText = text.slice(10).trim()
+    if (!chatText) { await sendTelegram(chatId, '❌ Usage: /whatsapp [paste chat text here]'); return }
+    await sendTelegram(chatId, '⏳ Analyzing chat...')
+    try {
+      const items = await analyzeWhatsappText(chatText, 'pasted')
+      if (!items.length) { await sendTelegram(chatId, '🤷 No actionable items found.'); return }
+      const reply = await saveWhatsappResults(chatId, items, 'pasted', 'telegram_whatsapp_cmd')
+      await sendTelegram(chatId, reply)
+    } catch(e) { await sendTelegram(chatId, '❌ WhatsApp analyze error: ' + e.message) }
+  }
   else if (cmd === '/help') {
     await sendTelegram(chatId,
       '🎵 Momentum Commands:\n\n' +
@@ -1634,6 +1844,9 @@ async function handleOwnerCommand(chatId, text) {
       '/demo [artist] — Check demo status\n' +
       '/mix [song] — Get mix gap analysis\n' +
       '/ref [spotify url] — Analyze reference track\n' +
+      '/whatsapp [text] — Analyze pasted chat\n' +
+      '📷 Send photo — Extract WhatsApp screenshot\n' +
+      '↩️ Forward message — Auto-analyze forwarded chat\n' +
       '/help — This message'
     )
   }
@@ -1684,7 +1897,13 @@ async function pollTelegram() {
         const text = msg.text || ''
         const fromId = msg.from.id
         if (fromId === TELEGRAM_OWNER_ID) {
-          await handleOwnerCommand(chatId, text)
+          if (msg.photo) {
+            await handleOwnerPhoto(chatId, msg)
+          } else if (msg.forward_from || msg.forward_date || msg.forward_sender_name) {
+            await handleOwnerForward(chatId, msg)
+          } else {
+            await handleOwnerCommand(chatId, text)
+          }
         } else {
           await handleArtistMessage(chatId, fromId, msg.from.first_name, text)
         }
@@ -4725,6 +4944,50 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /find-whatsapp-db ─────────────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/find-whatsapp-db') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    exec('find /Users/remo/Library -name "*.sqlite" -path "*[Ww]hats*[Aa]pp*" 2>/dev/null', (err, stdout) => {
+      const paths = stdout.trim().split('\n').filter(Boolean)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, paths, current: whatsappDbPath }))
+    })
+    return
+  }
+
+  // ── POST /setup-whatsapp ──────────────────────────────────────────────────
+  if (req.method === 'POST' && req.url === '/setup-whatsapp') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', async () => {
+      try {
+        const { dbPath } = JSON.parse(body || '{}')
+        const targetPath = dbPath || WHATSAPP_DB_PATH
+
+        if (!Database) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: 'better-sqlite3 not installed' })); return }
+        if (!fs.existsSync(targetPath)) { res.writeHead(404); res.end(JSON.stringify({ ok: false, error: 'DB not found: ' + targetPath })); return }
+
+        // Test read and return table names
+        const db = new Database(targetPath, { readonly: true, fileMustExist: true })
+        const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
+        const sampleCount = db.prepare("SELECT COUNT(*) as c FROM ZWAMESSAGE WHERE ZTEXT IS NOT NULL").get()?.c || 0
+        db.close()
+
+        whatsappDbPath = targetPath
+        lastWhatsAppCheck = Date.now() / 1000 - COREDATA_EPOCH_OFFSET - 3600
+        console.log('✓ WhatsApp DB set:', whatsappDbPath)
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, path: targetPath, tables, message_count: sampleCount }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── GET /ping ─────────────────────────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/ping') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -4862,6 +5125,106 @@ ${chatText.slice(0, 4000)}`
   res.writeHead(404); res.end()
 })
 
+// ── WhatsApp Desktop auto-monitor ────────────────────────────────────────────
+const WHATSAPP_DB_PATH = '/Users/remo/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite'
+// Core Data epoch offset: WhatsApp timestamps are seconds since 2001-01-01
+const COREDATA_EPOCH_OFFSET = 978307200
+let whatsappDbPath = null
+let lastWhatsAppCheck = Date.now() / 1000 - COREDATA_EPOCH_OFFSET - 3600 // 1 hour ago in CoreData seconds
+
+function readWhatsAppMessages(dbPath, since) {
+  if (!Database) throw new Error('better-sqlite3 not available')
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true })
+  try {
+    const msgs = db.prepare(`
+      SELECT
+        m.ZTEXT        AS text,
+        m.ZISFROMME    AS from_me,
+        m.ZMESSAGEDATE AS date,
+        m.ZPUSHNAME    AS push_name,
+        s.ZPARTNERNAME AS contact,
+        s.ZCONTACTJID  AS jid
+      FROM ZWAMESSAGE m
+      JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK
+      WHERE m.ZMESSAGEDATE > ?
+        AND m.ZTEXT IS NOT NULL
+        AND m.ZTEXT != ''
+        AND m.ZMESSAGETYPE = 0
+      ORDER BY m.ZMESSAGEDATE ASC
+      LIMIT 100
+    `).all(since)
+    return msgs
+  } finally { db.close() }
+}
+
+async function pollWhatsApp() {
+  if (!whatsappDbPath) return
+  try {
+    const newMsgs = readWhatsAppMessages(whatsappDbPath, lastWhatsAppCheck)
+    if (!newMsgs.length) return
+
+    // Group by contact JID
+    const byContact = {}
+    for (const msg of newMsgs) {
+      const key = msg.jid || msg.contact || 'unknown'
+      if (!byContact[key]) byContact[key] = { contact: msg.contact || msg.push_name || key, msgs: [] }
+      byContact[key].msgs.push(msg)
+    }
+
+    for (const { contact, msgs } of Object.values(byContact)) {
+      const text = msgs.map(m => (m.from_me ? 'Remo' : (m.push_name || contact)) + ': ' + m.text).join('\n')
+
+      // Save raw to inbox
+      await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+        method: 'POST',
+        headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          type: 'message',
+          song_title: `WhatsApp: ${contact}`,
+          message: text.slice(0, 2000),
+          patch_name: 'WhatsApp Auto',
+          read: false,
+          metadata: { platform: 'whatsapp', auto_captured: true, message_count: msgs.length }
+        })
+      }).catch(() => {})
+
+      // AI analysis — only for non-group, non-status chats with meaningful content
+      const jid = msgs[0]?.jid || ''
+      if (!jid.includes('@g.us') && !jid.includes('@status') && text.length > 20) {
+        try {
+          const items = await analyzeWhatsappText(text, contact)
+          if (items.length) {
+            for (const it of items.slice(0, 3)) {
+              await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+                method: 'POST',
+                headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+                body: JSON.stringify({
+                  category: it.category || 'networking',
+                  title: contact + ': ' + (it.title || '').slice(0, 50),
+                  content: it.content || '',
+                  entry_type_v2: it.entry_type || 'observation',
+                  confidence: it.confidence || 'weak',
+                  source_type: 'whatsapp_auto',
+                  active: true,
+                  metadata: { action_item: it.action_item || null, chat_name: contact }
+                })
+              }).catch(() => {})
+            }
+            const firstAction = items.find(i => i.action_item)?.action_item
+            await sendTelegram(TELEGRAM_OWNER_ID,
+              `📱 WhatsApp: ${contact} (${msgs.length} msg${msgs.length > 1 ? 's' : ''})\n` +
+              msgs[msgs.length - 1].text?.slice(0, 150) +
+              (firstAction ? `\n\n💡 Action: ${firstAction}` : '')
+            ).catch(() => {})
+          }
+        } catch(e) { console.warn('WhatsApp AI analysis error:', e.message) }
+      }
+    }
+
+    lastWhatsAppCheck = newMsgs[newMsgs.length - 1].date
+  } catch(e) { console.warn('pollWhatsApp error:', e.message) }
+}
+
 server.listen(PORT, '127.0.0.1', () => {
   server.timeout = 0          // no timeout — needed for large audio file streams
   server.keepAliveTimeout = 0
@@ -4877,6 +5240,23 @@ server.listen(PORT, '127.0.0.1', () => {
     pollInboxNotifications()
     console.log('✓ Telegram bot polling started')
     sendTelegram(TELEGRAM_OWNER_ID, '🟢 Momentum watcher started').catch(() => {})
+  }
+  // Auto-connect WhatsApp DB
+  if (Database && fs.existsSync(WHATSAPP_DB_PATH)) {
+    whatsappDbPath = WHATSAPP_DB_PATH
+    console.log('✓ WhatsApp DB found:', whatsappDbPath)
+    setInterval(pollWhatsApp, 120000)
+  } else {
+    exec(`find /Users/remo/Library -name "ChatStorage.sqlite" -path "*whatsapp*" 2>/dev/null`, (err, stdout) => {
+      const p = stdout.trim().split('\n').filter(Boolean)[0]
+      if (p) {
+        whatsappDbPath = p
+        console.log('✓ WhatsApp DB found:', whatsappDbPath)
+        setInterval(pollWhatsApp, 120000)
+      } else {
+        console.log('⚠ WhatsApp DB not found — /setup-whatsapp to configure')
+      }
+    })
   }
   // Obsidian vault watcher
   if (fs.existsSync(OBSIDIAN_VAULT_PATH)) {

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-20] momentum-watcher.cjs — DONE
+TASK: telegram-whatsapp-analysis, whatsapp-desktop-monitor
+WHAT: Telegram bot handles forwarded messages (auto-extract + save), photos (Claude vision OCR), /whatsapp command; WhatsApp Desktop auto-monitor reads ChatStorage.sqlite every 2min via better-sqlite3, AI analysis + brain/inbox save + Telegram push; GET /find-whatsapp-db + POST /setup-whatsapp endpoints; Gemini API support for cheaper analysis
+RESULT: works — /setup-whatsapp returns 18 tables + 45059 messages
+BLOCKERS: GEMINI_API_KEY empty in .env (fallback to Claude works fine)
+
 ## [2026-04-20] momentum-watcher.cjs + Start Momentum.command — DONE
 TASK: obsidian-sync, n8n-setup, telegram-expanded
 WHAT: Obsidian↔brain bi-directional sync (chokidar), /obsidian-sync + /brain-to-obsidian + /brain-dump endpoints; extended Telegram commands (/obsidian /demo /mix /ref /morning + YES/NO confirmation + feedback/download/milestone/error notifications); Start Momentum.command updated with n8n tab; CLAUDE.md updated

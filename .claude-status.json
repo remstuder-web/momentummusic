@@ -1,25 +1,21 @@
 {
-  "updated": "2026-04-20T00:20:00.000Z",
-  "last_task": "obsidian-sync + n8n + telegram-expanded",
+  "updated": "2026-04-20T12:13:00.000Z",
+  "last_task": "telegram-whatsapp-analysis + whatsapp-desktop-monitor",
   "status": "done",
   "working": [
-    "Telegram expanded: /morning /obsidian /demo /mix /ref commands",
-    "YES/NO confirmation flow (pendingConfirmations map)",
-    "Feedback + download inbox notifications polled every 30s → Telegram",
-    "Brain milestone notifications (50/100/200/300/500 entries)",
-    "Watcher errors now also sent via Telegram",
-    "Obsidian sync: chokidar watches vault, syncs .md → brain_knowledge",
-    "POST /obsidian-sync — manual full vault sync",
-    "GET /brain-to-obsidian — exports brain entries as .md files",
-    "POST /brain-dump — saves free text to brain (n8n target)",
-    "Start Momentum.command updated with Tab 3 for n8n (localhost:5678)"
+    "Telegram forwarded message handling (auto-analyzeWhatsappText → brain + inbox)",
+    "Telegram photo handling (Claude vision OCR → WhatsApp text extraction → analyze)",
+    "/whatsapp command (paste text → AI analysis → brain + inbox)",
+    "WhatsApp Desktop auto-monitor (reads ChatStorage.sqlite every 2min)",
+    "GET /find-whatsapp-db — lists all WhatsApp sqlite files",
+    "POST /setup-whatsapp — connects DB, returns tables + message count",
+    "Gemini API support (falls back to Claude Haiku if GEMINI_API_KEY empty)",
+    "better-sqlite3 installed, 45059 messages found in local DB"
   ],
   "broken": [],
   "partial": [
-    "Obsidian vault not yet created — run: mkdir -p /Users/remo/ObsidianVault/Momentum, then pm2 restart momentum-watcher --update-env",
-    "n8n not yet installed — run: npm install -g n8n",
-    "n8n workflows (Gmail→Brain, Calendar→Tasks, SubmitHub→Inbox) must be built in n8n UI at localhost:5678"
+    "GEMINI_API_KEY empty in .env — fill in for cheaper WhatsApp bulk analysis"
   ],
-  "next": "1. mkdir -p /Users/remo/ObsidianVault/Momentum  2. npm install -g n8n  3. Open Obsidian, create vault at that path  4. Build n8n workflows in browser",
-  "notes": "Obsidian mcp-obsidian plugin install is manual. n8n workflow building is UI-only (no code). TELEGRAM_BOT_TOKEN already set in .env."
+  "next": "Test by forwarding a WhatsApp message to Telegram bot. Add GEMINI_API_KEY if desired.",
+  "notes": "WhatsApp DB at ChatStorage.sqlite. Core Data epoch offset (978307200) applied. Polls every 2min, only 1:1 chats (not groups/status)."
 }

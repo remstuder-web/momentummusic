@@ -5038,20 +5038,54 @@ ${chatText.slice(0, 4000)}`
       if (!Database) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: 'better-sqlite3 not available' })); return }
       const dbPath = whatsappDbPath || WHATSAPP_DB_PATH
       if (!fs.existsSync(dbPath)) { res.writeHead(404); res.end(JSON.stringify({ ok: false, error: 'WhatsApp DB not found' })); return }
+
       const db = new Database(dbPath, { readonly: true, fileMustExist: true })
+      // JOIN push names in one query — WhatsApp profile name takes priority over ZPARTNERNAME
       const rows = db.prepare(`
-        SELECT DISTINCT ZPARTNERNAME as name, ZCONTACTJID as jid
-        FROM ZWACHATSESSION
-        WHERE ZPARTNERNAME IS NOT NULL AND ZPARTNERNAME != ''
-        ORDER BY ZPARTNERNAME
+        SELECT DISTINCT
+          cs.ZPARTNERNAME AS partner_name,
+          cs.ZCONTACTJID  AS jid,
+          pp.ZPUSHNAME    AS push_name
+        FROM ZWACHATSESSION cs
+        LEFT JOIN ZWAPROFILEPUSHNAME pp ON cs.ZCONTACTJID = pp.ZJID
+        WHERE cs.ZPARTNERNAME IS NOT NULL AND cs.ZPARTNERNAME != ''
+        ORDER BY cs.ZPARTNERNAME
       `).all()
       db.close()
+
+      // Build address book map: last9digits → full name (cached 10 min)
+      const abMap = buildAddressBookMap()
+
+      const looksLikePhone = (name) => /^\+?[\d\s\-().]+$/.test(name?.trim())
+
+      // Build contact list: push_name > address book > partner_name
+      const contacts = rows.map(r => {
+        const phone = r.jid.includes('@s.whatsapp.net') ? r.jid.split('@')[0].replace(/\D/g, '') : null
+        const last9 = phone?.slice(-9) || null
+        const contacts_name = (last9 && abMap.get(last9)) || null
+        const name = r.push_name || contacts_name || r.partner_name
+        return {
+          name,
+          partner_name: r.partner_name,
+          push_name: r.push_name || null,
+          contacts_name: contacts_name || null,
+          jid: r.jid
+        }
+      })
+
       const monitored = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
-      const contacts = rows.map(r => ({
-        name: r.name,
-        jid: r.jid,
-        monitored: monitored.some(mc => r.name.toLowerCase().includes(mc))
-      }))
+      for (const c of contacts) {
+        c.monitored = monitored.some(mc => c.name.toLowerCase().includes(mc))
+      }
+
+      // Sort: named contacts first (not raw phones), then alphabetically
+      contacts.sort((a, b) => {
+        const aPhone = looksLikePhone(a.name)
+        const bPhone = looksLikePhone(b.name)
+        if (aPhone !== bPhone) return aPhone ? 1 : -1
+        return a.name.localeCompare(b.name)
+      })
+
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, contacts, monitored_list: process.env.WHATSAPP_CONTACTS || '' }))
     } catch(e) {
@@ -5242,6 +5276,68 @@ ${chatText.slice(0, 4000)}`
 
   res.writeHead(404); res.end()
 })
+
+// ── Mac AddressBook lookup (cached) ──────────────────────────────────────────
+let _abMapCache = null
+let _abMapTime  = 0
+let _abMapBuilding = false
+const AB_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+
+function buildAddressBookMap() {
+  if (_abMapCache && (Date.now() - _abMapTime) < AB_CACHE_TTL) return _abMapCache
+  if (_abMapBuilding) return _abMapCache || new Map()
+
+  _abMapBuilding = true
+  const map = new Map()
+
+  if (Database) {
+    // Collect all AddressBook DB paths to try
+    const abBase = path.join(os.homedir(), 'Library', 'Application Support', 'AddressBook')
+    const candidates = []
+    const rootDb = path.join(abBase, 'AddressBook-v22.abcddb')
+    if (fs.existsSync(rootDb)) candidates.push(rootDb)
+    // Sources — scan if permitted, fall back to env var
+    try {
+      const sourcesDir = path.join(abBase, 'Sources')
+      for (const sub of fs.readdirSync(sourcesDir)) {
+        const p = path.join(sourcesDir, sub, 'AddressBook-v22.abcddb')
+        try { if (fs.statSync(p).isFile()) candidates.push(p) } catch(e) {}
+      }
+    } catch(e) {
+      for (const p of (process.env.ADDRESSBOOK_SOURCES || '').split(',').filter(Boolean)) {
+        try { if (fs.statSync(p.trim()).isFile()) candidates.push(p.trim()) } catch(e2) {}
+      }
+    }
+
+    for (const dbPath of candidates) {
+      try {
+        const ab = new Database(dbPath, { readonly: true, fileMustExist: true })
+        const rows = ab.prepare(`
+          SELECT
+            COALESCE(r.ZFIRSTNAME, '') || ' ' || COALESCE(r.ZLASTNAME, '') AS full_name,
+            p.ZFULLNUMBER AS phone
+          FROM ZABCDRECORD r
+          JOIN ZABCDPHONENUMBER p ON p.ZOWNER = r.Z_PK
+          WHERE p.ZFULLNUMBER IS NOT NULL AND p.ZFULLNUMBER != ''
+        `).all()
+        ab.close()
+        for (const row of rows) {
+          const name = row.full_name.trim()
+          if (!name) continue
+          const digits = row.phone.replace(/\D/g, '')
+          if (digits.length < 7) continue
+          const key = digits.slice(-9)
+          if (!map.has(key)) map.set(key, name)
+        }
+      } catch(e) { /* db locked or no access — skip */ }
+    }
+  }
+
+  _abMapCache = map
+  _abMapTime  = Date.now()
+  _abMapBuilding = false
+  return map
+}
 
 // ── WhatsApp Desktop auto-monitor ────────────────────────────────────────────
 const WHATSAPP_DB_PATH = '/Users/remo/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite'

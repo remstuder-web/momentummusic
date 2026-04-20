@@ -1305,7 +1305,8 @@ async function buildStatusResponse() {
     'GET /get-env-keys', 'POST /save-env-key', 'POST /save-tasks',
     'GET /status', 'GET /system-status', 'GET /ping',
     'POST /cleanup-brain-dupes',
-    'GET /find-whatsapp-db', 'POST /setup-whatsapp'
+    'GET /find-whatsapp-db', 'POST /setup-whatsapp',
+    'GET /whatsapp-contacts', 'POST /whatsapp-add-contact'
   ]
 
   const [catsRes, countRes, logRes] = await Promise.all([
@@ -1818,6 +1819,45 @@ async function handleOwnerCommand(chatId, text) {
       await sendTelegram(chatId, '✅ Morning agents complete — check inbox for full results.')
     } catch(e) { await sendTelegram(chatId, '❌ Morning run error: ' + e.message) }
   }
+  else if (cmd === '/contacts') {
+    const list = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim()).filter(Boolean)
+    if (!list.length) {
+      await sendTelegram(chatId, '📱 No contacts monitored.\nUse /monitor [name] to add one.')
+    } else {
+      await sendTelegram(chatId, '📱 Monitored WhatsApp contacts:\n' + list.map(c => '• ' + c).join('\n') + '\n\nUse /monitor [name] to add, /unmonitor [name] to remove.')
+    }
+  }
+  else if (text.startsWith('/monitor ')) {
+    const name = text.slice(9).trim()
+    if (!name) { await sendTelegram(chatId, '❌ Usage: /monitor [contact name]'); return }
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/whatsapp-add-contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contact: name })
+      })
+      const d = await r.json()
+      await sendTelegram(chatId, d.ok
+        ? `✅ ${d.message}\nNow monitoring: ${(d.contacts || []).join(', ')}`
+        : '❌ ' + (d.error || 'Unknown error'))
+    } catch(e) { await sendTelegram(chatId, '❌ Monitor error: ' + e.message) }
+  }
+  else if (text.startsWith('/unmonitor ')) {
+    const name = text.slice(11).trim()
+    if (!name) { await sendTelegram(chatId, '❌ Usage: /unmonitor [contact name]'); return }
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/whatsapp-add-contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contact: name, remove: true })
+      })
+      const d = await r.json()
+      const remaining = (d.contacts || [])
+      await sendTelegram(chatId, d.ok
+        ? `✅ ${d.message}\n` + (remaining.length ? 'Still monitoring: ' + remaining.join(', ') : 'No contacts monitored.')
+        : '❌ ' + (d.error || 'Unknown error'))
+    } catch(e) { await sendTelegram(chatId, '❌ Unmonitor error: ' + e.message) }
+  }
   else if (text.startsWith('/whatsapp ')) {
     const chatText = text.slice(10).trim()
     if (!chatText) { await sendTelegram(chatId, '❌ Usage: /whatsapp [paste chat text here]'); return }
@@ -1845,6 +1885,9 @@ async function handleOwnerCommand(chatId, text) {
       '/mix [song] — Get mix gap analysis\n' +
       '/ref [spotify url] — Analyze reference track\n' +
       '/whatsapp [text] — Analyze pasted chat\n' +
+      '/contacts — Show monitored WhatsApp contacts\n' +
+      '/monitor [name] — Add contact to monitor list\n' +
+      '/unmonitor [name] — Remove from monitor list\n' +
       '📷 Send photo — Extract WhatsApp screenshot\n' +
       '↩️ Forward message — Auto-analyze forwarded chat\n' +
       '/help — This message'
@@ -4988,6 +5031,84 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /whatsapp-contacts — list contacts from WhatsApp DB ─────────────────
+  if (req.method === 'GET' && req.url === '/whatsapp-contacts') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      if (!Database) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: 'better-sqlite3 not available' })); return }
+      const dbPath = whatsappDbPath || WHATSAPP_DB_PATH
+      if (!fs.existsSync(dbPath)) { res.writeHead(404); res.end(JSON.stringify({ ok: false, error: 'WhatsApp DB not found' })); return }
+      const db = new Database(dbPath, { readonly: true, fileMustExist: true })
+      const rows = db.prepare(`
+        SELECT DISTINCT ZPARTNERNAME as name, ZCONTACTJID as jid, ZLASTMESSAGEDATE as last_date
+        FROM ZWACHATSESSION
+        WHERE ZPARTNERNAME IS NOT NULL AND ZPARTNERNAME != ''
+          AND ZCONTACTJID NOT LIKE '%@status%'
+          AND ZCONTACTJID NOT LIKE '%@broadcast%'
+        ORDER BY ZLASTMESSAGEDATE DESC
+        LIMIT 200
+      `).all()
+      db.close()
+      const monitored = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
+      const contacts = rows.map(r => ({
+        name: r.name,
+        jid: r.jid,
+        monitored: monitored.some(mc => r.name.toLowerCase().includes(mc))
+      }))
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, contacts, monitored_list: process.env.WHATSAPP_CONTACTS || '' }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /whatsapp-add-contact ────────────────────────────────────────────
+  if (req.method === 'POST' && req.url === '/whatsapp-add-contact') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', () => {
+      try {
+        const { contact, remove } = JSON.parse(body || '{}')
+        if (!contact?.trim()) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing contact' })); return }
+        const name = contact.trim()
+        const current = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim()).filter(Boolean)
+
+        let updated
+        if (remove) {
+          updated = current.filter(c => c.toLowerCase() !== name.toLowerCase())
+        } else {
+          if (current.some(c => c.toLowerCase() === name.toLowerCase())) {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: true, message: `Already monitoring ${name}`, contacts: current }))
+            return
+          }
+          updated = [...current, name]
+        }
+
+        const newValue = updated.join(',')
+        const envPath = path.join(__dirname, '.env')
+        let envText = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : ''
+        const line = `WHATSAPP_CONTACTS=${newValue}`
+        const regex = /^WHATSAPP_CONTACTS=.*$/m
+        envText = regex.test(envText) ? envText.replace(regex, line) : envText.trimEnd() + '\n' + line + '\n'
+        fs.writeFileSync(envPath, envText, 'utf8')
+        process.env.WHATSAPP_CONTACTS = newValue
+
+        const msg = remove ? `Stopped monitoring ${name}` : `Now monitoring ${name}`
+        console.log(`✓ WHATSAPP_CONTACTS updated: ${newValue}`)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, message: msg, contacts: updated }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── GET /ping ─────────────────────────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/ping') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -5171,7 +5292,18 @@ async function pollWhatsApp() {
       byContact[key].msgs.push(msg)
     }
 
-    for (const { contact, msgs } of Object.values(byContact)) {
+    // Filter to monitored contacts if list is set
+    const monitoredContacts = (process.env.WHATSAPP_CONTACTS || '')
+      .split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
+
+    let entries = Object.values(byContact)
+    if (monitoredContacts.length > 0) {
+      entries = entries.filter(({ contact }) =>
+        monitoredContacts.some(mc => contact.toLowerCase().includes(mc))
+      )
+    }
+
+    for (const { contact, msgs } of entries) {
       const text = msgs.map(m => (m.from_me ? 'Remo' : (m.push_name || contact)) + ': ' + m.text).join('\n')
 
       // Save raw to inbox

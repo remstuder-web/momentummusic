@@ -48,6 +48,12 @@
 
   // Mozart
   let aiInput = $state(''), aiMessages = $state([]), aiLoading = $state(false)
+  let chatContainer = $state(null)
+  $effect(() => {
+    if (aiMessages.length && chatContainer) {
+      setTimeout(() => { chatContainer.scrollTop = chatContainer.scrollHeight }, 50)
+    }
+  })
   let correctionInputs = $state({}) // keyed by message index
 
   // TTS speak
@@ -1133,6 +1139,22 @@ ${mozartContext}`
     return html
   }
 
+  function formatMozartOutput(text) {
+    if (!text) return ''
+    return text
+      .replace(/^## (.+)$/gm, '<div class="moz-header">$1</div>')
+      .replace(/\[GAP\]/g, '<span class="moz-gap">[GAP]</span>')
+      .replace(/\[OK\]/g, '<span class="moz-ok">[OK]</span>')
+      .replace(/\[CONFIRMED\]/g, '<span class="moz-confirmed">[CONFIRMED]</span>')
+      .replace(/\[TENSION\]/g, '<span class="moz-tension">[TENSION]</span>')
+      .replace(/\[OUTDATED\]/g, '<span class="moz-outdated">[OUTDATED]</span>')
+      .replace(/\[NEW\]/g, '<span class="moz-new">[NEW]</span>')
+      .replace(/^[-•] (.+)$/gm, '<div class="moz-bullet">$1</div>')
+      .replace(/^\d+\. (.+)$/gm, '<div class="moz-bullet">$1</div>')
+      .replace(/<div class="moz-header">(Next Step|Next Move)<\/div>\n?/g, '<div class="moz-next-label">NEXT STEP</div>')
+      .replace(/\n\n/g, '<div class="moz-spacer"></div>')
+      .replace(/\n/g, '<br>')
+  }
 
   // Resolve live artist/project/song for day-detail panel
   function resolveDetailLabel(t) {
@@ -2041,11 +2063,11 @@ ${mozartContext}`
         <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
         <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
       </div>
-      <div class="chat-out">
+      <div class="chat-out" bind:this={chatContainer}>
         {#each aiMessages as msg, i}
           <div class="chat-msg {msg.role}">
             <div class="chat-who">{msg.role==='user'?'You':'Mozart'}</div>
-            <div class="chat-text">{msg.content}</div>
+            <div class="chat-text">{@html msg.role === 'assistant' ? formatMozartOutput(msg.content) : msg.content}</div>
             {#if msg.role === 'assistant'}
               <div class="chat-correction-row">
                 <button class="btn-wrong" onclick={() => correctionInputs = {...correctionInputs, [i]: correctionInputs[i] !== undefined ? undefined : ''}}>✗ Wrong</button>
@@ -2457,12 +2479,22 @@ ${mozartContext}`
   .mozart-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; }
   .clear-chat { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
   .clear-chat:hover { border-color: #555; color: #9e9690; }
-  .chat-out { min-height: 100px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+  .chat-out { min-height: 100px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; scroll-behavior: smooth; }
   .chat-msg { display: flex; flex-direction: column; gap: 2px; }
   .chat-who { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
   .chat-msg.assistant .chat-who { color: #7a6230; }
   .chat-text { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; line-height: 1.5; }
   .chat-text.dim { color: #444; }
+  :global(.moz-header) { font-family: 'Space Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: rgba(201,168,76,.75); margin: 12px 0 4px; padding-bottom: 4px; border-bottom: 1px solid #1c1c1c; display: block; }
+  :global(.moz-bullet) { padding: 2px 0 2px 12px; line-height: 1.6; color: #9e9690; display: block; }
+  :global(.moz-spacer) { height: 8px; display: block; }
+  :global(.moz-gap) { color: #e05a4a; font-weight: 500; }
+  :global(.moz-ok) { color: #4caf82; font-weight: 500; }
+  :global(.moz-confirmed) { color: #c9a84c; font-weight: 500; }
+  :global(.moz-tension) { color: #e8a838; font-weight: 500; }
+  :global(.moz-outdated) { color: #9e9690; font-weight: 500; }
+  :global(.moz-new) { color: #4a9fd4; font-weight: 500; }
+  :global(.moz-next-label) { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-top: 10px; margin-bottom: 4px; display: block; }
   .chat-input-row { display: flex; gap: 6px; }
   .chat-correction-row { display: flex; gap: 6px; margin-top: 4px; }
   .btn-wrong { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 7px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; }

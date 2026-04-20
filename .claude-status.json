@@ -1,14 +1,13 @@
 {
-  "updated": "2026-04-20T22:48:00.000Z",
-  "last_task": "mozart-output-line-breaks",
+  "updated": "2026-04-20T23:00:00.000Z",
+  "last_task": "mozart-chat-autoscroll",
   "status": "done",
   "working": [
-    "Mozart system prompt has 7 new line-break formatting rules",
-    "DailyTab parseAgentOutput splits plain paragraphs >100 chars on sentence boundaries",
-    "ProjectsTab parseMozartOutput renders headers/bullets/sentences with inline styles",
-    "ProjectsTab assistant messages rendered as {@html}, user messages plain text"
+    "DailyTab Mozart chat auto-scrolls on new message",
+    "ProjectsTab Mozart chat auto-scrolls on new message",
+    "scroll-behavior:smooth on .chat-out in both files"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test Mozart response in ProjectsTab — verify bullets on separate lines, no inline lists"
+  "next": "All Mozart improvements complete. Test full chat flow."
 }

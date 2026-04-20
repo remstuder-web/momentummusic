@@ -1,5 +1,17 @@
 # CHANGES
 
+## [2026-04-20] DailyTab.svelte + ProjectsTab.svelte — DONE
+TASK: mozart-chat-autoscroll
+WHAT: Added chatContainer ref + $effect auto-scroll (50ms timeout) to both DailyTab and ProjectsTab Mozart chat. Added scroll-behavior:smooth to .chat-out CSS in both files.
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-20] DailyTab.svelte + ProjectsTab.svelte — DONE
+TASK: mozart-output-formatting
+WHAT: Added formatMozartOutput() to DailyTab and ProjectsTab — regex-based renderer for ## headers, [GAP]/[OK]/tag spans, bullet/numbered items, Next Step label, spacers. Replaced parseMozartOutput() in ProjectsTab. Applied {@html formatMozartOutput()} for all assistant messages. Added :global(.moz-*) CSS classes in both files.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-20] mozartContext.js + DailyTab.svelte + ProjectsTab.svelte — DONE
 TASK: mozart-output-line-breaks
 WHAT: Added 7 new formatting rules to Mozart system prompt (every topic on new line, no inline lists, blank line between ideas). parseAgentOutput() in DailyTab now splits plain paragraphs >100 chars into individual sentence divs. ProjectsTab added parseMozartOutput() with full header/bullet/sentence rendering + {#if assistant} block uses {@html}.

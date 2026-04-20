@@ -620,36 +620,28 @@
   let aiInput = $state('')
   let aiMessages = $state([])
   let aiLoading = $state(false)
-
-  function parseMozartOutput(text) {
-    if (!text) return ''
-    const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const tag = s => s
-      .replace(/\[GAP\]/g,       '<span style="color:#e05a4a;font-weight:600">[GAP]</span>')
-      .replace(/\[OK\]/g,        '<span style="color:#4caf82;font-weight:600">[OK]</span>')
-      .replace(/\[CONFIRMED\]/g, '<span style="color:#4caf82;font-size:10px">[CONFIRMED]</span>')
-      .replace(/\[TENSION\]/g,   '<span style="color:#e05a4a;font-size:10px">[TENSION]</span>')
-      .replace(/\[OUTDATED\]/g,  '<span style="color:#9e9690;font-size:10px">[OUTDATED]</span>')
-      .replace(/\[NEW\]/g,       '<span style="color:#c9a84c;font-size:10px">[NEW]</span>')
-    let html = ''
-    for (const rawLine of text.split('\n')) {
-      const t = rawLine.trim()
-      if (!t) { html += '<div style="height:6px"></div>'; continue }
-      if (t.startsWith('## ')) {
-        html += `<div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:rgba(201,168,76,.75);letter-spacing:.1em;margin:10px 0 4px;text-transform:uppercase">${esc(t.slice(3))}</div>`
-      } else if (t.startsWith('- ') || t.startsWith('• ')) {
-        html += `<div style="font-size:13px;color:#cec9c1;line-height:1.6;padding-left:10px">${tag(esc(t.replace(/^[-•]\s+/, '')))}</div>`
-      } else if (/^\d+\.\s/.test(t)) {
-        html += `<div style="font-size:13px;color:#cec9c1;line-height:1.6;padding-left:10px">${tag(esc(t.replace(/^\d+\.\s+/, '')))}</div>`
-      } else if (t.length > 100) {
-        for (const s of t.split(/(?<=\. )/)) {
-          if (s.trim()) html += `<div style="font-size:13px;color:#9e9690;line-height:1.65;margin:2px 0">${tag(esc(s.trim()))}</div>`
-        }
-      } else {
-        html += `<div style="font-size:13px;color:#9e9690;line-height:1.65;margin:2px 0">${tag(esc(t))}</div>`
-      }
+  let chatContainer = $state(null)
+  $effect(() => {
+    if (aiMessages.length && chatContainer) {
+      setTimeout(() => { chatContainer.scrollTop = chatContainer.scrollHeight }, 50)
     }
-    return html
+  })
+
+  function formatMozartOutput(text) {
+    if (!text) return ''
+    return text
+      .replace(/^## (.+)$/gm, '<div class="moz-header">$1</div>')
+      .replace(/\[GAP\]/g, '<span class="moz-gap">[GAP]</span>')
+      .replace(/\[OK\]/g, '<span class="moz-ok">[OK]</span>')
+      .replace(/\[CONFIRMED\]/g, '<span class="moz-confirmed">[CONFIRMED]</span>')
+      .replace(/\[TENSION\]/g, '<span class="moz-tension">[TENSION]</span>')
+      .replace(/\[OUTDATED\]/g, '<span class="moz-outdated">[OUTDATED]</span>')
+      .replace(/\[NEW\]/g, '<span class="moz-new">[NEW]</span>')
+      .replace(/^[-•] (.+)$/gm, '<div class="moz-bullet">$1</div>')
+      .replace(/^\d+\. (.+)$/gm, '<div class="moz-bullet">$1</div>')
+      .replace(/<div class="moz-header">(Next Step|Next Move)<\/div>\n?/g, '<div class="moz-next-label">NEXT STEP</div>')
+      .replace(/\n\n/g, '<div class="moz-spacer"></div>')
+      .replace(/\n/g, '<br>')
   }
 
   // Deadlines & Tasks
@@ -2859,12 +2851,12 @@
         <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
         <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
       </div>
-      <div class="chat-out">
+      <div class="chat-out" bind:this={chatContainer}>
         {#each aiMessages as msg}
           <div class="chat-msg {msg.role}">
             <div class="chat-who">{msg.role==='user'?'You':'Mozart'}</div>
             {#if msg.role === 'assistant'}
-              <div class="chat-text">{@html parseMozartOutput(msg.content)}</div>
+              <div class="chat-text">{@html formatMozartOutput(msg.content)}</div>
             {:else}
               <div class="chat-text">{msg.content}</div>
             {/if}
@@ -3345,12 +3337,22 @@
   .mozart-title { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; display: flex; align-items: center; gap: 10px; }
   .clear-chat { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
   .clear-chat:hover { border-color: #555; color: #9e9690; }
-  .chat-out { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+  .chat-out { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 0; scroll-behavior: smooth; }
   .chat-msg { display: flex; flex-direction: column; gap: 3px; }
   .chat-who { font-family: 'Space Mono', monospace; font-size: 12px; color: #555; }
   .chat-msg.assistant .chat-who { color: #7a6230; }
   .chat-text { font-size: 14px; color: #cec9c1; line-height: 1.6; }
   .chat-text.dim { color: #444; }
+  :global(.moz-header) { font-family: 'Space Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: rgba(201,168,76,.75); margin: 12px 0 4px; padding-bottom: 4px; border-bottom: 1px solid #1c1c1c; display: block; }
+  :global(.moz-bullet) { padding: 2px 0 2px 12px; line-height: 1.6; color: #9e9690; display: block; }
+  :global(.moz-spacer) { height: 8px; display: block; }
+  :global(.moz-gap) { color: #e05a4a; font-weight: 500; }
+  :global(.moz-ok) { color: #4caf82; font-weight: 500; }
+  :global(.moz-confirmed) { color: #c9a84c; font-weight: 500; }
+  :global(.moz-tension) { color: #e8a838; font-weight: 500; }
+  :global(.moz-outdated) { color: #9e9690; font-weight: 500; }
+  :global(.moz-new) { color: #4a9fd4; font-weight: 500; }
+  :global(.moz-next-label) { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-top: 10px; margin-bottom: 4px; display: block; }
   .chat-input-row { display: flex; gap: 7px; }
   .chat-inp { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 8px 11px; outline: none; border-radius: 3px; }
   .chat-inp:focus { border-color: rgba(201,168,76,.4); }

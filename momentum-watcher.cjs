@@ -5170,6 +5170,146 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /whatsapp-backfill ────────────────────────────────────────────────
+  if (req.method === 'GET' && req.url.startsWith('/whatsapp-backfill')) {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    if (!whatsappDbPath) {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'WhatsApp DB not connected. POST /setup-whatsapp first.' }))
+      return
+    }
+    ;(async () => {
+      try {
+        const params = new URLSearchParams(req.url.split('?')[1] || '')
+        const hours = parseInt(params.get('hours') || '24', 10)
+        const backfillSince = Date.now() - (hours * 3600000)
+
+        const allMsgs = readWhatsAppMessages(whatsappDbPath, backfillSince)
+        if (!allMsgs.length) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, processed: 0, contacts: [], message: `No messages in last ${hours}h` }))
+          return
+        }
+
+        // Group by contact JID
+        const byContact = {}
+        for (const msg of allMsgs) {
+          const key = msg.contact || 'unknown'
+          const displayName = msg.partner_name || msg.contact?.split('@')[0] || 'unknown'
+          if (!byContact[key]) byContact[key] = { contact: displayName, jid: msg.contact, msgs: [] }
+          byContact[key].msgs.push(msg)
+        }
+
+        // Filter to monitored contacts
+        const monitoredContacts = getWaContacts().map(c => c.toLowerCase())
+        let entries = Object.values(byContact)
+        if (monitoredContacts.length > 0) {
+          entries = entries.filter(({ contact }) =>
+            monitoredContacts.some(mc => contact.toLowerCase().includes(mc))
+          )
+        }
+
+        const processed = []
+        for (const { contact, jid, msgs } of entries) {
+          if (jid.includes('@g.us') || jid.includes('@status')) continue
+          const history = msgs.map(m => (m.is_from_me ? 'Remo' : contact) + ': ' + m.text).join('\n')
+          const lastMsg = msgs[msgs.length - 1]?.text || ''
+          if (history.length <= 20) continue
+
+          try {
+            const { analysis, usage } = await analyzeArtistMessage(contact, history, lastMsg)
+
+            // Upsert contact profile
+            const existingProfile = await fetch(
+              `${SUPABASE_URL}/rest/v1/brain_knowledge?category=eq.contact_profile&title=eq.Profile%3A%20${encodeURIComponent(contact)}&limit=1`,
+              { headers: sbHeaders }
+            ).then(r => r.json()).catch(() => [])
+            const profileContent = (analysis.profile_update || '') + '\n\nLast contact: ' + new Date().toLocaleDateString()
+            if (existingProfile[0]?.id) {
+              await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=eq.${existingProfile[0].id}`, {
+                method: 'PATCH',
+                headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+                body: JSON.stringify({ content: profileContent })
+              }).catch(() => {})
+            } else {
+              await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+                method: 'POST',
+                headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+                body: JSON.stringify({
+                  category: 'contact_profile', title: 'Profile: ' + contact,
+                  content: profileContent, entry_type_v2: 'knowledge',
+                  confidence: 'medium', source_type: 'whatsapp_backfill', active: true
+                })
+              }).catch(() => {})
+            }
+
+            // Save to inbox
+            await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+              method: 'POST',
+              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({
+                type: 'message',
+                song_title: `WhatsApp: ${contact}`,
+                message: lastMsg.slice(0, 500),
+                patch_name: 'Backfill',
+                read: false,
+                metadata: {
+                  from: contact, platform: 'whatsapp',
+                  real_intent: analysis.real_intent,
+                  psychological_state: analysis.psychological_state,
+                  boundary_alert: analysis.boundary_alert,
+                  boundary_type: analysis.boundary_type,
+                  best_next_step: analysis.best_next_step,
+                  response_suggestion: analysis.response_suggestion,
+                  urgency: analysis.urgency,
+                  business_assessment: analysis.business_assessment
+                }
+              })
+            }).catch(() => {})
+
+            // Track cost
+            await fetch(`http://127.0.0.1:${PORT}/track-cost`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                endpoint: 'whatsapp-backfill',
+                model: 'claude-sonnet-4-20250514',
+                input_tokens: usage?.input_tokens || 0,
+                output_tokens: usage?.output_tokens || 0,
+                cost_usd: ((usage?.input_tokens || 0) * 0.000003) + ((usage?.output_tokens || 0) * 0.000015)
+              })
+            }).catch(() => {})
+
+            processed.push({
+              contact, messages: msgs.length,
+              urgency: analysis.urgency || 'low',
+              boundary: !!analysis.boundary_alert,
+              next_step: analysis.best_next_step
+            })
+          } catch(e) { console.warn(`Backfill error for ${contact}:`, e.message) }
+        }
+
+        // Telegram summary
+        if (processed.length) {
+          const highUrgency = processed.filter(p => p.urgency === 'high')
+          const boundaries = processed.filter(p => p.boundary)
+          let summary = `📱 WhatsApp backfill (${hours}h) — ${processed.length} contact${processed.length > 1 ? 's' : ''} analyzed\n\n`
+          if (boundaries.length) summary += `🚨 Boundary alerts: ${boundaries.map(p => p.contact).join(', ')}\n`
+          if (highUrgency.length) summary += `⚡ High urgency: ${highUrgency.map(p => p.contact).join(', ')}\n`
+          summary += processed.map(p => `• ${p.contact} (${p.messages} msgs, ${p.urgency})`).join('\n')
+          await sendTelegram(TELEGRAM_OWNER_ID, summary).catch(() => {})
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, processed: processed.length, contacts: processed, hours }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })()
+    return
+  }
+
   // ── GET /ping ─────────────────────────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/ping') {
     res.setHeader('Access-Control-Allow-Origin', '*')

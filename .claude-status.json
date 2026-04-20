@@ -1,20 +1,17 @@
 {
-  "updated": "2026-04-20T22:28:30.000Z",
-  "last_task": "whatsapp-psychological-analysis",
+  "updated": "2026-04-20T22:35:00.000Z",
+  "last_task": "mozart-whatsapp-context",
   "status": "done",
   "working": [
-    "analyzeArtistMessage() returns {analysis, usage} with urgency field",
-    "pollWhatsApp upserts contact_profile in brain_knowledge",
-    "pollWhatsApp saves inbox notification with full metadata",
-    "Telegram notification: boundary alert first, then full context",
-    "Cost tracking for whatsapp-analysis endpoint",
-    "DailyTab: urgency badge (high/medium/low) on WhatsApp inbox items",
-    "DailyTab: boundary alert red border + highlighted text",
-    "DailyTab: real_intent italic, state/biz dimmed, next step gold",
-    "DailyTab: reply suggestion with Copy button"
+    "Mozart context includes ARTIST/CONTACT PROFILES from brain_knowledge",
+    "Mozart context includes RECENT WHATSAPP ACTIVITY with real_intent + HIGH URGENCY flags",
+    "analyzeArtistMessage returns urgency field + {analysis, usage}",
+    "pollWhatsApp upserts contact_profile, saves full metadata to inbox, sends structured Telegram, tracks cost",
+    "DailyTab: urgency badge, boundary alert red border, reply suggestion with Copy button",
+    "WhatsApp contacts stored in whatsapp-contacts.json (no Vite HMR reload)"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test by receiving a message from a monitored contact — check inbox and Telegram",
-  "notes": "Claude Sonnet 4-20250514 used for analysis. Cost ~$0.003-0.015 per analysis. JSON parse uses regex strip of backticks."
+  "next": "Test full pipeline: receive WhatsApp message from monitored contact, check inbox display, ask Mozart about the contact",
+  "notes": "Mozart query uses metadata->>platform filter for whatsapp inbox items. Contact profiles keyed by title 'Profile: [name]'."
 }

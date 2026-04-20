@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-20] src/lib/mozartContext.js — DONE
+TASK: mozart-whatsapp-context
+WHAT: Added contact_profile + whatsapp inbox queries to buildMozartContext(). Mozart now sees ARTIST/CONTACT PROFILES (last 10) and RECENT WHATSAPP ACTIVITY (last 5, showing real_intent + [HIGH URGENCY] flag).
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-20] momentum-watcher.cjs + DailyTab.svelte — DONE
 TASK: whatsapp-psychological-analysis
 WHAT: analyzeArtistMessage() upgraded — added urgency field, fixed JSON parsing, returns {analysis, usage}. pollWhatsApp analysis block replaced: upserts contact_profile in brain, saves inbox notification with full metadata (real_intent, psychological_state, boundary_alert, boundary_type, best_next_step, response_suggestion, urgency, business_assessment), sends structured Telegram with boundary alert first, tracks API cost. DailyTab inbox shows expanded WhatsApp view: urgency badge, boundary alert (red border), real_intent/state/business fields, next step in gold, reply suggestion with Copy button.

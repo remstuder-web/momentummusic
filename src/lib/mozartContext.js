@@ -1,11 +1,13 @@
 export async function buildMozartContext(supabase, options = {}) {
   const { songVersions = [], currentSong = null, tasks = [], songSpecificRefs = [] } = options
 
-  const [{ data: ownProds }, { data: allRefs }, { data: goals }, { data: brain }] = await Promise.all([
+  const [{ data: ownProds }, { data: allRefs }, { data: goals }, { data: brain }, { data: contactProfiles }, { data: recentMessages }] = await Promise.all([
     supabase.from('reference_tracks').select('*').eq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(5),
     supabase.from('reference_tracks').select('*').neq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(20),
     supabase.from('brain_knowledge').select('title,content').eq('category', 'goal').limit(5),
-    supabase.from('brain_knowledge').select('category,title,content').eq('active', true).order('created_at', { ascending: false }).limit(6)
+    supabase.from('brain_knowledge').select('category,title,content').eq('active', true).order('created_at', { ascending: false }).limit(6),
+    supabase.from('brain_knowledge').select('title,content').eq('category', 'contact_profile').eq('active', true).order('created_at', { ascending: false }).limit(10),
+    supabase.from('inbox_notifications').select('message,metadata,created_at').eq('metadata->>platform', 'whatsapp').order('created_at', { ascending: false }).limit(5)
   ])
 
   const userRefs = (allRefs || []).filter(t => t.source === 'user' || t.promoted)
@@ -122,6 +124,23 @@ FORMATTING RULES — always follow these:
 
   if (brain?.length) context +=
     `## BRAIN KNOWLEDGE\n` + brain.map(b => `[${b.category}] ${b.title}: ${b.content.slice(0, 80)}`).join('\n')
+
+  if (contactProfiles?.length) {
+    context += '\n\n## ARTIST/CONTACT PROFILES\n'
+    context += contactProfiles.map(p =>
+      p.title.replace('Profile: ', '') + ': ' + p.content.slice(0, 120)
+    ).join('\n')
+  }
+
+  if (recentMessages?.length) {
+    context += '\n\n## RECENT WHATSAPP ACTIVITY\n'
+    context += recentMessages.map(m => {
+      const meta = m.metadata || {}
+      return (meta.from || 'Unknown') + ': ' +
+        (meta.real_intent || m.message?.slice(0, 80)) +
+        (meta.urgency === 'high' ? ' [HIGH URGENCY]' : '')
+    }).join('\n')
+  }
 
   return context
 }

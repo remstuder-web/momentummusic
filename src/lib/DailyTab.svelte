@@ -1478,10 +1478,11 @@ ${mozartContext}`
               {#each todayInbox as n (n.id)}
                 <div class="inbox-item {n.read ? 'read' : 'unread'}">
                   <div class="inbox-item-header">
-                    {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing'}<span class="inbox-type-badge br">✦ AI</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
+                    {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing'}<span class="inbox-type-badge br">✦ AI</span>{:else if n.metadata?.real_intent}<span class="inbox-type-badge wa">📱</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
                     <span class="inbox-code">{n.song_code}</span>
                     {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
                     <span class="inbox-title">{n.song_title}</span>
+                    {#if n.metadata?.urgency}<span class="wa-urgency-badge {n.metadata.urgency}">{n.metadata.urgency}</span>{/if}
                     <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
                     {#if !n.read}<span class="inbox-new-dot"></span>{/if}
                     {#if n.type === 'briefing' && n.message}
@@ -1504,6 +1505,23 @@ ${mozartContext}`
                         {/each}
                       </div>
                     {/if}
+                  {:else if n.metadata?.real_intent}
+                    {@const m = n.metadata}
+                    <div class="wa-analysis {m.boundary_alert ? 'has-boundary' : ''}">
+                      {#if m.boundary_alert}
+                        <div class="wa-boundary">⚠ {m.boundary_type ? m.boundary_type.toUpperCase() + ' ' : ''}BOUNDARY: {m.boundary_alert}</div>
+                      {/if}
+                      {#if m.real_intent}<div class="wa-field intent">Real intent: {m.real_intent}</div>{/if}
+                      {#if m.psychological_state}<div class="wa-field state">State: {m.psychological_state}</div>{/if}
+                      {#if m.business_assessment}<div class="wa-field biz">Business: {m.business_assessment}</div>{/if}
+                      {#if m.best_next_step}<div class="wa-field next">Next step: {m.best_next_step}</div>{/if}
+                      {#if m.response_suggestion}
+                        <div class="wa-reply-wrap">
+                          <span class="wa-reply-text">{m.response_suggestion}</span>
+                          <button class="wa-copy-btn" onclick={() => navigator.clipboard.writeText(m.response_suggestion)}>Copy</button>
+                        </div>
+                      {/if}
+                    </div>
                   {:else}
                     <div class="inbox-msg">{n.message}</div>
                   {/if}
@@ -2189,6 +2207,25 @@ ${mozartContext}`
   .inbox-new-dot { width: 5px; height: 5px; border-radius: 50%; background: #e05a4a; flex-shrink: 0; }
   .inbox-msg { font-size: 12px; color: #9e9690; white-space: pre-wrap; line-height: 1.7; }
   .inbox-patch { font-family: 'Space Mono', monospace; font-size: 9px; color: #333; margin-top: 2px; }
+  .inbox-type-badge.wa { background: rgba(76,175,130,.15); color: #4caf82; }
+
+  /* WhatsApp analysis */
+  .wa-urgency-badge { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .05em; padding: 1px 5px; border-radius: 2px; text-transform: uppercase; }
+  .wa-urgency-badge.high { background: rgba(224,90,74,.15); color: #e05a4a; }
+  .wa-urgency-badge.medium { background: rgba(201,168,76,.15); color: #c9a84c; }
+  .wa-urgency-badge.low { background: rgba(158,150,144,.15); color: #9e9690; }
+  .wa-analysis { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding: 6px 8px; border-radius: 3px; background: #111; }
+  .wa-analysis.has-boundary { border-left: 2px solid #e05a4a; background: rgba(224,90,74,.05); }
+  .wa-boundary { font-size: 12px; color: #e05a4a; font-weight: 600; margin-bottom: 2px; }
+  .wa-field { font-size: 12px; line-height: 1.5; }
+  .wa-field.intent { color: #9e9690; font-style: italic; }
+  .wa-field.state { font-size: 11px; color: #666; }
+  .wa-field.biz { font-size: 11px; color: #666; }
+  .wa-field.next { color: #c9a84c; }
+  .wa-reply-wrap { display: flex; align-items: flex-start; gap: 8px; margin-top: 4px; background: #1c1c1c; padding: 6px 8px; border-radius: 3px; }
+  .wa-reply-text { font-size: 12px; color: #cec9c1; flex: 1; line-height: 1.5; }
+  .wa-copy-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 2px 7px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .wa-copy-btn:hover { color: #c9a84c; border-color: #c9a84c; }
 
   /* Structured agent output renderer */
   .agent-output {

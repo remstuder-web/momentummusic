@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-20] momentum-watcher.cjs + DailyTab.svelte — DONE
+TASK: whatsapp-psychological-analysis
+WHAT: analyzeArtistMessage() upgraded — added urgency field, fixed JSON parsing, returns {analysis, usage}. pollWhatsApp analysis block replaced: upserts contact_profile in brain, saves inbox notification with full metadata (real_intent, psychological_state, boundary_alert, boundary_type, best_next_step, response_suggestion, urgency, business_assessment), sends structured Telegram with boundary alert first, tracks API cost. DailyTab inbox shows expanded WhatsApp view: urgency badge, boundary alert (red border), real_intent/state/business fields, next step in gold, reply suggestion with Copy button.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-20] DailyTab.svelte + +page.svelte + momentum-watcher.cjs — DONE
 TASK: cleanup-fixes-1-5
 WHAT: FIX1 removed add-check-item boxes; FIX2 removed WhatsApp button from agent row; FIX3 removed "How am I doing" button; FIX4 merged pulse check into scoutArtists(); FIX5 added WhatsApp Monitor section in Settings panel with contact toggles (○/●); added /whatsapp-add-contact + /whatsapp-remove-contact watcher endpoints

@@ -5466,17 +5466,19 @@ Analyze and return JSON:
   "boundary_type": null or "psychological|business|time|energy",
   "best_next_step": "specific action Remo should take",
   "response_suggestion": "suggested reply in 1-2 sentences",
-  "profile_update": "one sentence updating what we know about this person"
+  "profile_update": "one sentence updating what we know about this person",
+  "urgency": "low|medium|high"
 }`
       }]
     })
   })
 
   if (!res.ok) throw new Error(`Claude API ${res.status}`)
-  const data = await res.json()
-  const raw = data.content?.[0]?.text || '{}'
+  const d = await res.json()
+  const raw = (d.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
   const jsonMatch = raw.match(/\{[\s\S]*\}/)
-  return jsonMatch ? JSON.parse(jsonMatch[0]) : {}
+  const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
+  return { analysis, usage: d.usage }
 }
 
 async function pollWhatsApp() {
@@ -5511,74 +5513,90 @@ async function pollWhatsApp() {
       // Deep psychological + business analysis via Sonnet
       if (!jid.includes('@g.us') && !jid.includes('@status') && history.length > 20) {
         try {
-          const analysis = await analyzeArtistMessage(contact, history, lastMsg)
+          const { analysis, usage } = await analyzeArtistMessage(contact, history, lastMsg)
 
-          // Build inbox message
-          const lines = [
-            analysis.surface_message && `💬 *"${analysis.surface_message}"*`,
-            analysis.real_intent && `🎯 Real intent: ${analysis.real_intent}`,
-            analysis.psychological_state && `🧠 State: ${analysis.psychological_state}`,
-            analysis.business_assessment && `📊 Business: ${analysis.business_assessment}`,
-            analysis.boundary_alert && `⚠️ BOUNDARY: ${analysis.boundary_alert}`,
-            analysis.best_next_step && `✅ Next step: ${analysis.best_next_step}`,
-            analysis.response_suggestion && `💡 Reply: "${analysis.response_suggestion}"`
-          ].filter(Boolean).join('\n')
+          // 1. Update contact profile in brain (upsert by title)
+          const existingProfile = await fetch(
+            `${SUPABASE_URL}/rest/v1/brain_knowledge?category=eq.contact_profile&title=eq.Profile%3A%20${encodeURIComponent(contact)}&limit=1`,
+            { headers: sbHeaders }
+          ).then(r => r.json()).catch(() => [])
 
-          // Save analysis to inbox
+          const profileContent = (analysis.profile_update || '') +
+            '\n\nLast contact: ' + new Date().toLocaleDateString()
+
+          if (existingProfile[0]?.id) {
+            await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=eq.${existingProfile[0].id}`, {
+              method: 'PATCH',
+              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({ content: profileContent })
+            }).catch(() => {})
+          } else {
+            await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+              method: 'POST',
+              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({
+                category: 'contact_profile',
+                title: 'Profile: ' + contact,
+                content: profileContent,
+                entry_type_v2: 'knowledge',
+                confidence: 'medium',
+                source_type: 'whatsapp',
+                active: true
+              })
+            }).catch(() => {})
+          }
+
+          // 2. Save to inbox with full analysis metadata
           await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
             method: 'POST',
             headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
             body: JSON.stringify({
               type: 'message',
               song_title: `WhatsApp: ${contact}`,
-              message: lines,
+              message: lastMsg.slice(0, 500),
               patch_name: 'Artist Intel',
               read: false,
-              metadata: { platform: 'whatsapp', auto_captured: true, message_count: msgs.length, analysis }
+              metadata: {
+                from: contact,
+                platform: 'whatsapp',
+                real_intent: analysis.real_intent,
+                psychological_state: analysis.psychological_state,
+                boundary_alert: analysis.boundary_alert,
+                boundary_type: analysis.boundary_type,
+                best_next_step: analysis.best_next_step,
+                response_suggestion: analysis.response_suggestion,
+                urgency: analysis.urgency,
+                business_assessment: analysis.business_assessment
+              }
             })
           }).catch(() => {})
 
-          // Save/update contact profile in brain
-          if (analysis.profile_update) {
-            // Upsert: check if profile exists first
-            const existing = await fetch(
-              `${SUPABASE_URL}/rest/v1/brain_knowledge?category=eq.contact_profile&title=ilike.*${encodeURIComponent(contact)}*&limit=1`,
-              { headers: sbHeaders }
-            ).then(r => r.json()).catch(() => [])
-            const profileContent = `${existing[0]?.content || ''}\n[${new Date().toISOString().slice(0,10)}] ${analysis.profile_update}`.trim()
-            if (existing[0]?.id) {
-              await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=eq.${existing[0].id}`, {
-                method: 'PATCH',
-                headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-                body: JSON.stringify({ content: profileContent, updated_at: new Date().toISOString() })
-              }).catch(() => {})
-            } else {
-              await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
-                method: 'POST',
-                headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-                body: JSON.stringify({
-                  category: 'contact_profile',
-                  title: `${contact} — contact profile`,
-                  content: profileContent,
-                  entry_type_v2: 'observation',
-                  confidence: 'medium',
-                  source_type: 'whatsapp_auto',
-                  active: true
-                })
-              }).catch(() => {})
-            }
+          // 3. Telegram notification
+          let telegramMsg = ''
+          if (analysis.boundary_alert) {
+            telegramMsg += `⚠️ BOUNDARY ALERT (${analysis.boundary_type || 'unknown'})\n${analysis.boundary_alert}\n\n`
           }
+          telegramMsg += `📱 ${contact} (${analysis.urgency || 'medium'} urgency)\n\n`
+          telegramMsg += `💬 "${lastMsg.slice(0, 100)}"\n\n`
+          if (analysis.real_intent) telegramMsg += `🎯 Real intent: ${analysis.real_intent}\n`
+          if (analysis.psychological_state) telegramMsg += `🧠 State: ${analysis.psychological_state}\n`
+          if (analysis.business_assessment) telegramMsg += `💼 Business: ${analysis.business_assessment}\n\n`
+          if (analysis.best_next_step) telegramMsg += `✅ Next step: ${analysis.best_next_step}\n`
+          if (analysis.response_suggestion) telegramMsg += `💡 Suggested reply: ${analysis.response_suggestion}`
+          await sendTelegram(TELEGRAM_OWNER_ID, telegramMsg).catch(() => {})
 
-          // Telegram notification — highlight boundary alerts
-          const boundaryLine = analysis.boundary_alert
-            ? `\n\n🚨 BOUNDARY ALERT (${analysis.boundary_type || 'unknown'}): ${analysis.boundary_alert}`
-            : ''
-          const nextLine = analysis.best_next_step ? `\n\n✅ ${analysis.best_next_step}` : ''
-          await sendTelegram(TELEGRAM_OWNER_ID,
-            `📱 *${contact}* (${msgs.length} msg${msgs.length > 1 ? 's' : ''})\n` +
-            `"${lastMsg.slice(0, 120)}"` +
-            boundaryLine + nextLine
-          ).catch(() => {})
+          // 4. Track cost
+          await fetch(`http://127.0.0.1:${PORT}/track-cost`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              endpoint: 'whatsapp-analysis',
+              model: 'claude-sonnet-4-20250514',
+              input_tokens: usage?.input_tokens || 0,
+              output_tokens: usage?.output_tokens || 0,
+              cost_usd: ((usage?.input_tokens || 0) * 0.000003) + ((usage?.output_tokens || 0) * 0.000015)
+            })
+          }).catch(() => {})
 
         } catch(e) { console.warn('WhatsApp analysis error:', e.message) }
       }

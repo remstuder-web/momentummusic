@@ -1,26 +1,20 @@
 {
-  "updated": "2026-04-20T22:10:00.000Z",
-  "last_task": "cleanup-fixes-1-5",
+  "updated": "2026-04-20T22:28:30.000Z",
+  "last_task": "whatsapp-psychological-analysis",
   "status": "done",
   "working": [
-    "WhatsApp auto-monitor with CoreData epoch fix",
-    "AddressBook name enrichment via SQLite + ADDRESSBOOK_SOURCES env",
-    "ZWAPROFILEPUSHNAME push name lookup",
-    "Contact deduplication by JID",
-    "Gemini fallback for WhatsApp analysis",
-    "/contacts /monitor /unmonitor Telegram commands",
-    "/whatsapp-contacts GET endpoint",
-    "/whatsapp-add-contact POST endpoint",
-    "/whatsapp-remove-contact POST endpoint",
-    "DailyTab agent output CSS matched to Mozart style (13px throughout)",
-    "Removed add-check-item boxes from DailyTab",
-    "Removed WhatsApp button from agent row",
-    "Removed How am I doing button",
-    "Merged pulse check into scoutArtists()",
-    "WhatsApp Monitor UI in Settings panel with contact toggles (○/●)"
+    "analyzeArtistMessage() returns {analysis, usage} with urgency field",
+    "pollWhatsApp upserts contact_profile in brain_knowledge",
+    "pollWhatsApp saves inbox notification with full metadata",
+    "Telegram notification: boundary alert first, then full context",
+    "Cost tracking for whatsapp-analysis endpoint",
+    "DailyTab: urgency badge (high/medium/low) on WhatsApp inbox items",
+    "DailyTab: boundary alert red border + highlighted text",
+    "DailyTab: real_intent italic, state/biz dimmed, next step gold",
+    "DailyTab: reply suggestion with Copy button"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test WhatsApp monitor UI in browser — verify /whatsapp-contacts loads in Settings panel, test contact toggle on/off",
-  "notes": "ADDRESSBOOK_SOURCES env var set to full path to workaround pm2 EPERM on scandir. GEMINI_API_KEY is blank in .env — add key to enable Gemini fallback."
+  "next": "Test by receiving a message from a monitored contact — check inbox and Telegram",
+  "notes": "Claude Sonnet 4-20250514 used for analysis. Cost ~$0.003-0.015 per analysis. JSON parse uses regex strip of backticks."
 }

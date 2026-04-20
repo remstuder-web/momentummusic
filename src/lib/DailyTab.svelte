@@ -2474,12 +2474,12 @@ ${mozartContext}`
   .plan-section { border: 1px solid #1c1c1c; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
 
   /* Mozart */
-  .mozart-block { margin-top: 16px; border-top: 1px solid #1c1c1c; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .mozart-block { margin-top: 16px; border-top: 1px solid #1c1c1c; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 500px; }
   .mozart-title-row { display: flex; align-items: center; justify-content: space-between; }
   .mozart-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; }
   .clear-chat { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
   .clear-chat:hover { border-color: #555; color: #9e9690; }
-  .chat-out { min-height: 100px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; scroll-behavior: smooth; }
+  .chat-out { overflow-y: auto; max-height: 70vh; min-height: 300px; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; scroll-behavior: smooth; }
   .chat-msg { display: flex; flex-direction: column; gap: 2px; }
   .chat-who { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
   .chat-msg.assistant .chat-who { color: #7a6230; }

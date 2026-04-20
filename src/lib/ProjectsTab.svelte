@@ -3224,7 +3224,7 @@
   .btn-send-artist.sent { background: rgba(76,175,130,.08); border-color: rgba(76,175,130,.4); color: #4caf82; }
 
   /* RIGHT */
-  .right-col { border-left: 1px solid #1c1c1c; padding: 0 0 32px 22px; display: flex; flex-direction: column; gap: 16px; position: sticky; top: 60px; height: calc(100vh - 60px); overflow-y: auto; }
+  .right-col { border-left: 1px solid #1c1c1c; padding: 0 0 32px 22px; display: flex; flex-direction: column; gap: 16px; }
   .timer-block { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; background: #1c1c1c; border: 1px solid #252525; border-radius: 4px; }
   .timer-presets { display: flex; gap: 6px; }
   .timer-preset-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 3px 8px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; }
@@ -3333,11 +3333,11 @@
   .time-inp { width: 78px; flex: none; }
   .add-btn-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 6px 10px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
 
-  .mozart-block { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 160px; }
+  .mozart-block { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 500px; }
   .mozart-title { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; display: flex; align-items: center; gap: 10px; }
   .clear-chat { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
   .clear-chat:hover { border-color: #555; color: #9e9690; }
-  .chat-out { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 0; scroll-behavior: smooth; }
+  .chat-out { overflow-y: auto; max-height: 70vh; min-height: 300px; display: flex; flex-direction: column; gap: 10px; padding: 4px 0; scroll-behavior: smooth; }
   .chat-msg { display: flex; flex-direction: column; gap: 3px; }
   .chat-who { font-family: 'Space Mono', monospace; font-size: 12px; color: #555; }
   .chat-msg.assistant .chat-who { color: #7a6230; }

@@ -5419,6 +5419,66 @@ function readWhatsAppMessages(dbPath, since) {
   } finally { db.close() }
 }
 
+async function analyzeArtistMessage(contactName, messageHistory, newMessage) {
+  // Load existing profile from brain
+  const profileRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/brain_knowledge?select=content&category=eq.contact_profile&title=ilike.*${encodeURIComponent(contactName)}*&limit=1`,
+    { headers: sbHeaders }
+  ).catch(() => null)
+  let existingProfile = 'No previous profile.'
+  if (profileRes?.ok) {
+    const rows = await profileRes.json().catch(() => [])
+    if (rows[0]?.content) existingProfile = rows[0].content
+  }
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 800,
+      system: `You are a relationship intelligence advisor for Remo, a professional music producer. Remo's main goal: make millions with music that has artistic integrity — the Daft Punk model, not Taylor Swift.
+
+Analyze artist/contact messages with psychological depth. Be direct, practical, protective of Remo's time and energy. Flag boundary violations immediately and clearly.
+
+Format responses as structured JSON only.`,
+      messages: [{
+        role: 'user',
+        content: `Contact: ${contactName}
+Existing profile: ${existingProfile}
+Recent conversation:
+${messageHistory}
+
+New message: "${newMessage}"
+
+Analyze and return JSON:
+{
+  "surface_message": "what they literally said",
+  "real_intent": "what they actually want/need",
+  "psychological_state": "their emotional state right now",
+  "relationship_dynamic": "how they see this relationship",
+  "business_assessment": "value/risk for Remo's goals",
+  "boundary_alert": null or "DESCRIBE THE BOUNDARY BEING CROSSED",
+  "boundary_type": null or "psychological|business|time|energy",
+  "best_next_step": "specific action Remo should take",
+  "response_suggestion": "suggested reply in 1-2 sentences",
+  "profile_update": "one sentence updating what we know about this person"
+}`
+      }]
+    })
+  })
+
+  if (!res.ok) throw new Error(`Claude API ${res.status}`)
+  const data = await res.json()
+  const raw = data.content?.[0]?.text || '{}'
+  const jsonMatch = raw.match(/\{[\s\S]*\}/)
+  return jsonMatch ? JSON.parse(jsonMatch[0]) : {}
+}
+
 async function pollWhatsApp() {
   if (!whatsappDbPath) return
   try {
@@ -5445,51 +5505,82 @@ async function pollWhatsApp() {
     }
 
     for (const { contact, jid, msgs } of entries) {
-      const text = msgs.map(m => (m.is_from_me ? 'Remo' : contact) + ': ' + m.text).join('\n')
+      const history = msgs.map(m => (m.is_from_me ? 'Remo' : contact) + ': ' + m.text).join('\n')
+      const lastMsg = msgs[msgs.length - 1]?.text || ''
 
-      // Save raw to inbox
-      await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
-        method: 'POST',
-        headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-        body: JSON.stringify({
-          type: 'message',
-          song_title: `WhatsApp: ${contact}`,
-          message: text.slice(0, 2000),
-          patch_name: 'WhatsApp Auto',
-          read: false,
-          metadata: { platform: 'whatsapp', auto_captured: true, message_count: msgs.length }
-        })
-      }).catch(() => {})
-
-      // AI analysis — only for non-group, non-status chats with meaningful content
-      if (!jid.includes('@g.us') && !jid.includes('@status') && text.length > 20) {
+      // Deep psychological + business analysis via Sonnet
+      if (!jid.includes('@g.us') && !jid.includes('@status') && history.length > 20) {
         try {
-          const items = await analyzeWhatsappText(text, contact)
-          if (items.length) {
-            for (const it of items.slice(0, 3)) {
+          const analysis = await analyzeArtistMessage(contact, history, lastMsg)
+
+          // Build inbox message
+          const lines = [
+            analysis.surface_message && `💬 *"${analysis.surface_message}"*`,
+            analysis.real_intent && `🎯 Real intent: ${analysis.real_intent}`,
+            analysis.psychological_state && `🧠 State: ${analysis.psychological_state}`,
+            analysis.business_assessment && `📊 Business: ${analysis.business_assessment}`,
+            analysis.boundary_alert && `⚠️ BOUNDARY: ${analysis.boundary_alert}`,
+            analysis.best_next_step && `✅ Next step: ${analysis.best_next_step}`,
+            analysis.response_suggestion && `💡 Reply: "${analysis.response_suggestion}"`
+          ].filter(Boolean).join('\n')
+
+          // Save analysis to inbox
+          await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+            method: 'POST',
+            headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({
+              type: 'message',
+              song_title: `WhatsApp: ${contact}`,
+              message: lines,
+              patch_name: 'Artist Intel',
+              read: false,
+              metadata: { platform: 'whatsapp', auto_captured: true, message_count: msgs.length, analysis }
+            })
+          }).catch(() => {})
+
+          // Save/update contact profile in brain
+          if (analysis.profile_update) {
+            // Upsert: check if profile exists first
+            const existing = await fetch(
+              `${SUPABASE_URL}/rest/v1/brain_knowledge?category=eq.contact_profile&title=ilike.*${encodeURIComponent(contact)}*&limit=1`,
+              { headers: sbHeaders }
+            ).then(r => r.json()).catch(() => [])
+            const profileContent = `${existing[0]?.content || ''}\n[${new Date().toISOString().slice(0,10)}] ${analysis.profile_update}`.trim()
+            if (existing[0]?.id) {
+              await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=eq.${existing[0].id}`, {
+                method: 'PATCH',
+                headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+                body: JSON.stringify({ content: profileContent, updated_at: new Date().toISOString() })
+              }).catch(() => {})
+            } else {
               await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
                 method: 'POST',
                 headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
                 body: JSON.stringify({
-                  category: it.category || 'networking',
-                  title: contact + ': ' + (it.title || '').slice(0, 50),
-                  content: it.content || '',
-                  entry_type_v2: it.entry_type || 'observation',
-                  confidence: it.confidence || 'weak',
+                  category: 'contact_profile',
+                  title: `${contact} — contact profile`,
+                  content: profileContent,
+                  entry_type_v2: 'observation',
+                  confidence: 'medium',
                   source_type: 'whatsapp_auto',
-                  active: true,
-                  metadata: { action_item: it.action_item || null, chat_name: contact }
+                  active: true
                 })
               }).catch(() => {})
             }
-            const firstAction = items.find(i => i.action_item)?.action_item
-            await sendTelegram(TELEGRAM_OWNER_ID,
-              `📱 WhatsApp: ${contact} (${msgs.length} msg${msgs.length > 1 ? 's' : ''})\n` +
-              msgs[msgs.length - 1].text?.slice(0, 150) +
-              (firstAction ? `\n\n💡 Action: ${firstAction}` : '')
-            ).catch(() => {})
           }
-        } catch(e) { console.warn('WhatsApp AI analysis error:', e.message) }
+
+          // Telegram notification — highlight boundary alerts
+          const boundaryLine = analysis.boundary_alert
+            ? `\n\n🚨 BOUNDARY ALERT (${analysis.boundary_type || 'unknown'}): ${analysis.boundary_alert}`
+            : ''
+          const nextLine = analysis.best_next_step ? `\n\n✅ ${analysis.best_next_step}` : ''
+          await sendTelegram(TELEGRAM_OWNER_ID,
+            `📱 *${contact}* (${msgs.length} msg${msgs.length > 1 ? 's' : ''})\n` +
+            `"${lastMsg.slice(0, 120)}"` +
+            boundaryLine + nextLine
+          ).catch(() => {})
+
+        } catch(e) { console.warn('WhatsApp analysis error:', e.message) }
       }
     }
 

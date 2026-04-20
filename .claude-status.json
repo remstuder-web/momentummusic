@@ -1,21 +1,26 @@
 {
-  "updated": "2026-04-20T12:13:00.000Z",
-  "last_task": "telegram-whatsapp-analysis + whatsapp-desktop-monitor",
+  "updated": "2026-04-20T22:10:00.000Z",
+  "last_task": "cleanup-fixes-1-5",
   "status": "done",
   "working": [
-    "Telegram forwarded message handling (auto-analyzeWhatsappText → brain + inbox)",
-    "Telegram photo handling (Claude vision OCR → WhatsApp text extraction → analyze)",
-    "/whatsapp command (paste text → AI analysis → brain + inbox)",
-    "WhatsApp Desktop auto-monitor (reads ChatStorage.sqlite every 2min)",
-    "GET /find-whatsapp-db — lists all WhatsApp sqlite files",
-    "POST /setup-whatsapp — connects DB, returns tables + message count",
-    "Gemini API support (falls back to Claude Haiku if GEMINI_API_KEY empty)",
-    "better-sqlite3 installed, 45059 messages found in local DB"
+    "WhatsApp auto-monitor with CoreData epoch fix",
+    "AddressBook name enrichment via SQLite + ADDRESSBOOK_SOURCES env",
+    "ZWAPROFILEPUSHNAME push name lookup",
+    "Contact deduplication by JID",
+    "Gemini fallback for WhatsApp analysis",
+    "/contacts /monitor /unmonitor Telegram commands",
+    "/whatsapp-contacts GET endpoint",
+    "/whatsapp-add-contact POST endpoint",
+    "/whatsapp-remove-contact POST endpoint",
+    "DailyTab agent output CSS matched to Mozart style (13px throughout)",
+    "Removed add-check-item boxes from DailyTab",
+    "Removed WhatsApp button from agent row",
+    "Removed How am I doing button",
+    "Merged pulse check into scoutArtists()",
+    "WhatsApp Monitor UI in Settings panel with contact toggles (○/●)"
   ],
   "broken": [],
-  "partial": [
-    "GEMINI_API_KEY empty in .env — fill in for cheaper WhatsApp bulk analysis"
-  ],
-  "next": "Test by forwarding a WhatsApp message to Telegram bot. Add GEMINI_API_KEY if desired.",
-  "notes": "WhatsApp DB at ChatStorage.sqlite. Core Data epoch offset (978307200) applied. Polls every 2min, only 1:1 chats (not groups/status)."
+  "partial": [],
+  "next": "Test WhatsApp monitor UI in browser — verify /whatsapp-contacts loads in Settings panel, test contact toggle on/off",
+  "notes": "ADDRESSBOOK_SOURCES env var set to full path to workaround pm2 EPERM on scandir. GEMINI_API_KEY is blank in .env — add key to enable Gemini fallback."
 }

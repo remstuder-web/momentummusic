@@ -5154,6 +5154,37 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /whatsapp-remove-contact ────────────────────────────────────────
+  if (req.method === 'POST' && req.url === '/whatsapp-remove-contact') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', () => {
+      try {
+        const { contact } = JSON.parse(body || '{}')
+        if (!contact?.trim()) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing contact' })); return }
+        const name = contact.trim()
+        const current = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim()).filter(Boolean)
+        const updated = current.filter(c => c.toLowerCase() !== name.toLowerCase())
+        const newValue = updated.join(',')
+        const envPath = path.join(__dirname, '.env')
+        let envText = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : ''
+        const line = `WHATSAPP_CONTACTS=${newValue}`
+        const regex = /^WHATSAPP_CONTACTS=.*$/m
+        envText = regex.test(envText) ? envText.replace(regex, line) : envText.trimEnd() + '\n' + line + '\n'
+        fs.writeFileSync(envPath, envText, 'utf8')
+        process.env.WHATSAPP_CONTACTS = newValue
+        console.log(`✓ WHATSAPP_CONTACTS updated: ${newValue}`)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, message: `Stopped monitoring ${name}`, contacts: updated }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── GET /ping ─────────────────────────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/ping') {
     res.setHeader('Access-Control-Allow-Origin', '*')

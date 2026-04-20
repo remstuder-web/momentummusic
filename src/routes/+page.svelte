@@ -37,6 +37,34 @@
   let openaiKeyInput = $state('')
   let openaiKeySaved = $state(false)
 
+  // WhatsApp monitor
+  let waContacts = $state([])
+  let waContactsLoading = $state(false)
+
+  async function loadWaContacts() {
+    waContactsLoading = true
+    try {
+      const r = await fetch('http://localhost:4242/whatsapp-contacts')
+      const d = await r.json()
+      if (d.ok) waContacts = d.contacts
+    } catch(e) {}
+    waContactsLoading = false
+  }
+
+  async function toggleWaContact(name, monitored) {
+    const url = monitored
+      ? 'http://localhost:4242/whatsapp-remove-contact'
+      : 'http://localhost:4242/whatsapp-add-contact'
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contact: name })
+      })
+      await loadWaContacts()
+    } catch(e) {}
+  }
+
   // Goals
   let goals = $state([])
   let showGoals = $state(false)
@@ -267,7 +295,7 @@
   }
 
   $effect(() => {
-    if (showSettings) { loadTasks(); loadChanges(); loadErrors(); loadGoals(); checkWatcher() }
+    if (showSettings) { loadTasks(); loadChanges(); loadErrors(); loadGoals(); checkWatcher(); loadWaContacts() }
   })
 </script>
 
@@ -463,6 +491,30 @@
             <p class="settings-hint" style="color:#e74c3c">Run <code>pm2 start momentum-watcher</code> in terminal to restart</p>
           {/if}
         </div>
+        <div class="settings-field">
+          <label>WHATSAPP MONITOR</label>
+          {#if waContactsLoading}
+            <p class="settings-hint">Loading contacts…</p>
+          {:else if waContacts.length === 0}
+            <p class="settings-hint">No contacts found — make sure WhatsApp Desktop is installed.</p>
+          {:else}
+            <div class="wa-contacts-list">
+              {#each waContacts.filter(c => !c.jid.includes('@g.us') && !c.jid.includes('@status')) as c (c.jid)}
+                <div class="wa-contact-row">
+                  <button
+                    class="wa-toggle {c.monitored ? 'on' : ''}"
+                    onclick={() => toggleWaContact(c.name, c.monitored)}
+                    title={c.monitored ? 'Stop monitoring' : 'Start monitoring'}
+                  >
+                    {c.monitored ? '●' : '○'}
+                  </button>
+                  <span class="wa-contact-name">{c.name}</span>
+                </div>
+              {/each}
+            </div>
+            <p class="settings-hint">Monitored contacts are analyzed every 2 min and saved to Brain + Inbox.</p>
+          {/if}
+        </div>
         <button class="settings-close" onclick={() => showSettings = false}>Close</button>
       </div>
     </div>
@@ -561,6 +613,12 @@
   .settings-hint { font-family: 'Space Mono', monospace; font-size: 10px; color: #444; line-height: 1.6; }
   .settings-close { font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px 14px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 3px; cursor: pointer; align-self: flex-end; }
   .settings-close:hover { color: #9e9690; }
+  .wa-contacts-list { display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto; }
+  .wa-contact-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+  .wa-toggle { background: transparent; border: none; font-size: 14px; color: #303030; cursor: pointer; padding: 0; line-height: 1; width: 16px; flex-shrink: 0; }
+  .wa-toggle.on { color: #c9a84c; }
+  .wa-toggle:hover { color: rgba(201,168,76,.6); }
+  .wa-contact-name { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; }
 
   .usage-header-row { display: flex; align-items: center; justify-content: space-between; }
   .usage-header-row label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; color: #9e9690; }

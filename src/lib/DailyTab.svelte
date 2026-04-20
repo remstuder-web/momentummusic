@@ -796,9 +796,7 @@
   let pinnedTask = $derived((state.tasks || []).find(t => t.pinned))
   let scoutingArtists = $state(false)
   let matchingDemos = $state(false)
-  let runningPulseCheck = $state(false)
   let whatsappName = $state('')
-  let readingWhatsapp = $state(false)
 
   function timeAgo(iso) {
     const mins = Math.round((Date.now() - new Date(iso)) / 60000)
@@ -842,6 +840,16 @@
       const data = await res.json()
       if (!data.ok) throw new Error(data.error)
       agentLastRun = { ...agentLastRun, scout: new Date().toISOString() }
+      // Also run pulse check and append results
+      try {
+        const pr = await fetch('http://localhost:4242/agent-pulse-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey })
+        })
+        const pd = await pr.json()
+        if (pd.ok) agentLastRun = { ...agentLastRun, pulse: new Date().toISOString() }
+      } catch(e) { /* pulse non-critical */ }
       await loadInbox()
     } catch(e) {
       alert('Scout error: ' + e.message + '\nMake sure watcher is running.')
@@ -869,50 +877,6 @@
     matchingDemos = false
   }
 
-  async function generatePulseCheck() {
-    const apiKey = localStorage.getItem('mm_api_key') || ''
-    if (!apiKey) { alert('Add API key in Settings.'); return }
-    runningPulseCheck = true
-    try {
-      const res = await fetch('http://localhost:4242/agent-pulse-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey })
-      })
-      const data = await res.json()
-      if (data.ok) {
-        agentLastRun = { ...agentLastRun, pulse: new Date().toISOString() }
-        await loadInbox()
-      }
-    } catch(e) { alert('Watcher not running') }
-    runningPulseCheck = false
-  }
-
-  async function extractWhatsapp() {
-    const apiKey = localStorage.getItem('mm_api_key') || ''
-    if (!apiKey) { alert('Add API key in Settings.'); return }
-    readingWhatsapp = true
-    try {
-      const chatText = prompt(
-        'Paste the WhatsApp chat text here\n(Select all text in the chat, Cmd+C, then paste here):'
-      )
-      if (!chatText) { readingWhatsapp = false; return }
-      const name = whatsappName.trim() || prompt('Artist/contact name:') || 'Artist'
-      const res = await fetch('http://localhost:4242/analyze-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatText, chatName: name, apiKey })
-      })
-      const d = await res.json()
-      if (d.ok && d.items?.length) {
-        localStorage.setItem('mm_pending_chat_items', JSON.stringify(d.items))
-        document.dispatchEvent(new CustomEvent('mm-switch-tab', { detail: 'brain' }))
-      } else if (!d.ok) {
-        alert('Error: ' + d.error)
-      }
-    } catch(e) { alert('Error: ' + e.message) }
-    readingWhatsapp = false
-  }
 
   async function loadInbox() {
     // Delete old notifications first: feedback after 1 day, downloads after 7 days
@@ -1164,22 +1128,6 @@ ${mozartContext}`
     return html
   }
 
-  async function howAmIDoing() {
-    try {
-      const snapshot = await fetch('http://localhost:4242/daily-snapshot')
-        .then(r => r.json()).catch(() => null)
-      const totalTasks = (state.tasks || []).length
-      const doneTasks = (state.tasks || []).filter(t => t.done).length
-      const completionRate = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0
-      const snapText = snapshot?.ok
-        ? `Songs in production: ${snapshot.in_progress}\nSongs in mixing: ${snapshot.in_mixing}\nFinished this month: ${snapshot.done_this_month}\nDemos sent this month: ${snapshot.demos_sent_this_month}\nTask completion: ${doneTasks}/${totalTasks} (${completionRate}%)`
-        : `Task completion: ${doneTasks}/${totalTasks} (${completionRate}%)`
-      aiInput = `[PIPELINE SNAPSHOT]\n${snapText}\n\nGiven my active goals and this pipeline data, give me: (1) a 2-3 sentence gap analysis of where I'm behind schedule, (2) the single highest-leverage action I should take today.`
-      await sendAI()
-    } catch(e) {
-      aiMessages = [...aiMessages, { role: 'assistant', content: 'Error fetching snapshot: ' + e.message }]
-    }
-  }
 
   // Resolve live artist/project/song for day-detail panel
   function resolveDetailLabel(t) {
@@ -1420,18 +1368,6 @@ ${mozartContext}`
             </button>
             {#if agentLastRun.match}<div class="agent-last-run">{timeAgo(agentLastRun.match)}</div>{/if}
           </div>
-          <div class="agent-btn-wrap">
-            <button class="briefing-btn agent-pulse {runningPulseCheck?'loading':''}" onclick={generatePulseCheck}>
-              {runningPulseCheck ? '⚡ Checking...' : '⚡ Pulse Check'}
-            </button>
-            {#if agentLastRun.pulse}<div class="agent-last-run">{timeAgo(agentLastRun.pulse)}</div>{/if}
-          </div>
-          <button class="briefing-btn {readingWhatsapp?'loading':''}" onclick={extractWhatsapp}>
-            {readingWhatsapp ? '💬 Analyzing...' : '💬 WhatsApp'}
-          </button>
-          <button class="briefing-btn goal-check-btn" onclick={howAmIDoing}>
-            📊 How am I doing?
-          </button>
         </div>
 
         <!-- Today's briefing — auto-expanded at top -->
@@ -1840,16 +1776,6 @@ ${mozartContext}`
               <button class="del-btn" onclick={() => delCheck(item.id)}>×</button>
             </div>
           {/each}
-          <div class="add-row">
-            <input class="add-inp" bind:value={newCheck} placeholder="New check item..." onkeydown={e=>e.key==='Enter'&&addCheck()} />
-            <input class="add-inp url" bind:value={newCheckUrl} placeholder="URL (optional)..." />
-            <button class="add-btn" onclick={addCheck}>+</button>
-          </div>
-        {:else}
-          <div class="add-row" style="margin-top:6px">
-            <input class="add-inp" bind:value={newCheck} placeholder="Add check item..." onkeydown={e=>e.key==='Enter'&&addCheck()} />
-            <button class="add-btn" onclick={addCheck}>+</button>
-          </div>
         {/if}
       {/if}
 

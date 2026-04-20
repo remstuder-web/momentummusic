@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-20] DailyTab.svelte + +page.svelte + momentum-watcher.cjs — DONE
+TASK: cleanup-fixes-1-5
+WHAT: FIX1 removed add-check-item boxes; FIX2 removed WhatsApp button from agent row; FIX3 removed "How am I doing" button; FIX4 merged pulse check into scoutArtists(); FIX5 added WhatsApp Monitor section in Settings panel with contact toggles (○/●); added /whatsapp-add-contact + /whatsapp-remove-contact watcher endpoints
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-20] DailyTab.svelte — DONE
 TASK: agent-output-font-match
 WHAT: Agent output CSS matched to Mozart chat style — all font-size 14px→13px; agent-next-move color #9e9690→#cec9c1; agent-header 11px→10px, letter-spacing .08→.1em, margin/padding tightened, border #252525→#1c1c1c, added font-weight:700; added font-family DM Sans to .chat-text

@@ -1820,7 +1820,7 @@ async function handleOwnerCommand(chatId, text) {
     } catch(e) { await sendTelegram(chatId, '❌ Morning run error: ' + e.message) }
   }
   else if (cmd === '/contacts') {
-    const list = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim()).filter(Boolean)
+    const list = getWaContacts()
     if (!list.length) {
       await sendTelegram(chatId, '📱 No contacts monitored.\nUse /monitor [name] to add one.')
     } else {
@@ -5087,7 +5087,7 @@ ${chatText.slice(0, 4000)}`
       }
       const deduped = Array.from(seen.values())
 
-      const monitored = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
+      const monitored = getWaContacts().map(c => c.toLowerCase())
       for (const c of deduped) {
         c.monitored = monitored.some(mc => c.name.toLowerCase().includes(mc))
       }
@@ -5101,7 +5101,7 @@ ${chatText.slice(0, 4000)}`
       })
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, contacts: deduped, monitored_list: process.env.WHATSAPP_CONTACTS || '' }))
+      res.end(JSON.stringify({ ok: true, contacts: deduped, monitored_list: getWaContacts().join(',') }))
     } catch(e) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))
@@ -5119,7 +5119,7 @@ ${chatText.slice(0, 4000)}`
         const { contact, remove } = JSON.parse(body || '{}')
         if (!contact?.trim()) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing contact' })); return }
         const name = contact.trim()
-        const current = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim()).filter(Boolean)
+        const current = getWaContacts()
 
         let updated
         if (remove) {
@@ -5133,17 +5133,9 @@ ${chatText.slice(0, 4000)}`
           updated = [...current, name]
         }
 
-        const newValue = updated.join(',')
-        const envPath = path.join(__dirname, '.env')
-        let envText = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : ''
-        const line = `WHATSAPP_CONTACTS=${newValue}`
-        const regex = /^WHATSAPP_CONTACTS=.*$/m
-        envText = regex.test(envText) ? envText.replace(regex, line) : envText.trimEnd() + '\n' + line + '\n'
-        fs.writeFileSync(envPath, envText, 'utf8')
-        process.env.WHATSAPP_CONTACTS = newValue
-
+        setWaContacts(updated)
         const msg = remove ? `Stopped monitoring ${name}` : `Now monitoring ${name}`
-        console.log(`✓ WHATSAPP_CONTACTS updated: ${newValue}`)
+        console.log(`✓ whatsapp-contacts.json updated: ${updated.join(',')}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, message: msg, contacts: updated }))
       } catch(e) {
@@ -5164,17 +5156,10 @@ ${chatText.slice(0, 4000)}`
         const { contact } = JSON.parse(body || '{}')
         if (!contact?.trim()) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing contact' })); return }
         const name = contact.trim()
-        const current = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim()).filter(Boolean)
+        const current = getWaContacts()
         const updated = current.filter(c => c.toLowerCase() !== name.toLowerCase())
-        const newValue = updated.join(',')
-        const envPath = path.join(__dirname, '.env')
-        let envText = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : ''
-        const line = `WHATSAPP_CONTACTS=${newValue}`
-        const regex = /^WHATSAPP_CONTACTS=.*$/m
-        envText = regex.test(envText) ? envText.replace(regex, line) : envText.trimEnd() + '\n' + line + '\n'
-        fs.writeFileSync(envPath, envText, 'utf8')
-        process.env.WHATSAPP_CONTACTS = newValue
-        console.log(`✓ WHATSAPP_CONTACTS updated: ${newValue}`)
+        setWaContacts(updated)
+        console.log(`✓ whatsapp-contacts.json updated: ${updated.join(',')}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, message: `Stopped monitoring ${name}`, contacts: updated }))
       } catch(e) {
@@ -5384,6 +5369,24 @@ function buildAddressBookMap() {
   return map
 }
 
+// ── WhatsApp contacts config (stored in JSON to avoid triggering Vite HMR) ───
+const WA_CONTACTS_FILE = path.join(__dirname, 'whatsapp-contacts.json')
+function getWaContacts() {
+  try {
+    if (fs.existsSync(WA_CONTACTS_FILE)) {
+      const d = JSON.parse(fs.readFileSync(WA_CONTACTS_FILE, 'utf8'))
+      return Array.isArray(d) ? d : []
+    }
+  } catch(e) {}
+  // migrate from .env on first run
+  const fromEnv = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim()).filter(Boolean)
+  if (fromEnv.length) { fs.writeFileSync(WA_CONTACTS_FILE, JSON.stringify(fromEnv), 'utf8') }
+  return fromEnv
+}
+function setWaContacts(list) {
+  fs.writeFileSync(WA_CONTACTS_FILE, JSON.stringify(list), 'utf8')
+}
+
 // ── WhatsApp Desktop auto-monitor ────────────────────────────────────────────
 const WHATSAPP_DB_PATH = '/Users/remo/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite'
 // CoreData epoch: WhatsApp ZMESSAGEDATE = Unix seconds - 978307200
@@ -5432,8 +5435,7 @@ async function pollWhatsApp() {
     }
 
     // Filter to monitored contacts if list is set
-    const monitoredContacts = (process.env.WHATSAPP_CONTACTS || '')
-      .split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
+    const monitoredContacts = getWaContacts().map(c => c.toLowerCase())
 
     let entries = Object.values(byContact)
     if (monitoredContacts.length > 0) {

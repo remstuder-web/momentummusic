@@ -1372,8 +1372,9 @@ ${mozartContext}`
 
         <!-- Today's briefing — auto-expanded at top -->
         {#if todayBriefing}
-          <div class="today-briefing-block" style="position:relative">
+          <div class="today-briefing-block">
             <div class="today-briefing-header">
+              <button class="inbox-del-btn" onclick={() => deleteInboxItem(todayBriefing.id)}>×</button>
               <span class="inbox-type-badge br">✦ AI</span>
               <span class="today-briefing-label">TODAY'S BRIEFING</span>
               {#if todayBriefing.message}
@@ -1394,7 +1395,6 @@ ${mozartContext}`
                 {/each}
               </div>
             {/if}
-            <button class="agent-output-del" onclick={() => deleteInboxItem(todayBriefing.id)}>×</button>
           </div>
         {/if}
 

@@ -1,20 +1,14 @@
 {
-  "updated": "2026-04-20T22:40:00.000Z",
-  "last_task": "mozart-full-system-context",
+  "updated": "2026-04-20T22:48:00.000Z",
+  "last_task": "mozart-output-line-breaks",
   "status": "done",
   "working": [
-    "Mozart knows active projects with deadline counts",
-    "Mozart knows songs in pipeline grouped by stage",
-    "Mozart knows demos in market (count + titles)",
-    "Mozart knows today's undone tasks",
-    "Mozart knows pending unread inbox (non-whatsapp)",
-    "Mozart knows latest market_knowledge brain entries",
-    "Mozart knows watched artists with genres",
-    "Mozart knows artist/contact profiles + recent whatsapp activity",
-    "All queries run in parallel via Promise.all"
+    "Mozart system prompt has 7 new line-break formatting rules",
+    "DailyTab parseAgentOutput splits plain paragraphs >100 chars on sentence boundaries",
+    "ProjectsTab parseMozartOutput renders headers/bullets/sentences with inline styles",
+    "ProjectsTab assistant messages rendered as {@html}, user messages plain text"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test Mozart with full context — ask about pipeline, projects, or market. Tables watched_artists may not exist yet; query will return null gracefully.",
-  "notes": "watched_artists table may not exist — Supabase will return error but destructuring catches it as null. Same for any missing columns."
+  "next": "Test Mozart response in ProjectsTab — verify bullets on separate lines, no inline lists"
 }

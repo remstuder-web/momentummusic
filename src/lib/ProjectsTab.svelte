@@ -621,6 +621,37 @@
   let aiMessages = $state([])
   let aiLoading = $state(false)
 
+  function parseMozartOutput(text) {
+    if (!text) return ''
+    const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const tag = s => s
+      .replace(/\[GAP\]/g,       '<span style="color:#e05a4a;font-weight:600">[GAP]</span>')
+      .replace(/\[OK\]/g,        '<span style="color:#4caf82;font-weight:600">[OK]</span>')
+      .replace(/\[CONFIRMED\]/g, '<span style="color:#4caf82;font-size:10px">[CONFIRMED]</span>')
+      .replace(/\[TENSION\]/g,   '<span style="color:#e05a4a;font-size:10px">[TENSION]</span>')
+      .replace(/\[OUTDATED\]/g,  '<span style="color:#9e9690;font-size:10px">[OUTDATED]</span>')
+      .replace(/\[NEW\]/g,       '<span style="color:#c9a84c;font-size:10px">[NEW]</span>')
+    let html = ''
+    for (const rawLine of text.split('\n')) {
+      const t = rawLine.trim()
+      if (!t) { html += '<div style="height:6px"></div>'; continue }
+      if (t.startsWith('## ')) {
+        html += `<div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:rgba(201,168,76,.75);letter-spacing:.1em;margin:10px 0 4px;text-transform:uppercase">${esc(t.slice(3))}</div>`
+      } else if (t.startsWith('- ') || t.startsWith('• ')) {
+        html += `<div style="font-size:13px;color:#cec9c1;line-height:1.6;padding-left:10px">${tag(esc(t.replace(/^[-•]\s+/, '')))}</div>`
+      } else if (/^\d+\.\s/.test(t)) {
+        html += `<div style="font-size:13px;color:#cec9c1;line-height:1.6;padding-left:10px">${tag(esc(t.replace(/^\d+\.\s+/, '')))}</div>`
+      } else if (t.length > 100) {
+        for (const s of t.split(/(?<=\. )/)) {
+          if (s.trim()) html += `<div style="font-size:13px;color:#9e9690;line-height:1.65;margin:2px 0">${tag(esc(s.trim()))}</div>`
+        }
+      } else {
+        html += `<div style="font-size:13px;color:#9e9690;line-height:1.65;margin:2px 0">${tag(esc(t))}</div>`
+      }
+    }
+    return html
+  }
+
   // Deadlines & Tasks
   let newDeadlineLabel = $state('')
   let newDeadlineDate = $state('')
@@ -2832,7 +2863,11 @@
         {#each aiMessages as msg}
           <div class="chat-msg {msg.role}">
             <div class="chat-who">{msg.role==='user'?'You':'Mozart'}</div>
-            <div class="chat-text">{msg.content}</div>
+            {#if msg.role === 'assistant'}
+              <div class="chat-text">{@html parseMozartOutput(msg.content)}</div>
+            {:else}
+              <div class="chat-text">{msg.content}</div>
+            {/if}
           </div>
         {/each}
         {#if aiLoading}<div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>{/if}

@@ -1120,6 +1120,11 @@ ${mozartContext}`
         html += `<div class="agent-gap">${colorTagLine(esc(t))}</div>`
       } else if (t.startsWith('[OK]')) {
         html += `<div class="agent-ok">${colorTagLine(esc(t))}</div>`
+      } else if (t.length > 100) {
+        const sentences = t.split(/(?<=\. )/)
+        for (const s of sentences) {
+          if (s.trim()) html += `<div class="agent-p">${colorTagLine(esc(s.trim()))}</div>`
+        }
       } else {
         html += `<div class="agent-p">${colorTagLine(esc(t))}</div>`
       }

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-20] mozartContext.js + DailyTab.svelte + ProjectsTab.svelte — DONE
+TASK: mozart-output-line-breaks
+WHAT: Added 7 new formatting rules to Mozart system prompt (every topic on new line, no inline lists, blank line between ideas). parseAgentOutput() in DailyTab now splits plain paragraphs >100 chars into individual sentence divs. ProjectsTab added parseMozartOutput() with full header/bullet/sentence rendering + {#if assistant} block uses {@html}.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-20] src/lib/mozartContext.js — DONE
 TASK: mozart-full-system-context
 WHAT: Added 6 new parallel queries to buildMozartContext(): project songs by stage, demos in market, unread non-whatsapp inbox, market_knowledge brain entries, watched_artists, active projects. Added 7 new context sections after ACTIVE GOALS: ACTIVE PROJECTS, SONGS IN PIPELINE, DEMOS IN MARKET, TODAY'S TASKS, PENDING INBOX, MARKET INTELLIGENCE, WATCHED ARTISTS.

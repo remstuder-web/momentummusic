@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-20] momentum-watcher.cjs → /brain-to-obsidian — DONE
+TASK: obsidian-graph-backlinks
+WHAT: Added CATEGORY_LINKS map (13 categories → related [[notes]]). Each exported .md gets ## Related section with category links + content-scanned links to other entry titles (longest-first matching, max 8). Created 5 index notes: Hit Benchmark.md, My Productions.md, Active Goals.md, Contact Directory.md, Market Intelligence.md. Export returns {written, index_notes}. Tested: 134 entries + 5 index notes written successfully.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-20] momentum-watcher.cjs + BrainTab.svelte + mozartContext.js — DONE
 TASK: obsidian-two-way-sync
 WHAT: A) brain-to-obsidian writes richer .md with full frontmatter (category/confidence/type/source/created/tags), # title header, footer with source_url + added date, [[backlinks]] for reference tracks. B) syncObsidianFile parses category from frontmatter, extracts [[backlinks]] into metadata.related_notes, only updates brain if file mtime > created_at (manual edit detection). C) Daily 8am auto-sync via scheduleDaily8amObsidianSync() — fires brain-to-obsidian then obsidian-sync. D) BrainTab reference tracks get notes textarea (onblur save), mozartContext formatTrack includes notes field. SQL needed: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;

@@ -5427,16 +5427,55 @@ ${chatText.slice(0, 4000)}`
   if (req.method === 'GET' && req.url === '/brain-to-obsidian') {
     try {
       if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) fs.mkdirSync(OBSIDIAN_VAULT_PATH, { recursive: true })
-      const r = await fetch(
+      const brainRes = await fetch(
         `${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=id,title,category,content,confidence,entry_type_v2,source_type,source_url,created_at,metadata&order=created_at.desc&limit=500`,
         { headers: sbHeaders }
       )
-      const entries = await r.json()
+      const brainRaw = await brainRes.json()
+      const safeEntries = Array.isArray(brainRaw) ? brainRaw : []
+
+      // Build a set of all entry titles (safe names) for content-link scanning
+      const allTitles = safeEntries
+        .map(e => (e.title || '').trim())
+        .filter(t => t.length > 4)
+        .sort((a, b) => b.length - a.length) // longest first to avoid partial matches
+
+      const CATEGORY_LINKS = {
+        'goal':              ['[[Daft Punk Model]]', '[[Hit Benchmark]]', '[[Active Goals]]'],
+        'mixing_technique':  ['[[Hit Benchmark]]', '[[Reference Tracks]]'],
+        'reference_current': ['[[Hit Benchmark]]', '[[Mixing Technique]]'],
+        'artist_strategy':   ['[[Release Strategy]]', '[[Social Media]]'],
+        'market_knowledge':  ['[[Artist Strategy]]', '[[Hit Benchmark]]'],
+        'own_production':    ['[[Hit Benchmark]]', '[[My Productions]]'],
+        'contact_profile':   ['[[Networking]]', '[[Artist Strategy]]'],
+        'production_style':  ['[[Own Production]]', '[[Mixing Technique]]'],
+        'creative_process':  ['[[Production Style]]', '[[Artist Strategy]]'],
+        'reference_mixing':  ['[[Hit Benchmark]]', '[[Mixing Technique]]'],
+        'release_strategy':  ['[[Artist Strategy]]', '[[Market Intelligence]]'],
+        'industry_insight':  ['[[Market Intelligence]]', '[[Artist Strategy]]'],
+        'social_media':      ['[[Artist Strategy]]', '[[Release Strategy]]'],
+        'networking':        ['[[Contact Directory]]', '[[Artist Strategy]]']
+      }
+
+      function findContentLinks(content, ownTitle) {
+        const found = new Set()
+        for (const title of allTitles) {
+          if (title === ownTitle) continue
+          // Whole-word match (case-insensitive)
+          const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          if (new RegExp(`\\b${escaped}\\b`, 'i').test(content)) {
+            found.add(`[[${title}]]`)
+          }
+        }
+        return [...found].slice(0, 8)
+      }
+
       let written = 0
-      for (const e of (Array.isArray(entries) ? entries : [])) {
+      for (const e of safeEntries) {
         const safeName = (e.title || 'untitled').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)
         const filePath = path.join(OBSIDIAN_VAULT_PATH, safeName + '.md')
         const createdDate = e.created_at ? new Date(e.created_at).toLocaleDateString() : ''
+
         const fm = [
           '---',
           `category: ${e.category || 'knowledge'}`,
@@ -5448,9 +5487,11 @@ ${chatText.slice(0, 4000)}`
           '---'
         ].join('\n')
 
-        const isRefTrack = e.category?.includes('reference')
-        const obsidianLinks = isRefTrack
-          ? '\n\n[[Hit Benchmark]] [[Production Style]] [[My Goals]]'
+        const catLinks = CATEGORY_LINKS[e.category] || []
+        const contentLinks = findContentLinks(e.content || '', e.title || '')
+        const allLinks = [...new Set([...catLinks, ...contentLinks])]
+        const relatedSection = allLinks.length
+          ? `\n\n## Related\n${allLinks.join(' ')}`
           : ''
 
         const footer = [
@@ -5460,12 +5501,58 @@ ${chatText.slice(0, 4000)}`
           createdDate ? `*Added: ${createdDate}*` : null
         ].filter(l => l !== null).join('\n')
 
-        const md = `${fm}\n\n# ${e.title || 'Untitled'}\n\n${e.content || ''}${obsidianLinks}${footer}`
+        const md = `${fm}\n\n# ${e.title || 'Untitled'}\n\n${e.content || ''}${relatedSection}${footer}`
         fs.writeFileSync(filePath, md, 'utf8')
         written++
       }
+
+      // ── Write index notes ──────────────────────────────────────────────────
+      const indexNotes = [
+        {
+          file: 'Hit Benchmark.md',
+          title: 'Hit Benchmark',
+          intro: 'All reference tracks used to calibrate production targets.',
+          filter: e => e.category?.includes('reference'),
+          link: e => `- [[${(e.title || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)}]]`
+        },
+        {
+          file: 'My Productions.md',
+          title: 'My Productions',
+          intro: 'All own production knowledge entries.',
+          filter: e => e.category === 'own_production',
+          link: e => `- [[${(e.title || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)}]]`
+        },
+        {
+          file: 'Active Goals.md',
+          title: 'Active Goals',
+          intro: 'All goal entries — the Daft Punk model: artistic integrity + commercial success.',
+          filter: e => e.category === 'goal',
+          link: e => `- [[${(e.title || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)}]]`
+        },
+        {
+          file: 'Contact Directory.md',
+          title: 'Contact Directory',
+          intro: 'All artist and contact profiles.',
+          filter: e => e.category === 'contact_profile',
+          link: e => `- [[${(e.title || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)}]]`
+        },
+        {
+          file: 'Market Intelligence.md',
+          title: 'Market Intelligence',
+          intro: 'All market knowledge and industry insights.',
+          filter: e => e.category === 'market_knowledge' || e.category === 'industry_insight',
+          link: e => `- [[${(e.title || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)}]]`
+        }
+      ]
+
+      for (const idx of indexNotes) {
+        const linked = safeEntries.filter(idx.filter)
+        const md = `# ${idx.title}\n\n${idx.intro}\n\n## Entries\n${linked.map(idx.link).join('\n') || '*(none yet)*'}\n`
+        fs.writeFileSync(path.join(OBSIDIAN_VAULT_PATH, idx.file), md, 'utf8')
+      }
+
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, written }))
+      res.end(JSON.stringify({ ok: true, written, index_notes: indexNotes.length }))
     } catch(e) {
       res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
     }

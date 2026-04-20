@@ -2268,7 +2268,7 @@ ${mozartContext}`
   .agent-output {
     padding: 2px 0 4px;
     font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 300;
     color: #9e9690;
     line-height: 1.65;
@@ -2279,18 +2279,19 @@ ${mozartContext}`
   }
   :global(.agent-header) {
     font-family: 'Space Mono', monospace !important;
-    font-size: 11px;
+    font-size: 10px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .08em;
+    letter-spacing: .1em;
     color: rgba(201,168,76,.75);
-    margin: 14px 0 6px;
-    padding-bottom: 5px;
-    border-bottom: 1px solid #252525;
+    margin: 12px 0 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #1c1c1c;
   }
   :global(.agent-header:first-child) { margin-top: 6px; }
   :global(.agent-bullet) {
     font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 300;
     color: #9e9690;
     line-height: 1.65;
@@ -2319,13 +2320,13 @@ ${mozartContext}`
     border-left: 2px solid #c9a84c;
     padding: 6px 12px;
     margin-top: 8px;
-    color: #9e9690;
+    color: #cec9c1;
     font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 300;
     line-height: 1.65;
   }
-  :global(.agent-p) { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; color: #9e9690; line-height: 1.65; margin: 3px 0; }
+  :global(.agent-p) { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300; color: #9e9690; line-height: 1.65; margin: 3px 0; }
   .agent-tracks { margin-top: 8px; border-top: 1px solid #1c1c1c; padding-top: 6px; }
   .agent-track-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #111; }
   .agent-track-row:last-child { border-bottom: none; }
@@ -2492,7 +2493,7 @@ ${mozartContext}`
   .chat-msg { display: flex; flex-direction: column; gap: 2px; }
   .chat-who { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
   .chat-msg.assistant .chat-who { color: #7a6230; }
-  .chat-text { font-size: 13px; color: #cec9c1; line-height: 1.5; }
+  .chat-text { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; line-height: 1.5; }
   .chat-text.dim { color: #444; }
   .chat-input-row { display: flex; gap: 6px; }
   .chat-correction-row { display: flex; gap: 6px; margin-top: 4px; }

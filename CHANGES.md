@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-20] DailyTab.svelte — DONE
+TASK: agent-output-font-match
+WHAT: Agent output CSS matched to Mozart chat style — all font-size 14px→13px; agent-next-move color #9e9690→#cec9c1; agent-header 11px→10px, letter-spacing .08→.1em, margin/padding tightened, border #252525→#1c1c1c, added font-weight:700; added font-family DM Sans to .chat-text
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-20] momentum-watcher.cjs — DONE
 TASK: whatsapp-epoch-fix
 WHAT: readWhatsAppMessages now stores lastWhatsAppCheck as Unix ms (standard JS), converts to CoreData seconds at query time via (since/1000) - 978307200; SQL uses partner_name + is_from_me aliases; pollWhatsApp display uses partner_name || jid.split('@')[0]; /whatsapp-contacts returns 254 contacts alphabetically; lastWhatsAppCheck update converts CoreData secs back to Unix ms correctly

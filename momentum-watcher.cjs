@@ -5073,13 +5073,27 @@ ${chatText.slice(0, 4000)}`
         }
       })
 
-      const monitored = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
+      // Deduplicate by JID — prefer entry where partner_name is a real name
+      const seen = new Map()
       for (const c of contacts) {
+        const existing = seen.get(c.jid)
+        if (!existing) {
+          seen.set(c.jid, c)
+        } else {
+          const currentIsPhone = /^\+?\d+$/.test(c.partner_name || '')
+          const existingIsPhone = /^\+?\d+$/.test(existing.partner_name || '')
+          if (existingIsPhone && !currentIsPhone) seen.set(c.jid, c)
+        }
+      }
+      const deduped = Array.from(seen.values())
+
+      const monitored = (process.env.WHATSAPP_CONTACTS || '').split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
+      for (const c of deduped) {
         c.monitored = monitored.some(mc => c.name.toLowerCase().includes(mc))
       }
 
       // Sort: named contacts first (not raw phones), then alphabetically
-      contacts.sort((a, b) => {
+      deduped.sort((a, b) => {
         const aPhone = looksLikePhone(a.name)
         const bPhone = looksLikePhone(b.name)
         if (aPhone !== bPhone) return aPhone ? 1 : -1
@@ -5087,7 +5101,7 @@ ${chatText.slice(0, 4000)}`
       })
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, contacts, monitored_list: process.env.WHATSAPP_CONTACTS || '' }))
+      res.end(JSON.stringify({ ok: true, contacts: deduped, monitored_list: process.env.WHATSAPP_CONTACTS || '' }))
     } catch(e) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))

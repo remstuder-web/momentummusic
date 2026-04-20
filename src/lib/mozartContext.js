@@ -54,7 +54,8 @@ export async function buildMozartContext(supabase, options = {}) {
       t.bass_energy != null ? 'bas ' + Number(t.bass_energy).toFixed(2)      : null,
       t.acousticness!= null ? 'aco ' + Number(t.acousticness).toFixed(2)     : null,
       t.duration_seconds    ? fmtDur(t.duration_seconds)                      : null,
-      t.genre_tags?.length  ? t.genre_tags.slice(0, 2).join(', ')             : null
+      t.genre_tags?.length  ? t.genre_tags.slice(0, 2).join(', ')             : null,
+      t.notes               ? '(' + t.notes.slice(0, 60) + ')'               : null
     ].filter(Boolean).join(' · ')
 
   const formatVersion = (name, a) =>

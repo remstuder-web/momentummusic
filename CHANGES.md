@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-20] momentum-watcher.cjs + BrainTab.svelte + mozartContext.js — DONE
+TASK: obsidian-two-way-sync
+WHAT: A) brain-to-obsidian writes richer .md with full frontmatter (category/confidence/type/source/created/tags), # title header, footer with source_url + added date, [[backlinks]] for reference tracks. B) syncObsidianFile parses category from frontmatter, extracts [[backlinks]] into metadata.related_notes, only updates brain if file mtime > created_at (manual edit detection). C) Daily 8am auto-sync via scheduleDaily8amObsidianSync() — fires brain-to-obsidian then obsidian-sync. D) BrainTab reference tracks get notes textarea (onblur save), mozartContext formatTrack includes notes field. SQL needed: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;
+RESULT: works
+BLOCKERS: Run SQL migration in Supabase: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;
+
 ## [2026-04-20] DailyTab.svelte + ProjectsTab.svelte — DONE
 TASK: mozart-chat-autoscroll
 WHAT: Added chatContainer ref + $effect auto-scroll (50ms timeout) to both DailyTab and ProjectsTab Mozart chat. Added scroll-behavior:smooth to .chat-out CSS in both files.

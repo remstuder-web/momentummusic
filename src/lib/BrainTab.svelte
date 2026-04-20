@@ -159,6 +159,11 @@
     await loadCategories()
   }
 
+  async function updateTrackNotes(id, notes) {
+    await supabase.from('reference_tracks').update({ notes }).eq('id', id)
+    referenceTrackEntries = referenceTrackEntries.map(t => t.id === id ? { ...t, notes } : t)
+  }
+
   async function unwatchArtist(id) {
     await supabase.from('watched_artists').update({ active: false }).eq('id', id)
     watchedArtists = watchedArtists.filter(a => a.id !== id)
@@ -1416,6 +1421,13 @@ Return ONLY JSON (single item array):
                     {track.danceability != null ? ' · dnc ' + Number(track.danceability).toFixed(2) : ''}
                     {track.loudness != null ? ' · ' + track.loudness + 'LUFS' : ''}
                   </span>
+                  <textarea
+                    class="brain-reftrack-notes"
+                    placeholder="Why saved? (drums, energy, mix, arrangement...)"
+                    value={track.notes || ''}
+                    onblur={e => { if (e.target.value !== (track.notes || '')) updateTrackNotes(track.id, e.target.value) }}
+                    rows="1"
+                  ></textarea>
                 </span>
                 <span class="brain-reftrack-source">{col === 'daily_chart' ? 'chart' : !track.spotify_id ? 'youtube' : 'spotify'}</span>
                 <button class="brain-del" onclick={async () => {
@@ -1893,6 +1905,9 @@ Return ONLY JSON (single item array):
     line-height: 14px;
   }
   .brain-reftrack-promote:hover { color: #4caf82; border-color: #4caf82; }
+  .brain-reftrack-notes { width: 100%; background: transparent; border: none; border-top: 1px solid #1a1a1a; color: #666; font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 300; line-height: 1.4; padding: 3px 0 0; resize: none; outline: none; margin-top: 2px; }
+  .brain-reftrack-notes::placeholder { color: #333; }
+  .brain-reftrack-notes:focus { color: #9e9690; }
 
   .brain-entry {
     background: #1c1c1c;

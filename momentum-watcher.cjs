@@ -269,6 +269,26 @@ setInterval(() => {
   } catch(e) { /* config.json missing or invalid — skip silently */ }
 }, 24 * 60 * 60 * 1000)
 
+// ── Daily 8am: Obsidian two-way sync ──────────────────────────────────────
+function scheduleDaily8amObsidianSync() {
+  const now = new Date()
+  const next8am = new Date(now)
+  next8am.setHours(8, 0, 0, 0)
+  if (next8am <= now) next8am.setDate(next8am.getDate() + 1)
+  const msUntil = next8am - now
+  console.log(`⏰ Obsidian auto-sync scheduled in ${Math.round(msUntil / 60000)}min`)
+  setTimeout(async function runSync() {
+    console.log('🔄 Daily Obsidian sync running...')
+    try {
+      await fetch(`http://127.0.0.1:${PORT}/brain-to-obsidian`).catch(() => {})
+      await fetch(`http://127.0.0.1:${PORT}/obsidian-sync`, { method: 'POST' }).catch(() => {})
+      console.log('✓ Daily Obsidian sync complete')
+    } catch(e) { console.warn('Daily Obsidian sync error:', e.message) }
+    setTimeout(runSync, 24 * 60 * 60 * 1000)
+  }, msUntil)
+}
+scheduleDaily8amObsidianSync()
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 function fetchJSON(url, options = {}) {
   return new Promise((resolve, reject) => {
@@ -1384,35 +1404,49 @@ async function syncObsidianFile(filePath) {
   if (!filePath.endsWith('.md')) return
   try {
     const content = fs.readFileSync(filePath, 'utf8')
+    const stat = fs.statSync(filePath)
     const filename = path.basename(filePath, '.md')
     const { frontmatter, body } = parseObsidianFrontmatter(content)
     const tags = frontmatter.tags || frontmatter.tag || []
     const tagArr = Array.isArray(tags) ? tags : [tags]
-    const category = tagArr[0] || 'knowledge'
+    const category = frontmatter.category || tagArr[0] || 'knowledge'
+
+    // Extract [[backlinks]] from body
+    const backlinkMatches = body.match(/\[\[([^\]]+)\]\]/g) || []
+    const relatedNotes = backlinkMatches.map(m => m.slice(2, -2).trim())
+
     const row = {
       category,
       title: filename,
-      content: body.slice(0, 500),
+      content: body.replace(/\[\[([^\]]+)\]\]/g, '$1').slice(0, 500),
       source_type: 'obsidian',
       confidence: frontmatter.confidence || 'medium',
       entry_type_v2: frontmatter.type || 'knowledge',
-      active: true
+      active: true,
+      ...(relatedNotes.length ? { metadata: { related_notes: relatedNotes } } : {})
     }
-    // Upsert by title + source_type
+
+    // Upsert by title + source_type; if file mtime > created_at, it was manually edited → always update
     const existing = await fetch(
-      `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(filename)}&source_type=eq.obsidian&select=id`,
+      `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(filename)}&source_type=eq.obsidian&select=id,created_at`,
       { headers: sbHeaders }
     ).then(r => r.json()).catch(() => [])
-    if (existing.length) {
-      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=eq.${existing[0].id}`, {
-        method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' }, body: JSON.stringify(row)
-      })
+
+    if (existing[0]?.id) {
+      const createdAt = new Date(existing[0].created_at).getTime()
+      const mtime = stat.mtimeMs
+      if (mtime > createdAt) {
+        await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=eq.${existing[0].id}`, {
+          method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' }, body: JSON.stringify(row)
+        })
+        console.log(`✓ Obsidian sync (updated): ${filename}`)
+      }
     } else {
       await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
         method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' }, body: JSON.stringify(row)
       })
+      console.log(`✓ Obsidian sync (new): ${filename}`)
     }
-    console.log(`✓ Obsidian sync: ${filename}`)
   } catch(e) { console.warn('Obsidian sync error:', e.message) }
 }
 
@@ -5394,7 +5428,7 @@ ${chatText.slice(0, 4000)}`
     try {
       if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) fs.mkdirSync(OBSIDIAN_VAULT_PATH, { recursive: true })
       const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=title,category,content,confidence,entry_type_v2&order=created_at.desc&limit=500`,
+        `${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=id,title,category,content,confidence,entry_type_v2,source_type,source_url,created_at,metadata&order=created_at.desc&limit=500`,
         { headers: sbHeaders }
       )
       const entries = await r.json()
@@ -5402,8 +5436,32 @@ ${chatText.slice(0, 4000)}`
       for (const e of (Array.isArray(entries) ? entries : [])) {
         const safeName = (e.title || 'untitled').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)
         const filePath = path.join(OBSIDIAN_VAULT_PATH, safeName + '.md')
-        const fm = `---\ntags: [${e.category || 'knowledge'}]\ntype: ${e.entry_type_v2 || 'knowledge'}\nconfidence: ${e.confidence || 'medium'}\n---\n\n`
-        fs.writeFileSync(filePath, fm + (e.content || ''), 'utf8')
+        const createdDate = e.created_at ? new Date(e.created_at).toLocaleDateString() : ''
+        const fm = [
+          '---',
+          `category: ${e.category || 'knowledge'}`,
+          `confidence: ${e.confidence || 'medium'}`,
+          `type: ${e.entry_type_v2 || 'knowledge'}`,
+          `source: ${e.source_type || 'manual'}`,
+          `created: ${e.created_at || ''}`,
+          `tags: [${e.category || 'knowledge'}, ${e.entry_type_v2 || 'knowledge'}]`,
+          '---'
+        ].join('\n')
+
+        const isRefTrack = e.category?.includes('reference')
+        const obsidianLinks = isRefTrack
+          ? '\n\n[[Hit Benchmark]] [[Production Style]] [[My Goals]]'
+          : ''
+
+        const footer = [
+          '',
+          '---',
+          e.source_url ? `*Source: ${e.source_url}*` : null,
+          createdDate ? `*Added: ${createdDate}*` : null
+        ].filter(l => l !== null).join('\n')
+
+        const md = `${fm}\n\n# ${e.title || 'Untitled'}\n\n${e.content || ''}${obsidianLinks}${footer}`
+        fs.writeFileSync(filePath, md, 'utf8')
         written++
       }
       res.writeHead(200, { 'Content-Type': 'application/json' })

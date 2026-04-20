@@ -1,13 +1,18 @@
 {
-  "updated": "2026-04-20T23:00:00.000Z",
-  "last_task": "mozart-chat-autoscroll",
+  "updated": "2026-04-20T23:06:00.000Z",
+  "last_task": "obsidian-two-way-sync",
   "status": "done",
   "working": [
-    "DailyTab Mozart chat auto-scrolls on new message",
-    "ProjectsTab Mozart chat auto-scrolls on new message",
-    "scroll-behavior:smooth on .chat-out in both files"
+    "brain-to-obsidian: richer frontmatter + # title + footer + reference track backlinks",
+    "syncObsidianFile: parses category from frontmatter, extracts [[backlinks]] to metadata.related_notes",
+    "syncObsidianFile: only updates brain if file mtime > created_at (manual edit detection)",
+    "Daily 8am auto-sync: scheduleDaily8amObsidianSync() fires on startup",
+    "BrainTab: notes textarea per reference track, onblur saves to Supabase",
+    "mozartContext: track.notes included in formatTrack()"
   ],
   "broken": [],
-  "partial": [],
-  "next": "All Mozart improvements complete. Test full chat flow."
+  "partial": [
+    "reference_tracks.notes column — needs SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;"
+  ],
+  "next": "Run SQL migration in Supabase dashboard, then test notes field on reference tracks"
 }

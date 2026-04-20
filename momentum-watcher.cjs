@@ -18,6 +18,7 @@ const http = require('http')
 const https = require('https')
 const { execSync, exec } = require('child_process')
 const { Readable } = require('stream')
+const chokidar = require('chokidar')
 
 // ── CONFIG ────────────────────────────────────────────────────────────────
 // Dropbox OAuth2 — fill in App Key and App Secret from your Dropbox App Console
@@ -28,6 +29,14 @@ const DROPBOX_APP_SECRET = 'h36y7hta8ttmr6e'  // e.g. 'def456uvw'
 // Spotify — fill in from https://developer.spotify.com/dashboard
 const SPOTIFY_CLIENT_ID     = '45bb7c8c0553458ca79e0848ea805559'
 const SPOTIFY_CLIENT_SECRET = 'ab5d6290dc404f48b261870262f23a0c'
+
+// Telegram bot
+const TELEGRAM_TOKEN    = process.env.TELEGRAM_BOT_TOKEN
+const TELEGRAM_OWNER_ID = 33858745
+const TELEGRAM_API      = 'https://api.telegram.org/bot' + TELEGRAM_TOKEN
+
+// Obsidian vault
+const OBSIDIAN_VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || '/Users/remo/ObsidianVault/Momentum'
 
 const GENRE_LIST = [
   { label: 'ELECTRONIC & DANCE', type: 'main', tag: 'electronic' },
@@ -1243,7 +1252,10 @@ function logError(endpoint, message, level = 'error') {
     method: 'POST',
     headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
     body: JSON.stringify(row)
-  }).catch(() => {}) // fire-and-forget — never throw
+  }).catch(() => {})
+  if (level === 'error' && TELEGRAM_TOKEN) {
+    sendTelegram(TELEGRAM_OWNER_ID, '⚠️ Watcher error [' + endpoint + ']: ' + String(message).slice(0, 200)).catch(() => {})
+  }
   console.error(`[${level}] ${endpoint}: ${message}`)
 }
 
@@ -1339,6 +1351,402 @@ async function buildStatusResponse() {
     endpoints_registered,
     last_watcher_error
   }
+}
+
+// ── Obsidian sync ─────────────────────────────────────────────────────────
+function parseObsidianFrontmatter(content) {
+  const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/m)
+  if (!match) return { frontmatter: {}, body: content }
+  const fm = {}
+  for (const line of match[1].split('\n')) {
+    const [k, ...v] = line.split(':')
+    if (k && v.length) {
+      const val = v.join(':').trim().replace(/^["']|["']$/g, '')
+      if (val.startsWith('[')) {
+        try { fm[k.trim()] = JSON.parse(val) } catch { fm[k.trim()] = val.replace(/[\[\]]/g, '').split(',').map(s => s.trim()) }
+      } else {
+        fm[k.trim()] = val
+      }
+    }
+  }
+  return { frontmatter: fm, body: match[2].trim() }
+}
+
+async function syncObsidianFile(filePath) {
+  if (!filePath.endsWith('.md')) return
+  try {
+    const content = fs.readFileSync(filePath, 'utf8')
+    const filename = path.basename(filePath, '.md')
+    const { frontmatter, body } = parseObsidianFrontmatter(content)
+    const tags = frontmatter.tags || frontmatter.tag || []
+    const tagArr = Array.isArray(tags) ? tags : [tags]
+    const category = tagArr[0] || 'knowledge'
+    const row = {
+      category,
+      title: filename,
+      content: body.slice(0, 500),
+      source_type: 'obsidian',
+      confidence: frontmatter.confidence || 'medium',
+      entry_type_v2: frontmatter.type || 'knowledge',
+      active: true
+    }
+    // Upsert by title + source_type
+    const existing = await fetch(
+      `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(filename)}&source_type=eq.obsidian&select=id`,
+      { headers: sbHeaders }
+    ).then(r => r.json()).catch(() => [])
+    if (existing.length) {
+      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=eq.${existing[0].id}`, {
+        method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' }, body: JSON.stringify(row)
+      })
+    } else {
+      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+        method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' }, body: JSON.stringify(row)
+      })
+    }
+    console.log(`✓ Obsidian sync: ${filename}`)
+  } catch(e) { console.warn('Obsidian sync error:', e.message) }
+}
+
+// ── Telegram bot ──────────────────────────────────────────────────────────
+const pendingConfirmations = {}
+
+async function sendTelegram(chatId, text) {
+  await fetch(TELEGRAM_API + '/sendMessage', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+  })
+}
+
+async function handleOwnerCommand(chatId, text) {
+  const cmd = text.trim().toLowerCase()
+  const apiKey = process.env.ANTHROPIC_API_KEY
+
+  // YES/NO confirmation handling
+  if (cmd === 'yes' || cmd === 'ja') {
+    const pending = pendingConfirmations[chatId]
+    if (pending) {
+      delete pendingConfirmations[chatId]
+      try { await pending.action() } catch(e) { await sendTelegram(chatId, '❌ Error: ' + e.message) }
+    } else {
+      await sendTelegram(chatId, 'Nothing pending to confirm.')
+    }
+    return
+  }
+  if (cmd === 'no' || cmd === 'nein') {
+    if (pendingConfirmations[chatId]) {
+      delete pendingConfirmations[chatId]
+      await sendTelegram(chatId, '❌ Cancelled.')
+    }
+    return
+  }
+
+  if (cmd === '/brief' || cmd === '/briefing') {
+    await sendTelegram(chatId, '⏳ Generating briefing...')
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/morning-briefing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey })
+      })
+      const d = await r.json()
+      await sendTelegram(chatId, '📋 ' + (d.briefing?.slice(0, 3000) || 'Failed'))
+    } catch(e) { await sendTelegram(chatId, '❌ Briefing error: ' + e.message) }
+  }
+  else if (cmd === '/scout') {
+    await sendTelegram(chatId, '⏳ Scouting...')
+    try {
+      const result = await runAgentScout(apiKey, null)
+      await sendTelegram(chatId, '🔍 ' + (result.suggestions?.slice(0, 3000) || 'No suggestions'))
+    } catch(e) { await sendTelegram(chatId, '❌ Scout error: ' + e.message) }
+  }
+  else if (cmd === '/pulse') {
+    await sendTelegram(chatId, '⏳ Checking pulse...')
+    try {
+      await runPulseCheck(apiKey, null)
+      await sendTelegram(chatId, '📊 Pulse check complete — check inbox for results.')
+    } catch(e) { await sendTelegram(chatId, '❌ Pulse error: ' + e.message) }
+  }
+  else if (cmd === '/status') {
+    try {
+      const status = await buildStatusResponse()
+      await sendTelegram(chatId,
+        '✅ Momentum Status\n' +
+        'Brain: ' + status.brain_entry_count + ' entries\n' +
+        'Categories: ' + status.brain_categories?.length + '\n' +
+        'Anthropic: ' + (status.api_keys_present?.anthropic ? '✅' : '❌') + '\n' +
+        'Last error: ' + (status.last_watcher_error || 'none')
+      )
+    } catch(e) { await sendTelegram(chatId, '❌ Status error: ' + e.message) }
+  }
+  else if (cmd === '/chart') {
+    await sendTelegram(chatId, '⏳ Analyzing charts...')
+    try {
+      const result = await runAgentChartAnalysis(apiKey)
+      const tracks = (result.tracks || []).slice(0, 5)
+        .map(t => t.artist + ' — ' + t.title + ' (' + Math.round(t.bpm || 0) + 'bpm ' + (t.camelot || '') + ')')
+        .join('\n')
+      await sendTelegram(chatId, '🎵 Top tracks:\n' + (tracks || 'No tracks analyzed'))
+    } catch(e) { await sendTelegram(chatId, '❌ Chart error: ' + e.message) }
+  }
+  else if (text.startsWith('/brain ')) {
+    const content = text.slice(7).trim()
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+        method: 'POST',
+        headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          category: 'observation', title: content.slice(0, 60), content,
+          entry_type_v2: 'observation', confidence: 'weak', source_type: 'telegram', active: true
+        })
+      })
+      await sendTelegram(chatId, '🧠 Saved to Brain: "' + content.slice(0, 50) + '"')
+    } catch(e) { await sendTelegram(chatId, '❌ Brain save error: ' + e.message) }
+  }
+  else if (text.startsWith('/ask ')) {
+    const question = text.slice(5).trim()
+    await sendTelegram(chatId, '⏳ Asking Mozart...')
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001', max_tokens: 500,
+          system: 'You are Mozart, music production advisor for Remo. Be concise — max 300 words.',
+          messages: [{ role: 'user', content: question }]
+        })
+      })
+      const d = await r.json()
+      await sendTelegram(chatId, '🎹 ' + (d.content?.[0]?.text || 'No response'))
+    } catch(e) { await sendTelegram(chatId, '❌ Ask error: ' + e.message) }
+  }
+  else if (text.startsWith('/obsidian ')) {
+    const title = text.slice(10).trim()
+    if (!title) { await sendTelegram(chatId, '❌ Usage: /obsidian [note title]'); return }
+    try {
+      if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) fs.mkdirSync(OBSIDIAN_VAULT_PATH, { recursive: true })
+      const filePath = path.join(OBSIDIAN_VAULT_PATH, title + '.md')
+      fs.writeFileSync(filePath, `---\ntags: [observation]\ntype: knowledge\nconfidence: medium\n---\n\n`, 'utf8')
+      await syncObsidianFile(filePath)
+      await sendTelegram(chatId, '📝 Note created in Obsidian: "' + title + '"')
+    } catch(e) { await sendTelegram(chatId, '❌ Obsidian error: ' + e.message) }
+  }
+  else if (text.startsWith('/demo ')) {
+    const artist = text.slice(6).trim()
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/songs?select=title,code,work_data,created_at&title=ilike.*${encodeURIComponent(artist)}*&order=created_at.desc&limit=10`,
+        { headers: sbHeaders }
+      )
+      const songs = await r.json()
+      if (!songs.length) { await sendTelegram(chatId, '🔍 No songs found for: ' + artist); return }
+      const lines = songs.map(s => {
+        const wd = s.work_data || {}
+        const stage = wd.current_stage || 'demo'
+        const versions = (wd.versions || []).length
+        return `${s.code} — ${s.title} | stage: ${stage} | versions: ${versions}`
+      }).join('\n')
+      await sendTelegram(chatId, '🎵 Demo status for "' + artist + '":\n' + lines)
+    } catch(e) { await sendTelegram(chatId, '❌ Demo error: ' + e.message) }
+  }
+  else if (text.startsWith('/mix ')) {
+    const songQuery = text.slice(5).trim()
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/songs?select=title,code,work_data,audio_analysis&title=ilike.*${encodeURIComponent(songQuery)}*&limit=3`,
+        { headers: sbHeaders }
+      )
+      const songs = await r.json()
+      if (!songs.length) { await sendTelegram(chatId, '🔍 No songs found for: ' + songQuery); return }
+      const s = songs[0]
+      const aa = s.audio_analysis || {}
+      const wd = s.work_data || {}
+      const gap = []
+      if (aa.bpm)       gap.push(`BPM: ${Math.round(aa.bpm)}`)
+      if (aa.key)       gap.push(`Key: ${aa.key} ${aa.scale || ''} (${aa.camelot || ''})`)
+      if (aa.energy != null)      gap.push(`Energy: ${(aa.energy * 100).toFixed(0)}%`)
+      if (aa.loudness_lufs != null) gap.push(`Loudness: ${aa.loudness_lufs.toFixed(1)} LUFS`)
+      const stage = wd.current_stage || 'unknown'
+      const msg = `🎛 Mix gap — ${s.code} ${s.title}\nStage: ${stage}\n` + (gap.join(' | ') || 'No analysis yet — run /analyze-spotify-track first')
+      await sendTelegram(chatId, msg)
+    } catch(e) { await sendTelegram(chatId, '❌ Mix error: ' + e.message) }
+  }
+  else if (text.startsWith('/ref ')) {
+    const spotifyUrl = text.slice(5).trim()
+    await sendTelegram(chatId, '⏳ Analyzing track...')
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/analyze-spotify-track`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: spotifyUrl, apiKey })
+      })
+      const d = await r.json()
+      if (!d.ok) { await sendTelegram(chatId, '❌ Analysis failed: ' + (d.error || 'unknown')); return }
+      const summary = `🎵 ${d.artist} — ${d.title}\nBPM: ${Math.round(d.bpm || 0)} | Key: ${d.key} ${d.scale || ''} (${d.camelot || ''})\nEnergy: ${((d.energy || 0) * 100).toFixed(0)}% | Dance: ${((d.danceability || 0) * 100).toFixed(0)}%\n\nSave to brain? Reply YES to confirm.`
+      pendingConfirmations[chatId] = {
+        action: async () => {
+          await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+            method: 'POST',
+            headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({
+              category: 'reference_current', title: d.artist + ' — ' + d.title,
+              content: `BPM: ${Math.round(d.bpm || 0)}, Key: ${d.key} ${d.scale||''} (${d.camelot||''}), Energy: ${((d.energy||0)*100).toFixed(0)}%, Dance: ${((d.danceability||0)*100).toFixed(0)}%`,
+              source_type: 'telegram', entry_type_v2: 'reference', confidence: 'strong', active: true
+            })
+          })
+          await sendTelegram(chatId, '🧠 Reference saved: ' + d.artist + ' — ' + d.title)
+        }
+      }
+      await sendTelegram(chatId, summary)
+    } catch(e) { await sendTelegram(chatId, '❌ Ref error: ' + e.message) }
+  }
+  else if (cmd === '/morning') {
+    await sendTelegram(chatId, '⏳ Running full morning agents...')
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/run-morning-agents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey })
+      })
+      const d = await r.json()
+      if (d.scout?.suggestions)
+        await sendTelegram(chatId, '🔍 Scout:\n' + d.scout.suggestions.slice(0, 1000))
+      if (d.trends?.trends)
+        await sendTelegram(chatId, '📱 TikTok:\n' + d.trends.trends.slice(0, 1000))
+      if (d.chart?.assessment)
+        await sendTelegram(chatId, '🎵 Charts:\n' + d.chart.assessment.slice(0, 1000))
+      await sendTelegram(chatId, '✅ Morning agents complete — check inbox for full results.')
+    } catch(e) { await sendTelegram(chatId, '❌ Morning run error: ' + e.message) }
+  }
+  else if (cmd === '/help') {
+    await sendTelegram(chatId,
+      '🎵 Momentum Commands:\n\n' +
+      '/brief — Morning briefing\n' +
+      '/scout — Scout breaking artists\n' +
+      '/pulse — Market pulse check\n' +
+      '/chart — Top chart tracks\n' +
+      '/status — System status\n' +
+      '/brain [text] — Save to Brain\n' +
+      '/ask [question] — Ask Mozart\n' +
+      '/morning — Full morning agent run\n' +
+      '/obsidian [title] — Create Obsidian note\n' +
+      '/demo [artist] — Check demo status\n' +
+      '/mix [song] — Get mix gap analysis\n' +
+      '/ref [spotify url] — Analyze reference track\n' +
+      '/help — This message'
+    )
+  }
+  else {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+        method: 'POST',
+        headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          category: 'observation', title: text.slice(0, 60), content: text,
+          entry_type_v2: 'observation', confidence: 'weak', source_type: 'telegram', active: true
+        })
+      })
+      await sendTelegram(chatId, '🧠 Saved to Brain')
+    } catch(e) { await sendTelegram(chatId, '❌ Save error: ' + e.message) }
+  }
+}
+
+async function handleArtistMessage(chatId, fromId, firstName, text) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        type: 'message',
+        song_title: 'Telegram: ' + firstName,
+        message: '[from: ' + firstName + ' | telegram_id: ' + fromId + ']\n' + text,
+        patch_name: 'Telegram',
+        read: false
+      })
+    })
+  } catch(e) { console.warn('Telegram inbox save error:', e.message) }
+  await sendTelegram(chatId, '✅ Message received! Remo will get back to you soon.')
+  await sendTelegram(TELEGRAM_OWNER_ID, '📩 Message from ' + firstName + ':\n' + text)
+}
+
+async function pollTelegram() {
+  let offset = 0
+  setInterval(async () => {
+    try {
+      const res = await fetch(TELEGRAM_API + '/getUpdates?offset=' + offset + '&timeout=5')
+      const data = await res.json()
+      for (const update of (data.result || [])) {
+        offset = update.update_id + 1
+        const msg = update.message
+        if (!msg) continue
+        const chatId = msg.chat.id
+        const text = msg.text || ''
+        const fromId = msg.from.id
+        if (fromId === TELEGRAM_OWNER_ID) {
+          await handleOwnerCommand(chatId, text)
+        } else {
+          await handleArtistMessage(chatId, fromId, msg.from.first_name, text)
+        }
+      }
+    } catch(e) { console.error('Telegram poll error:', e.message) }
+  }, 3000)
+}
+
+let _lastNotifId = 0
+let _lastBrainCount = 0
+
+async function pollInboxNotifications() {
+  // Seed the baseline on first run — don't flood with existing notifications
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/inbox_notifications?select=id&order=id.desc&limit=1`,
+      { headers: sbHeaders }
+    )
+    const rows = await r.json()
+    _lastNotifId = rows?.[0]?.id || 0
+    const cr = await fetch(
+      `${SUPABASE_URL}/rest/v1/brain_knowledge?select=id&limit=1`,
+      { headers: { ...sbHeaders, 'Prefer': 'count=exact' } }
+    )
+    _lastBrainCount = parseInt(cr.headers.get('content-range')?.split('/')[1] || '0')
+  } catch(e) {}
+
+  setInterval(async () => {
+    try {
+      // New feedback / download notifications
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/inbox_notifications?id=gt.${_lastNotifId}&type=in.(feedback,download)&select=id,type,song_title,artist,message&order=id.asc`,
+        { headers: sbHeaders }
+      )
+      const rows = await r.json()
+      for (const n of (Array.isArray(rows) ? rows : [])) {
+        _lastNotifId = Math.max(_lastNotifId, n.id)
+        if (n.type === 'feedback') {
+          await sendTelegram(TELEGRAM_OWNER_ID,
+            '💬 New feedback on <b>' + (n.song_title || 'track') + '</b>\n' + (n.message || '').slice(0, 300)
+          ).catch(() => {})
+        } else if (n.type === 'download') {
+          await sendTelegram(TELEGRAM_OWNER_ID,
+            '⬇️ Download: <b>' + (n.song_title || n.artist || 'track') + '</b>'
+          ).catch(() => {})
+        }
+      }
+
+      // Brain milestone check
+      const cr = await fetch(
+        `${SUPABASE_URL}/rest/v1/brain_knowledge?select=id&limit=1`,
+        { headers: { ...sbHeaders, 'Prefer': 'count=exact' } }
+      )
+      const newCount = parseInt(cr.headers.get('content-range')?.split('/')[1] || '0')
+      for (const milestone of [50, 100, 200, 300, 500]) {
+        if (_lastBrainCount < milestone && newCount >= milestone) {
+          await sendTelegram(TELEGRAM_OWNER_ID, '🧠 Brain milestone: ' + milestone + ' entries!').catch(() => {})
+        }
+      }
+      _lastBrainCount = newCount
+    } catch(e) {}
+  }, 30000)
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────────
@@ -2266,6 +2674,9 @@ ${context}` }]
           })
         })
 
+        if (TELEGRAM_TOKEN) {
+          sendTelegram(TELEGRAM_OWNER_ID, '🌅 Morning Briefing\n\n' + briefingText.slice(0, 3000)).catch(() => {})
+        }
         console.log(`✓ Morning briefing generated for ${todayISO}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, briefing: briefingText }))
@@ -4377,6 +4788,77 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /obsidian-sync — sync all .md files from Obsidian vault to brain ──
+  if (req.method === 'POST' && req.url === '/obsidian-sync') {
+    try {
+      if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) {
+        res.writeHead(200); res.end(JSON.stringify({ ok: true, synced: 0, message: 'Vault not found' })); return
+      }
+      const files = fs.readdirSync(OBSIDIAN_VAULT_PATH).filter(f => f.endsWith('.md'))
+      for (const f of files) await syncObsidianFile(path.join(OBSIDIAN_VAULT_PATH, f))
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, synced: files.length }))
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── GET /brain-to-obsidian — export brain_knowledge entries as .md files ──
+  if (req.method === 'GET' && req.url === '/brain-to-obsidian') {
+    try {
+      if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) fs.mkdirSync(OBSIDIAN_VAULT_PATH, { recursive: true })
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=title,category,content,confidence,entry_type_v2&order=created_at.desc&limit=500`,
+        { headers: sbHeaders }
+      )
+      const entries = await r.json()
+      let written = 0
+      for (const e of (Array.isArray(entries) ? entries : [])) {
+        const safeName = (e.title || 'untitled').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)
+        const filePath = path.join(OBSIDIAN_VAULT_PATH, safeName + '.md')
+        const fm = `---\ntags: [${e.category || 'knowledge'}]\ntype: ${e.entry_type_v2 || 'knowledge'}\nconfidence: ${e.confidence || 'medium'}\n---\n\n`
+        fs.writeFileSync(filePath, fm + (e.content || ''), 'utf8')
+        written++
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, written }))
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /brain-dump — save free text directly to brain_knowledge ──────────
+  if (req.method === 'POST' && req.url === '/brain-dump') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        const text = body.text || ''
+        if (!text.trim()) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'text required' })); return }
+        await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+          method: 'POST',
+          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            category: body.category || 'observation',
+            title: text.slice(0, 60),
+            content: text,
+            entry_type_v2: 'observation',
+            confidence: 'weak',
+            source_type: body.source || 'external',
+            active: true
+          })
+        })
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   res.writeHead(404); res.end()
 })
 
@@ -4390,6 +4872,21 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('  Submissions: ', SUBMISSIONS_DIR)
   console.log('  Audio:        http://localhost:4242/audio/')
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  if (TELEGRAM_TOKEN) {
+    pollTelegram()
+    pollInboxNotifications()
+    console.log('✓ Telegram bot polling started')
+    sendTelegram(TELEGRAM_OWNER_ID, '🟢 Momentum watcher started').catch(() => {})
+  }
+  // Obsidian vault watcher
+  if (fs.existsSync(OBSIDIAN_VAULT_PATH)) {
+    chokidar.watch(OBSIDIAN_VAULT_PATH, { ignored: /(^|[\/\\])\../, persistent: true })
+      .on('add', p => syncObsidianFile(p))
+      .on('change', p => syncObsidianFile(p))
+    console.log('✓ Obsidian vault watching:', OBSIDIAN_VAULT_PATH)
+  } else {
+    console.log('⚠ Obsidian vault not found:', OBSIDIAN_VAULT_PATH, '— create vault to enable sync')
+  }
   exec('/opt/homebrew/bin/python3.11 -c "import essentia"', (err) => {
     if (err) console.warn('⚠ Essentia not available — BPM/key analysis disabled')
     else console.log('✓ Essentia ready')

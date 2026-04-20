@@ -1,24 +1,25 @@
 {
-  "updated": "2026-04-19T11:39:00.000Z",
-  "last_task": "briefing on demand, top 10 tracks playable, tiktok real data, song refs",
+  "updated": "2026-04-20T00:20:00.000Z",
+  "last_task": "obsidian-sync + n8n + telegram-expanded",
   "status": "done",
   "working": [
-    "PART 1: Auto-briefing trigger removed — briefing only runs on click or watcher schedule",
-    "PART 2: chart-analysis top 3→10 tracks; scout+chart+tiktok encode tracks in inbox message",
-    "PART 2: DailyTab renders agent-tracks section with ▶ Play (green) + Brain (gold) buttons",
-    "PART 2: getTracksFromMessage / stripTracksFromMessage helpers",
-    "PART 2: addTrackToBrain saves to brain_knowledge directly from frontend",
-    "PART 3: fetchTikTokRealData() tries tokboard.com then kworb YouTube",
-    "PART 3: runAgentTikTokTrends: Spotify search + Essentia for top 5 trends",
-    "PART 3: stores in reference_tracks (collection_name=tiktok_trending) + brain_knowledge",
-    "PART 4: ProjectsTab sendAI extracts spotify IDs from reference_links",
-    "PART 4: mozartContext renders songSpecificRefs as 'THIS SONG'S REFERENCES (primary)'"
+    "Telegram expanded: /morning /obsidian /demo /mix /ref commands",
+    "YES/NO confirmation flow (pendingConfirmations map)",
+    "Feedback + download inbox notifications polled every 30s → Telegram",
+    "Brain milestone notifications (50/100/200/300/500 entries)",
+    "Watcher errors now also sent via Telegram",
+    "Obsidian sync: chokidar watches vault, syncs .md → brain_knowledge",
+    "POST /obsidian-sync — manual full vault sync",
+    "GET /brain-to-obsidian — exports brain entries as .md files",
+    "POST /brain-dump — saves free text to brain (n8n target)",
+    "Start Momentum.command updated with Tab 3 for n8n (localhost:5678)"
   ],
   "broken": [],
   "partial": [
-    "SQL migration not run — source/promoted columns don't exist yet in reference_tracks. Run in Supabase SQL Editor: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT 'agent', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false; UPDATE reference_tracks SET source = 'agent' WHERE collection_name = 'daily_chart';",
-    "tokboard.com may 403 or change structure — if no real trends fetched, TikTok agent falls back to kworb YouTube only"
+    "Obsidian vault not yet created — run: mkdir -p /Users/remo/ObsidianVault/Momentum, then pm2 restart momentum-watcher --update-env",
+    "n8n not yet installed — run: npm install -g n8n",
+    "n8n workflows (Gmail→Brain, Calendar→Tasks, SubmitHub→Inbox) must be built in n8n UI at localhost:5678"
   ],
-  "next": "Run SQL migration in Supabase dashboard for source/promoted columns on reference_tracks",
-  "notes": "Track encoding uses <!--TRACKS:JSON--> sentinel in inbox message — invisible in parseAgentOutput (stripped), parsed by getTracksFromMessage. Each track row shows play link (spotify or youtube fallback) + one-click brain save."
+  "next": "1. mkdir -p /Users/remo/ObsidianVault/Momentum  2. npm install -g n8n  3. Open Obsidian, create vault at that path  4. Build n8n workflows in browser",
+  "notes": "Obsidian mcp-obsidian plugin install is manual. n8n workflow building is UI-only (no code). TELEGRAM_BOT_TOKEN already set in .env."
 }

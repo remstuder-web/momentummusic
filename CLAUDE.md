@@ -164,8 +164,14 @@ After completing every task, write /Users/remo/momentum/.claude-status.json with
 This file is how the chat assistant tracks progress across sessions — always keep it current.
 Read it via GET http://localhost:4242/status at the start of each session.
 
+## Integrations
+- TELEGRAM_OWNER_ID: 33858745 — commands: /brief /scout /pulse /chart /status /brain /ask /morning /obsidian /demo /mix /ref /help
+- OBSIDIAN_VAULT: /Users/remo/ObsidianVault/Momentum — bi-directional sync with brain_knowledge via chokidar
+- N8N: localhost:5678 — workflow automation (Gmail→Brain, Calendar→Tasks, SubmitHub→Inbox)
+- New endpoints: POST /obsidian-sync, GET /brain-to-obsidian, POST /brain-dump
+
 ## Known issues
-- None currently. (Last verified: 2026-04-18)
+- None currently. (Last verified: 2026-04-20)
 
 ## System health
 Last verified: 2026-04-18

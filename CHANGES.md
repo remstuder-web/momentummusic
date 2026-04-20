@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-20] momentum-watcher.cjs + Start Momentum.command — DONE
+TASK: obsidian-sync, n8n-setup, telegram-expanded
+WHAT: Obsidian↔brain bi-directional sync (chokidar), /obsidian-sync + /brain-to-obsidian + /brain-dump endpoints; extended Telegram commands (/obsidian /demo /mix /ref /morning + YES/NO confirmation + feedback/download/milestone/error notifications); Start Momentum.command updated with n8n tab; CLAUDE.md updated
+RESULT: works — pm2 restarted, Telegram polling confirmed, Obsidian vault warning shown (vault not yet created)
+BLOCKERS: Obsidian vault must be created at /Users/remo/ObsidianVault/Momentum; n8n must be installed (npm install -g n8n)
+
 ## [2026-04-19] DailyTab.svelte — DONE
 TASK: next step no background, download delete permanent, text dimmer
 WHAT: agent-next-move padding 6px 12px, margin-top 8px, color #9e9690 (was #cec9c1/10px/14px); confirmed deleteInboxItem already does Supabase delete for all types; confirmed body text already #9e9690

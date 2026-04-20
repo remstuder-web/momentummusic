@@ -203,8 +203,16 @@ FORMATTING RULES — always follow these:
     ).join(', ') + '\n\n'
   }
 
-  if (brain?.length) context +=
-    `## BRAIN KNOWLEDGE\n` + brain.map(b => `[${b.category}] ${b.title}: ${b.content.slice(0, 80)}`).join('\n')
+  if (brain?.length) {
+    const priorityBrain = brain.filter(b => b.priority)
+    const normalBrain = brain.filter(b => !b.priority)
+    if (priorityBrain.length) {
+      context += `## HIGH PRIORITY KNOWLEDGE\n` + priorityBrain.map(b => `[${b.category}] ${b.title}: ${b.content.slice(0, 80)}`).join('\n') + '\n\n'
+    }
+    if (normalBrain.length) {
+      context += `## BRAIN KNOWLEDGE\n` + normalBrain.map(b => `[${b.category}] ${b.title}: ${b.content.slice(0, 80)}`).join('\n')
+    }
+  }
 
   if (contactProfiles?.length) {
     context += '\n\n## ARTIST/CONTACT PROFILES\n'

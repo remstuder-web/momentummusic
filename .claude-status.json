@@ -1,15 +1,23 @@
 {
-  "updated": "2026-04-20T23:15:00.000Z",
-  "last_task": "obsidian-graph-backlinks",
-  "status": "done",
+  "updated": "2026-04-21T00:00:00.000Z",
+  "last_task": "brain-collections-quicknotes-priority",
+  "status": "partial",
   "working": [
-    "brain-to-obsidian: CATEGORY_LINKS adds related [[notes]] per category (13 categories mapped)",
-    "brain-to-obsidian: content scanning links to other brain entry titles (max 8)",
-    "5 index notes: Hit Benchmark, My Productions, Active Goals, Contact Directory, Market Intelligence",
-    "134 entries exported + 5 index notes on last run",
-    "Graph view in Obsidian now shows connected clusters"
+    "BrainTab: updatePriority() function added",
+    "BrainTab: priority filter ★ button in header",
+    "BrainTab: quick notes section rendered",
+    "BrainTab: collection group headers rendered",
+    "BrainTab: priority ★ star on each entry row",
+    "BrainTab: .brain-entry.priority gold left border CSS",
+    "BrainTab: dump-collection-inp CSS",
+    "mozartContext.js: HIGH PRIORITY KNOWLEDGE section first",
+    "momentum-watcher.cjs: Obsidian export includes priority tag + collection subfolder",
+    "pm2 restarted"
   ],
   "broken": [],
-  "partial": [],
-  "next": "Open Obsidian graph view — should show clusters around Hit Benchmark, Active Goals, Contact Directory"
+  "partial": [
+    "SQL migrations NOT run yet — columns priority, collection_name_display (brain_knowledge) and notes (reference_tracks) need to be added via Supabase dashboard SQL editor"
+  ],
+  "next": "Run SQL migrations in Supabase dashboard: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS priority boolean DEFAULT false; ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS collection_name_display text; ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;",
+  "notes": "All BrainTab code is in place. Feature is fully coded but will error without the DB columns. Run the 3 ALTER TABLE statements in Supabase SQL editor to activate."
 }

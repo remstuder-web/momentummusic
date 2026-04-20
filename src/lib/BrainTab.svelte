@@ -68,6 +68,8 @@
   let catSuggestOverride = $state('')
   let splitEdits = $state([])
   let prefilledCategory = $state('')
+  let dumpCollection = $state('')
+  let priorityFilter = $state(false)
 
   let brainSearch = $state('')
   let confidenceTooltip = $state(null) // { entryId, to, label }
@@ -469,9 +471,11 @@ Return ONLY JSON:
           title,
           content: dumpText.trim(),
           entry_type: 'knowledge',
-          active: true
+          active: true,
+          collection_name_display: dumpCollection.trim() || null
         })
         dumpText = ''
+        dumpCollection = ''
         catSuggestion = null
         newCategoryInput = {}
         await loadEntries()
@@ -617,7 +621,8 @@ Return ONLY JSON (single item array):
         confidence: item.suggestedCategory === 'goal' ? 'locked' : (item.confidence || null),
         source_url: item.source_url || null,
         verbatim_full: item.entry_type === 'chunk' ? pendingOriginalText : null,
-        active: true
+        active: true,
+        collection_name_display: dumpCollection.trim() || null
       }).select('id').single()
       if (inserted?.id) pushBrainUndo('Added: ' + item.title, inserted.id, null)
     }
@@ -625,6 +630,7 @@ Return ONLY JSON (single item array):
     pendingOriginalText = ''
     showApproval = false
     dumpText = ''
+    dumpCollection = ''
     newCategoryInput = {}
     catSuggestion = null
     await loadEntries()
@@ -837,6 +843,11 @@ Return ONLY JSON (single item array):
     await supabase.from('brain_knowledge').update({ confidence: val }).eq('id', id)
     entries = entries.map(e => e.id === id ? { ...e, confidence: val } : e)
     confidenceTooltip = null
+  }
+
+  async function updatePriority(id, val) {
+    await supabase.from('brain_knowledge').update({ priority: val }).eq('id', id)
+    entries = entries.map(e => e.id === id ? { ...e, priority: val } : e)
   }
 
   async function setReviewDate(id, date) {
@@ -1086,6 +1097,14 @@ Return ONLY JSON (single item array):
       </div>
     {/if}
 
+    {#if catSuggestion || catSuggestLoading}
+      <input
+        class="dump-collection-inp"
+        placeholder="Group with… (optional, e.g. 'Kumbia V05 Session')"
+        bind:value={dumpCollection}
+      />
+    {/if}
+
     {#if catSuggestLoading}
       <div class="cat-suggest-card">
         <div class="cat-suggest-header">ANALYSING CATEGORY…</div>
@@ -1218,6 +1237,9 @@ Return ONLY JSON (single item array):
         <span class="brain-cat-count">{entries.length + watchedArtists.length + referenceTrackEntries.length}</span>
         <span class="brain-cat-arrow {entriesOpen ? 'open' : ''}">▶</span>
       </button>
+      <button class="brain-priority-filter-btn {priorityFilter ? 'active' : ''}" onclick={() => priorityFilter = !priorityFilter} title="Show priority only">
+        ★
+      </button>
       <button class="undo-tab-btn" onclick={undoBrain} disabled={undoStack.length === 0} title={undoStack[0]?.description || 'Nothing to undo'}>
         ↩ {undoStack[0] ? undoStack[0].description.slice(0, 20) + '...' : 'undo'}
       </button>
@@ -1243,13 +1265,26 @@ Return ONLY JSON (single item array):
         </div>
       {/if}
 
-      {@const allNormal = [...entries.filter(e => e.category !== 'reference_tracks')].sort((a,b) => a.category.localeCompare(b.category))}
+      {@const allNormal = [...entries.filter(e => e.category !== 'reference_tracks')].sort((a,b) => {
+        if (a.priority && !b.priority) return -1
+        if (!a.priority && b.priority) return 1
+        return a.category.localeCompare(b.category)
+      })}
       {@const normalEntries = brainSearch
         ? allNormal.filter(e =>
             e.title?.toLowerCase().includes(brainSearch.toLowerCase()) ||
             e.content?.toLowerCase().includes(brainSearch.toLowerCase()))
-        : allNormal}
-      {@const catIds = [...new Set(normalEntries.map(e => e.category))]}
+        : priorityFilter ? allNormal.filter(e => e.priority) : allNormal}
+      {@const quickNotes = normalEntries.filter(e =>
+        (e.category === 'quick_note' || e.entry_type_v2 === 'observation') && (e.content || '').length < 100
+      )}
+      {@const mainEntries = normalEntries.filter(e =>
+        !(e.category === 'quick_note' || (e.entry_type_v2 === 'observation' && (e.content || '').length < 100))
+      )}
+      {@const collections = [...new Set(mainEntries.map(e => e.collection_name_display).filter(Boolean))]}
+      {@const collectionEntries = mainEntries.filter(e => e.collection_name_display)}
+      {@const uncollected = mainEntries.filter(e => !e.collection_name_display)}
+      {@const catIds = [...new Set(uncollected.map(e => e.category))]}
 
       {#if duplicateWarnings.length && !brainSearch}
         <div class="brain-dup-warning">
@@ -1261,10 +1296,69 @@ Return ONLY JSON (single item array):
         <p class="brain-empty">No entries yet. Dump something above.</p>
       {/if}
 
-      <!-- Knowledge entries grouped by category -->
+      <!-- Quick Notes section -->
+      {#if quickNotes.length}
+        <div class="brain-cat-divider">QUICK NOTES</div>
+        <div class="brain-quicknotes-list">
+          {#each quickNotes as qn}
+            <div class="brain-quick-note">
+              <span class="brain-quick-note-dot">·</span>
+              <span class="brain-quick-note-text">{qn.content}</span>
+              <span class="brain-quick-note-date">{new Date(qn.created_at).toLocaleDateString('de-CH')}</span>
+              <button class="brain-del" onclick={() => deleteEntry(qn.id)}>×</button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+
+      <!-- Collection groups -->
+      {#each collections as col}
+        <div class="brain-collection-header">
+          <span class="brain-collection-icon">◈</span>
+          {col}
+        </div>
+        {#each mainEntries.filter(e => e.collection_name_display === col) as entry}
+          {#if entry.category === 'question'}
+            <div class="brain-question-row">
+              <span class="brain-question-icon">❓</span>
+              <span class="brain-question-text">{entry.content}</span>
+              <span class="brain-question-date">{new Date(entry.created_at).toLocaleDateString('de-CH')}</span>
+              <button class="track-del-btn" onclick={() => deleteEntry(entry.id)}>×</button>
+            </div>
+          {:else}
+            <div class="brain-entry {entry.active ? '' : 'inactive'} {entry.priority ? 'priority' : ''}">
+              <div class="brain-entry-header">
+                <button
+                  class="brain-toggle {entry.active ? 'on' : ''}"
+                  onclick={() => toggleEntry(entry.id, entry.active)}
+                  title={entry.active ? 'Active' : 'Paused'}
+                >{entry.active ? '◉' : '○'}</button>
+                <span
+                  class="brain-entry-title clickable-title"
+                  title={entry.content?.slice(0, 120)}
+                  onclick={() => expandedEntries = { ...expandedEntries, [entry.id]: !expandedEntries[entry.id] }}
+                >{entry.title}</span>
+                <button class="brain-priority-star {entry.priority ? 'on' : ''}" onclick={() => updatePriority(entry.id, !entry.priority)}>★</button>
+                <button class="conf-pill conf-pill-{entry.confidence || 'low'}" onclick={() => cycleConfidence(entry)}>{CONF_DISPLAY[entry.confidence || 'low']}</button>
+                <button class="brain-del" onclick={() => deleteEntry(entry.id)}>×</button>
+              </div>
+              {#if expandedEntries[entry.id]}
+                <div class="brain-entry-content">{entry.content}</div>
+                <div class="brain-review-row">
+                  <span class="brain-review-label">Review by:</span>
+                  <input type="date" class="brain-review-date-inp" value={entry.review_date || ''} onchange={e => setReviewDate(entry.id, e.target.value)} />
+                  {#if entry.review_date}<button class="brain-review-clear" onclick={() => setReviewDate(entry.id, '')}>×</button>{/if}
+                </div>
+              {/if}
+            </div>
+          {/if}
+        {/each}
+      {/each}
+
+      <!-- Knowledge entries grouped by category (uncollected) -->
       {#each catIds as catId}
         <div class="brain-cat-divider">{catId.replace(/_/g, ' ')}</div>
-        {#each normalEntries.filter(e => e.category === catId) as entry}
+        {#each uncollected.filter(e => e.category === catId) as entry}
           {#if entry.category === 'question'}
             <div class="brain-question-row">
               <span class="brain-question-icon">❓</span>
@@ -1310,7 +1404,7 @@ Return ONLY JSON (single item array):
               </div>
             </div>
           {:else}
-            <div class="brain-entry {entry.active ? '' : 'inactive'}">
+            <div class="brain-entry {entry.active ? '' : 'inactive'} {entry.priority ? 'priority' : ''}">
               <div class="brain-entry-header">
                 <button
                   class="brain-toggle {entry.active ? 'on' : ''}"
@@ -1322,6 +1416,7 @@ Return ONLY JSON (single item array):
                   title={entry.content?.slice(0, 120)}
                   onclick={() => expandedEntries = { ...expandedEntries, [entry.id]: !expandedEntries[entry.id] }}
                 >{entry.title}</span>
+                <button class="brain-priority-star {entry.priority ? 'on' : ''}" onclick={() => updatePriority(entry.id, !entry.priority)}>★</button>
                 <button
                   class="conf-pill conf-pill-{entry.confidence || 'low'}"
                   onclick={() => cycleConfidence(entry)}
@@ -1909,6 +2004,80 @@ Return ONLY JSON (single item array):
   .brain-reftrack-notes::placeholder { color: #333; }
   .brain-reftrack-notes:focus { color: #9e9690; }
 
+  .dump-collection-inp {
+    width: 100%;
+    background: #141414;
+    border: 1px solid #2a2a2a;
+    border-radius: 3px;
+    color: #9e9690;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 300;
+    padding: 6px 10px;
+    margin-top: 6px;
+    outline: none;
+    box-sizing: border-box;
+  }
+  .dump-collection-inp:focus { border-color: #3c3c3c; color: #f5f1ea; }
+  .dump-collection-inp::placeholder { color: #444; }
+
+  .brain-priority-filter-btn {
+    background: #1c1c1c;
+    border: 1px solid #303030;
+    border-radius: 3px;
+    color: #444;
+    font-size: 14px;
+    padding: 4px 8px;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .brain-priority-filter-btn.active { color: #c9a84c; border-color: #c9a84c; }
+  .brain-priority-filter-btn:hover { color: #c9a84c; }
+
+  .brain-quicknotes-list { margin-bottom: 8px; }
+  .brain-quick-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    background: #141414;
+    margin-bottom: 3px;
+  }
+  .brain-quick-note-dot { color: #555; font-size: 14px; flex-shrink: 0; }
+  .brain-quick-note-text { flex: 1; font-size: 12px; color: #cec9c1; font-weight: 300; }
+  .brain-quick-note-date { font-size: 10px; color: #555; flex-shrink: 0; }
+
+  .brain-collection-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0 4px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #c9a84c;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid rgba(201,168,76,0.2);
+    margin-bottom: 4px;
+    margin-top: 10px;
+  }
+  .brain-collection-icon { font-size: 10px; opacity: 0.7; }
+
+  .brain-priority-star {
+    background: none;
+    border: none;
+    color: #333;
+    font-size: 13px;
+    padding: 0 3px;
+    cursor: pointer;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: color 0.15s;
+  }
+  .brain-priority-star.on { color: #c9a84c; }
+  .brain-priority-star:hover { color: #c9a84c; }
+
   .brain-entry {
     background: #1c1c1c;
     border: 1px solid #252525;
@@ -1918,6 +2087,7 @@ Return ONLY JSON (single item array):
     transition: opacity .2s;
   }
   .brain-entry.inactive { opacity: .35; }
+  .brain-entry.priority { border-left: 2px solid #c9a84c; }
   .brain-question-row {
     display: flex;
     align-items: flex-start;

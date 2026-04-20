@@ -5428,7 +5428,7 @@ ${chatText.slice(0, 4000)}`
     try {
       if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) fs.mkdirSync(OBSIDIAN_VAULT_PATH, { recursive: true })
       const brainRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=id,title,category,content,confidence,entry_type_v2,source_type,source_url,created_at,metadata&order=created_at.desc&limit=500`,
+        `${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=id,title,category,content,confidence,entry_type_v2,source_type,source_url,created_at,metadata,priority,collection_name_display&order=created_at.desc&limit=500`,
         { headers: sbHeaders }
       )
       const brainRaw = await brainRes.json()
@@ -5476,6 +5476,9 @@ ${chatText.slice(0, 4000)}`
         const filePath = path.join(OBSIDIAN_VAULT_PATH, safeName + '.md')
         const createdDate = e.created_at ? new Date(e.created_at).toLocaleDateString() : ''
 
+        const tags = [e.category || 'knowledge', e.entry_type_v2 || 'knowledge']
+        if (e.priority) tags.push('priority')
+
         const fm = [
           '---',
           `category: ${e.category || 'knowledge'}`,
@@ -5483,9 +5486,10 @@ ${chatText.slice(0, 4000)}`
           `type: ${e.entry_type_v2 || 'knowledge'}`,
           `source: ${e.source_type || 'manual'}`,
           `created: ${e.created_at || ''}`,
-          `tags: [${e.category || 'knowledge'}, ${e.entry_type_v2 || 'knowledge'}]`,
+          e.collection_name_display ? `collection: ${e.collection_name_display}` : null,
+          `tags: [${tags.join(', ')}]`,
           '---'
-        ].join('\n')
+        ].filter(l => l !== null).join('\n')
 
         const catLinks = CATEGORY_LINKS[e.category] || []
         const contentLinks = findContentLinks(e.content || '', e.title || '')
@@ -5501,8 +5505,16 @@ ${chatText.slice(0, 4000)}`
           createdDate ? `*Added: ${createdDate}*` : null
         ].filter(l => l !== null).join('\n')
 
+        // Entries with a collection go in a Collections subfolder
+        let outPath = filePath
+        if (e.collection_name_display) {
+          const colDir = path.join(OBSIDIAN_VAULT_PATH, 'Collections', e.collection_name_display.replace(/[\/\\:*?"<>|]/g, '-'))
+          if (!fs.existsSync(colDir)) fs.mkdirSync(colDir, { recursive: true })
+          outPath = path.join(colDir, safeName + '.md')
+        }
+
         const md = `${fm}\n\n# ${e.title || 'Untitled'}\n\n${e.content || ''}${relatedSection}${footer}`
-        fs.writeFileSync(filePath, md, 'utf8')
+        fs.writeFileSync(outPath, md, 'utf8')
         written++
       }
 

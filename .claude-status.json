@@ -1,19 +1,18 @@
 {
-  "updated": "2026-04-21T12:00:00Z",
-  "last_task": "work-log-tracking",
+  "updated": "2026-04-21T12:30:00Z",
+  "last_task": "mozart-actions",
   "status": "done",
   "working": [
-    "ProjectsTab: work timer starts when song is expanded, stops+logs on collapse",
-    "Min 5 min threshold — sessions under 5 min are discarded",
-    "stopWorkTimer() called on onDestroy and visibilitychange (tab hidden)",
-    "logWorkSession() inserts to work_logs table AND brain_knowledge (own_production)",
-    "loadSongWorkLogs() fetches last 10 sessions for expanded song",
-    "WORK LOG section renders below versions, above song footer",
-    "work_logs table already exists in Supabase",
-    "svelte-check: 0 errors"
+    "parseActions() exported from mozartContext.js — parses [ACTION: type | k=v] blocks",
+    "executeAction(action, supabase, currentSong) exported — handles add_reference, save_to_brain, analyze_track, set_stage",
+    "Action instructions added to Mozart system prompt in buildMozartContext()",
+    "All 3 sendAI functions (ProjectsTab, DailyTab, BrainTab) strip action tags from displayed reply and execute actions",
+    "_system: true flag on action result messages for potential styling",
+    "POST /agent-import-spotify query mode: search Spotify by text, Essentia BPM/key/camelot on preview, save to reference_tracks + optionally update songs.work_data.reference_links",
+    "watcher restarted and ping OK"
   ],
   "broken": [],
   "partial": [],
-  "next": "All tasks complete. Add new tasks or test the work log by opening a song for 5+ minutes then closing it.",
-  "notes": "work_logs table schema: id uuid PK, song_id text, song_title text, stage text, duration_minutes int, logged_at timestamptz, note text, created_at timestamptz"
+  "next": "Test by asking Mozart: 'Add Princess Nokia - Surfboard as a reference track' — should trigger add_reference action and appear in reference_tracks.",
+  "notes": "executeAction uses fetch to localhost:4242 — watcher must be running. set_stage does select+update pattern (no supabase.raw). DailyTab/BrainTab pass null as currentSong (no song context)."
 }

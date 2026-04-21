@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] mozartContext.js + ProjectsTab/DailyTab/BrainTab + momentum-watcher.cjs — DONE
+TASK: mozart-actions
+WHAT: Mozart can now signal actions via [ACTION: type | param=value] blocks. parseActions()/executeAction() exported from mozartContext.js. Actions: add_reference (Spotify search→save), save_to_brain, analyze_track, set_stage. /agent-import-spotify query mode added to watcher for text-based track search + Essentia analysis + reference_tracks save + song reference_links update.
+RESULT: works — svelte-check 0 errors, watcher restarted OK
+BLOCKERS: none
+
 ## [2026-04-21] src/lib/ProjectsTab.svelte — DONE
 TASK: work-log-tracking
 WHAT: Auto-log work sessions when songs are expanded/collapsed; display WORK LOG section per song with stage/duration/date. Timer starts on expand, stops+logs on collapse, tab hide, or component destroy. Min 5 min to log. Also inserts brain_knowledge entry per session.

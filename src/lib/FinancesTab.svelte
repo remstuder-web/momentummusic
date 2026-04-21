@@ -63,9 +63,10 @@
   let aiInput = $state('')
   let aiLoading = $state(false)
 
-  async function sendAI() {
-    if (!aiInput.trim() || aiLoading) return
-    const msg = aiInput.trim(); aiInput = ''
+  async function sendAI(rawMsg) {
+    const msg = (typeof rawMsg === 'string' && rawMsg.trim()) ? rawMsg.trim() : aiInput.trim()
+    if (!msg || aiLoading) return
+    aiInput = ''
     aiMessages = [...aiMessages, { role: 'user', content: msg }]
     aiLoading = true
     const apiKey = localStorage.getItem('mm_api_key') || ''
@@ -180,7 +181,7 @@
     </div>
     <div class="chat-input-row">
       <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
-      <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
+      <button class="btn-gold-sm" onclick={() => sendAI()}>Ask</button>
     </div>
     <div class="chat-out">
       {#each aiMessages as msg}

@@ -1,5 +1,17 @@
 # CHANGES
 
+## [2026-04-21] vite.config.js + NotesTab.svelte — DONE
+TASK: vite-proxy-notes
+WHAT: Added /watcher proxy in vite.config.js pointing to localhost:4242; changed all 7 fetch calls in NotesTab from http://localhost:4242/ to /watcher/ so requests route through Vite dev server (fixes Firefox CORS)
+RESULT: works — proxy routes through Vite, no cross-origin request from browser
+BLOCKERS: none
+
+## [2026-04-21] momentum-watcher.cjs — DONE
+TASK: notes-cors-verify
+WHAT: Verified CORS already has GET in Access-Control-Allow-Methods; GET /notes already exists and returns valid JSON with position+content
+RESULT: no changes needed — both already correct
+BLOCKERS: none
+
 ## [2026-04-21] momentum-watcher.cjs + NotesTab.svelte — DONE
 TASK: notes-manual-ordering
 WHAT: Added position field to note frontmatter; readNotesDir sorts by position asc then updated desc; POST /notes/reorder swaps adjacent notes and lazily assigns positions to all on first use; NotesTab has ▲▼ buttons per row

@@ -10,7 +10,7 @@
   async function load() {
     loading = true
     try {
-      const r = await fetch('http://localhost:4242/notes')
+      const r = await fetch('/watcher/notes')
       const d = await r.json()
       notes = (d.notes || []).map(n => ({ ...n, _exp: false, _editing: false }))
       if (d.lastSync) lastSync = new Date(d.lastSync)
@@ -22,7 +22,7 @@
     if (!newTopicName.trim()) return
     const title = newTopicName.trim()
     newTopicName = ''
-    const r = await fetch('http://localhost:4242/notes', {
+    const r = await fetch('/watcher/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, content: '' })
@@ -35,7 +35,7 @@
     note.content = text
     notes = [...notes]
     savingFiles[note.filename] = true
-    const r = await fetch('http://localhost:4242/notes', {
+    const r = await fetch('/watcher/notes', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: note.filename, content: text })
@@ -49,7 +49,7 @@
   async function renameNote(note, newTitle) {
     const trimmed = newTitle.trim()
     if (!trimmed || trimmed === note.title) { note._editing = false; notes = [...notes]; return }
-    const r = await fetch('http://localhost:4242/notes', {
+    const r = await fetch('/watcher/notes', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: note.filename, title: trimmed, content: note.content })
@@ -62,7 +62,7 @@
 
   async function deleteNote(note) {
     if (!confirm(`Delete "${note.title}"?`)) return
-    await fetch('http://localhost:4242/notes', {
+    await fetch('/watcher/notes', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: note.filename })
@@ -73,7 +73,7 @@
   async function triggerAppleSync() {
     syncStatus = 'syncing'
     try {
-      const r = await fetch('http://localhost:4242/apple-notes-sync', { method: 'POST' })
+      const r = await fetch('/watcher/apple-notes-sync', { method: 'POST' })
       const d = await r.json()
       if (!d.ok) throw new Error(d.error)
       syncCount = d.synced
@@ -99,7 +99,7 @@
   function focusInput(node) { setTimeout(() => node.focus(), 0) }
 
   async function moveNote(note, dir) {
-    await fetch('http://localhost:4242/notes/reorder', {
+    await fetch('/watcher/notes/reorder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: note.filename, direction: dir })

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] ConnectionsTab + FinancesTab + NotesTab + BrainTab — DONE
+TASK: mozart-all-tabs
+WHAT: Added Mozart chat panel to 4 tabs (ReleasesTab doesn't exist). Each gets: buildMozartContext import, aiMessages/aiInput/aiLoading state, sendAI(), formatMozartOutput(), Mozart block HTML at bottom, full CSS. NotesTab also got supabase import.
+RESULT: works — HMR reloaded all 4 cleanly, no compile errors
+BLOCKERS: none
+
 ## [2026-04-21] momentum-watcher.cjs — DONE
 TASK: apple-note-html-body
 WHAT: Added textToAppleNotesHtml() — converts plain text to Apple Notes HTML before writing to temp file; lines→<div>, blank lines→<br>, bullet prefixes stripped. Applied to both createAppleNote and updateAppleNote.

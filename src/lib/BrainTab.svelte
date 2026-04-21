@@ -919,6 +919,47 @@ Return ONLY JSON (single item array):
     } catch(e) {}
     localStorage.removeItem('mm_pending_chat_items')
   }
+
+  let aiMessages = $state([])
+  let aiInput = $state('')
+  let aiLoading = $state(false)
+
+  async function sendAI() {
+    if (!aiInput.trim() || aiLoading) return
+    const msg = aiInput.trim(); aiInput = ''
+    aiMessages = [...aiMessages, { role: 'user', content: msg }]
+    aiLoading = true
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    if (!apiKey) { aiMessages = [...aiMessages, { role: 'assistant', content: 'No API key set — add it in Settings ⚙.' }]; aiLoading = false; return }
+    const mozartContext = await buildMozartContext(supabase, {})
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, system: mozartContext, messages: aiMessages.slice(-10) })
+      })
+      const data = await res.json()
+      if (data.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/mozart', model: 'claude-sonnet-4-20250514', input_tokens: data.usage.input_tokens, output_tokens: data.usage.output_tokens, cost_usd: (data.usage.input_tokens * 0.000003) + (data.usage.output_tokens * 0.000015) }) }).catch(() => {})
+      aiMessages = [...aiMessages, { role: 'assistant', content: data.content?.[0]?.text || 'No response.' }]
+    } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
+    aiLoading = false
+  }
+
+  function formatMozartOutput(text) {
+    if (!text) return ''
+    return text
+      .replace(/^## (.+)$/gm, '<div class="moz-header">$1</div>')
+      .replace(/\[GAP\]/g, '<span class="moz-gap">[GAP]</span>')
+      .replace(/\[OK\]/g, '<span class="moz-ok">[OK]</span>')
+      .replace(/\[CONFIRMED\]/g, '<span class="moz-confirmed">[CONFIRMED]</span>')
+      .replace(/\[TENSION\]/g, '<span class="moz-tension">[TENSION]</span>')
+      .replace(/\[OUTDATED\]/g, '<span class="moz-outdated">[OUTDATED]</span>')
+      .replace(/\[NEW\]/g, '<span class="moz-new">[NEW]</span>')
+      .replace(/^[-•] (.+)$/gm, '<div class="moz-bullet">$1</div>')
+      .replace(/^\d+\. (.+)$/gm, '<div class="moz-bullet">$1</div>')
+      .replace(/<div class="moz-header">(Next Step|Next Move)<\/div>\n?/g, '<div class="moz-next-label">NEXT STEP</div>')
+      .replace(/\n\n/g, '<div class="moz-spacer"></div>')
+  }
 </script>
 
 <div class="brain-wrap">
@@ -1650,6 +1691,30 @@ Return ONLY JSON (single item array):
     {/if}
   </div>
 
+</div>
+
+<div class="mozart-block">
+  <div class="mozart-title-row">
+    <div class="mozart-title">ASK MOZART</div>
+    {#if aiMessages.length}
+      <button class="clear-chat" onclick={() => aiMessages = []}>Clear</button>
+    {/if}
+  </div>
+  <div class="chat-input-row">
+    <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
+    <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
+  </div>
+  <div class="chat-out">
+    {#each aiMessages as msg}
+      <div class="chat-msg {msg.role}">
+        <div class="chat-who">{msg.role==='user'?'You':'Mozart'}</div>
+        <div class="chat-text">{@html msg.role === 'assistant' ? formatMozartOutput(msg.content) : msg.content}</div>
+      </div>
+    {/each}
+    {#if aiLoading}
+      <div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -2526,4 +2591,19 @@ Return ONLY JSON (single item array):
     padding: 2px 7px; cursor: pointer; transition: border-color .15s, color .15s;
   }
   .brain-related-chip:hover { border-color: rgba(201,168,76,.4); color: #cec9c1; }
+  .mozart-block { margin-top: 16px; border-top: 1px solid #1c1c1c; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .mozart-title-row { display: flex; align-items: center; justify-content: space-between; }
+  .mozart-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; }
+  .clear-chat { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
+  .clear-chat:hover { border-color: #555; color: #9e9690; }
+  .chat-out { overflow-y: auto; max-height: 70vh; min-height: 200px; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; scroll-behavior: smooth; }
+  .chat-msg { display: flex; flex-direction: column; gap: 2px; }
+  .chat-who { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
+  .chat-msg.assistant .chat-who { color: #7a6230; }
+  .chat-text { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; line-height: 1.5; }
+  .chat-text.dim { color: #444; }
+  .chat-input-row { display: flex; gap: 6px; }
+  .chat-inp { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; border-radius: 3px; }
+  .chat-inp:focus { border-color: rgba(201,168,76,.4); }
+  .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 7px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
 </style>

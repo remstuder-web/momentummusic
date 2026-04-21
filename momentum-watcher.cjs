@@ -5987,6 +5987,7 @@ ${chatText.slice(0, 4000)}`
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, written, index_notes: indexFiles.length }))
+      pushVaultToGit()
     } catch(e) {
       res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
     }
@@ -6309,6 +6310,16 @@ ${content.slice(0, 5000)}`
   }
   console.log(`✓ NOW extract: ${saved} new entries saved to brain_knowledge`)
   return { count: saved }
+}
+
+function pushVaultToGit() {
+  exec(
+    'cd /Users/remo/ObsidianVault/Momentum && git add -A && git commit -m "brain export" && git push origin main',
+    (err, stdout, stderr) => {
+      if (err) console.error('vault git push error:', err.message)
+      else console.log('✓ vault pushed to GitHub')
+    }
+  )
 }
 
 function ensureNowNote() {

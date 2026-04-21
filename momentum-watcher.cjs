@@ -5730,30 +5730,40 @@ ${chatText.slice(0, 4000)}`
         .sort((a, b) => b.length - a.length) // longest first to avoid partial matches
 
       const CATEGORY_LINKS = {
-        'goal':              ['[[Daft Punk Model]]', '[[Hit Benchmark]]', '[[Active Goals]]'],
-        'mixing_technique':  ['[[Hit Benchmark]]', '[[Reference Tracks]]'],
-        'reference_current': ['[[Hit Benchmark]]', '[[Mixing Technique]]'],
-        'artist_strategy':   ['[[Release Strategy]]', '[[Social Media]]'],
-        'market_knowledge':  ['[[Artist Strategy]]', '[[Hit Benchmark]]'],
-        'own_production':    ['[[Hit Benchmark]]', '[[My Productions]]'],
-        'contact_profile':   ['[[Networking]]', '[[Artist Strategy]]'],
-        'production_style':  ['[[Own Production]]', '[[Mixing Technique]]'],
-        'creative_process':  ['[[Production Style]]', '[[Artist Strategy]]'],
-        'reference_mixing':  ['[[Hit Benchmark]]', '[[Mixing Technique]]'],
-        'release_strategy':  ['[[Artist Strategy]]', '[[Market Intelligence]]'],
+        'goal':              ['[[Active Goals]]', '[[Hit Benchmark]]', '[[Daft Punk Model]]'],
+        'mixing_technique':  ['[[Hit Benchmark]]', '[[Reference Tracks]]', '[[Music Tips]]'],
+        'reference_current': ['[[Hit Benchmark]]', '[[Mixing Technique]]', '[[Reference Tracks]]'],
+        'artist_strategy':   ['[[Release Strategy]]', '[[Social Media]]', '[[Networking]]'],
+        'market_knowledge':  ['[[Artist Strategy]]', '[[Hit Benchmark]]', '[[Market Intelligence]]'],
+        'own_production':    ['[[Hit Benchmark]]', '[[My Productions]]', '[[Mixing Technique]]'],
+        'contact_profile':   ['[[Networking]]', '[[Artist Strategy]]', '[[Contact Directory]]'],
+        'production_style':  ['[[Music Tips]]', '[[Mixing Technique]]', '[[Creative Process]]'],
+        'creative_process':  ['[[Music Tips]]', '[[Production Style]]', '[[Active Goals]]'],
+        'business':          ['[[Active Goals]]', '[[Release Strategy]]'],
+        'business_finance':  ['[[Active Goals]]', '[[Business]]'],
+        'collaboration':     ['[[Artist Strategy]]', '[[Networking]]', '[[Contact Directory]]'],
         'industry_insight':  ['[[Market Intelligence]]', '[[Artist Strategy]]'],
+        'networking':        ['[[Contact Directory]]', '[[Artist Strategy]]'],
+        'release_strategy':  ['[[Active Goals]]', '[[Artist Strategy]]'],
         'social_media':      ['[[Artist Strategy]]', '[[Release Strategy]]'],
-        'networking':        ['[[Contact Directory]]', '[[Artist Strategy]]']
+        'sound_design':      ['[[Music Tips]]', '[[Production Style]]', '[[Mixing Technique]]'],
+        'observation':       ['[[NOW]]'],
+        'question':          ['[[NOW]]', '[[Active Goals]]']
       }
+
+      // Scan content for first-3-words of other entry titles
+      const titleKeywords = allTitles.map(t => ({
+        full: t,
+        key: t.split(/\s+/).slice(0, 3).join(' ')
+      })).filter(t => t.key.length > 4)
 
       function findContentLinks(content, ownTitle) {
         const found = new Set()
-        for (const title of allTitles) {
-          if (title === ownTitle) continue
-          // Whole-word match (case-insensitive)
-          const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        for (const { full, key } of titleKeywords) {
+          if (full === ownTitle) continue
+          const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
           if (new RegExp(`\\b${escaped}\\b`, 'i').test(content)) {
-            found.add(`[[${title}]]`)
+            found.add(`[[${full}]]`)
           }
         }
         return [...found].slice(0, 8)
@@ -5807,53 +5817,118 @@ ${chatText.slice(0, 4000)}`
         written++
       }
 
+      // ── Fetch curated reference tracks for Hit Benchmark ──────────────────
+      let curatedRefTracks = []
+      try {
+        const refRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/reference_tracks?or=(source.eq.user,promoted.eq.true)&select=title,artist&order=created_at.desc&limit=100`,
+          { headers: sbHeaders }
+        )
+        curatedRefTracks = await refRes.json().catch(() => [])
+        if (!Array.isArray(curatedRefTracks)) curatedRefTracks = []
+      } catch(e) { console.warn('reference_tracks fetch failed:', e.message) }
+
+      const safeTitle = t => (t || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)
+
       // ── Write index notes ──────────────────────────────────────────────────
-      const indexNotes = [
+      const hitBenchmarkRefList = curatedRefTracks.length
+        ? curatedRefTracks.map(t => `- [[${safeTitle(t.title)} — ${t.artist || ''}]]`).join('\n')
+        : '*(no curated reference tracks yet)*'
+
+      const indexFiles = [
         {
           file: 'Hit Benchmark.md',
-          title: 'Hit Benchmark',
-          intro: 'All reference tracks used to calibrate production targets.',
-          filter: e => e.category?.includes('reference'),
-          link: e => `- [[${(e.title || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)}]]`
+          content: [
+            '# Hit Benchmark',
+            '',
+            'Central reference point for all production decisions.',
+            '',
+            '## Reference Tracks',
+            hitBenchmarkRefList,
+            '',
+            '## Brain Entries',
+            safeEntries.filter(e => e.category?.includes('reference')).map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
+            '',
+            '## Related',
+            '[[My Productions]] [[Mixing Technique]] [[Active Goals]]'
+          ].join('\n')
         },
         {
           file: 'My Productions.md',
-          title: 'My Productions',
-          intro: 'All own production knowledge entries.',
-          filter: e => e.category === 'own_production',
-          link: e => `- [[${(e.title || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)}]]`
+          content: [
+            '# My Productions',
+            '',
+            safeEntries.filter(e => e.category === 'own_production').map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
+            '',
+            '## Related',
+            '[[Hit Benchmark]] [[Mixing Technique]] [[Release Strategy]]'
+          ].join('\n')
         },
         {
           file: 'Active Goals.md',
-          title: 'Active Goals',
-          intro: 'All goal entries — the Daft Punk model: artistic integrity + commercial success.',
-          filter: e => e.category === 'goal',
-          link: e => `- [[${(e.title || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)}]]`
+          content: [
+            '# Active Goals',
+            '',
+            safeEntries.filter(e => e.category === 'goal').map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
+            '',
+            '## Related',
+            '[[Hit Benchmark]] [[Artist Strategy]] [[NOW]]'
+          ].join('\n')
         },
         {
           file: 'Contact Directory.md',
-          title: 'Contact Directory',
-          intro: 'All artist and contact profiles.',
-          filter: e => e.category === 'contact_profile',
-          link: e => `- [[${(e.title || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)}]]`
+          content: [
+            '# Contact Directory',
+            '',
+            safeEntries.filter(e => e.category === 'contact_profile').map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
+            '',
+            '## Related',
+            '[[Artist Strategy]] [[Networking]] [[Collaboration]]'
+          ].join('\n')
         },
         {
           file: 'Market Intelligence.md',
-          title: 'Market Intelligence',
-          intro: 'All market knowledge and industry insights.',
-          filter: e => e.category === 'market_knowledge' || e.category === 'industry_insight',
-          link: e => `- [[${(e.title || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)}]]`
+          content: [
+            '# Market Intelligence',
+            '',
+            safeEntries.filter(e => e.category === 'market_knowledge' || e.category === 'industry_insight').slice(0, 10).map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
+            '',
+            '## Related',
+            '[[Artist Strategy]] [[Hit Benchmark]] [[Scout]]'
+          ].join('\n')
+        },
+        {
+          file: 'NOW.md',
+          content: [
+            '# NOW',
+            '',
+            'See: [[Notes/NOW]]',
+            '',
+            '## Related',
+            '[[Active Goals]] [[Hit Benchmark]] [[My Productions]]'
+          ].join('\n')
+        },
+        {
+          file: 'Daft Punk Model.md',
+          content: [
+            '# Daft Punk Model',
+            '',
+            'Commercial success with artistic integrity.',
+            'Mass appeal without compromising vision.',
+            'The intersection of hits and respect.',
+            '',
+            '## Related',
+            '[[Active Goals]] [[Artist Strategy]] [[Production Style]]'
+          ].join('\n')
         }
       ]
 
-      for (const idx of indexNotes) {
-        const linked = safeEntries.filter(idx.filter)
-        const md = `# ${idx.title}\n\n${idx.intro}\n\n## Entries\n${linked.map(idx.link).join('\n') || '*(none yet)*'}\n`
-        fs.writeFileSync(path.join(OBSIDIAN_VAULT_PATH, idx.file), md, 'utf8')
+      for (const idx of indexFiles) {
+        fs.writeFileSync(path.join(OBSIDIAN_VAULT_PATH, idx.file), idx.content, 'utf8')
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, written, index_notes: indexNotes.length }))
+      res.end(JSON.stringify({ ok: true, written, index_notes: indexFiles.length }))
     } catch(e) {
       res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
     }

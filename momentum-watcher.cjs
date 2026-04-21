@@ -5571,6 +5571,23 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /fetch-instagram — scrape public Instagram profile ────────────────
+  if (req.method === 'POST' && req.url === '/fetch-instagram') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!body.handle) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'handle required' })); return }
+        const profile = await fetchInstagramProfile(body.handle)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, profile }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /brain-dump — save free text directly to brain_knowledge ──────────
   if (req.method === 'POST' && req.url === '/brain-dump') {
     const chunks = []; req.on('data', c => chunks.push(c))
@@ -5664,6 +5681,55 @@ function buildAddressBookMap() {
   _abMapTime  = Date.now()
   _abMapBuilding = false
   return map
+}
+
+// ── Instagram profile scraper ────────────────────────────────────────────────
+async function fetchInstagramProfile(handle) {
+  const clean = handle.replace(/^@/, '').replace(/.*instagram\.com\//, '').split('/')[0]
+  const url = 'https://www.instagram.com/' + clean + '/?__a=1&__d=dis'
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    const data = await res.json()
+    const user = data.graphql?.user || data.data?.user
+    if (!user) throw new Error('No user data')
+
+    return {
+      username: user.username,
+      full_name: user.full_name,
+      followers: user.edge_followed_by?.count,
+      following: user.edge_follow?.count,
+      bio: user.biography,
+      posts: user.edge_owner_to_timeline_media?.count,
+      verified: user.is_verified,
+      profile_pic: user.profile_pic_url_hd
+    }
+  } catch(e) {
+    // Fallback: scrape HTML
+    const res2 = await fetch('https://www.instagram.com/' + clean + '/', {
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    })
+    const html = await res2.text()
+
+    const followers = html.match(/"edge_followed_by":\{"count":(\d+)\}/)
+    const bio = html.match(/<meta property="og:description" content="([^"]+)"/)
+    const name = html.match(/<meta property="og:title" content="([^"]+)"/)
+
+    return {
+      username: clean,
+      full_name: name?.[1]?.split('(')?.[0]?.trim() || clean,
+      followers: followers ? parseInt(followers[1]) : null,
+      bio: bio?.[1] || null,
+      posts: null,
+      verified: false
+    }
+  }
 }
 
 // ── WhatsApp contacts config (stored in JSON to avoid triggering Vite HMR) ───

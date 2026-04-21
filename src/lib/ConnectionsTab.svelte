@@ -234,11 +234,47 @@
                     <div class="field">
                       <div class="field-label">INSTAGRAM</div>
                       <div class="inp-with-btn">
-                        <input class="inp-sm" value={conn.instagram||''} placeholder="@handle or URL..." onchange={e => updateField(conn, 'instagram', e.target.value)} />
+                        <input class="inp-sm" value={conn.instagram||''} placeholder="@handle or URL..."
+                          onchange={e => {
+                            const val = e.target.value
+                            updateField(conn, 'instagram', val)
+                            if (val && (val.includes('@') || val.includes('instagram'))) {
+                              clearTimeout(window._igFetchTimer)
+                              window._igFetchTimer = setTimeout(() => {
+                                fetch('http://localhost:4242/fetch-instagram', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ handle: val })
+                                })
+                                .then(r => r.json())
+                                .then(d => {
+                                  if (d.ok && d.profile) {
+                                    if (!conn.name || conn.name === 'New Contact') {
+                                      updateField(conn, 'name', d.profile.full_name || d.profile.username)
+                                    }
+                                    if (d.profile.followers) {
+                                      updateField(conn, 'ig_followers', d.profile.followers)
+                                    }
+                                    if (d.profile.bio) {
+                                      updateField(conn, 'ig_bio', d.profile.bio)
+                                    }
+                                  }
+                                })
+                                .catch(() => {})
+                              }, 500)
+                            }
+                          }}
+                        />
                         {#if conn.instagram}
                           <button class="social-btn insta" onclick={() => openLink(instaUrl(conn.instagram))}>IG</button>
                         {/if}
                       </div>
+                      {#if conn.ig_followers}
+                        <div class="ig-stats">
+                          {conn.ig_followers?.toLocaleString()} followers
+                          {#if conn.ig_bio}· {conn.ig_bio.slice(0, 60)}{/if}
+                        </div>
+                      {/if}
                     </div>
                     <div class="field">
                       <div class="field-label">TIKTOK</div>
@@ -462,6 +498,8 @@
   .via-pick-opt { display: block; width: 100%; font-family: 'Space Mono', monospace; font-size: 11px; padding: 7px 12px; background: transparent; border: none; border-bottom: 1px solid #1a1a1a; color: #9e9690; cursor: pointer; text-align: left; }
   .via-pick-opt:last-child { border-bottom: none; }
   .via-pick-opt:hover { background: #252525; color: #c9a84c; }
+
+  .ig-stats { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #666; margin-top: 3px; font-style: italic; }
 
   .social-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 7px; border: none; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .social-btn.insta { background: linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045); color: #fff; }

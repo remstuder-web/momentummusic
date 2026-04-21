@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-21] ConnectionsTab.svelte — DONE
+TASK: connections-header-reorder
+WHAT: Moved IG button and personal dot to after category badges (order: name → badges → IG → green dot). Widened name input from 120px to 160px with min 100px / max 200px.
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-21] ConnectionsTab.svelte — DONE
 TASK: connections-mixers-personal-ig
 WHAT: Added MIXERS to GROUPS array. Personal contact checkbox in expanded body (saves to conn.personal). Green dot in header when personal=true. IG button in header (stopPropagation, opens Instagram link).
 RESULT: works

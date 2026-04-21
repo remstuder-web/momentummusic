@@ -1,17 +1,15 @@
 {
-  "updated": "2026-04-21T00:20:00.000Z",
-  "last_task": "connections-mixers-personal-ig",
+  "updated": "2026-04-21T00:30:00.000Z",
+  "last_task": "connections-header-reorder",
   "status": "done",
   "working": [
-    "ConnectionsTab: MIXERS added to GROUPS",
-    "ConnectionsTab: personal checkbox in expanded body",
-    "ConnectionsTab: green dot in header for personal contacts",
-    "ConnectionsTab: IG button in header (stopPropagation)"
+    "ConnectionsTab: header order is now name → category badges → IG → personal dot",
+    "ConnectionsTab: name input width 160px (min 100px, max 200px)"
   ],
   "broken": [],
   "partial": [
     "brain-collections SQL migrations still needed: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS priority boolean DEFAULT false; ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS collection_name_display text; ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;"
   ],
   "next": "Run brain_knowledge SQL migrations in Supabase dashboard",
-  "notes": "Connections tab fully working. personal field needs to exist on contacts table or be stored in metadata — check if updateField handles arbitrary fields."
+  "notes": "All connections header changes done."
 }

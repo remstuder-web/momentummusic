@@ -1028,8 +1028,31 @@ ${mozartContext}`
     else alert('Error saving: ' + error.message)
   }
 
+  function addTrackButtons(html, tracks) {
+    // Detect "Artist — Title" or "Artist - Title" (spaces required around plain hyphen)
+    return html.replace(
+      /([A-Z][^—<\n]{1,35})\s*(?:—| - )\s*([^<\n,;(—]{2,50})/g,
+      (match, artist, title) => {
+        const a = artist.trim()
+        const t = title.trim()
+        if (a.length < 2 || t.length < 2) return match
+        const track = tracks?.find(tr =>
+          tr.title?.toLowerCase().includes(t.toLowerCase()) ||
+          tr.artist?.toLowerCase().includes(a.toLowerCase())
+        )
+        const url = (track?.spotify_url ||
+          'https://open.spotify.com/search/' + encodeURIComponent(a + ' ' + t))
+          .replace(/"/g, '&quot;')
+        return match +
+          ` <button class="inline-play-btn" data-url="${url}">▶</button>` +
+          ` <button class="inline-brain-btn" data-artist="${a.replace(/"/g,'&quot;')}" data-title="${t.replace(/"/g,'&quot;')}" data-url="${url}">+</button>`
+      }
+    )
+  }
+
   function parseAgentOutput(text) {
     if (!text) return ''
+    const tracks = getTracksFromMessage(text)
     text = stripTracksFromMessage(text)
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const lines = text.split('\n')
@@ -1061,13 +1084,15 @@ ${mozartContext}`
         html += `<div class="agent-header">${title}</div>`
         if (isNextMoveOrStep) { html += '<div class="agent-next-move">'; inNextMove = true }
       } else if (t.startsWith('- ') || t.startsWith('• ')) {
-        // Split on embedded bullet runs (e.g. "point. - another point")
         const parts = t.replace(/^[-•]\s+/, '').split(/\s+[-•]\s+/)
         for (const part of parts) {
-          if (part.trim()) html += `<div class="agent-bullet">${colorTagLine(esc(part.trim()))}</div>`
+          if (part.trim()) {
+            const content = addTrackButtons(colorTagLine(esc(part.trim())), tracks)
+            html += `<div class="agent-bullet">${content}</div>`
+          }
         }
       } else if (/^\d+\.\s/.test(t)) {
-        const content = colorTagLine(esc(t.replace(/^\d+\.\s+/, '')))
+        const content = addTrackButtons(colorTagLine(esc(t.replace(/^\d+\.\s+/, ''))), tracks)
         html += `<div class="agent-bullet">${content}</div>`
       } else if (t.startsWith('[GAP]')) {
         html += `<div class="agent-gap">${colorTagLine(esc(t))}</div>`
@@ -1076,10 +1101,14 @@ ${mozartContext}`
       } else if (t.length > 100) {
         const sentences = t.split(/(?<=\. )/)
         for (const s of sentences) {
-          if (s.trim()) html += `<div class="agent-p">${colorTagLine(esc(s.trim()))}</div>`
+          if (s.trim()) {
+            const content = addTrackButtons(colorTagLine(esc(s.trim())), tracks)
+            html += `<div class="agent-p">${content}</div>`
+          }
         }
       } else {
-        html += `<div class="agent-p">${colorTagLine(esc(t))}</div>`
+        const content = addTrackButtons(colorTagLine(esc(t)), tracks)
+        html += `<div class="agent-p">${content}</div>`
       }
     }
     closeNextMove()
@@ -1191,9 +1220,19 @@ ${mozartContext}`
     const onVisible = () => { if (document.visibilityState === 'visible') reloadProjectData() }
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisible)
+
+    const onInlineClick = (e) => {
+      const playBtn = e.target.closest('.inline-play-btn')
+      if (playBtn?.dataset.url) { window.open(playBtn.dataset.url, '_blank'); return }
+      const brainBtn = e.target.closest('.inline-brain-btn')
+      if (brainBtn) addTrackToBrain({ artist: brainBtn.dataset.artist, title: brainBtn.dataset.title, spotify_url: brainBtn.dataset.url })
+    }
+    document.addEventListener('click', onInlineClick)
+
     return () => {
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisible)
+      document.removeEventListener('click', onInlineClick)
     }
   })
 </script>
@@ -2150,6 +2189,21 @@ ${mozartContext}`
   .wa-reply-text { font-size: 11px; color: #cec9c1; flex: 1; line-height: 1.5; }
   .wa-copy-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 2px 7px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .wa-copy-btn:hover { color: #c9a84c; border-color: #c9a84c; }
+
+  :global(.inline-play-btn) {
+    display: inline; font-size: 8px; font-family: 'Space Mono', monospace;
+    background: transparent; border: 1px solid #2a2a2a; color: #4caf82;
+    padding: 0px 4px; border-radius: 2px; cursor: pointer;
+    margin-left: 4px; vertical-align: middle; line-height: 1.4;
+  }
+  :global(.inline-brain-btn) {
+    display: inline; font-size: 8px; font-family: 'Space Mono', monospace;
+    background: transparent; border: 1px solid #2a2a2a; color: #c9a84c;
+    padding: 0px 4px; border-radius: 2px; cursor: pointer;
+    margin-left: 2px; vertical-align: middle; line-height: 1.4;
+  }
+  :global(.inline-play-btn:hover)  { border-color: #4caf82; }
+  :global(.inline-brain-btn:hover) { border-color: #c9a84c; }
 
   /* Structured agent output renderer */
   .agent-output {

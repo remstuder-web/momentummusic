@@ -20,7 +20,7 @@
     date: today, ticks: {}, customs: [], healthChecks: {}, healthTicks: {},
     helpers: [], helperTicks: {}, privateItems: [], privateTicks: {},
     checkItems: [], checkTicks: {},
-    tasks: [], dismissedReminders: [], seededFixed: false, refs: [],
+    tasks: [], dismissedReminders: [], seededFixed: false,
     calYear: new Date().getFullYear(), calMonth: new Date().getMonth(), selectedDay: todayISO
   })
 
@@ -32,9 +32,7 @@
   let calDate = $state(new Date())
   let selectedDay = $state(todayISO)
   let activeSection = $state('routine')
-  let newRef = $state('')
-  let newRefType = $state('new')
-  let refSpotifyWindow = $state(null)
+
   let newCheck = $state('')
   let newCheckUrl = $state('')
   let normDragging = $state(false)
@@ -338,24 +336,14 @@
           }
         }
       }
-      // Fallback for private_items, check_items, refs (still per-day)
+      // Fallback for private_items, check_items (still per-day)
       let fallback = null
       if (!data?.private_items?.length && !data?.check_items?.length) {
         const { data: fb } = await supabase.from('daily_state')
-          .select('helper_ticks, private_items, private_ticks, check_items, check_ticks, refs')
+          .select('helper_ticks, private_items, private_ticks, check_items, check_ticks')
           .neq('date', today)
           .order('id', { ascending: false }).limit(1).maybeSingle()
         fallback = fb
-      }
-      // Also load refs fallback separately if today has none
-      let refsFallback = []
-      if (!data?.refs?.length) {
-        const { data: rf } = await supabase.from('daily_state')
-          .select('refs')
-          .neq('date', today)
-          .not('refs', 'eq', '[]')
-          .order('id', { ascending: false }).limit(1).maybeSingle()
-        refsFallback = rf?.refs || []
       }
       // Read backup before state is set — so removal below doesn't lose it
       const backup = localStorage.getItem('mm_daily_backup_' + todayISO)
@@ -378,7 +366,7 @@
               ...futureTasks.filter(t => !todayIds.has(t.id))
             ]
             return merged
-          })(), dismissedReminders: data.dismissed_reminders||[], refs: data.refs?.length ? data.refs : refsFallback,
+          })(), dismissedReminders: data.dismissed_reminders||[],
           seededFixed: data.seeded_fixed||false,
           calYear: data.cal_year||new Date().getFullYear(), calMonth: data.cal_month||new Date().getMonth(),
           selectedDay: data.selected_day||todayISO
@@ -387,7 +375,7 @@
         if (data.cal_year) calDate = new Date(data.cal_year, data.cal_month||0, 1)
         localStorage.removeItem('mm_daily_backup_' + todayISO)
       } else {
-        // No row for today — load private/check/refs from fallback
+        // No row for today — load private/check from fallback
         if (fallback) {
           state = { ...state,
             helperTicks: {},
@@ -395,7 +383,6 @@
             privateTicks: {},
             checkItems: fallback?.check_items||[],
             checkTicks: {},
-            refs: fallback?.refs?.length ? fallback.refs : refsFallback,
             tasks: [...recurringTasks, ...futureTasks],
           }
         }
@@ -403,8 +390,8 @@
       }
       seedFixed()
       loadSubReminders()
-      // Persist ticks/tasks/refs into today's daily_state row
-      if (fallback || state.refs?.length || recurringTasks.length || futureTasks.length) await save()
+      // Persist ticks/tasks into today's daily_state row
+      if (fallback || recurringTasks.length || futureTasks.length) await save()
       // Restore banner: only show tasks in backup that are missing from Supabase (truly lost)
       if (backup) {
         try {
@@ -441,8 +428,7 @@
       dismissed_reminders: state.dismissedReminders,
       ticks: state.ticks,
       health_ticks: state.healthTicks,
-      private_ticks: state.privateTicks,
-      refs: state.refs
+      private_ticks: state.privateTicks
     }, { onConflict: 'date' })
     if (error) {
       saveStatus = 'error'
@@ -458,46 +444,6 @@
 
   async function tick(id) { state.ticks = {...state.ticks, [id]: !state.ticks[id]}; await save() }
 
-  async function addRef() {
-    if (!newRef.trim()) return
-    const id = 'r' + Date.now()
-    const ref = { id, url: newRef.trim(), type: newRefType, label: '' }
-    state.refs = [...(state.refs||[]), ref]
-    newRef = ''; await save()
-
-    // Auto-fetch Spotify metadata via oEmbed (no auth needed)
-    const trackMatch = ref.url.match(/spotify\.com\/track\/([a-zA-Z0-9]+)/)
-    if (trackMatch) {
-      try {
-        const r = await fetch('https://open.spotify.com/oembed?url=' + encodeURIComponent(ref.url))
-        const d = await r.json()
-        if (d.title) {
-          state.refs = state.refs.map(r2 => r2.id === id ? { ...r2, label: d.title } : r2)
-          await save()
-        }
-      } catch(e) { /* silent fail */ }
-    } else {
-      fetchRefTitle(id, ref.url)
-    }
-  }
-
-  async function fetchRefTitle(id, url) {
-    try {
-      const r = await fetch(`http://localhost:4242/get-page-title?url=${encodeURIComponent(url)}`)
-      if (!r.ok) return
-      const { title } = await r.json()
-      if (title) {
-        state.refs = (state.refs||[]).map(r => r.id === id ? {...r, label: title} : r)
-        await save()
-      }
-    } catch(e) {} // watcher not running — silently skip
-  }
-
-  async function delRef(id) { state.refs = (state.refs||[]).filter(r => r.id !== id); await save() }
-  function openSpotifyRef(url) {
-    if (refSpotifyWindow && !refSpotifyWindow.closed) refSpotifyWindow.close()
-    refSpotifyWindow = window.open(url, '_blank', 'width=400,height=600')
-  }
   async function tickHealth(id) { state.healthTicks = {...state.healthTicks, [id]: !state.healthTicks[id]}; await save() }
   async function addCustom() {
     if (!newCustom.trim()) return
@@ -1735,8 +1681,7 @@ ${mozartContext}`
       <div class="sections">
         <button class="sec-tab {activeSection==='routine'?'on':''}" onclick={() => activeSection='routine'}>ROUTINE</button>
         <button class="sec-tab {activeSection==='helpers'?'on':''}" onclick={() => activeSection='helpers'}>HELPERS</button>
-        <button class="sec-tab {activeSection==='refs'?'on':''}" onclick={() => activeSection='refs'}>MIX REFS</button>
-        <button class="sec-tab {activeSection==='private'?'on':''}" onclick={() => activeSection='private'}>PRIVATE</button>
+<button class="sec-tab {activeSection==='private'?'on':''}" onclick={() => activeSection='private'}>PRIVATE</button>
       </div>
 
       {#if activeSection === 'routine'}
@@ -1900,71 +1845,6 @@ ${mozartContext}`
             <span class="norm-hint">Drop audio here → –14 LUFS → Desktop</span>
           {/if}
         </div>
-      {/if}
-
-      {#if activeSection === 'refs'}
-        <!-- Add row with type toggle -->
-        <div class="add-row" style="margin-bottom:10px">
-          <select class="add-inp" style="width:110px;flex-shrink:0" bind:value={newRefType}>
-            <option value="new">NEW</option>
-            <option value="ref">REFERENCE</option>
-          </select>
-          <input class="add-inp" bind:value={newRef} placeholder="Paste Spotify or any URL..."
-            onkeydown={e => e.key==='Enter' && addRef()} />
-          <button class="add-btn" onclick={addRef}>+</button>
-        </div>
-
-        <!-- NEW section -->
-        <div class="ref-section-label">NEW</div>
-        {#each (state.refs||[]).filter(r => r.type === 'new' || !r.type) as ref (ref.id)}
-          {@const isSpotify = ref.url.includes('spotify')}
-          <div class="ref-row">
-            <div class="ref-row-btns">
-              <button class="ref-dl-btn" onclick={() => { navigator.clipboard.writeText(ref.url); window.open('https://spotidown.app/de4', '_blank') }} title="Copy & download">↓</button>
-              {#if isSpotify}
-                <button class="ref-play-btn" onclick={() => openSpotifyRef(ref.url)}>▶</button>
-              {:else}
-                <button class="ref-play-btn" onclick={() => window.open(ref.url,'_blank')}>▶</button>
-              {/if}
-            </div>
-            <div class="ref-info">
-              {#if ref.label}<span class="ref-title" style="color:#cec9c1;font-size:10px">{ref.label}</span>{/if}
-              <span class="ref-url" style="color:#333;font-size:8px">{ref.url.replace('https://open.spotify.com/track/','spotify/track/').replace('https://','')}</span>
-            </div>
-            <button class="ref-copy-btn" onclick={() => navigator.clipboard.writeText(ref.url)} title="Copy URL">⌘C</button>
-            <button class="ref-move-btn" onclick={async () => { state.refs = (state.refs||[]).map(r => r.id===ref.id ? {...r, type:'ref'} : r); await save() }} title="Move to References">→ REF</button>
-            <button class="del-btn" onclick={() => delRef(ref.id)}>×</button>
-          </div>
-        {/each}
-        {#if !(state.refs||[]).filter(r => r.type === 'new' || !r.type).length}
-          <p class="empty-sm" style="padding:4px 0 10px;color:#333">Nothing new.</p>
-        {/if}
-
-        <!-- MIX REFERENCES section -->
-        <div class="ref-section-label" style="margin-top:12px">MIX REFERENCES</div>
-        {#each (state.refs||[]).filter(r => r.type === 'ref') as ref (ref.id)}
-          {@const isSpotify = ref.url.includes('spotify')}
-          <div class="ref-row">
-            <div class="ref-row-btns">
-              <button class="ref-dl-btn" onclick={() => { navigator.clipboard.writeText(ref.url); window.open('https://spotidown.app/de4', '_blank') }} title="Copy & download">↓</button>
-              {#if isSpotify}
-                <button class="ref-play-btn" onclick={() => openSpotifyRef(ref.url)}>▶</button>
-              {:else}
-                <button class="ref-play-btn" onclick={() => window.open(ref.url,'_blank')}>▶</button>
-              {/if}
-            </div>
-            <div class="ref-info">
-              {#if ref.label}<span class="ref-title" style="color:#cec9c1;font-size:10px">{ref.label}</span>{/if}
-              <span class="ref-url" style="color:#333;font-size:8px">{ref.url.replace('https://open.spotify.com/track/','spotify/track/').replace('https://','')}</span>
-            </div>
-            <button class="ref-copy-btn" onclick={() => navigator.clipboard.writeText(ref.url)} title="Copy URL">⌘C</button>
-            <button class="ref-move-btn" onclick={async () => { state.refs = (state.refs||[]).map(r => r.id===ref.id ? {...r, type:'new'} : r); await save() }} title="Move to New">→ NEW</button>
-            <button class="del-btn" onclick={() => delRef(ref.id)}>×</button>
-          </div>
-        {/each}
-        {#if !(state.refs||[]).filter(r => r.type === 'ref').length}
-          <p class="empty-sm" style="padding:4px 0 10px;color:#333">No references yet.</p>
-        {/if}
       {/if}
 
       {#if activeSection === 'private'}
@@ -2505,19 +2385,4 @@ ${mozartContext}`
   .chat-inp:focus { border-color: rgba(201,168,76,.4); }
   .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 7px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
   /* References tab */
-  .ref-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-bottom: 1px solid #111; }
-  .ref-row-btns { display: flex; gap: 4px; flex-shrink: 0; }
-  .ref-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .ref-url { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ref-title { font-size: 12px; color: #cec9c1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ref-dl-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 6px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; }
-  .ref-dl-btn:hover { border-color: #c9a84c; color: #c9a84c; }
-  .ref-section-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; color: rgba(201,168,76,.5); padding: 6px 0 4px; border-bottom: 1px solid #1a1a1a; }
-  .ref-move-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 2px 5px; background: transparent; border: 1px solid #1c1c1c; color: #333; border-radius: 2px; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
-  .ref-move-btn:hover { border-color: #303030; color: #555; }
-  .ref-play-btn { font-size: 10px; padding: 2px 7px; background: rgba(30,215,96,.08); border: 1px solid rgba(30,215,96,.4); color: #1ed760; border-radius: 2px; cursor: pointer; font-family: 'Space Mono', monospace; font-weight: 700; }
-  .ref-play-btn:hover { background: rgba(30,215,96,.15); }
-  .ref-url { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ref-copy-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 2px 6px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
-  .ref-copy-btn:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
 </style>

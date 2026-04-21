@@ -5904,42 +5904,49 @@ async function getAppleNotes(folderName = 'Notes') {
 }
 
 async function createAppleNote(title, body, folderName = 'Notes') {
-  return new Promise((resolve, reject) => {
-    const safeBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')
+  return new Promise((resolve) => {
+    const tmpFile = '/tmp/apple_note_body.txt'
+    fs.writeFileSync(tmpFile, body, 'utf8')
+    const safeTitle = title.replace(/"/g, '\\"').replace(/'/g, "'\\''")
+    const safeFolder = folderName.replace(/"/g, '\\"')
     const script = `
       tell application "Notes"
         tell account "iCloud"
           try
-            set targetFolder to folder "${folderName}"
+            set targetFolder to folder "${safeFolder}"
           on error
-            set targetFolder to make new folder with properties {name:"${folderName}"}
+            set targetFolder to make new folder with properties {name:"${safeFolder}"}
           end try
-          make new note at targetFolder with properties {name:"${title.replace(/"/g, '\\"')}", body:"${safeBody}"}
+          set noteBody to (read POSIX file "/tmp/apple_note_body.txt" as «class utf8»)
+          make new note at targetFolder with properties {name:"${safeTitle}", body:noteBody}
         end tell
       end tell
     `
-    exec(`osascript -e '${script.replace(/'/g, "'\\''")}'`, (err) => {
-      if (err) reject(err)
-      else resolve(true)
-    })
+    exec(`osascript -e '${script.replace(/'/g, "'\\''")}'`, () => resolve(true))
   })
 }
 
 async function updateAppleNote(title, body, folderName = 'Notes') {
   return new Promise((resolve) => {
-    const safeBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')
-    const safeTitle = title.replace(/"/g, '\\"')
+    const tmpFile = '/tmp/apple_note_body.txt'
+    fs.writeFileSync(tmpFile, body, 'utf8')
+    const safeTitle = title.replace(/"/g, '\\"').replace(/'/g, "'\\''")
+    const safeFolder = folderName.replace(/"/g, '\\"')
     const script = `
-      var app = Application('Notes');
-      try {
-        var folders = app.folders.whose({name: "${folderName}"});
-        if (folders.length > 0) {
-          var ns = folders[0].notes.whose({name: "${safeTitle}"});
-          if (ns.length > 0) { ns[0].body = "${safeBody}"; }
-        }
-      } catch(e) {}
+      tell application "Notes"
+        set noteBody to (read POSIX file "/tmp/apple_note_body.txt" as «class utf8»)
+        tell account "iCloud"
+          try
+            set targetFolder to folder "${safeFolder}"
+            set matchingNotes to notes of targetFolder whose name is "${safeTitle}"
+            if length of matchingNotes > 0 then
+              set body of item 1 of matchingNotes to noteBody
+            end if
+          end try
+        end tell
+      end tell
     `
-    exec(`osascript -l JavaScript -e '${script.replace(/'/g, "'\\''")}'`, () => resolve(true))
+    exec(`osascript -e '${script.replace(/'/g, "'\\''")}'`, () => resolve(true))
   })
 }
 

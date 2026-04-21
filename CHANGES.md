@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] momentum-watcher.cjs — DONE
+TASK: apple-note-formatting
+WHAT: createAppleNote + updateAppleNote now write body to /tmp/apple_note_body.txt and read it via AppleScript heredoc — avoids \n→literal escaping that broke line breaks in Apple Notes
+RESULT: works — watcher restarted cleanly
+BLOCKERS: none
+
 ## [2026-04-21] vite.config.js + NotesTab.svelte — DONE
 TASK: vite-proxy-notes
 WHAT: Added /watcher proxy in vite.config.js pointing to localhost:4242; changed all 7 fetch calls in NotesTab from http://localhost:4242/ to /watcher/ so requests route through Vite dev server (fixes Firefox CORS)

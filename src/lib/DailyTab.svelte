@@ -745,6 +745,7 @@
   let autoBriefingLoading = $state(false)
   let agentLastRun = $state({})
   let todayBriefing = $derived(inboxItems.find(n => n.type === 'briefing' && n.created_at?.slice(0,10) === todayISO))
+  let pressItems = $derived(inboxItems.filter(n => n.type === 'press' && n.created_at?.slice(0,10) === todayISO).slice(0, 3))
   let pinnedTask = $derived((state.tasks || []).find(t => t.pinned))
   let scoutingArtists = $state(false)
   let matchingDemos = $state(false)
@@ -1213,8 +1214,8 @@ ${mozartContext}`
       </div>
     {/if}
 
-    <!-- CHECK OUT — surfaced brain entries (top of page) -->
-    {#if checkOutItems.length}
+    <!-- CHECK OUT — surfaced brain entries + press articles (top of page) -->
+    {#if checkOutItems.length || pressItems.length}
       <div class="checkout-section">
         <div class="checkout-section-header">🎧 CHECK OUT TODAY</div>
         {#each checkOutItems as item (item.id)}
@@ -1241,6 +1242,15 @@ ${mozartContext}`
             {/if}
           </div>
         {/each}
+        {#if pressItems.length}
+          <div class="press-divider">PRESS</div>
+          {#each pressItems as p (p.id)}
+            <button class="press-item" onclick={() => window.open(p.metadata?.url, '_blank')}>
+              <span class="press-source">{p.patch_name}</span>
+              <span class="press-title">{p.song_title} →</span>
+            </button>
+          {/each}
+        {/if}
       </div>
     {/if}
 
@@ -2023,6 +2033,11 @@ ${mozartContext}`
   .section-block { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #1c1c1c; padding-top: 16px; }
   .checkout-section { background: rgba(201,168,76,.06); border: 1px solid rgba(201,168,76,.2); border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; }
   .checkout-section-header { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .14em; color: #c9a84c; margin-bottom: 8px; }
+  .press-divider { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: #444; text-transform: uppercase; margin: 8px 0 4px; border-top: 1px solid #252525; padding-top: 6px; }
+  .press-item { display: flex; align-items: baseline; gap: 7px; background: none; border: none; cursor: pointer; padding: 3px 0; text-align: left; width: 100%; }
+  .press-item:hover .press-title { color: #c9a84c; }
+  .press-source { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; flex-shrink: 0; text-transform: uppercase; letter-spacing: .06em; min-width: 110px; }
+  .press-title { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color .15s; }
   .checkout-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; min-height: 36px; }
   .checkout-cb { accent-color: #c9a84c; width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
   .checkout-art { width: 36px; height: 36px; border-radius: 2px; object-fit: cover; flex-shrink: 0; }

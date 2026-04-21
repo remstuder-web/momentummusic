@@ -730,6 +730,27 @@ async function fetchSharedBrainContext() {
 }
 
 // ── Agent: Scout — real market intelligence + AI analysis ─────────────────
+
+const MUSIC_SOURCES = [
+  { name: 'Pitchfork Best New', url: 'https://pitchfork.com/reviews/best/tracks/feed/rss', type: 'rss' },
+  { name: 'The FADER',         url: 'https://www.thefader.com/rss',                        type: 'rss' },
+  { name: 'Stereogum',         url: 'https://www.stereogum.com/feed/',                     type: 'rss' },
+  { name: 'Lyrical Lemonade',  url: 'https://lyricallemonade.com/feed/',                   type: 'rss' },
+  { name: 'A&R Factory',       url: 'https://www.anrfactory.com/feed/',                    type: 'rss' }
+]
+
+async function fetchMusicPressItems() {
+  const results = await Promise.allSettled(
+    MUSIC_SOURCES.map(async src => {
+      const items = await fetchRssWithBody(src.url, 2)
+      return items
+        .filter(i => i.title && i.title.length > 15 && i.url && i.url.startsWith('http'))
+        .map(i => ({ ...i, source: src.name }))
+    })
+  )
+  return results.flatMap(r => r.status === 'fulfilled' ? r.value : [])
+}
+
 async function fetchRssTitles(url, count = 5) {
   try {
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' } })
@@ -852,7 +873,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
   const today = new Date().toISOString().slice(0, 10)
 
   // Fetch all data sources in parallel
-  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP] = await Promise.all([
+  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, pressItems] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/connections?select=name`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?order=tempo.desc&limit=5&select=title,artist,genre_tags,tempo,key`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/watched_artists?active=eq.true&select=*`, { headers: sbHeaders }),
@@ -862,6 +883,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     fetchRssWithBody('https://www.hypebot.com/feed', 3),
     fetchKworbTrending(),
     fetchKworbSpotify(),
+    fetchMusicPressItems(),
   ])
 
   const [connections, refTracks, watchedArtists] = await Promise.all([
@@ -923,7 +945,17 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     .map(t => `- ${t.artist} — ${t.title} | ${t.tempo || '?'}bpm ${t.key || ''} | genres: ${(t.genre_tags || []).slice(0,3).join(', ')}`)
     .join('\n')
 
-  const sourcesUsed = ['spotify_new_releases', 'pitchfork', 'factmag', 'hypebot', 'kworb_youtube', 'kworb_spotify', 'watched_artists']
+  // Build music press block grouped by source
+  const pressBySource = {}
+  for (const item of pressItems) {
+    if (!pressBySource[item.source]) pressBySource[item.source] = []
+    pressBySource[item.source].push(item)
+  }
+  const pressBlock = Object.entries(pressBySource)
+    .map(([src, items]) => `${src.toUpperCase()}:\n` + items.map(i => `- ${i.title}${i.body ? `: ${i.body.slice(0, 300)}` : ''} (source: ${src})`).join('\n'))
+    .join('\n\n') || 'No press fetched'
+
+  const sourcesUsed = ['spotify_new_releases', 'pitchfork', 'factmag', 'hypebot', 'kworb_youtube', 'kworb_spotify', 'watched_artists', ...MUSIC_SOURCES.map(s => s.name)]
 
   const prompt = `Here is this week's REAL music data — do not invent anything outside this data:
 
@@ -938,6 +970,9 @@ ${kworbSPText}
 
 INDUSTRY HEADLINES THIS WEEK (with article snippets):
 ${rssLines}
+
+## MUSIC PRESS (today)
+${pressBlock}
 
 WATCHED ARTISTS — NEW RELEASES:
 ${watchedNewText || 'none this week'}
@@ -986,6 +1021,29 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
       metadata: { source_type: 'scout_agent', sources: sourcesUsed, date: today }
     })
   }).catch(() => {})
+
+  // Save press articles to inbox as type='press' (top 1 per source, max 5)
+  const pressToSave = Object.values(
+    pressItems.reduce((acc, item) => {
+      if (!acc[item.source]) acc[item.source] = item
+      return acc
+    }, {})
+  ).slice(0, 5)
+  for (const item of pressToSave) {
+    fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+      method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        type: 'press',
+        song_code: null,
+        song_title: (item.title || '').slice(0, 120),
+        artist: null,
+        message: (item.body || '').slice(0, 300),
+        patch_name: item.source,
+        read: false,
+        metadata: { url: item.url, source: item.source }
+      })
+    }).catch(() => {})
+  }
 
   // Encode kworb tracks as structured data in inbox message
   const kworbTracks = (Array.isArray(kworbSP) ? kworbSP : []).slice(0, 10).map(t => ({

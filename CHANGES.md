@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-21] momentum-watcher.cjs + NotesTab.svelte — DONE
+TASK: notes-manual-ordering
+WHAT: Added position field to note frontmatter; readNotesDir sorts by position asc then updated desc; POST /notes/reorder swaps adjacent notes and lazily assigns positions to all on first use; NotesTab has ▲▼ buttons per row
+RESULT: works — reorder tested, frontmatter written correctly
+BLOCKERS: none
+
+## [2026-04-21] momentum-watcher.cjs + NotesTab.svelte — DONE
 TASK: apple-notes-obsidian-sync
 WHAT: Switched Apple Notes sync target from Supabase to Obsidian/Notes/ folder. Added GET/POST/PATCH/DELETE /notes endpoints (file-based). NotesTab fully rewritten to use watcher as source of truth — no Supabase. Edits debounce-save to .md + push back to Apple Notes via JXA. 5-min auto-sync Apple → Obsidian.
 RESULT: works — 7/7 Apple Notes synced to Obsidian/Notes/, GET /notes returns all with content

@@ -5431,8 +5431,9 @@ ${chatText.slice(0, 4000)}`
         if (!body.title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'title required' })); return }
         if (!fs.existsSync(NOTES_PATH)) fs.mkdirSync(NOTES_PATH, { recursive: true })
         const filename = noteToFilename(body.title)
-        const content = `---\nsource: momentum\nupdated: ${new Date().toISOString()}\n---\n\n${body.content || ''}`
-        fs.writeFileSync(path.join(NOTES_PATH, filename), content, 'utf8')
+        const existingNotes = readNotesDir()
+        const nextPos = existingNotes.length
+        writeNoteFile(path.join(NOTES_PATH, filename), { content: body.content || '', position: nextPos })
         createAppleNote(body.title, body.content || '', 'Notes').catch(() => {})
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, filename }))
@@ -5454,13 +5455,18 @@ ${chatText.slice(0, 4000)}`
         let filename = body.filename
         let title = body.filename.replace(/\.md$/, '')
         // Rename: create new file, delete old
+        // Read existing position before any rename/overwrite
+        let existingPosition = null
+        if (fs.existsSync(oldPath)) {
+          const { fm } = parseFrontmatter(fs.readFileSync(oldPath, 'utf8'))
+          if (fm.position !== undefined) existingPosition = parseInt(fm.position, 10)
+        }
         if (body.title && noteToFilename(body.title) !== body.filename) {
           filename = noteToFilename(body.title)
           title = body.title
           if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath)
         }
-        const content = `---\nsource: momentum\nupdated: ${new Date().toISOString()}\n---\n\n${body.content ?? ''}`
-        fs.writeFileSync(path.join(NOTES_PATH, filename), content, 'utf8')
+        writeNoteFile(path.join(NOTES_PATH, filename), { content: body.content ?? '', position: existingPosition })
         updateAppleNote(title, body.content ?? '', 'Notes').catch(() => {})
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, filename }))
@@ -5480,6 +5486,47 @@ ${chatText.slice(0, 4000)}`
         if (!body.filename) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'filename required' })); return }
         const fp = path.join(NOTES_PATH, body.filename)
         if (fs.existsSync(fp)) fs.unlinkSync(fp)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /notes/reorder — swap positions of two adjacent notes ───────────────
+  if (req.method === 'POST' && req.url === '/notes/reorder') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!body.filename || body.direction === undefined) {
+          res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'filename and direction required' })); return
+        }
+        const all = readNotesDir()
+        const idx = all.findIndex(n => n.filename === body.filename)
+        const swapIdx = idx + body.direction
+        if (idx < 0 || swapIdx < 0 || swapIdx >= all.length) {
+          res.writeHead(200); res.end(JSON.stringify({ ok: true })); return
+        }
+        // Assign explicit positions to all notes if any are unpositioned
+        const needsInit = all.some(n => n.position === null)
+        if (needsInit) {
+          for (let i = 0; i < all.length; i++) all[i].position = i
+        }
+        // Swap positions
+        const posA = all[idx].position
+        const posB = all[swapIdx].position
+        all[idx].position = posB
+        all[swapIdx].position = posA
+        // Write both files preserving content
+        for (const n of [all[idx], all[swapIdx]]) {
+          const fp = path.join(NOTES_PATH, n.filename)
+          if (fs.existsSync(fp)) {
+            writeNoteFile(fp, { content: n.content, position: n.position, source: n.source || 'momentum' })
+          }
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true }))
       } catch(e) {
@@ -5900,21 +5947,46 @@ function noteToFilename(title) {
   return title.replace(/[^a-zA-Z0-9 ]/g, '').trim() + '.md'
 }
 
+function parseFrontmatter(raw) {
+  const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)/)
+  if (!match) return { fm: {}, body: raw.trim() }
+  const fm = {}
+  for (const line of match[1].split('\n')) {
+    const colon = line.indexOf(':')
+    if (colon < 0) continue
+    fm[line.slice(0, colon).trim()] = line.slice(colon + 1).trim()
+  }
+  return { fm, body: match[2].trim() }
+}
+
+function writeNoteFile(filepath, { content, position, source = 'momentum' }) {
+  const posLine = position !== null && position !== undefined ? `position: ${position}\n` : ''
+  fs.writeFileSync(filepath, `---\nsource: ${source}\n${posLine}updated: ${new Date().toISOString()}\n---\n\n${content}`, 'utf8')
+}
+
 function readNotesDir() {
   if (!fs.existsSync(NOTES_PATH)) return []
-  return fs.readdirSync(NOTES_PATH)
+  const notes = fs.readdirSync(NOTES_PATH)
     .filter(f => f.endsWith('.md'))
     .map(f => {
       const fp = path.join(NOTES_PATH, f)
       const raw = fs.readFileSync(fp, 'utf8')
       const stat = fs.statSync(fp)
-      // Strip YAML frontmatter
-      const bodyMatch = raw.match(/^---[\s\S]*?---\n([\s\S]*)/)
-      const content = bodyMatch ? bodyMatch[1].trim() : raw.trim()
-      const titleFromFile = f.replace(/\.md$/, '')
-      return { title: titleFromFile, content, filename: f, updated: stat.mtime.toISOString() }
+      const { fm, body } = parseFrontmatter(raw)
+      const position = fm.position !== undefined ? parseInt(fm.position, 10) : null
+      return {
+        title: f.replace(/\.md$/, ''),
+        content: body,
+        filename: f,
+        updated: stat.mtime.toISOString(),
+        position,
+        source: fm.source || 'momentum'
+      }
     })
-    .sort((a, b) => new Date(b.updated) - new Date(a.updated))
+  // Positioned notes first (asc), then unpositioned by updated desc
+  const positioned = notes.filter(n => n.position !== null).sort((a, b) => a.position - b.position)
+  const unpositioned = notes.filter(n => n.position === null).sort((a, b) => new Date(b.updated) - new Date(a.updated))
+  return [...positioned, ...unpositioned]
 }
 
 async function syncAppleNotesToObsidian() {
@@ -5925,8 +5997,13 @@ async function syncAppleNotesToObsidian() {
     try {
       const filename = noteToFilename(note.name)
       const filepath = path.join(NOTES_PATH, filename)
-      const content = `---\nsource: apple_notes\nupdated: ${new Date().toISOString()}\n---\n\n${note.body}`
-      fs.writeFileSync(filepath, content, 'utf8')
+      // Preserve existing position if file already exists
+      let existingPosition = null
+      if (fs.existsSync(filepath)) {
+        const { fm } = parseFrontmatter(fs.readFileSync(filepath, 'utf8'))
+        if (fm.position !== undefined) existingPosition = parseInt(fm.position, 10)
+      }
+      writeNoteFile(filepath, { content: note.body, position: existingPosition, source: 'apple_notes' })
       synced++
     } catch(e) { console.error('notes sync error:', note.name, e.message) }
   }

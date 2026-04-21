@@ -98,6 +98,15 @@
 
   function focusInput(node) { setTimeout(() => node.focus(), 0) }
 
+  async function moveNote(note, dir) {
+    await fetch('http://localhost:4242/notes/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: note.filename, direction: dir })
+    })
+    await load()
+  }
+
   let saveTimers = {}
   function debounceSave(note, text) {
     clearTimeout(saveTimers[note.filename])
@@ -147,6 +156,8 @@
               <span class="topic-name">{note.title}</span>
             {/if}
             <div class="topic-actions" onclick={e => e.stopPropagation()}>
+              <button class="act-btn" onclick={() => moveNote(note, -1)}>▲</button>
+              <button class="act-btn" onclick={() => moveNote(note, 1)}>▼</button>
               <button class="act-btn" onclick={() => { note._editing = true; notes = [...notes] }}>✎</button>
               <button class="act-btn del" onclick={() => deleteNote(note)}>✕</button>
             </div>

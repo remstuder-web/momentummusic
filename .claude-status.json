@@ -1,19 +1,18 @@
 {
-  "updated": "2026-04-21T09:10:00.000Z",
-  "last_task": "apple-notes-obsidian-sync",
+  "updated": "2026-04-21T09:20:00.000Z",
+  "last_task": "notes-manual-ordering",
   "status": "done",
   "working": [
-    "GET /notes — reads Obsidian/Notes/*.md, returns title+content+filename+updated",
-    "POST /notes — creates .md file + Apple Note",
-    "PATCH /notes — updates file + syncs back to Apple Notes via JXA; handles rename",
-    "DELETE /notes — deletes .md file (Apple Note left intact)",
-    "POST /apple-notes-sync — syncs Apple Notes → Obsidian/Notes/ (7/7 working)",
-    "5-min auto-sync interval active",
-    "syncObsidianFile skips Notes/ subfolder (no brain_knowledge pollution)",
-    "NotesTab: file-based, no Supabase, debounce-save, rename inline, 🍎 Sync button"
+    "parseFrontmatter + writeNoteFile helpers",
+    "readNotesDir: parses position, sorts positioned asc then unpositioned by updated desc",
+    "POST /notes/reorder: swaps adjacent notes, lazily assigns positions to all on first reorder",
+    "POST /notes: new notes get position = notes.length",
+    "PATCH /notes: preserves existing position when saving content or renaming",
+    "syncAppleNotesToObsidian: preserves existing position when re-syncing",
+    "NotesTab: ▲▼ buttons call /notes/reorder then reload"
   ],
   "broken": [],
   "partial": [],
-  "next": "No pending tasks — ready for new work",
-  "notes": "Files in Obsidian/Notes/ are source of truth. Apple Notes is a mirror. Chokidar skips Notes/ to avoid brain sync pollution."
+  "next": "No pending tasks",
+  "notes": "Positions are lazily assigned — unpositioned notes sort by mtime until first reorder. First ▲/▼ click assigns positions to all notes in the current sorted order."
 }

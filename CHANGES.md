@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] momentum-watcher.cjs + ConnectionsTab.svelte — DONE
+TASK: ig-auto-fetch
+WHAT: Added fetchInstagramProfile() helper + POST /fetch-instagram endpoint. ConnectionsTab instagram onchange triggers 500ms debounce fetch — auto-fills name if empty, saves ig_followers + ig_bio fields. ig-stats display below instagram input.
+RESULT: works (endpoint live). ig_followers/ig_bio display pending SQL migration.
+BLOCKERS: Run in Supabase SQL editor: ALTER TABLE connections ADD COLUMN IF NOT EXISTS ig_followers integer; ALTER TABLE connections ADD COLUMN IF NOT EXISTS ig_bio text;
+
 ## [2026-04-21] ConnectionsTab.svelte — DONE
 TASK: connections-header-reorder
 WHAT: Moved IG button and personal dot to after category badges (order: name → badges → IG → green dot). Widened name input from 120px to 160px with min 100px / max 200px.

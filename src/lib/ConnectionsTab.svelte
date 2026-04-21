@@ -81,6 +81,37 @@
     connections = [...connections, data]
     newName = ''
     expandedId = data.id
+    enrichNewContact(data)
+  }
+
+  async function enrichNewContact(conn) {
+    if (!conn.name || conn.name === 'New Contact') return
+    try {
+      const res = await fetch('http://localhost:4242/enrich-contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: conn.name })
+      })
+      const d = await res.json()
+      if (!d.ok) return
+
+      const updates = {}
+      if (d.instagram && !conn.instagram) updates.instagram = d.instagram
+      if (d.tiktok && !conn.tiktok) updates.tiktok = d.tiktok
+      if (d.spotify_id && !conn.spotify_id) updates.spotify_id = d.spotify_id
+      if (d.ig_followers) updates.ig_followers = d.ig_followers
+      if (d.ig_bio) updates.ig_bio = d.ig_bio
+      if (d.tiktok_followers) updates.tiktok_followers = d.tiktok_followers
+      if (d.spotify_followers) updates.spotify_followers = d.spotify_followers
+      if (d.spotify_genres) updates.spotify_genres = d.spotify_genres
+
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('connections').update(updates).eq('id', conn.id)
+        connections = connections.map(c => c.id === conn.id ? { ...c, ...updates, _enriched: true } : c)
+      }
+    } catch(e) {
+      console.error('enrich failed:', e.message)
+    }
   }
 
   async function updateField(conn, field, value) {
@@ -161,7 +192,8 @@
                 <input class="conn-name-input" value={conn.name}
                   onclick={e => e.stopPropagation()}
                   onchange={e => updateField(conn, 'name', e.target.value)}
-                  onkeydown={e => e.key === 'Enter' && e.target.blur()} />
+                  onkeydown={e => e.key === 'Enter' && e.target.blur()}
+                  onblur={e => { if (!conn.instagram && !conn.tiktok) enrichNewContact(conn) }} />
                 {#each connTypes as t}
                   <span class="type-badge">{t}</span>
                 {/each}
@@ -201,6 +233,11 @@
                     />
                     <span>Personal contact</span>
                   </label>
+                  {#if conn._enriched}
+                    <div style="font-size:10px;color:#4caf82;font-family:'Space Mono',monospace;margin-bottom:6px">
+                      ✓ Profiles auto-filled
+                    </div>
+                  {/if}
 
                   <div class="field">
                     <div class="field-label">GROUP</div>
@@ -284,8 +321,17 @@
                           <button class="social-btn tiktok" onclick={() => openLink(tiktokUrl(conn.tiktok))}>TT</button>
                         {/if}
                       </div>
+                      {#if conn.tiktok_followers}
+                        <div class="ig-stats">TikTok: {conn.tiktok_followers?.toLocaleString()} followers</div>
+                      {/if}
                     </div>
                   </div>
+                  {#if conn.spotify_followers}
+                    <div class="ig-stats" style="margin-bottom:6px">
+                      Spotify: {conn.spotify_followers?.toLocaleString()} followers
+                      {#if conn.spotify_genres?.length}· {conn.spotify_genres.join(', ')}{/if}
+                    </div>
+                  {/if}
 
                   <div class="row2">
                     <div class="field">

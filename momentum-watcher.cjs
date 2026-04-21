@@ -5571,6 +5571,23 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /enrich-contact — auto-find social profiles by artist name ────────
+  if (req.method === 'POST' && req.url === '/enrich-contact') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!body.name) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'name required' })); return }
+        const enriched = await enrichContact(body.name)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, ...enriched }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /fetch-instagram — scrape public Instagram profile ────────────────
   if (req.method === 'POST' && req.url === '/fetch-instagram') {
     const chunks = []; req.on('data', c => chunks.push(c))
@@ -5681,6 +5698,74 @@ function buildAddressBookMap() {
   _abMapTime  = Date.now()
   _abMapBuilding = false
   return map
+}
+
+// ── Contact enrichment — auto-find social profiles by artist name ────────────
+async function enrichContact(name) {
+  const results = {
+    instagram: null, tiktok: null, spotify_id: null,
+    spotify_followers: null, spotify_genres: null,
+    ig_followers: null, ig_bio: null,
+    tiktok_followers: null, tiktok_likes: null
+  }
+
+  // 1. Search Spotify for artist
+  try {
+    const token = await getSpotifyToken()
+    const res = await fetch(
+      'https://api.spotify.com/v1/search?q=' + encodeURIComponent(name) + '&type=artist&limit=1',
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    )
+    const d = await res.json()
+    const artist = d.artists?.items?.[0]
+    if (artist && artist.name.toLowerCase() === name.toLowerCase()) {
+      results.spotify_id = artist.id
+      results.spotify_followers = artist.followers?.total
+      results.spotify_genres = artist.genres?.slice(0, 3)
+    }
+  } catch(e) {}
+
+  // 2. Search Instagram via web
+  try {
+    const cleanName = name.toLowerCase().replace(/\s+/g, '')
+    const variations = [cleanName, cleanName + 'music', cleanName + 'official']
+    for (const username of variations) {
+      const res = await fetch('https://www.instagram.com/' + username + '/', {
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      })
+      if (res.ok) {
+        const html = await res.text()
+        const followers = html.match(/"edge_followed_by":\{"count":(\d+)\}/)
+        const bio = html.match(/<meta property="og:description" content="([^"]+)"/)
+        if (followers) {
+          results.instagram = '@' + username
+          results.ig_followers = parseInt(followers[1])
+          results.ig_bio = bio?.[1] || null
+          break
+        }
+      }
+    }
+  } catch(e) {}
+
+  // 3. Search TikTok via web
+  try {
+    const cleanName = name.toLowerCase().replace(/\s+/g, '')
+    const res = await fetch('https://www.tiktok.com/@' + cleanName, {
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    })
+    if (res.ok) {
+      const html = await res.text()
+      const followers = html.match(/"followerCount":(\d+)/)
+      const likes = html.match(/"heartCount":(\d+)/)
+      if (followers) {
+        results.tiktok = '@' + cleanName
+        results.tiktok_followers = parseInt(followers[1])
+        results.tiktok_likes = likes ? parseInt(likes[1]) : null
+      }
+    }
+  } catch(e) {}
+
+  return results
 }
 
 // ── Instagram profile scraper ────────────────────────────────────────────────

@@ -1,15 +1,19 @@
 {
-  "updated": "2026-04-21T00:30:00.000Z",
-  "last_task": "connections-header-reorder",
-  "status": "done",
+  "updated": "2026-04-21T07:40:00.000Z",
+  "last_task": "ig-auto-fetch",
+  "status": "partial",
   "working": [
-    "ConnectionsTab: header order is now name → category badges → IG → personal dot",
-    "ConnectionsTab: name input width 160px (min 100px, max 200px)"
+    "POST /fetch-instagram endpoint live",
+    "fetchInstagramProfile() with JSON + HTML fallback",
+    "ConnectionsTab: 500ms debounce auto-fetch on instagram field change",
+    "Auto-fills name, ig_followers, ig_bio",
+    "ig-stats display below instagram input"
   ],
   "broken": [],
   "partial": [
-    "brain-collections SQL migrations still needed: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS priority boolean DEFAULT false; ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS collection_name_display text; ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;"
+    "ig_followers/ig_bio columns missing — run: ALTER TABLE connections ADD COLUMN IF NOT EXISTS ig_followers integer; ALTER TABLE connections ADD COLUMN IF NOT EXISTS ig_bio text;",
+    "brain-collections SQL also needed: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS priority boolean DEFAULT false; ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS collection_name_display text; ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;"
   ],
-  "next": "Run brain_knowledge SQL migrations in Supabase dashboard",
-  "notes": "All connections header changes done."
+  "next": "Run SQL migrations in Supabase dashboard for both connections and brain_knowledge tables",
+  "notes": "Instagram scraping may be rate-limited by Instagram. JSON endpoint (?__a=1) often blocked; HTML fallback extracts from meta tags."
 }

@@ -1313,62 +1313,12 @@ ${mozartContext}`
     <!-- ROUTINE / HEALTH -->
     <div class="section-block">
 
-      <!-- ── TODAY: always-visible stream ─────────────────────── -->
+      <!-- ── TODAY: tasks + nudges ─────────────────────────────── -->
       <div class="today-section">
 
         <!-- TTS toast -->
         {#if speakToast}
           <div class="speak-toast">{speakToast}</div>
-        {/if}
-
-        <!-- Agent buttons row -->
-        <div class="agent-row">
-          <div class="agent-btn-wrap">
-            <button class="briefing-btn agent-brief {generatingBriefing?'loading':''}" onclick={() => generateBriefing()}>
-              {generatingBriefing ? '✦ Generating...' : '✦ Morning Briefing'}
-            </button>
-            {#if agentLastRun.briefing}<div class="agent-last-run">{timeAgo(agentLastRun.briefing)}</div>{/if}
-          </div>
-          <div class="agent-btn-wrap">
-            <button class="briefing-btn agent-scout {scoutingArtists?'loading':''}" onclick={() => scoutArtists()}>
-              {scoutingArtists ? '✦ Scouting...' : '✦ Scout Artists'}
-            </button>
-            {#if agentLastRun.scout}<div class="agent-last-run">{timeAgo(agentLastRun.scout)}</div>{/if}
-          </div>
-          <div class="agent-btn-wrap">
-            <button class="briefing-btn agent-match {matchingDemos?'loading':''}" onclick={() => matchDemos()}>
-              {matchingDemos ? '✦ Matching...' : '✦ Match Demos'}
-            </button>
-            {#if agentLastRun.match}<div class="agent-last-run">{timeAgo(agentLastRun.match)}</div>{/if}
-          </div>
-        </div>
-
-        <!-- Today's briefing — auto-expanded at top -->
-        {#if todayBriefing}
-          <div class="today-briefing-block">
-            <div class="today-briefing-header">
-              <button class="inbox-del-btn" onclick={() => deleteInboxItem(todayBriefing.id)}>×</button>
-              <span class="inbox-type-badge br">✦ AI</span>
-              <span class="today-briefing-label">TODAY'S BRIEFING</span>
-              {#if todayBriefing.message}
-                <button class="inbox-speak-btn {speakingId === todayBriefing.id ? 'playing' : ''}" onclick={() => speakText(todayBriefing.id, todayBriefing.message)} title={speakingId === todayBriefing.id ? 'Stop' : 'Read aloud'}>
-                  {speakingId === todayBriefing.id ? '■' : '▶'}
-                </button>
-              {/if}
-            </div>
-            <div class="agent-output">{@html parseAgentOutput(todayBriefing.message)}</div>
-            {#if getTracksFromMessage(todayBriefing.message).length}
-              <div class="agent-tracks">
-                {#each getTracksFromMessage(todayBriefing.message) as track}
-                  <div class="agent-track-row">
-                    <button class="track-play-btn" onclick={() => window.open(track.spotify_url || track.youtube_url, '_blank')} title="Play">▶</button>
-                    <span class="track-info">{track.artist} — {track.title}{track.bpm ? ' · ' + Math.round(track.bpm) + 'bpm' : ''}{track.key ? ' · ' + track.key : ''}{track.camelot ? ' (' + track.camelot + ')' : ''}</span>
-                    <button class="track-brain-btn" onclick={() => addTrackToBrain(track)}>+ Brain</button>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
         {/if}
 
         <!-- Brain review banner -->
@@ -1438,94 +1388,6 @@ ${mozartContext}`
           </div>
         {/if}
         {/each}
-
-        <!-- Inbox stream -->
-        {#if !inboxItems.length}
-          <p class="empty-sm" style="padding:10px 0;color:#333">No notifications yet. Run an agent or send a listen link.</p>
-        {:else}
-          {@const todayInbox = inboxItems.filter(n => n.created_at?.slice(0,10) === todayISO && !(n.type === 'briefing' && n.id === todayBriefing?.id))}
-          {@const olderInbox = inboxItems.filter(n => n.created_at?.slice(0,10) !== todayISO)}
-          <div class="inbox-scroll">
-            {#if todayInbox.length}
-              <div class="year-today-sep">TODAY</div>
-              {#each todayInbox as n (n.id)}
-                <div class="inbox-item {n.read ? 'read' : 'unread'}">
-                  <div class="inbox-item-header">
-                    {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing'}<span class="inbox-type-badge br">✦ AI</span>{:else if n.metadata?.real_intent}<span class="inbox-type-badge wa">📱</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
-                    <span class="inbox-code">{n.song_code}</span>
-                    {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
-                    <span class="inbox-title">{n.song_title}</span>
-                    {#if n.metadata?.urgency}<span class="wa-urgency-badge {n.metadata.urgency}">{n.metadata.urgency}</span>{/if}
-                    <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
-                    {#if !n.read}<span class="inbox-new-dot"></span>{/if}
-                    {#if n.type === 'briefing' && n.message}
-                      <button class="inbox-speak-btn {speakingId === n.id ? 'playing' : ''}" onclick={() => speakText(n.id, n.message)} title={speakingId === n.id ? 'Stop' : 'Read aloud'}>
-                        {speakingId === n.id ? '■' : '▶'}
-                      </button>
-                    {/if}
-                    <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
-                  </div>
-                  {#if n.type === 'briefing'}
-                    <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
-                    {#if getTracksFromMessage(n.message).length}
-                      <div class="agent-tracks">
-                        {#each getTracksFromMessage(n.message) as track}
-                          <div class="agent-track-row">
-                            <button class="track-play-btn" onclick={() => window.open(track.spotify_url || track.youtube_url, '_blank')} title="Play">▶</button>
-                            <span class="track-info">{track.artist} — {track.title}{track.bpm ? ' · ' + Math.round(track.bpm) + 'bpm' : ''}{track.key ? ' · ' + track.key : ''}{track.camelot ? ' (' + track.camelot + ')' : ''}</span>
-                            <button class="track-brain-btn" onclick={() => addTrackToBrain(track)}>+ Brain</button>
-                          </div>
-                        {/each}
-                      </div>
-                    {/if}
-                  {:else if n.metadata?.real_intent}
-                    {@const m = n.metadata}
-                    <div class="wa-analysis {m.boundary_alert ? 'has-boundary' : ''}">
-                      {#if m.boundary_alert}
-                        <div class="wa-boundary">⚠ {m.boundary_type ? m.boundary_type.toUpperCase() + ' ' : ''}BOUNDARY: {m.boundary_alert}</div>
-                      {/if}
-                      {#if m.real_intent}<div class="wa-field intent">Real intent: {m.real_intent}</div>{/if}
-                      {#if m.psychological_state}<div class="wa-field state">State: {m.psychological_state}</div>{/if}
-                      {#if m.business_assessment}<div class="wa-field biz">Business: {m.business_assessment}</div>{/if}
-                      {#if m.best_next_step}<div class="wa-field next">Next step: {m.best_next_step}</div>{/if}
-                      {#if m.response_suggestion}
-                        <div class="wa-reply-wrap">
-                          <span class="wa-reply-text">{m.response_suggestion}</span>
-                          <button class="wa-copy-btn" onclick={() => navigator.clipboard.writeText(m.response_suggestion)}>Copy</button>
-                        </div>
-                      {/if}
-                    </div>
-                  {:else}
-                    <div class="inbox-msg">{n.message}</div>
-                  {/if}
-                  {#if n.patch_name}<div class="inbox-patch">via {n.patch_name}</div>{/if}
-                </div>
-              {/each}
-            {:else}
-              <p class="empty-sm" style="padding:8px 0;color:#333">Nothing today.</p>
-            {/if}
-            {#if olderInbox.length}
-              <div class="year-today-sep" style="margin-top:10px;opacity:.4">EARLIER</div>
-              {#each olderInbox as n (n.id)}
-                <div class="inbox-item read" style="opacity:.35">
-                  <div class="inbox-item-header">
-                    {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing'}<span class="inbox-type-badge br">✦ AI</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
-                    <span class="inbox-code">{n.song_code}</span>
-                    {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
-                    <span class="inbox-title">{n.song_title}</span>
-                    <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
-                    <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
-                  </div>
-                  {#if n.type === 'briefing'}
-                    <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
-                  {:else}
-                    <div class="inbox-msg">{n.message}</div>
-                  {/if}
-                </div>
-              {/each}
-            {/if}
-          </div>
-        {/if}
 
       </div>
 
@@ -1867,6 +1729,144 @@ ${mozartContext}`
         </div>
       {/if}
 
+      <!-- Agent buttons row -->
+      <div class="agent-row">
+        <div class="agent-btn-wrap">
+          <button class="briefing-btn agent-brief {generatingBriefing?'loading':''}" onclick={() => generateBriefing()}>
+            {generatingBriefing ? '✦ Generating...' : '✦ Morning Briefing'}
+          </button>
+          {#if agentLastRun.briefing}<div class="agent-last-run">{timeAgo(agentLastRun.briefing)}</div>{/if}
+        </div>
+        <div class="agent-btn-wrap">
+          <button class="briefing-btn agent-scout {scoutingArtists?'loading':''}" onclick={() => scoutArtists()}>
+            {scoutingArtists ? '✦ Scouting...' : '✦ Scout Artists'}
+          </button>
+          {#if agentLastRun.scout}<div class="agent-last-run">{timeAgo(agentLastRun.scout)}</div>{/if}
+        </div>
+        <div class="agent-btn-wrap">
+          <button class="briefing-btn agent-match {matchingDemos?'loading':''}" onclick={() => matchDemos()}>
+            {matchingDemos ? '✦ Matching...' : '✦ Match Demos'}
+          </button>
+          {#if agentLastRun.match}<div class="agent-last-run">{timeAgo(agentLastRun.match)}</div>{/if}
+        </div>
+      </div>
+
+      <!-- Today's briefing — auto-expanded at top -->
+      {#if todayBriefing}
+        <div class="today-briefing-block">
+          <div class="today-briefing-header">
+            <button class="inbox-del-btn" onclick={() => deleteInboxItem(todayBriefing.id)}>×</button>
+            <span class="inbox-type-badge br">✦ AI</span>
+            <span class="today-briefing-label">TODAY'S BRIEFING</span>
+            {#if todayBriefing.message}
+              <button class="inbox-speak-btn {speakingId === todayBriefing.id ? 'playing' : ''}" onclick={() => speakText(todayBriefing.id, todayBriefing.message)} title={speakingId === todayBriefing.id ? 'Stop' : 'Read aloud'}>
+                {speakingId === todayBriefing.id ? '■' : '▶'}
+              </button>
+            {/if}
+          </div>
+          <div class="agent-output">{@html parseAgentOutput(todayBriefing.message)}</div>
+          {#if getTracksFromMessage(todayBriefing.message).length}
+            <div class="agent-tracks">
+              {#each getTracksFromMessage(todayBriefing.message) as track}
+                <div class="agent-track-row">
+                  <button class="track-play-btn" onclick={() => window.open(track.spotify_url || track.youtube_url, '_blank')} title="Play">▶</button>
+                  <span class="track-info">{track.artist} — {track.title}{track.bpm ? ' · ' + Math.round(track.bpm) + 'bpm' : ''}{track.key ? ' · ' + track.key : ''}{track.camelot ? ' (' + track.camelot + ')' : ''}</span>
+                  <button class="track-brain-btn" onclick={() => addTrackToBrain(track)}>+ Brain</button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Inbox stream -->
+      {#if !inboxItems.length}
+        <p class="empty-sm" style="padding:10px 0;color:#333">No notifications yet. Run an agent or send a listen link.</p>
+      {:else}
+        {@const todayInbox = inboxItems.filter(n => n.created_at?.slice(0,10) === todayISO && !(n.type === 'briefing' && n.id === todayBriefing?.id))}
+        {@const olderInbox = inboxItems.filter(n => n.created_at?.slice(0,10) !== todayISO)}
+        <div class="inbox-scroll">
+          {#if todayInbox.length}
+            <div class="year-today-sep">TODAY</div>
+            {#each todayInbox as n (n.id)}
+              <div class="inbox-item {n.read ? 'read' : 'unread'}">
+                <div class="inbox-item-header">
+                  {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing'}<span class="inbox-type-badge br">✦ AI</span>{:else if n.metadata?.real_intent}<span class="inbox-type-badge wa">📱</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
+                  <span class="inbox-code">{n.song_code}</span>
+                  {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
+                  <span class="inbox-title">{n.song_title}</span>
+                  {#if n.metadata?.urgency}<span class="wa-urgency-badge {n.metadata.urgency}">{n.metadata.urgency}</span>{/if}
+                  <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
+                  {#if !n.read}<span class="inbox-new-dot"></span>{/if}
+                  {#if n.type === 'briefing' && n.message}
+                    <button class="inbox-speak-btn {speakingId === n.id ? 'playing' : ''}" onclick={() => speakText(n.id, n.message)} title={speakingId === n.id ? 'Stop' : 'Read aloud'}>
+                      {speakingId === n.id ? '■' : '▶'}
+                    </button>
+                  {/if}
+                  <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
+                </div>
+                {#if n.type === 'briefing'}
+                  <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
+                  {#if getTracksFromMessage(n.message).length}
+                    <div class="agent-tracks">
+                      {#each getTracksFromMessage(n.message) as track}
+                        <div class="agent-track-row">
+                          <button class="track-play-btn" onclick={() => window.open(track.spotify_url || track.youtube_url, '_blank')} title="Play">▶</button>
+                          <span class="track-info">{track.artist} — {track.title}{track.bpm ? ' · ' + Math.round(track.bpm) + 'bpm' : ''}{track.key ? ' · ' + track.key : ''}{track.camelot ? ' (' + track.camelot + ')' : ''}</span>
+                          <button class="track-brain-btn" onclick={() => addTrackToBrain(track)}>+ Brain</button>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                {:else if n.metadata?.real_intent}
+                  {@const m = n.metadata}
+                  <div class="wa-analysis {m.boundary_alert ? 'has-boundary' : ''}">
+                    {#if m.boundary_alert}
+                      <div class="wa-boundary">⚠ {m.boundary_type ? m.boundary_type.toUpperCase() + ' ' : ''}BOUNDARY: {m.boundary_alert}</div>
+                    {/if}
+                    {#if m.real_intent}<div class="wa-field intent">Real intent: {m.real_intent}</div>{/if}
+                    {#if m.psychological_state}<div class="wa-field state">State: {m.psychological_state}</div>{/if}
+                    {#if m.business_assessment}<div class="wa-field biz">Business: {m.business_assessment}</div>{/if}
+                    {#if m.best_next_step}<div class="wa-field next">Next step: {m.best_next_step}</div>{/if}
+                    {#if m.response_suggestion}
+                      <div class="wa-reply-wrap">
+                        <span class="wa-reply-text">{m.response_suggestion}</span>
+                        <button class="wa-copy-btn" onclick={() => navigator.clipboard.writeText(m.response_suggestion)}>Copy</button>
+                      </div>
+                    {/if}
+                  </div>
+                {:else}
+                  <div class="inbox-msg">{n.message}</div>
+                {/if}
+                {#if n.patch_name}<div class="inbox-patch">via {n.patch_name}</div>{/if}
+              </div>
+            {/each}
+          {:else}
+            <p class="empty-sm" style="padding:8px 0;color:#333">Nothing today.</p>
+          {/if}
+          {#if olderInbox.length}
+            <div class="year-today-sep" style="margin-top:10px;opacity:.4">EARLIER</div>
+            {#each olderInbox as n (n.id)}
+              <div class="inbox-item read" style="opacity:.35">
+                <div class="inbox-item-header">
+                  {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing'}<span class="inbox-type-badge br">✦ AI</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
+                  <span class="inbox-code">{n.song_code}</span>
+                  {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
+                  <span class="inbox-title">{n.song_title}</span>
+                  <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
+                  <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
+                </div>
+                {#if n.type === 'briefing'}
+                  <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
+                {:else}
+                  <div class="inbox-msg">{n.message}</div>
+                {/if}
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+
     </div>
   </div>
 
@@ -2112,7 +2112,7 @@ ${mozartContext}`
   .inbox-title { font-family: 'Space Mono', monospace; font-size: 10px; color: #cec9c1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .inbox-date { font-family: 'Space Mono', monospace; font-size: 9px; color: #333; }
   .inbox-new-dot { width: 5px; height: 5px; border-radius: 50%; background: #e05a4a; flex-shrink: 0; }
-  .inbox-msg { font-size: 12px; color: #9e9690; white-space: pre-wrap; line-height: 1.7; }
+  .inbox-msg { font-size: 11px; color: #9e9690; white-space: pre-wrap; line-height: 1.7; }
   .inbox-patch { font-family: 'Space Mono', monospace; font-size: 9px; color: #333; margin-top: 2px; }
   .inbox-type-badge.wa { background: rgba(76,175,130,.15); color: #4caf82; }
 
@@ -2123,14 +2123,14 @@ ${mozartContext}`
   .wa-urgency-badge.low { background: rgba(158,150,144,.15); color: #9e9690; }
   .wa-analysis { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding: 6px 8px; border-radius: 3px; background: #111; }
   .wa-analysis.has-boundary { border-left: 2px solid #e05a4a; background: rgba(224,90,74,.05); }
-  .wa-boundary { font-size: 12px; color: #e05a4a; font-weight: 600; margin-bottom: 2px; }
-  .wa-field { font-size: 12px; line-height: 1.5; }
+  .wa-boundary { font-size: 10px; color: #e05a4a; font-weight: 600; margin-bottom: 2px; }
+  .wa-field { font-size: 10px; line-height: 1.5; }
   .wa-field.intent { color: #9e9690; font-style: italic; }
-  .wa-field.state { font-size: 11px; color: #666; }
-  .wa-field.biz { font-size: 11px; color: #666; }
+  .wa-field.state { font-size: 9px; color: #666; }
+  .wa-field.biz { font-size: 9px; color: #666; }
   .wa-field.next { color: #c9a84c; }
   .wa-reply-wrap { display: flex; align-items: flex-start; gap: 8px; margin-top: 4px; background: #1c1c1c; padding: 6px 8px; border-radius: 3px; }
-  .wa-reply-text { font-size: 12px; color: #cec9c1; flex: 1; line-height: 1.5; }
+  .wa-reply-text { font-size: 11px; color: #cec9c1; flex: 1; line-height: 1.5; }
   .wa-copy-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 2px 7px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .wa-copy-btn:hover { color: #c9a84c; border-color: #c9a84c; }
 

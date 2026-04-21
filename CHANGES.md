@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] DailyTab.svelte + ProjectsTab.svelte — DONE
+TASK: mozart-window-larger
+WHAT: .chat-out max-height 70vh (was 300px), min-height 300px. .mozart-block min-height 500px both files. ProjectsTab .right-col fixed height removed (was calc(100vh-60px)), sticky/overflow removed so Mozart expands naturally.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-20] momentum-watcher.cjs → /brain-to-obsidian — DONE
 TASK: obsidian-graph-backlinks
 WHAT: Added CATEGORY_LINKS map (13 categories → related [[notes]]). Each exported .md gets ## Related section with category links + content-scanned links to other entry titles (longest-first matching, max 8). Created 5 index notes: Hit Benchmark.md, My Productions.md, Active Goals.md, Contact Directory.md, Market Intelligence.md. Export returns {written, index_notes}. Tested: 134 entries + 5 index notes written successfully.

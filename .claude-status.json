@@ -1,23 +1,18 @@
 {
-  "updated": "2026-04-21T00:00:00.000Z",
-  "last_task": "brain-collections-quicknotes-priority",
-  "status": "partial",
+  "updated": "2026-04-21T00:10:00.000Z",
+  "last_task": "mozart-window-larger",
+  "status": "done",
   "working": [
-    "BrainTab: updatePriority() function added",
-    "BrainTab: priority filter ★ button in header",
-    "BrainTab: quick notes section rendered",
-    "BrainTab: collection group headers rendered",
-    "BrainTab: priority ★ star on each entry row",
-    "BrainTab: .brain-entry.priority gold left border CSS",
-    "BrainTab: dump-collection-inp CSS",
-    "mozartContext.js: HIGH PRIORITY KNOWLEDGE section first",
-    "momentum-watcher.cjs: Obsidian export includes priority tag + collection subfolder",
-    "pm2 restarted"
+    "DailyTab: .chat-out max-height 70vh, min-height 300px",
+    "DailyTab: .mozart-block min-height 500px",
+    "ProjectsTab: .chat-out max-height 70vh, min-height 300px",
+    "ProjectsTab: .mozart-block min-height 500px",
+    "ProjectsTab: .right-col fixed height removed, expands with content"
   ],
   "broken": [],
   "partial": [
-    "SQL migrations NOT run yet — columns priority, collection_name_display (brain_knowledge) and notes (reference_tracks) need to be added via Supabase dashboard SQL editor"
+    "brain-collections SQL migrations still needed: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS priority boolean DEFAULT false; ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS collection_name_display text; ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;"
   ],
-  "next": "Run SQL migrations in Supabase dashboard: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS priority boolean DEFAULT false; ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS collection_name_display text; ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;",
-  "notes": "All BrainTab code is in place. Feature is fully coded but will error without the DB columns. Run the 3 ALTER TABLE statements in Supabase SQL editor to activate."
+  "next": "Run brain_knowledge SQL migrations in Supabase dashboard to activate collections/priority/notes features",
+  "notes": "Mozart panels now expand naturally. ProjectsTab right-col no longer sticky/fixed-height."
 }

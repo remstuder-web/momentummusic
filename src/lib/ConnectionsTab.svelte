@@ -2,7 +2,7 @@
   import { supabase } from './supabase.js'
   import { GENRE_LIST } from '$lib/genres.js'
 
-  const GROUPS = ['ARTISTS', 'PRODUCERS', 'MUSIC INDUSTRY']
+  const GROUPS = ['ARTISTS', 'PRODUCERS', 'MIXERS', 'MUSIC INDUSTRY']
 
   let connections = $state([])
   let patches = $state([])
@@ -162,6 +162,16 @@
                   onclick={e => e.stopPropagation()}
                   onchange={e => updateField(conn, 'name', e.target.value)}
                   onkeydown={e => e.key === 'Enter' && e.target.blur()} />
+                {#if conn.personal}
+                  <span class="personal-dot" title="Personal contact"></span>
+                {/if}
+                {#if conn.instagram}
+                  <button
+                    class="social-btn insta head-ig"
+                    onclick={e => { e.stopPropagation(); openLink(instaUrl(conn.instagram)) }}
+                    title="Open Instagram"
+                  >IG</button>
+                {/if}
                 {#each connTypes as t}
                   <span class="type-badge">{t}</span>
                 {/each}
@@ -183,6 +193,14 @@
 
               {#if expandedId === conn.id}
                 <div class="conn-body">
+
+                  <label class="personal-check-row">
+                    <input type="checkbox"
+                      checked={conn.personal || false}
+                      onchange={e => updateField(conn, 'personal', e.target.checked)}
+                    />
+                    <span>Personal contact</span>
+                  </label>
 
                   <div class="field">
                     <div class="field-label">GROUP</div>
@@ -447,6 +465,10 @@
 
   .social-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 7px; border: none; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .social-btn.insta { background: linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045); color: #fff; }
+  .head-ig { font-size: 7px; padding: 1px 5px; flex-shrink: 0; }
+
+  .personal-dot { width: 7px; height: 7px; border-radius: 50%; background: #4caf82; flex-shrink: 0; }
+  .personal-check-row { display: flex; align-items: center; gap: 6px; font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; cursor: pointer; margin-bottom: 8px; }
   .social-btn.tiktok { background: #111; color: #fff; border: 1px solid #333; }
 
   .genre-select-conn { color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; }

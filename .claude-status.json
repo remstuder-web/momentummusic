@@ -1,17 +1,19 @@
 {
-  "updated": "2026-04-21T09:00:00.000Z",
-  "last_task": "remove-capture-category-input",
+  "updated": "2026-04-21T09:15:00.000Z",
+  "last_task": "apple-notes-integration",
   "status": "done",
   "working": [
-    "Screen capture: category input removed",
-    "captureCategory state removed entirely",
-    "captureScreen() calls /suggest-category after capture, updates entry via Supabase",
-    "Meta line shows auto-suggested category or plain 'Saved to Brain'"
+    "GET /apple-notes — returns notes from Momentum folder (empty until folder created)",
+    "POST /apple-notes — creates note in Apple Notes via AppleScript",
+    "POST /apple-notes-sync — syncs Apple Notes to Supabase notes table",
+    "5-minute auto-sync interval active",
+    "NotesTab: 🍎 Sync button, last-sync timestamp, 🍎 badge on apple_notes source rows",
+    "Startup warning fires with SQL to run if notes columns missing"
   ],
   "broken": [],
   "partial": [
-    "All pending SQL migrations still needed in Supabase dashboard (connections + brain_knowledge + reference_tracks columns)"
+    "SQL migrations needed in Supabase: apple_note_id text, source text, updated_at timestamptz + unique index — see startup log"
   ],
-  "next": "Run SQL migrations in Supabase dashboard",
-  "notes": "fetchCatSuggestion() not called directly (it operates on dumpText); instead /suggest-category is called inline in captureScreen() with analysis text."
+  "next": "Run SQL migrations in Supabase dashboard for notes table (apple_note_id, source, updated_at columns)",
+  "notes": "Apple Notes Momentum folder must exist for notes to sync. Create it manually in Apple Notes app first."
 }

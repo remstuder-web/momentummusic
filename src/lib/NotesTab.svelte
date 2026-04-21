@@ -4,11 +4,38 @@
   let notes = $state([])
   let loading = $state(true)
   let newTopicName = $state('')
+  let syncStatus = $state(null)   // null | 'syncing' | 'done' | 'error'
+  let lastSync = $state(null)
+  let syncCount = $state(null)
 
   async function load() {
     const { data } = await supabase.from('notes').select('*').order('position')
     notes = (data || []).map(n => ({ ...n, _exp: false }))
     loading = false
+  }
+
+  async function triggerAppleSync() {
+    syncStatus = 'syncing'
+    try {
+      const r = await fetch('http://localhost:4242/apple-notes-sync', { method: 'POST' })
+      const d = await r.json()
+      if (!d.ok) throw new Error(d.error)
+      syncCount = d.synced
+      lastSync = d.lastSync ? new Date(d.lastSync) : new Date()
+      syncStatus = 'done'
+      await load()
+      setTimeout(() => { if (syncStatus === 'done') syncStatus = null }, 3000)
+    } catch(e) {
+      syncStatus = 'error'
+      setTimeout(() => { syncStatus = null }, 4000)
+    }
+  }
+
+  async function fetchLastSyncTime() {
+    const r = await fetch('http://localhost:4242/apple-notes').catch(() => null)
+    if (!r) return
+    const d = await r.json().catch(() => null)
+    if (d?.lastSync) lastSync = new Date(d.lastSync)
   }
 
   async function addTopic() {
@@ -62,11 +89,22 @@
   }
 
   load()
+  fetchLastSyncTime()
 </script>
 
 <div class="notes-wrap">
   <div class="top-bar">
     <span class="sh">NOTES</span>
+    <div class="apple-sync-row">
+      {#if lastSync}
+        <span class="apple-sync-ts">↻ {lastSync.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
+      {/if}
+      <button class="apple-sync-btn {syncStatus === 'syncing' ? 'syncing' : ''}"
+        onclick={triggerAppleSync}
+        disabled={syncStatus === 'syncing'}>
+        {syncStatus === 'syncing' ? '⏳' : syncStatus === 'done' ? `✓ ${syncCount} synced` : syncStatus === 'error' ? '✗ error' : '🍎 Sync'}
+      </button>
+    </div>
     <div class="add-row">
       <input class="inp" bind:value={newTopicName} placeholder="New topic..."
         onkeydown={e => e.key === 'Enter' && addTopic()} />
@@ -84,7 +122,7 @@
         <div class="topic {note._exp ? 'exp' : ''}">
           <div class="topic-head" onclick={() => toggle(note)}>
             <span class="topic-arr">▶</span>
-            <span class="topic-name">{note.name}</span>
+            <span class="topic-name">{note.name}{#if note.source === 'apple_notes'} <span class="apple-badge">🍎</span>{/if}</span>
             <div class="topic-actions" onclick={e => e.stopPropagation()}>
               <button class="act-btn" onclick={() => moveNote(note, -1)}>▲</button>
               <button class="act-btn" onclick={() => moveNote(note, 1)}>▼</button>
@@ -107,7 +145,13 @@
 
 <style>
   .notes-wrap { width: 100%; }
-  .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .apple-sync-row { display: flex; align-items: center; gap: 6px; }
+  .apple-sync-ts { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
+  .apple-sync-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 4px 10px; background: #1c1c1c; border: 1px solid #303030; color: #9e9690; border-radius: 3px; cursor: pointer; letter-spacing: .04em; }
+  .apple-sync-btn:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
+  .apple-sync-btn.syncing { opacity: .6; cursor: default; }
+  .apple-badge { font-size: 12px; opacity: .7; }
   .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); }
   .add-row { display: flex; gap: 8px; margin-left: auto; }
   .inp { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; outline: none; border-radius: 3px; width: 220px; }

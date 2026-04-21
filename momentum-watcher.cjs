@@ -5407,6 +5407,47 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /apple-notes — return all notes from Momentum folder ─────────────────
+  if (req.method === 'GET' && req.url === '/apple-notes') {
+    try {
+      const notes = await getAppleNotes('Momentum')
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, notes, lastSync: appleNotesLastSync, count: notes.length }))
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /apple-notes — create a new note in Momentum folder ─────────────────
+  if (req.method === 'POST' && req.url === '/apple-notes') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!body.title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'title required' })); return }
+        await createAppleNote(body.title, body.body || '', 'Momentum')
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /apple-notes-sync — two-way sync Apple Notes ↔ Supabase notes ───────
+  if (req.method === 'POST' && req.url === '/apple-notes-sync') {
+    try {
+      const result = await syncAppleNotesToSupabase()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, ...result, lastSync: appleNotesLastSync }))
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /obsidian-sync — sync all .md files from Obsidian vault to brain ──
   if (req.method === 'POST' && req.url === '/obsidian-sync') {
     try {
@@ -5698,6 +5739,99 @@ function buildAddressBookMap() {
   _abMapTime  = Date.now()
   _abMapBuilding = false
   return map
+}
+
+// ── Apple Notes integration ───────────────────────────────────────────────────
+let appleNotesLastSync = null
+
+function parseAppleScriptList(stdout) {
+  // JXA returns JSON directly — this is a fallback for raw AppleScript output
+  const raw = stdout.trim()
+  if (!raw || raw === '{}' || raw === '') return []
+  try { return JSON.parse(raw) } catch(e) {}
+  // Best-effort: extract name/id pairs from AppleScript record output
+  const results = []
+  const recordRe = /\{[^{}]*name:"([^"]*)"[^{}]*id:"([^"]*)"/g
+  let m
+  while ((m = recordRe.exec(raw)) !== null) results.push({ name: m[1], id: m[2], body: '', modificationDate: null })
+  return results
+}
+
+async function getAppleNotes(folderName = 'Momentum') {
+  return new Promise((resolve) => {
+    const script = `
+      var app = Application('Notes');
+      var result = [];
+      try {
+        var folders = app.folders.whose({name: "${folderName}"});
+        if (folders.length > 0) {
+          var ns = folders[0].notes();
+          for (var i = 0; i < ns.length; i++) {
+            try {
+              result.push({
+                name: ns[i].name(),
+                body: ns[i].plaintext(),
+                id: ns[i].id(),
+                modificationDate: ns[i].modificationDate().toISOString()
+              });
+            } catch(e) {}
+          }
+        }
+      } catch(e) {}
+      JSON.stringify(result);
+    `
+    exec(`osascript -l JavaScript -e '${script.replace(/'/g, "'\\''")}'`,
+      { maxBuffer: 10 * 1024 * 1024 },
+      (err, stdout) => {
+        if (err) { resolve(parseAppleScriptList(stdout || '')); return }
+        try { resolve(JSON.parse(stdout.trim())) }
+        catch(e) { resolve(parseAppleScriptList(stdout || '')) }
+      }
+    )
+  })
+}
+
+async function createAppleNote(title, body, folderName = 'Momentum') {
+  return new Promise((resolve, reject) => {
+    const safeBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')
+    const script = `
+      tell application "Notes"
+        tell account "iCloud"
+          try
+            set targetFolder to folder "${folderName}"
+          on error
+            set targetFolder to make new folder with properties {name:"${folderName}"}
+          end try
+          make new note at targetFolder with properties {name:"${title.replace(/"/g, '\\"')}", body:"${safeBody}"}
+        end tell
+      end tell
+    `
+    exec(`osascript -e '${script.replace(/'/g, "'\\''")}'`, (err) => {
+      if (err) reject(err)
+      else resolve(true)
+    })
+  })
+}
+
+async function syncAppleNotesToSupabase() {
+  const notes = await getAppleNotes('Momentum')
+  let synced = 0
+  for (const note of notes) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/notes`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: note.name,
+        text: note.body,
+        apple_note_id: note.id,
+        updated_at: note.modificationDate || new Date().toISOString(),
+        source: 'apple_notes'
+      })
+    })
+    if (r.ok) synced++
+  }
+  appleNotesLastSync = new Date().toISOString()
+  return { synced, total: notes.length }
 }
 
 // ── Contact enrichment — auto-find social profiles by artist name ────────────
@@ -6102,6 +6236,15 @@ server.listen(PORT, '127.0.0.1', () => {
   } else {
     console.log('⚠ Obsidian vault not found:', OBSIDIAN_VAULT_PATH, '— create vault to enable sync')
   }
+  // Apple Notes auto-sync every 5 minutes
+  setInterval(async () => {
+    try {
+      await syncAppleNotesToSupabase()
+    } catch(e) {
+      logError('apple-notes-sync', e.message)
+    }
+  }, 5 * 60 * 1000)
+  console.log('✓ Apple Notes auto-sync: every 5 minutes')
   exec('/opt/homebrew/bin/python3.11 -c "import essentia"', (err) => {
     if (err) console.warn('⚠ Essentia not available — BPM/key analysis disabled')
     else console.log('✓ Essentia ready')
@@ -6117,6 +6260,9 @@ server.listen(PORT, '127.0.0.1', () => {
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=source,promoted&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing source/promoted columns — run SQL in Supabase:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT \'agent\', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false;\nUPDATE reference_tracks SET source = \'agent\' WHERE collection_name = \'daily_chart\';') })
+    .catch(() => {})
+  fetch(`${SUPABASE_URL}/rest/v1/notes?select=apple_note_id,source&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ notes table missing Apple Notes columns — run SQL in Supabase:\nALTER TABLE notes ADD COLUMN IF NOT EXISTS apple_note_id text;\nALTER TABLE notes ADD COLUMN IF NOT EXISTS source text DEFAULT \'momentum\';\nALTER TABLE notes ADD COLUMN IF NOT EXISTS updated_at timestamptz;\nCREATE UNIQUE INDEX IF NOT EXISTS notes_apple_note_id_idx ON notes(apple_note_id) WHERE apple_note_id IS NOT NULL;') })
     .catch(() => {})
 })
 

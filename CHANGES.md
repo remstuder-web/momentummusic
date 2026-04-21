@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] momentum-watcher.cjs + NotesTab.svelte — DONE
+TASK: apple-notes-integration
+WHAT: Added Apple Notes integration — GET/POST /apple-notes + POST /apple-notes-sync endpoints; getAppleNotes() via JXA + createAppleNote() via AppleScript; 5-min auto-sync to Supabase notes table; NotesTab shows sync button, last-sync time, 🍎 badge on Apple-sourced notes
+RESULT: works — /apple-notes returns {ok:true,notes:[],count:0} (empty until Momentum folder created in Apple Notes); SQL migration needed for apple_note_id/source columns
+BLOCKERS: Run SQL in Supabase dashboard (logged in startup warning)
+
 ## [2026-04-21] BrainTab.svelte — DONE
 TASK: remove-capture-category-input
 WHAT: Removed manual category input from screen capture section; category now auto-suggested via /suggest-category after capture and applied via Supabase update

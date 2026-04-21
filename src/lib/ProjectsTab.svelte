@@ -1,6 +1,6 @@
 <script>
   import { supabase } from './supabase.js'
-  import { buildMozartContext } from './mozartContext.js'
+  import { buildMozartContext, parseActions, executeAction } from './mozartContext.js'
   import { GENRE_LIST } from '$lib/genres.js'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
   import { onDestroy } from 'svelte'
@@ -2061,7 +2061,13 @@
       if (reply.length > 300 && /research|found|analysis|suggests|shows|according|trend|data|insight|indicates/i.test(reply)) {
         reply += '\n\n---\n💡 Worth saving to Brain? Paste the key insight in Brain dump.'
       }
-      aiMessages = [...aiMessages, { role: 'assistant', content: reply }]
+      const actions = parseActions(reply)
+      const cleanReply = reply.replace(/\[ACTION:[^\]]+\]/g, '').trim()
+      aiMessages = [...aiMessages, { role: 'assistant', content: cleanReply }]
+      for (const action of actions) {
+        const result = await executeAction(action, supabase, expandedSong)
+        if (result) aiMessages = [...aiMessages, { role: 'assistant', content: result, _system: true }]
+      }
     } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
     aiLoading = false
   }

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] src/lib/ProjectsTab.svelte — DONE
+TASK: work-log-tracking
+WHAT: Auto-log work sessions when songs are expanded/collapsed; display WORK LOG section per song with stage/duration/date. Timer starts on expand, stops+logs on collapse, tab hide, or component destroy. Min 5 min to log. Also inserts brain_knowledge entry per session.
+RESULT: works — svelte-check 0 errors, work_logs table confirmed in Supabase
+BLOCKERS: none
+
 ## [2026-04-21] momentum-watcher.cjs + NotesTab.svelte — DONE
 TASK: fix-now-duplicate-extract-btn
 WHAT: (1) readNotesDir() skips NOW.md; parseNowNote() reads it separately; GET /notes prepends it → no more duplicate. (2) PATCH /notes resets 30s extract timer when filename===NOW.md. (3) Removed dedicated NOW block + all NOW-specific state/functions from NotesTab. NOW.md now renders via standard note loop: always expanded (_exp=true), toggle() no-ops for it, no delete/rename/reorder buttons, now-title gold style. (4) Removed extract button.
@@ -820,4 +826,34 @@ BLOCKERS: none
 TASK: /status live data fix
 WHAT: Restarted watcher so buildStatusResponse() loads (was running stale process from before code landed); all live fields now present
 RESULT: works — brain_categories, brain_entry_count, tasks_remaining, recent_changes, api_keys_present, endpoints_registered all populated
+BLOCKERS: none
+
+## [2026-04-21] momentum-watcher.cjs — DONE
+TASK: brain-to-obsidian backlinks + index notes
+WHAT: Expanded CATEGORY_LINKS (19 categories), 3-word content scanning, 7 index notes (Hit Benchmark with ref tracks, My Productions, Active Goals, Contact Directory, Market Intelligence, NOW, Daft Punk Model)
+RESULT: works — 171 entries written, 7 index notes, all with Related sections
+BLOCKERS: none
+
+## [2026-04-21] momentum-watcher.cjs + DailyTab.svelte — DONE
+TASK: scout music press sources + Check Out PRESS subsection
+WHAT: Added MUSIC_SOURCES (5 feeds: Pitchfork Best New, FADER, Stereogum, Lyrical Lemonade, A&R Factory). fetchMusicPressItems() fetches 2 articles per source with 300-char body. Press block added to Claude prompt. Top 1 per source saved to inbox as type='press'. DailyTab Check Out shows PRESS subsection with top 3 today's articles as clickable links.
+RESULT: works — Stereogum, FADER, A&R Factory confirmed parsing; Pitchfork Best New URL adjusted (may still 404 silently); items filtered by url+title length
+BLOCKERS: none
+
+## [2026-04-21] momentum-watcher.cjs — DONE
+TASK: brain-to-obsidian auto git push
+WHAT: pushVaultToGit() fires after /brain-to-obsidian completes — git add -A, commit "brain export", push origin main. Fire-and-forget (no await).
+RESULT: works — "✓ vault pushed to GitHub" confirmed in pm2 logs
+BLOCKERS: none
+
+## [2026-04-21] src/lib/DailyTab.svelte — DONE
+TASK: inline ▶ + buttons after song mentions in agent output
+WHAT: addTrackButtons() scans bullet/paragraph lines for "Artist — Title" and "Artist - Title" patterns after HTML-escaping. Appends inline ▶ (green) and + (gold) buttons using data attributes. Delegated click handler in onMount opens Spotify or calls addTrackToBrain(). Tracks extracted from <!--TRACKS:--> comment inside parseAgentOutput(). CSS uses :global() for {@html} context. Headers and [GAP]/[OK] lines excluded from scanning.
+RESULT: works — 0 svelte-check errors
+BLOCKERS: none
+
+## [2026-04-21] src/lib/DailyTab.svelte — DONE
+TASK: bigger inline buttons, remove duplicate tracks list
+WHAT: inline-play-btn/inline-brain-btn: font-size 8→9px, padding 0/4→2/6px, margin 4/2→5/3px, line-height 1.4→1.6. Removed agent-tracks div from todayBriefing block and inbox briefing items (both occurrences). Inline buttons in text are now the only track interaction.
+RESULT: works — 0 svelte-check errors
 BLOCKERS: none

@@ -3448,13 +3448,100 @@ ${context}` }]
     req.on('data', d => body += d)
     req.on('end', async () => {
       try {
-        const { url, apiKey } = JSON.parse(body)
-        if (!url)    { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: 'No URL' })); return }
-        if (!apiKey) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: 'No API key' })); return }
+        const { url, apiKey, query, song_id, collection, source } = JSON.parse(body)
 
         const SUPABASE_URL = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
         const ANON_KEY = 'sb_publishable_4yMwlAo6OLpgGPN_6yWvIw_g5bnjnWS'
         const sbHeaders = { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json' }
+
+        // ── QUERY MODE (Mozart action: add_reference) ─────────────────
+        if (query) {
+          const token = await getSpotifyToken()
+          const spH = { 'Authorization': `Bearer ${token}` }
+          const searchRes = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`, { headers: spH })
+          if (!searchRes.ok) throw new Error(`Spotify search error: ${searchRes.status}`)
+          const searchData = await searchRes.json()
+          const track = searchData.tracks?.items?.[0]
+          if (!track) {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: 'No track found for: ' + query }))
+            return
+          }
+
+          const artistId = track.artists?.[0]?.id
+          const artistRes = artistId ? await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: spH }) : null
+          const artist = artistRes?.ok ? await artistRes.json() : { genres: [] }
+
+          let bpm = null, key = null, camelot = null
+          if (track.preview_url) {
+            const tmpAudio = `/tmp/mm_qimport_${Date.now()}.mp3`
+            try {
+              execSync(`curl -s -o "${tmpAudio}" "${track.preview_url}"`, { timeout: 15000 })
+              const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
+              const esTmp = require('path').join(require('os').tmpdir(), `mm_qi_${Date.now()}.py`)
+              require('fs').writeFileSync(esTmp, [
+                'import essentia.standard as es, json, sys',
+                `audio = es.MonoLoader(filename=${JSON.stringify(tmpAudio)}, sampleRate=44100)()`,
+                'bpm_val, beats, beats_conf, _, _ = es.RhythmExtractor2013(method="multifeature")(audio)',
+                'k, scale, strength = es.KeyExtractor(profileType="edma")(audio)',
+                'print(json.dumps({"bpm": round(float(bpm_val)), "key": k, "scale": scale}))'
+              ].join('\n'))
+              const esOut = execSync(`"${ESSENTIA_PYTHON}" "${esTmp}" 2>/dev/null`, { encoding: 'utf8', timeout: 20000 }).trim()
+              try { require('fs').unlinkSync(esTmp) } catch(e) {}
+              const f = JSON.parse(esOut)
+              bpm = f.bpm
+              key = f.key + (f.scale === 'minor' ? ' minor' : ' major')
+              const CAMELOT = { 'C major':'8B','G major':'9B','D major':'10B','A major':'11B','E major':'12B','B major':'1B','F# major':'2B','Db major':'3B','Ab major':'4B','Eb major':'5B','Bb major':'6B','F major':'7B','A minor':'8A','E minor':'9A','B minor':'10A','F# minor':'11A','C# minor':'12A','G# minor':'1A','Eb minor':'2A','Bb minor':'3A','F minor':'4A','C minor':'5A','G minor':'6A','D minor':'7A' }
+              camelot = CAMELOT[key] || null
+            } catch(e) { console.warn('  Essentia query-import failed:', e.message.slice(0, 50)) }
+            try { require('fs').unlinkSync(tmpAudio) } catch(e) {}
+          }
+
+          const spotifyUrl = track.external_urls?.spotify || `https://open.spotify.com/track/${track.id}`
+          const collectionName = collection || 'reference_current'
+
+          await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
+            method: 'POST',
+            headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+            body: JSON.stringify({
+              spotify_id: track.id,
+              title: track.name,
+              artist: track.artists.map(a => a.name).join(', '),
+              album: track.album?.name,
+              release_date: track.album?.release_date,
+              genre_tags: artist.genres || [],
+              tempo: bpm || null,
+              key: key || null,
+              camelot: camelot || null,
+              popularity: track.popularity,
+              preview_url: track.preview_url,
+              album_art: track.album?.images?.[0]?.url,
+              collection_name: collectionName,
+              source: source || 'mozart',
+              approved: true
+            })
+          })
+
+          if (song_id) {
+            const { data: songRow } = await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song_id}&select=work_data`, { headers: sbHeaders }).then(r => r.json()).then(d => ({ data: d?.[0] }))
+            const wd = songRow?.work_data || {}
+            const refLinks = Array.isArray(wd.reference_links) ? wd.reference_links : []
+            if (!refLinks.includes(spotifyUrl)) refLinks.push(spotifyUrl)
+            await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song_id}`, {
+              method: 'PATCH',
+              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({ work_data: { ...wd, reference_links: refLinks } })
+            })
+          }
+
+          console.log(`✓ query-import: ${track.name} — ${track.artists[0]?.name} | ${bpm || '?'}bpm ${key || '?'}`)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, title: track.name, artist: track.artists.map(a => a.name).join(', '), bpm, key, camelot }))
+          return
+        }
+
+        if (!url)    { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: 'No URL' })); return }
+        if (!apiKey) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: 'No API key' })); return }
 
         // ── SINGLE TRACK ──────────────────────────────────────────────
         if (url.includes('/track/')) {

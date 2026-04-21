@@ -1,20 +1,19 @@
 {
-  "updated": "2026-04-21T10:18:00Z",
-  "last_task": "brain-health-briefing + curated-vs-library-refs",
+  "updated": "2026-04-21T12:00:00Z",
+  "last_task": "work-log-tracking",
   "status": "done",
   "working": [
-    "getBrainHealth() — entry count, new-3-days, weak-old, overlaps, missing categories — appended to /morning-briefing",
-    "weeklyBrainReview() — Sunday 8am Haiku analysis → Telegram + api_usage tracking",
-    "BrainTab MY REFERENCES section — curated (source=user or promoted=true) with full stats + notes",
-    "BrainTab LIBRARY section — collapsed by default, searchable, promote-to-curated button",
-    "promoteTrack() — sets source=user, promoted=true, live UI update",
-    "GET/POST /now + POST /now/extract endpoints",
-    "extractNowEntries() with 30s debounce",
-    "Two-column tab-layout on all 4 tabs",
-    "watcher ping OK, svelte-check clean"
+    "ProjectsTab: work timer starts when song is expanded, stops+logs on collapse",
+    "Min 5 min threshold — sessions under 5 min are discarded",
+    "stopWorkTimer() called on onDestroy and visibilitychange (tab hidden)",
+    "logWorkSession() inserts to work_logs table AND brain_knowledge (own_production)",
+    "loadSongWorkLogs() fetches last 10 sessions for expanded song",
+    "WORK LOG section renders below versions, above song footer",
+    "work_logs table already exists in Supabase",
+    "svelte-check: 0 errors"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test Notes tab — NOW.md at top, always expanded, no duplicate, auto-extract fires 30s after typing stops.",
-  "notes": "getBrainHealth uses global sbHeaders (top-level). weeklyBrainReview checks getDay()===0 && getHours()===8 every minute. NOW_PATH = NOTES_PATH/NOW.md (position -1, always first). ensureNowNote() runs at startup."
+  "next": "All tasks complete. Add new tasks or test the work log by opening a song for 5+ minutes then closing it.",
+  "notes": "work_logs table schema: id uuid PK, song_id text, song_title text, stage text, duration_minutes int, logged_at timestamptz, note text, created_at timestamptz"
 }

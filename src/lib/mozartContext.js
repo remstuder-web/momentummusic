@@ -231,5 +231,90 @@ FORMATTING RULES — always follow these:
     }).join('\n')
   }
 
+  context += `\n\n## ACTION COMMANDS
+When the user asks you to ADD, SAVE, FETCH, or ANALYZE something, include an action command at the END of your response in this format:
+[ACTION: action_type | param1=value1 | param2=value2]
+
+Available actions:
+- add_reference: adds a track as reference. params: track (artist - title), song_id (optional)
+- save_to_brain: saves text to brain. params: text, category
+- analyze_track: analyzes a Spotify URL. params: url
+- set_stage: changes song stage. params: song_id, stage
+
+Always include the action AFTER your normal response text.
+Only include actions when explicitly asked to perform them.`
+
   return context
+}
+
+export function parseActions(text) {
+  const actions = []
+  const regex = /\[ACTION:\s*(\w+)\s*\|([^\]]+)\]/g
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    const type = match[1]
+    const params = {}
+    match[2].split('|').forEach(p => {
+      const eqIdx = p.indexOf('=')
+      if (eqIdx < 0) return
+      const k = p.slice(0, eqIdx).trim()
+      const v = p.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '')
+      if (k) params[k] = v
+    })
+    actions.push({ type, params })
+  }
+  return actions
+}
+
+export async function executeAction(action, supabase, currentSong) {
+  switch (action.type) {
+    case 'add_reference': {
+      const res = await fetch('http://localhost:4242/agent-import-spotify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: action.params.track,
+          song_id: action.params.song_id || currentSong?.id,
+          collection: 'reference_current',
+          source: 'mozart'
+        })
+      })
+      const d = await res.json()
+      return d.ok ? '✓ Added ' + action.params.track : '✗ Could not find track'
+    }
+
+    case 'save_to_brain': {
+      await supabase.from('brain_knowledge').insert({
+        category: action.params.category || 'observation',
+        title: action.params.text?.slice(0, 60),
+        content: action.params.text,
+        entry_type_v2: 'observation',
+        confidence: 'medium',
+        source_type: 'mozart',
+        active: true
+      })
+      return '✓ Saved to brain'
+    }
+
+    case 'analyze_track': {
+      const res = await fetch('http://localhost:4242/analyze-spotify-track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: action.params.url })
+      })
+      const d = await res.json()
+      return d.ok ? '✓ Analyzed: ' + (d.title || action.params.url) : '✗ Could not analyze'
+    }
+
+    case 'set_stage': {
+      if (!action.params.song_id || !action.params.stage) return null
+      const { data: song } = await supabase.from('songs').select('work_data').eq('id', action.params.song_id).single()
+      const newWorkData = { ...(song?.work_data || {}), current_stage: action.params.stage }
+      await supabase.from('songs').update({ work_data: newWorkData }).eq('id', action.params.song_id)
+      return '✓ Stage updated to ' + action.params.stage
+    }
+
+    default:
+      return null
+  }
 }

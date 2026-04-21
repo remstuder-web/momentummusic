@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte'
   import { supabase } from './supabase.js'
-  import { buildMozartContext } from './mozartContext.js'
+  import { buildMozartContext, parseActions, executeAction } from './mozartContext.js'
 
   const DUMP_HINTS = [
     "Paste a Spotify link to analyze a track...",
@@ -49,6 +49,7 @@
   let entriesOpen = $state(false)
   let tracksOpen = $state(false)
   let libraryExpanded = $state(false)
+  let curatedExpanded = $state(true)
   let librarySearch = $state('')
   let expandedEntries = $state({})
   let watchedArtists = $state([])
@@ -958,7 +959,14 @@ Return ONLY JSON (single item array):
       })
       const data = await res.json()
       if (data.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/mozart', model: 'claude-sonnet-4-20250514', input_tokens: data.usage.input_tokens, output_tokens: data.usage.output_tokens, cost_usd: (data.usage.input_tokens * 0.000003) + (data.usage.output_tokens * 0.000015) }) }).catch(() => {})
-      aiMessages = [...aiMessages, { role: 'assistant', content: data.content?.[0]?.text || 'No response.' }]
+      const reply = data.content?.[0]?.text || 'No response.'
+      const actions = parseActions(reply)
+      const cleanReply = reply.replace(/\[ACTION:[^\]]+\]/g, '').trim()
+      aiMessages = [...aiMessages, { role: 'assistant', content: cleanReply }]
+      for (const action of actions) {
+        const result = await executeAction(action, supabase, null)
+        if (result) aiMessages = [...aiMessages, { role: 'assistant', content: result, _system: true }]
+      }
     } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
     aiLoading = false
   }
@@ -1619,10 +1627,12 @@ Return ONLY JSON (single item array):
 
     {#if tracksOpen}
       <!-- MY REFERENCES (user + promoted) -->
-      <div class="refs-section-header refs-curated">
+      <div class="refs-section-header refs-curated" onclick={() => curatedExpanded = !curatedExpanded}>
         <span>● MY REFERENCES</span>
         <span class="refs-count">{curatedRefs.length}</span>
+        <span style="margin-left:auto">{curatedExpanded ? '▲' : '▼'}</span>
       </div>
+      {#if curatedExpanded}
       {#if curatedRefs.length}
         {#each curatedRefs as track}
           <div class="brain-track-row">
@@ -1659,6 +1669,7 @@ Return ONLY JSON (single item array):
         {/each}
       {:else}
         <p class="brain-empty" style="font-size:11px;padding:8px 0">No curated refs yet — import a Spotify track or promote from library.</p>
+      {/if}
       {/if}
 
       <!-- LIBRARY (agent-added, not promoted) -->
@@ -2620,7 +2631,8 @@ Return ONLY JSON (single item array):
   .chat-inp:focus { border-color: rgba(201,168,76,.4); }
   .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 7px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
   .refs-section-header { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; padding: 8px 0 4px; border-bottom: 1px solid #1c1c1c; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
-  .refs-section-header.refs-curated { color: rgba(201,168,76,.75); cursor: default; }
+  .refs-section-header.refs-curated { color: rgba(201,168,76,.75); cursor: pointer; }
+  .refs-section-header.refs-curated:hover { color: rgba(201,168,76,1); }
   .refs-section-header.refs-library { color: #444; }
   .refs-section-header.refs-library:hover { color: #666; }
   .refs-count { font-family: 'Space Mono', monospace; font-size: 8px; background: #1c1c1c; padding: 1px 5px; border-radius: 8px; color: #555; }

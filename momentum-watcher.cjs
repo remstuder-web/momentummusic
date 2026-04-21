@@ -815,9 +815,10 @@ async function fetchKworbTrending() {
 async function fetchKworbSpotify() {
   try {
     const res = await fetch(
-      'https://kworb.net/spotify/country/global/daily.html',
+      'https://kworb.net/spotify/country/global_daily.html',
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     )
+    if (!res.ok) return []
     const html = await res.text()
     const results = []
     const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
@@ -829,14 +830,15 @@ async function fetchKworbSpotify() {
       while ((cell = cellRegex.exec(match[1])) !== null) {
         cells.push(cell[1].replace(/<[^>]+>/g, '').trim())
       }
-      if (cells.length >= 3) {
-        results.push({
-          position: results.length + 1,
-          artist: cells[1] || '',
-          title: cells[2] || '',
-          streams: cells[0] || ''
-        })
-      }
+      // Columns: [0]=pos [1]=change [2]=artist - title [3]=days [4]=? [5]=(xN) [6]=streams
+      if (cells.length < 7) continue
+      const pos = parseInt(cells[0])
+      if (isNaN(pos)) continue
+      const artistTitle = cells[2] || ''
+      const dashIdx = artistTitle.indexOf(' - ')
+      const artist = dashIdx >= 0 ? artistTitle.slice(0, dashIdx).trim() : artistTitle
+      const title = dashIdx >= 0 ? artistTitle.slice(dashIdx + 3).trim() : ''
+      results.push({ position: pos, artist, title, streams: cells[6] || '', source: 'kworb_spotify_global' })
     }
     return results.slice(0, 10)
   } catch(e) {

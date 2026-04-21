@@ -3536,7 +3536,7 @@ ${context}` }]
 
           console.log(`✓ query-import: ${track.name} — ${track.artists[0]?.name} | ${bpm || '?'}bpm ${key || '?'}`)
           res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: true, title: track.name, artist: track.artists.map(a => a.name).join(', '), bpm, key, camelot }))
+          res.end(JSON.stringify({ ok: true, spotify_id: track.id, title: track.name, artist: track.artists.map(a => a.name).join(', '), bpm, key, camelot }))
           return
         }
 

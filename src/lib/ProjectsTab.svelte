@@ -2044,7 +2044,12 @@
         songVersions: wd?.versions || [],
         songSpecificRefs
       })
-      const system = brainContext + '\n\n' + buildProjectContext()
+      let system = brainContext + '\n\n' + buildProjectContext()
+      if (expandedSong?.id) {
+        system += '\n\nCurrent open song: ' + (expandedSong.title || expandedSong.code) +
+          ' (id: ' + expandedSong.id + ')\n' +
+          'When adding references, use song_id=' + expandedSong.id
+      }
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },

@@ -269,18 +269,39 @@ export function parseActions(text) {
 export async function executeAction(action, supabase, currentSong) {
   switch (action.type) {
     case 'add_reference': {
+      const songId = action.params.song_id || currentSong?.id
       const res = await fetch('http://localhost:4242/agent-import-spotify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: action.params.track,
-          song_id: action.params.song_id || currentSong?.id,
+          song_id: songId,
           collection: 'reference_current',
           source: 'mozart'
         })
       })
       const d = await res.json()
-      return d.ok ? '✓ Added ' + action.params.track : '✗ Could not find track'
+      if (!d.ok) return '✗ Could not find track'
+
+      if (songId && d.spotify_id) {
+        const { data: songData } = await supabase.from('songs').select('work_data').eq('id', songId).maybeSingle()
+        const wd = songData?.work_data || {}
+        const refs = Array.isArray(wd.reference_links) ? wd.reference_links : []
+        if (!refs.find(r => r.spotify_id === d.spotify_id)) {
+          refs.push({
+            id: 'ref' + Date.now(),
+            title: d.title,
+            artist: d.artist,
+            spotify_id: d.spotify_id,
+            url: 'https://open.spotify.com/track/' + d.spotify_id,
+            source: 'mozart'
+          })
+          wd.reference_links = refs
+          await supabase.from('songs').update({ work_data: wd }).eq('id', songId)
+        }
+      }
+
+      return '✓ Added ' + (d.title ? d.title + ' — ' + d.artist : action.params.track)
     }
 
     case 'save_to_brain': {

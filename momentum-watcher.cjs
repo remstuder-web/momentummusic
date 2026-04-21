@@ -5410,7 +5410,7 @@ ${chatText.slice(0, 4000)}`
   // ── GET /apple-notes — return all notes from Momentum folder ─────────────────
   if (req.method === 'GET' && req.url === '/apple-notes') {
     try {
-      const notes = await getAppleNotes('Momentum')
+      const notes = await getAppleNotes('Notes')
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, notes, lastSync: appleNotesLastSync, count: notes.length }))
     } catch(e) {
@@ -5757,7 +5757,7 @@ function parseAppleScriptList(stdout) {
   return results
 }
 
-async function getAppleNotes(folderName = 'Momentum') {
+async function getAppleNotes(folderName = 'Notes') {
   return new Promise((resolve) => {
     const script = `
       var app = Application('Notes');
@@ -5791,7 +5791,7 @@ async function getAppleNotes(folderName = 'Momentum') {
   })
 }
 
-async function createAppleNote(title, body, folderName = 'Momentum') {
+async function createAppleNote(title, body, folderName = 'Notes') {
   return new Promise((resolve, reject) => {
     const safeBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')
     const script = `
@@ -5814,24 +5814,57 @@ async function createAppleNote(title, body, folderName = 'Momentum') {
 }
 
 async function syncAppleNotesToSupabase() {
-  const notes = await getAppleNotes('Momentum')
+  const appleNotes = await getAppleNotes('Notes')
+  // Fetch existing notes to deduplicate by name
+  const existingRes = await fetch(`${SUPABASE_URL}/rest/v1/notes?select=id,name`, { headers: sbHeaders })
+  const existing = await existingRes.json()
+  const byName = {}
+  for (const n of (Array.isArray(existing) ? existing : [])) byName[n.name] = n.id
+
   let synced = 0
-  for (const note of notes) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/notes`, {
-      method: 'POST',
-      headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: note.name,
-        text: note.body,
-        apple_note_id: note.id,
-        updated_at: note.modificationDate || new Date().toISOString(),
-        source: 'apple_notes'
-      })
-    })
-    if (r.ok) synced++
+  for (const note of appleNotes) {
+    try {
+      const existingId = byName[note.name]
+      const payload = { name: note.name, text: note.body }
+      // Include new columns only if they exist (ignore 400 gracefully)
+      const payloadWithMeta = { ...payload, source: 'apple_notes' }
+      if (existingId) {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/notes?id=eq.${existingId}`, {
+          method: 'PATCH',
+          headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify(payloadWithMeta)
+        })
+        if (r.ok || r.status === 400) synced++ // 400 = unknown column, still counts text update
+        if (r.status === 400) {
+          // Retry with base columns only
+          await fetch(`${SUPABASE_URL}/rest/v1/notes?id=eq.${existingId}`, {
+            method: 'PATCH',
+            headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+            body: JSON.stringify(payload)
+          })
+        }
+      } else {
+        const maxPos = Object.keys(byName).length
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/notes`, {
+          method: 'POST',
+          headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ ...payloadWithMeta, position: maxPos })
+        })
+        if (r.ok) { synced++; byName[note.name] = true }
+        else if (r.status === 400) {
+          // Retry with base columns only
+          const r2 = await fetch(`${SUPABASE_URL}/rest/v1/notes`, {
+            method: 'POST',
+            headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ ...payload, position: maxPos })
+          })
+          if (r2.ok) { synced++; byName[note.name] = true }
+        }
+      }
+    } catch(e) { /* skip failed note */ }
   }
   appleNotesLastSync = new Date().toISOString()
-  return { synced, total: notes.length }
+  return { synced, total: appleNotes.length }
 }
 
 // ── Contact enrichment — auto-find social profiles by artist name ────────────

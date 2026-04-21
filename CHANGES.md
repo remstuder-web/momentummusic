@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] momentum-watcher.cjs + BrainTab.svelte — DONE
+TASK: brain-health-briefing + curated-vs-library-refs
+WHAT: (1) getBrainHealth() appended to morning briefing — entry count, new last 3 days, weak old entries, category overlaps, missing knowledge gaps. (2) weeklyBrainReview() Sunday 8am Haiku analysis → Telegram. (3) BrainTab REFERENCE TRACKS split into MY REFERENCES (user+promoted) and LIBRARY (collapsed, searchable) with promote + delete buttons.
+RESULT: watcher restarted OK, svelte-check clean
+BLOCKERS: none
+
 ## [2026-04-21] momentum-watcher.cjs + NotesTab.svelte — DONE
 TASK: now-brain-extract
 WHAT: NOW.md note — GET/POST/POST /now/extract endpoints; extractNowEntries() via Claude Haiku; 30s debounced auto-extract after save; dedup by title+source_type; NOW.md preserved intact. NotesTab: NOW textarea at top with "→ Extract to Brain" button, nowContent/saveNow/extractNow state.

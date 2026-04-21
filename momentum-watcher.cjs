@@ -2841,6 +2841,66 @@ async function restore(input) {
   }
 
   // ── POST /morning-briefing — generate daily AI summary, push to inbox ──
+async function getBrainHealth() {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=id,category,title,confidence,created_at,source_type`,
+      { headers: sbHeaders }
+    )
+    const entries = await res.json()
+    if (!Array.isArray(entries) || !entries.length) return null
+
+    const categoryCounts = {}
+    const weakOld = []
+    const recentNew = []
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 3600000)
+    const threeDaysAgo = Date.now() - (3 * 24 * 3600000)
+
+    for (const e of entries) {
+      categoryCounts[e.category] = (categoryCounts[e.category] || 0) + 1
+      if (e.confidence === 'weak' && new Date(e.created_at).getTime() < thirtyDaysAgo) {
+        weakOld.push((e.title || '').slice(0, 40))
+      }
+      if (new Date(e.created_at).getTime() > threeDaysAgo && e.source_type === 'agent') {
+        recentNew.push(e.category)
+      }
+    }
+
+    const overlaps = []
+    const cats = Object.keys(categoryCounts)
+    if (cats.includes('artist_breaking') && cats.includes('artist_strategy'))
+      overlaps.push('artist_breaking + artist_strategy overlap')
+    if (cats.includes('emerging_artists_tracking') && cats.includes('artist_breaking'))
+      overlaps.push('emerging_artists_tracking + artist_breaking overlap')
+
+    const lines = []
+    lines.push(`Brain: ${entries.length} entries across ${cats.length} categories`)
+
+    if (recentNew.length > 0) {
+      const newByCat = {}
+      recentNew.forEach(c => newByCat[c] = (newByCat[c] || 0) + 1)
+      lines.push(`New last 3 days: ` + Object.entries(newByCat).map(([c,n]) => `${n} ${c}`).join(', '))
+    }
+    if (weakOld.length > 0)
+      lines.push(`${weakOld.length} weak entries >30 days old — consider deleting`)
+    if (overlaps.length > 0)
+      lines.push('Suggest merging: ' + overlaps.join(', '))
+
+    const missing = []
+    if (!cats.includes('goal')) missing.push('goals')
+    if (!cats.includes('own_production')) missing.push('own productions')
+    if (!cats.includes('mixing_technique')) missing.push('mixing rules')
+    if (missing.length)
+      lines.push('Missing knowledge: ' + missing.join(', ') + ' — add via Brain dump')
+
+    return lines.join('\n')
+  } catch(e) {
+    console.warn('getBrainHealth error:', e.message)
+    return null
+  }
+}
+
+  // ── POST /morning-briefing — generate daily AI summary, push to inbox ──
   if (req.method === 'POST' && req.url.startsWith('/morning-briefing')) {
     const chunks = []; req.on('data', c => chunks.push(c))
     req.on('end', async () => {
@@ -2944,7 +3004,11 @@ ${context}` }]
           })
         })
         const claudeData = await claudeRes.json()
-        const briefingText = claudeData.content?.[0]?.text || 'No briefing generated.'
+        let briefingText = claudeData.content?.[0]?.text || 'No briefing generated.'
+
+        // Append brain health snapshot
+        const brainHealth = await getBrainHealth()
+        if (brainHealth) briefingText += '\n\n## Brain Health\n' + brainHealth
 
         // Track API usage
         {
@@ -6576,6 +6640,59 @@ server.listen(PORT, '127.0.0.1', () => {
     }
   }, 5 * 60 * 1000)
   console.log('✓ Apple Notes auto-sync: every 5 minutes')
+  // Weekly brain review — Sunday 8am
+  async function weeklyBrainReview() {
+    try {
+      const brainRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=id,category,title,content,confidence,created_at,source_type`,
+        { headers: sbHeaders }
+      )
+      const entries = await brainRes.json()
+      if (!Array.isArray(entries) || !entries.length) return
+      const categoryCounts = {}
+      for (const e of entries) categoryCounts[e.category] = (categoryCounts[e.category] || 0) + 1
+      const apiKey = process.env.ANTHROPIC_API_KEY
+      if (!apiKey) { console.warn('weeklyBrainReview: no ANTHROPIC_API_KEY'); return }
+      const cr = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001', max_tokens: 600,
+          system: 'You are a knowledge curator for a music producer brain. Be direct and specific.',
+          messages: [{ role: 'user', content: `Weekly brain review for Remo (music producer).
+Categories: ${JSON.stringify(categoryCounts)}
+Total entries: ${entries.length}
+
+Analyze and suggest:
+1. Category overlaps to merge
+2. Knowledge gaps for a music producer
+3. Overall brain health score 1-10
+4. One priority action to improve the brain this week
+
+Max 150 words. Be specific and actionable.` }]
+        })
+      })
+      const d = await cr.json()
+      const review = d.content?.[0]?.text || ''
+      if (TELEGRAM_TOKEN) {
+        await sendTelegram(TELEGRAM_OWNER_ID, '🧠 Weekly Brain Review\n\n' + review + '\n\n→ Review in Brain tab')
+      }
+      fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
+        method: 'POST',
+        headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          endpoint: 'weekly-brain-review', model: 'claude-haiku-4-5-20251001',
+          input_tokens: d.usage?.input_tokens || 0, output_tokens: d.usage?.output_tokens || 0,
+          cost_usd: ((d.usage?.input_tokens || 0) * 0.0000008) + ((d.usage?.output_tokens || 0) * 0.000001)
+        })
+      }).catch(() => {})
+      console.log('✓ Weekly brain review sent')
+    } catch(e) { console.warn('weeklyBrainReview error:', e.message) }
+  }
+  setInterval(() => {
+    const now = new Date()
+    if (now.getDay() === 0 && now.getHours() === 8 && now.getMinutes() === 0) weeklyBrainReview()
+  }, 60000)
   exec('/opt/homebrew/bin/python3.11 -c "import essentia"', (err) => {
     if (err) console.warn('⚠ Essentia not available — BPM/key analysis disabled')
     else console.log('✓ Essentia ready')

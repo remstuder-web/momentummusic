@@ -1,18 +1,20 @@
 {
-  "updated": "2026-04-21T10:11:00Z",
-  "last_task": "now-brain-extract",
+  "updated": "2026-04-21T10:18:00Z",
+  "last_task": "brain-health-briefing + curated-vs-library-refs",
   "status": "done",
   "working": [
-    "GET /now — reads NOW.md from Obsidian vault",
-    "POST /now — saves NOW.md, schedules 30s debounced extractNowEntries()",
-    "POST /now/extract — manual extract NOW.md → brain_knowledge immediately",
-    "extractNowEntries() — Claude Haiku parses free text, dedupes by title+source_type='now_note'",
-    "NotesTab NOW block — textarea at top, auto-save on input, Extract to Brain button",
-    "Two-column tab-layout on ConnectionsTab, FinancesTab, NotesTab, BrainTab",
-    "watcher ping OK"
+    "getBrainHealth() — entry count, new-3-days, weak-old, overlaps, missing categories — appended to /morning-briefing",
+    "weeklyBrainReview() — Sunday 8am Haiku analysis → Telegram + api_usage tracking",
+    "BrainTab MY REFERENCES section — curated (source=user or promoted=true) with full stats + notes",
+    "BrainTab LIBRARY section — collapsed by default, searchable, promote-to-curated button",
+    "promoteTrack() — sets source=user, promoted=true, live UI update",
+    "GET/POST /now + POST /now/extract endpoints",
+    "extractNowEntries() with 30s debounce",
+    "Two-column tab-layout on all 4 tabs",
+    "watcher ping OK, svelte-check clean"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test NOW extract flow end-to-end with real content and API key",
-  "notes": "NOW.md lives at OBSIDIAN_VAULT_PATH/NOW.md. Extraction uses source_type='now_note'. nowExtractTimer is module-scoped so it survives across requests."
+  "next": "Test morning briefing Brain Health section. Test reference track promote flow.",
+  "notes": "getBrainHealth uses global sbHeaders (top-level). weeklyBrainReview is defined inside server.listen callback and checks getDay()===0 && getHours()===8 every minute."
 }

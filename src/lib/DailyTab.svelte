@@ -1814,19 +1814,6 @@ ${mozartContext}`
             {/if}
           </div>
           <div class="agent-output">{@html parseAgentOutput(todayBriefing.message)}</div>
-          {#if getTracksFromMessage(todayBriefing.message).length}
-            <div class="agent-tracks">
-              {#each getTracksFromMessage(todayBriefing.message) as track}
-                <div class="agent-track-row">
-                  <span class="agent-track-name">{track.artist} — {track.title}{track.bpm ? ' · ' + Math.round(track.bpm) + 'bpm' : ''}{track.key ? ' · ' + track.key : ''}{track.camelot ? ' (' + track.camelot + ')' : ''}</span>
-                  <div class="agent-track-btns">
-                    <button class="track-play-btn" onclick={() => window.open(track.spotify_url || track.youtube_url, '_blank')} title="Play">▶</button>
-                    <button class="track-brain-btn" onclick={() => addTrackToBrain(track)}>+ Brain</button>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
         </div>
       {/if}
 
@@ -1858,17 +1845,6 @@ ${mozartContext}`
                 </div>
                 {#if n.type === 'briefing'}
                   <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
-                  {#if getTracksFromMessage(n.message).length}
-                    <div class="agent-tracks">
-                      {#each getTracksFromMessage(n.message) as track}
-                        <div class="agent-track-row">
-                          <button class="track-play-btn" onclick={() => window.open(track.spotify_url || track.youtube_url, '_blank')} title="Play">▶</button>
-                          <span class="track-info">{track.artist} — {track.title}{track.bpm ? ' · ' + Math.round(track.bpm) + 'bpm' : ''}{track.key ? ' · ' + track.key : ''}{track.camelot ? ' (' + track.camelot + ')' : ''}</span>
-                          <button class="track-brain-btn" onclick={() => addTrackToBrain(track)}>+ Brain</button>
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
                 {:else if n.metadata?.real_intent}
                   {@const m = n.metadata}
                   <div class="wa-analysis {m.boundary_alert ? 'has-boundary' : ''}">
@@ -2191,16 +2167,16 @@ ${mozartContext}`
   .wa-copy-btn:hover { color: #c9a84c; border-color: #c9a84c; }
 
   :global(.inline-play-btn) {
-    display: inline; font-size: 8px; font-family: 'Space Mono', monospace;
+    display: inline; font-size: 9px; font-family: 'Space Mono', monospace;
     background: transparent; border: 1px solid #2a2a2a; color: #4caf82;
-    padding: 0px 4px; border-radius: 2px; cursor: pointer;
-    margin-left: 4px; vertical-align: middle; line-height: 1.4;
+    padding: 2px 6px; border-radius: 2px; cursor: pointer;
+    margin-left: 5px; vertical-align: middle; line-height: 1.6;
   }
   :global(.inline-brain-btn) {
-    display: inline; font-size: 8px; font-family: 'Space Mono', monospace;
+    display: inline; font-size: 9px; font-family: 'Space Mono', monospace;
     background: transparent; border: 1px solid #2a2a2a; color: #c9a84c;
-    padding: 0px 4px; border-radius: 2px; cursor: pointer;
-    margin-left: 2px; vertical-align: middle; line-height: 1.4;
+    padding: 2px 6px; border-radius: 2px; cursor: pointer;
+    margin-left: 3px; vertical-align: middle; line-height: 1.6;
   }
   :global(.inline-play-btn:hover)  { border-color: #4caf82; }
   :global(.inline-brain-btn:hover) { border-color: #c9a84c; }

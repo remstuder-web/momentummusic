@@ -3,6 +3,7 @@
   import { buildMozartContext } from './mozartContext.js'
   import { GENRE_LIST } from '$lib/genres.js'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
+  import { onDestroy } from 'svelte'
 
   let projects = $state([])
   let songs = $state([])
@@ -18,6 +19,12 @@
 
   let selectedProjectId = $state(null)
   let expandedSongId = $state(null)
+  let workTimerStart = $state(null)
+  let workTimerSong = $state(null)
+  let workTimerStage = $state(null)
+  let songWorkLogs = $state([])
+  const MIN_LOG_MINUTES = 5
+
   let selectedListenBg = $state('stars')  // 'stars' or 'void'
   let openTipSectionId = $state(null)
   let activeTipSectionId = $state(null)
@@ -1924,8 +1931,67 @@
     return lines.join('\n')
   }
 
+  function stopWorkTimer(shouldLog = true) {
+    if (!workTimerStart || !workTimerSong) return
+    const elapsed = Math.round((Date.now() - workTimerStart) / 60000)
+    if (shouldLog && elapsed >= MIN_LOG_MINUTES) logWorkSession(workTimerSong, workTimerStage, elapsed)
+    workTimerStart = null; workTimerSong = null; workTimerStage = null
+  }
+
+  function startWorkTimer(song) {
+    stopWorkTimer(false)
+    workTimerStart = Date.now()
+    workTimerSong = song
+    const wd = workData(song)
+    workTimerStage = wd?.current_stage || 'production'
+    console.log('Work timer started for', song.title || song.code, 'stage:', workTimerStage)
+  }
+
+  async function logWorkSession(song, stage, minutes) {
+    await supabase.from('work_logs').insert({
+      song_id: song.id,
+      song_title: song.title || song.code,
+      stage,
+      duration_minutes: minutes,
+      logged_at: new Date().toISOString(),
+      note: ''
+    })
+    await supabase.from('brain_knowledge').insert({
+      category: 'own_production',
+      title: 'Work session: ' + (song.title || song.code),
+      content: stage + ' — ' + minutes + ' min · ' + new Date().toLocaleDateString(),
+      entry_type_v2: 'observation',
+      confidence: 'medium',
+      source_type: 'auto_log',
+      active: true
+    })
+    console.log('Work session logged:', minutes, 'min on', song.title || song.code)
+  }
+
+  async function loadSongWorkLogs(songId) {
+    const { data } = await supabase.from('work_logs').select('*').eq('song_id', songId)
+      .order('logged_at', { ascending: false }).limit(10)
+    songWorkLogs = data || []
+  }
+
+  onDestroy(() => stopWorkTimer(true))
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopWorkTimer(true)
+      else if (expandedSong) startWorkTimer(expandedSong)
+    })
+  }
+
   async function expandSong(song, isExpanding) {
     saveActiveTips(); activeTipSectionId = null; activeTipText = ''
+    if (isExpanding) {
+      startWorkTimer(song)
+      loadSongWorkLogs(song.id)
+    } else {
+      stopWorkTimer(true)
+      songWorkLogs = []
+    }
     expandedSongId = isExpanding ? song.id : null
     if (!isExpanding) return
     const wd = workData(song)
@@ -2633,6 +2699,20 @@
                   </div>
                 {/if}
 
+                <!-- Work log -->
+                {#if songWorkLogs?.length && expandedSongId === song.id}
+                  <div class="work-log-section">
+                    <div class="work-log-title">WORK LOG</div>
+                    {#each songWorkLogs as log}
+                      <div class="work-log-entry">
+                        <span class="work-log-stage">{log.stage}</span>
+                        <span class="work-log-dur">{log.duration_minutes}min</span>
+                        <span class="work-log-date">{new Date(log.logged_at).toLocaleDateString()}</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+
                 <!-- Song footer: Move to Demos | Send to Artist (hidden on prod/mix) | Delete -->
                 <div class="song-footer-row">
                   <button class="sfooter-btn move" onclick={() => moveSongToDemo(song)}>← Move to Demos</button>
@@ -3207,6 +3287,12 @@
   .notes-drop-wrap { border-radius: 3px; transition: all .15s; }
   .notes-drop-wrap.pdf-drag-over { outline: 1px dashed rgba(201,168,76,.5); background: rgba(201,168,76,.03); }
   .send-to-artist-row { padding: 10px 14px; border-top: 1px solid #1c1c1c; }
+  .work-log-section { padding: 8px 14px 10px; border-top: 1px solid #1a1a1a; margin-top: 4px; }
+  .work-log-title { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-bottom: 5px; }
+  .work-log-entry { display: flex; gap: 12px; align-items: center; padding: 2px 0; }
+  .work-log-stage { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; text-transform: uppercase; letter-spacing: .06em; min-width: 80px; }
+  .work-log-dur { font-family: 'Space Mono', monospace; font-size: 10px; color: #cec9c1; min-width: 40px; }
+  .work-log-date { font-family: 'Space Mono', monospace; font-size: 10px; color: #666; }
   .song-footer-row { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid #1a1a1a; margin-top: 4px; }
   .sfooter-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 5px 12px; background: transparent; border-radius: 3px; cursor: pointer; }
   .sfooter-btn.move { border: 1px solid rgba(74,159,212,.3); color: #4a9fd4; margin-right: auto; }

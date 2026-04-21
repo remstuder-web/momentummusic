@@ -43,7 +43,7 @@
   let captureMixingSuggestions = $state([])
   let captureEntryId = $state(null)
   let captureContext = $state('')
-  let captureCategory = $state('')
+  let capturedSavedCategory = $state('')
   let entries = $state([])
   let lastExtracted = $state(null)
   let entriesOpen = $state(false)
@@ -117,9 +117,6 @@
       .select('category')
       .not('category', 'is', null)
     existingCategories = [...new Set((data || []).map(r => r.category))].sort()
-    if (!captureCategory && existingCategories.length > 0) {
-      captureCategory = existingCategories[0]
-    }
   }
 
   async function loadEntries() {
@@ -183,13 +180,28 @@
       const res = await fetch('http://localhost:4242/capture-screen', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey, context: captureContext, category: captureCategory })
+        body: JSON.stringify({ apiKey, context: captureContext })
       })
       const d = await res.json()
       if (!d.ok) throw new Error(d.error)
       captureResult = d.analysis
       captureMixingSuggestions = d.mixing_suggestions || []
       captureEntryId = d.saved_entry_id || null
+      // Auto-suggest category from analysis text
+      try {
+        await loadCategories()
+        const catRes = await fetch('http://localhost:4242/suggest-category', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: d.analysis, existingCategories, apiKey })
+        })
+        const catD = await catRes.json()
+        const suggestedCat = catD.ok ? (catD.suggestion || catD.category || '') : ''
+        capturedSavedCategory = suggestedCat
+        if (suggestedCat && captureEntryId) {
+          await supabase.from('brain_knowledge').update({ category: suggestedCat }).eq('id', captureEntryId)
+        }
+      } catch(e) { console.error('capture category suggest error:', e.message) }
       await loadEntries()
     } catch(e) {
       alert('Screen capture failed: ' + e.message + '\nMake sure watcher is running.')
@@ -940,7 +952,6 @@ Return ONLY JSON (single item array):
           placeholder="What should I look for? (e.g. mixing session, chord chart...)"
           style="flex:1"
         />
-        <input class="brain-cat-rename-inp" list="brain-cats-dl" bind:value={captureCategory} placeholder="category" style="width:140px;flex-shrink:0" />
       </div>
       <button
         class="brain-process-btn {capturing ? 'loading' : ''}"
@@ -959,7 +970,7 @@ Return ONLY JSON (single item array):
             {/each}
           {/if}
           <div class="brain-capture-meta">
-            Saved to Brain · {captureCategory}
+            Saved to Brain{capturedSavedCategory ? ` · ${capturedSavedCategory}` : ''}
             {#if captureEntryId}
               · <button class="brain-capture-delete-link" onclick={async () => { await deleteEntry(captureEntryId); captureResult = null; captureMixingSuggestions = []; captureEntryId = null }}>delete</button>
             {/if}

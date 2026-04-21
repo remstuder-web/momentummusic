@@ -1,22 +1,17 @@
 {
-  "updated": "2026-04-21T07:45:00.000Z",
-  "last_task": "contact-enrichment",
-  "status": "partial",
+  "updated": "2026-04-21T09:00:00.000Z",
+  "last_task": "remove-capture-category-input",
+  "status": "done",
   "working": [
-    "POST /enrich-contact endpoint live",
-    "enrichContact(): Spotify exact-match, IG variations, TikTok handle",
-    "addConnection() triggers enrichNewContact() after save",
-    "Name input onblur triggers enrichment if no IG/TikTok yet",
-    "enriched indicator shows in expanded body",
-    "TikTok + Spotify stats displayed"
+    "Screen capture: category input removed",
+    "captureCategory state removed entirely",
+    "captureScreen() calls /suggest-category after capture, updates entry via Supabase",
+    "Meta line shows auto-suggested category or plain 'Saved to Brain'"
   ],
   "broken": [],
   "partial": [
-    "SQL needed for connections: tiktok text, spotify_id text, tiktok_followers integer, spotify_followers integer, spotify_genres text[]",
-    "SQL needed for connections: ig_followers integer, ig_bio text",
-    "SQL needed for brain_knowledge: priority boolean, collection_name_display text",
-    "SQL needed for reference_tracks: notes text"
+    "All pending SQL migrations still needed in Supabase dashboard (connections + brain_knowledge + reference_tracks columns)"
   ],
-  "next": "Run all pending SQL migrations in Supabase dashboard",
-  "notes": "IG and TikTok scraping may be blocked — these platforms rate-limit unauthenticated requests. Spotify exact-name match works reliably."
+  "next": "Run SQL migrations in Supabase dashboard",
+  "notes": "fetchCatSuggestion() not called directly (it operates on dumpText); instead /suggest-category is called inline in captureScreen() with analysis text."
 }

@@ -1,5 +1,17 @@
 # CHANGES
 
+## [2026-04-21] BrainTab.svelte — DONE
+TASK: remove-capture-category-input
+WHAT: Removed manual category input from screen capture section; category now auto-suggested via /suggest-category after capture and applied via Supabase update
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-21] momentum-watcher.cjs + ConnectionsTab.svelte — DONE
+TASK: ig-guess-from-tiktok
+WHAT: enrichContact() now sets instagram_guess = tiktok handle when TikTok found but no IG scraped. ConnectionsTab uses instagram_guess to auto-fill IG field, sets _ig_guessed flag. Shows "auto-guessed from TikTok — verify manually" note in 9px italic below field.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-21] momentum-watcher.cjs + ConnectionsTab.svelte — DONE
 TASK: contact-enrichment
 WHAT: enrichContact() searches Spotify exact-match + IG username variations + TikTok handle. POST /enrich-contact endpoint. addConnection() triggers enrichment after save. Name input onblur triggers enrichment if no instagram/tiktok yet. "✓ Profiles auto-filled" indicator. TikTok + Spotify stats displayed below respective fields.

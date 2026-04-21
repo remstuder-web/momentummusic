@@ -1749,7 +1749,7 @@ ${mozartContext}`
         </div>
         <div class="agent-btn-wrap">
           <button class="briefing-btn agent-scout {scoutingArtists?'loading':''}" onclick={() => scoutArtists()}>
-            {scoutingArtists ? '✦ Scouting...' : '✦ Scout Artists'}
+            {scoutingArtists ? '✦ Scouting...' : '✦ Scout'}
           </button>
           {#if agentLastRun.scout}<div class="agent-last-run">{timeAgo(agentLastRun.scout)}</div>{/if}
         </div>
@@ -1779,9 +1779,11 @@ ${mozartContext}`
             <div class="agent-tracks">
               {#each getTracksFromMessage(todayBriefing.message) as track}
                 <div class="agent-track-row">
-                  <button class="track-play-btn" onclick={() => window.open(track.spotify_url || track.youtube_url, '_blank')} title="Play">▶</button>
-                  <span class="track-info">{track.artist} — {track.title}{track.bpm ? ' · ' + Math.round(track.bpm) + 'bpm' : ''}{track.key ? ' · ' + track.key : ''}{track.camelot ? ' (' + track.camelot + ')' : ''}</span>
-                  <button class="track-brain-btn" onclick={() => addTrackToBrain(track)}>+ Brain</button>
+                  <span class="agent-track-name">{track.artist} — {track.title}{track.bpm ? ' · ' + Math.round(track.bpm) + 'bpm' : ''}{track.key ? ' · ' + track.key : ''}{track.camelot ? ' (' + track.camelot + ')' : ''}</span>
+                  <div class="agent-track-btns">
+                    <button class="track-play-btn" onclick={() => window.open(track.spotify_url || track.youtube_url, '_blank')} title="Play">▶</button>
+                    <button class="track-brain-btn" onclick={() => addTrackToBrain(track)}>+ Brain</button>
+                  </div>
                 </div>
               {/each}
             </div>
@@ -2215,11 +2217,12 @@ ${mozartContext}`
   .agent-tracks { margin-top: 8px; border-top: 1px solid #1c1c1c; padding-top: 6px; }
   .agent-track-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #111; }
   .agent-track-row:last-child { border-bottom: none; }
+  .agent-track-name { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .agent-track-btns { display: flex; gap: 4px; flex-shrink: 0; }
   .track-play-btn { background: transparent; border: 1px solid #4caf82; color: #4caf82; font-size: 9px; padding: 2px 6px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .track-play-btn:hover { background: rgba(76,175,130,.12); }
-  .track-brain-btn { background: transparent; border: 1px solid #c9a84c; color: #c9a84c; font-size: 9px; padding: 2px 6px; border-radius: 2px; cursor: pointer; margin-left: auto; flex-shrink: 0; }
+  .track-brain-btn { background: transparent; border: 1px solid #c9a84c; color: #c9a84c; font-size: 9px; padding: 2px 6px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .track-brain-btn:hover { background: rgba(201,168,76,.1); }
-  .track-info { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :global(.ao-tag-gap) { color: #e05a4a; font-weight: 500; margin-right: 4px; }
   :global(.ao-tag-ok)  { color: #4caf82; font-weight: 500; margin-right: 4px; }
   :global(.agent-label-confirmed) { color: #c9a84c; font-weight: 500; }

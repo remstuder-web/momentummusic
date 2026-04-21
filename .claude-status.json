@@ -15,6 +15,6 @@
   ],
   "broken": [],
   "partial": [],
-  "next": "Test morning briefing Brain Health section. Test reference track promote flow.",
-  "notes": "getBrainHealth uses global sbHeaders (top-level). weeklyBrainReview is defined inside server.listen callback and checks getDay()===0 && getHours()===8 every minute."
+  "next": "Test morning briefing Brain Health section. Test reference track promote flow. Check NOW.md appears at top of Notes tab.",
+  "notes": "getBrainHealth uses global sbHeaders (top-level). weeklyBrainReview checks getDay()===0 && getHours()===8 every minute. NOW_PATH = NOTES_PATH/NOW.md (position -1, always first). ensureNowNote() runs at startup."
 }

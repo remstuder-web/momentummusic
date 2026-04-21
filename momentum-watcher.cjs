@@ -44,7 +44,7 @@ const GEMINI_API_KEY    = process.env.GEMINI_API_KEY
 // Obsidian vault
 const OBSIDIAN_VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || '/Users/remo/ObsidianVault/Momentum'
 const NOTES_PATH = path.join(OBSIDIAN_VAULT_PATH, 'Notes')
-const NOW_PATH = path.join(OBSIDIAN_VAULT_PATH, 'NOW.md')
+const NOW_PATH = path.join(OBSIDIAN_VAULT_PATH, 'Notes', 'NOW.md')
 
 let nowExtractTimer = null
 
@@ -6164,6 +6164,14 @@ ${content.slice(0, 5000)}`
   return { count: saved }
 }
 
+function ensureNowNote() {
+  if (!fs.existsSync(NOTES_PATH)) fs.mkdirSync(NOTES_PATH, { recursive: true })
+  if (!fs.existsSync(NOW_PATH)) {
+    writeNoteFile(NOW_PATH, { content: "What's on my mind right now\n\n", position: -1, source: 'momentum' })
+    console.log('✓ NOW.md created')
+  }
+}
+
 function parseFrontmatter(raw) {
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)/)
   if (!match) return { fm: {}, body: raw.trim() }
@@ -6200,9 +6208,10 @@ function readNotesDir() {
         source: fm.source || 'momentum'
       }
     })
-  // Positioned notes first (asc), then unpositioned by updated desc
-  const positioned = notes.filter(n => n.position !== null).sort((a, b) => a.position - b.position)
-  const unpositioned = notes.filter(n => n.position === null).sort((a, b) => new Date(b.updated) - new Date(a.updated))
+  // Force NOW.md to always be first, then positioned asc, then unpositioned by updated desc
+  const withNowFirst = notes.map(n => n.filename === 'NOW.md' ? { ...n, position: -1 } : n)
+  const positioned = withNowFirst.filter(n => n.position !== null).sort((a, b) => a.position - b.position)
+  const unpositioned = withNowFirst.filter(n => n.position === null).sort((a, b) => new Date(b.updated) - new Date(a.updated))
   return [...positioned, ...unpositioned]
 }
 
@@ -6630,6 +6639,7 @@ server.listen(PORT, '127.0.0.1', () => {
   } else {
     console.log('⚠ Obsidian vault not found:', OBSIDIAN_VAULT_PATH, '— create vault to enable sync')
   }
+  ensureNowNote()
   // Apple Notes auto-sync every 5 minutes
   if (!fs.existsSync(NOTES_PATH)) fs.mkdirSync(NOTES_PATH, { recursive: true })
   setInterval(async () => {

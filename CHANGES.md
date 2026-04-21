@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] momentum-watcher.cjs — DONE
+TASK: now-note-pinned-top
+WHAT: ensureNowNote() creates Notes/NOW.md on startup if missing (position -1). readNotesDir() forces NOW.md to position -1 so it's always first. NOW_PATH updated to NOTES_PATH/NOW.md.
+RESULT: /notes returns 8 notes with NOW.md first — confirmed
+BLOCKERS: none
+
 ## [2026-04-21] momentum-watcher.cjs + BrainTab.svelte — DONE
 TASK: brain-health-briefing + curated-vs-library-refs
 WHAT: (1) getBrainHealth() appended to morning briefing — entry count, new last 3 days, weak old entries, category overlaps, missing knowledge gaps. (2) weeklyBrainReview() Sunday 8am Haiku analysis → Telegram. (3) BrainTab REFERENCE TRACKS split into MY REFERENCES (user+promoted) and LIBRARY (collapsed, searchable) with promote + delete buttons.

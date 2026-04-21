@@ -108,9 +108,17 @@
     return acc
   })
 
-  // Curated = user-added or promoted; Library = agent-added and not promoted
-  const curatedRefs = $derived(referenceTrackEntries.filter(t => t.source === 'user' || t.promoted === true))
-  const libraryRefs = $derived(referenceTrackEntries.filter(t => t.source !== 'user' && !t.promoted))
+  // Curated = user-added, mozart-added, or promoted; Library = agent-added and not promoted
+  const curatedRefs = $derived(
+    referenceTrackEntries
+      .filter(t => t.source === 'user' || t.source === 'mozart' || t.promoted === true)
+      .sort((a, b) => (a.artist || '').localeCompare(b.artist || ''))
+  )
+  const libraryRefs = $derived(
+    referenceTrackEntries
+      .filter(t => t.source !== 'user' && t.source !== 'mozart' && !t.promoted)
+      .sort((a, b) => (a.artist || '').localeCompare(b.artist || ''))
+  )
   const filteredLibraryRefs = $derived(
     libraryRefs.filter(t =>
       !librarySearch ||

@@ -3580,7 +3580,7 @@ ${context}` }]
               preview_url: track.preview_url,
               album_art: track.album?.images?.[0]?.url,
               collection_name: collectionName,
-              source: source || 'mozart',
+              source: 'user',
               approved: true
             })
           })

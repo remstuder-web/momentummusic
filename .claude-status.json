@@ -1,16 +1,18 @@
 {
-  "updated": "2026-04-21T12:25:00Z",
-  "last_task": "mozart-refs-to-project",
+  "updated": "2026-04-21T13:05:00Z",
+  "last_task": "gear-news-tech-section",
   "status": "done",
   "working": [
-    "executeAction(action, supabase, currentSong, currentProject) — 4th param is project",
-    "add_reference saves to projects.project_meta.reference_links, deduped by name field",
-    "ProjectsTab passes selectedProject as 4th arg to executeAction",
-    "System prompt includes project_id hint so Mozart uses correct project_id in ACTION blocks",
-    "ACTION COMMANDS in prompt updated: add_reference param is now project_id (not song_id)"
+    "GEAR_SOURCES array: Bedroom Producers Blog + CDM Create Digital Music (both RSS, both 200 OK)",
+    "fetchGearNewsItems() uses fetchRssWithBody on both sources, returns up to 6 items",
+    "/agent-scout: gearThreads fetched in parallel, injected as '## TECH — NEW GEAR & PLUGINS' block in prompt, ## Tech section instruction added",
+    "/morning-briefing: gearThreadsBriefing fetched, 'TECH — NEW GEAR & PLUGINS' added to context, ## Tech section added to sections list",
+    "Gear items saved to brain_knowledge: category=sound_design, source_type=gear_news, deduped by title",
+    "Gearspace web scraper removed (site returns 403)",
+    "Test confirmed: ## Tech section appears in morning briefing with real plugin summaries"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test: open a project, ask Mozart 'Add X as reference' — should appear in project reference panel.",
-  "notes": "currentProject.project_meta is mutated in-place after update so local state reflects change without reload. DailyTab/BrainTab pass null for currentProject — add_reference from those tabs skips the project_meta update."
+  "next": "Test /agent-scout to confirm TECH section also appears there. All tasks done.",
+  "notes": "BPB and CDM both return free plugin + gear announcements. CDM (cdm.link) covers hardware + synthesis. BPB covers free VSTs and plugins."
 }

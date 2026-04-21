@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] momentum-watcher.cjs — DONE
+TASK: gear-news-tech-section
+WHAT: Added GEAR_SOURCES (BPB + CDM RSS) and fetchGearNewsItems(). TECH section injected into /agent-scout and /morning-briefing prompts. Gear items saved to brain_knowledge category=sound_design source_type=gear_news (deduped). Gearspace web scraper dropped (403 blocked) — replaced with reliable RSS feeds. Test confirmed ## Tech section appears in briefing output with free plugin summaries.
+RESULT: works — TECH section confirmed in morning briefing
+BLOCKERS: none
+
 ## [2026-04-21] mozartContext.js + ProjectsTab.svelte — DONE
 TASK: mozart-refs-to-project
 WHAT: executeAction add_reference now saves to projects.project_meta.reference_links (deduped by name) instead of songs.work_data. executeAction signature gains currentProject param. ProjectsTab passes selectedProject to executeAction and injects project_id into system prompt. ACTION COMMANDS updated to use project_id.

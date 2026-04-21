@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-21] momentum-watcher.cjs — DONE
+TASK: apple-note-html-body
+WHAT: Added textToAppleNotesHtml() — converts plain text to Apple Notes HTML before writing to temp file; lines→<div>, blank lines→<br>, bullet prefixes stripped. Applied to both createAppleNote and updateAppleNote.
+RESULT: works — temp file confirmed correct HTML output
+BLOCKERS: none
+
+## [2026-04-21] momentum-watcher.cjs — DONE
 TASK: apple-note-formatting
 WHAT: createAppleNote + updateAppleNote now write body to /tmp/apple_note_body.txt and read it via AppleScript heredoc — avoids \n→literal escaping that broke line breaks in Apple Notes
 RESULT: works — watcher restarted cleanly

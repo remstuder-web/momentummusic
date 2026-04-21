@@ -5906,7 +5906,8 @@ async function getAppleNotes(folderName = 'Notes') {
 async function createAppleNote(title, body, folderName = 'Notes') {
   return new Promise((resolve) => {
     const tmpFile = '/tmp/apple_note_body.txt'
-    fs.writeFileSync(tmpFile, body, 'utf8')
+    const htmlBody = textToAppleNotesHtml(body)
+    fs.writeFileSync(tmpFile, htmlBody, 'utf8')
     const safeTitle = title.replace(/"/g, '\\"').replace(/'/g, "'\\''")
     const safeFolder = folderName.replace(/"/g, '\\"')
     const script = `
@@ -5929,7 +5930,8 @@ async function createAppleNote(title, body, folderName = 'Notes') {
 async function updateAppleNote(title, body, folderName = 'Notes') {
   return new Promise((resolve) => {
     const tmpFile = '/tmp/apple_note_body.txt'
-    fs.writeFileSync(tmpFile, body, 'utf8')
+    const htmlBody = textToAppleNotesHtml(body)
+    fs.writeFileSync(tmpFile, htmlBody, 'utf8')
     const safeTitle = title.replace(/"/g, '\\"').replace(/'/g, "'\\''")
     const safeFolder = folderName.replace(/"/g, '\\"')
     const script = `
@@ -5948,6 +5950,22 @@ async function updateAppleNote(title, body, folderName = 'Notes') {
     `
     exec(`osascript -e '${script.replace(/'/g, "'\\''")}'`, () => resolve(true))
   })
+}
+
+function textToAppleNotesHtml(text) {
+  if (!text) return ''
+  return text
+    .split('\n')
+    .map(line => {
+      if (line.trim() === '') return '<br>'
+      if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
+        return '<div>' + line.trim().slice(2)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>'
+      }
+      return '<div>' + line
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>'
+    })
+    .join('')
 }
 
 function noteToFilename(title) {

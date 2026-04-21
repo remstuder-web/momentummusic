@@ -43,6 +43,7 @@ const GEMINI_API_KEY    = process.env.GEMINI_API_KEY
 
 // Obsidian vault
 const OBSIDIAN_VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || '/Users/remo/ObsidianVault/Momentum'
+const NOTES_PATH = path.join(OBSIDIAN_VAULT_PATH, 'Notes')
 
 const GENRE_LIST = [
   { label: 'ELECTRONIC & DANCE', type: 'main', tag: 'electronic' },
@@ -1402,6 +1403,8 @@ function parseObsidianFrontmatter(content) {
 
 async function syncObsidianFile(filePath) {
   if (!filePath.endsWith('.md')) return
+  // Notes/ subfolder is managed by Apple Notes sync — skip brain sync
+  if (filePath.startsWith(NOTES_PATH + path.sep) || filePath.startsWith(NOTES_PATH + '/')) return
   try {
     const content = fs.readFileSync(filePath, 'utf8')
     const stat = fs.statSync(filePath)
@@ -5407,7 +5410,86 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
-  // ── GET /apple-notes — return all notes from Momentum folder ─────────────────
+  // ── GET /notes — read all notes from Obsidian/Notes/ ─────────────────────────
+  if (req.method === 'GET' && req.url === '/notes') {
+    try {
+      const notes = readNotesDir()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, notes, lastSync: appleNotesLastSync }))
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /notes — create note in Obsidian + Apple Notes ──────────────────────
+  if (req.method === 'POST' && req.url === '/notes') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!body.title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'title required' })); return }
+        if (!fs.existsSync(NOTES_PATH)) fs.mkdirSync(NOTES_PATH, { recursive: true })
+        const filename = noteToFilename(body.title)
+        const content = `---\nsource: momentum\nupdated: ${new Date().toISOString()}\n---\n\n${body.content || ''}`
+        fs.writeFileSync(path.join(NOTES_PATH, filename), content, 'utf8')
+        createAppleNote(body.title, body.content || '', 'Notes').catch(() => {})
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, filename }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── PATCH /notes — update note content or rename ──────────────────────────────
+  if (req.method === 'PATCH' && req.url === '/notes') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!body.filename) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'filename required' })); return }
+        const oldPath = path.join(NOTES_PATH, body.filename)
+        let filename = body.filename
+        let title = body.filename.replace(/\.md$/, '')
+        // Rename: create new file, delete old
+        if (body.title && noteToFilename(body.title) !== body.filename) {
+          filename = noteToFilename(body.title)
+          title = body.title
+          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath)
+        }
+        const content = `---\nsource: momentum\nupdated: ${new Date().toISOString()}\n---\n\n${body.content ?? ''}`
+        fs.writeFileSync(path.join(NOTES_PATH, filename), content, 'utf8')
+        updateAppleNote(title, body.content ?? '', 'Notes').catch(() => {})
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, filename }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── DELETE /notes — delete note file (Apple Note left intact) ─────────────────
+  if (req.method === 'DELETE' && req.url === '/notes') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!body.filename) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'filename required' })); return }
+        const fp = path.join(NOTES_PATH, body.filename)
+        if (fs.existsSync(fp)) fs.unlinkSync(fp)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── GET /apple-notes — return raw Apple Notes list ───────────────────────────
   if (req.method === 'GET' && req.url === '/apple-notes') {
     try {
       const notes = await getAppleNotes('Notes')
@@ -5419,27 +5501,10 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
-  // ── POST /apple-notes — create a new note in Momentum folder ─────────────────
-  if (req.method === 'POST' && req.url === '/apple-notes') {
-    const chunks = []; req.on('data', c => chunks.push(c))
-    req.on('end', async () => {
-      try {
-        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        if (!body.title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'title required' })); return }
-        await createAppleNote(body.title, body.body || '', 'Momentum')
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true }))
-      } catch(e) {
-        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
-      }
-    })
-    return
-  }
-
-  // ── POST /apple-notes-sync — two-way sync Apple Notes ↔ Supabase notes ───────
+  // ── POST /apple-notes-sync — sync Apple Notes → Obsidian/Notes/ ──────────────
   if (req.method === 'POST' && req.url === '/apple-notes-sync') {
     try {
-      const result = await syncAppleNotesToSupabase()
+      const result = await syncAppleNotesToObsidian()
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, ...result, lastSync: appleNotesLastSync }))
     } catch(e) {
@@ -5813,55 +5878,57 @@ async function createAppleNote(title, body, folderName = 'Notes') {
   })
 }
 
-async function syncAppleNotesToSupabase() {
-  const appleNotes = await getAppleNotes('Notes')
-  // Fetch existing notes to deduplicate by name
-  const existingRes = await fetch(`${SUPABASE_URL}/rest/v1/notes?select=id,name`, { headers: sbHeaders })
-  const existing = await existingRes.json()
-  const byName = {}
-  for (const n of (Array.isArray(existing) ? existing : [])) byName[n.name] = n.id
+async function updateAppleNote(title, body, folderName = 'Notes') {
+  return new Promise((resolve) => {
+    const safeBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')
+    const safeTitle = title.replace(/"/g, '\\"')
+    const script = `
+      var app = Application('Notes');
+      try {
+        var folders = app.folders.whose({name: "${folderName}"});
+        if (folders.length > 0) {
+          var ns = folders[0].notes.whose({name: "${safeTitle}"});
+          if (ns.length > 0) { ns[0].body = "${safeBody}"; }
+        }
+      } catch(e) {}
+    `
+    exec(`osascript -l JavaScript -e '${script.replace(/'/g, "'\\''")}'`, () => resolve(true))
+  })
+}
 
+function noteToFilename(title) {
+  return title.replace(/[^a-zA-Z0-9 ]/g, '').trim() + '.md'
+}
+
+function readNotesDir() {
+  if (!fs.existsSync(NOTES_PATH)) return []
+  return fs.readdirSync(NOTES_PATH)
+    .filter(f => f.endsWith('.md'))
+    .map(f => {
+      const fp = path.join(NOTES_PATH, f)
+      const raw = fs.readFileSync(fp, 'utf8')
+      const stat = fs.statSync(fp)
+      // Strip YAML frontmatter
+      const bodyMatch = raw.match(/^---[\s\S]*?---\n([\s\S]*)/)
+      const content = bodyMatch ? bodyMatch[1].trim() : raw.trim()
+      const titleFromFile = f.replace(/\.md$/, '')
+      return { title: titleFromFile, content, filename: f, updated: stat.mtime.toISOString() }
+    })
+    .sort((a, b) => new Date(b.updated) - new Date(a.updated))
+}
+
+async function syncAppleNotesToObsidian() {
+  if (!fs.existsSync(NOTES_PATH)) fs.mkdirSync(NOTES_PATH, { recursive: true })
+  const appleNotes = await getAppleNotes('Notes')
   let synced = 0
   for (const note of appleNotes) {
     try {
-      const existingId = byName[note.name]
-      const payload = { name: note.name, text: note.body }
-      // Include new columns only if they exist (ignore 400 gracefully)
-      const payloadWithMeta = { ...payload, source: 'apple_notes' }
-      if (existingId) {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/notes?id=eq.${existingId}`, {
-          method: 'PATCH',
-          headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-          body: JSON.stringify(payloadWithMeta)
-        })
-        if (r.ok || r.status === 400) synced++ // 400 = unknown column, still counts text update
-        if (r.status === 400) {
-          // Retry with base columns only
-          await fetch(`${SUPABASE_URL}/rest/v1/notes?id=eq.${existingId}`, {
-            method: 'PATCH',
-            headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-            body: JSON.stringify(payload)
-          })
-        }
-      } else {
-        const maxPos = Object.keys(byName).length
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/notes`, {
-          method: 'POST',
-          headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ ...payloadWithMeta, position: maxPos })
-        })
-        if (r.ok) { synced++; byName[note.name] = true }
-        else if (r.status === 400) {
-          // Retry with base columns only
-          const r2 = await fetch(`${SUPABASE_URL}/rest/v1/notes`, {
-            method: 'POST',
-            headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-            body: JSON.stringify({ ...payload, position: maxPos })
-          })
-          if (r2.ok) { synced++; byName[note.name] = true }
-        }
-      }
-    } catch(e) { /* skip failed note */ }
+      const filename = noteToFilename(note.name)
+      const filepath = path.join(NOTES_PATH, filename)
+      const content = `---\nsource: apple_notes\nupdated: ${new Date().toISOString()}\n---\n\n${note.body}`
+      fs.writeFileSync(filepath, content, 'utf8')
+      synced++
+    } catch(e) { console.error('notes sync error:', note.name, e.message) }
   }
   appleNotesLastSync = new Date().toISOString()
   return { synced, total: appleNotes.length }
@@ -6270,9 +6337,10 @@ server.listen(PORT, '127.0.0.1', () => {
     console.log('⚠ Obsidian vault not found:', OBSIDIAN_VAULT_PATH, '— create vault to enable sync')
   }
   // Apple Notes auto-sync every 5 minutes
+  if (!fs.existsSync(NOTES_PATH)) fs.mkdirSync(NOTES_PATH, { recursive: true })
   setInterval(async () => {
     try {
-      await syncAppleNotesToSupabase()
+      await syncAppleNotesToObsidian()
     } catch(e) {
       logError('apple-notes-sync', e.message)
     }

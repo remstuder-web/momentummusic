@@ -1,19 +1,19 @@
 {
-  "updated": "2026-04-21T09:15:00.000Z",
-  "last_task": "apple-notes-integration",
+  "updated": "2026-04-21T09:10:00.000Z",
+  "last_task": "apple-notes-obsidian-sync",
   "status": "done",
   "working": [
-    "GET /apple-notes — returns notes from Momentum folder (empty until folder created)",
-    "POST /apple-notes — creates note in Apple Notes via AppleScript",
-    "POST /apple-notes-sync — syncs Apple Notes to Supabase notes table",
-    "5-minute auto-sync interval active",
-    "NotesTab: 🍎 Sync button, last-sync timestamp, 🍎 badge on apple_notes source rows",
-    "Startup warning fires with SQL to run if notes columns missing"
+    "GET /notes — reads Obsidian/Notes/*.md, returns title+content+filename+updated",
+    "POST /notes — creates .md file + Apple Note",
+    "PATCH /notes — updates file + syncs back to Apple Notes via JXA; handles rename",
+    "DELETE /notes — deletes .md file (Apple Note left intact)",
+    "POST /apple-notes-sync — syncs Apple Notes → Obsidian/Notes/ (7/7 working)",
+    "5-min auto-sync interval active",
+    "syncObsidianFile skips Notes/ subfolder (no brain_knowledge pollution)",
+    "NotesTab: file-based, no Supabase, debounce-save, rename inline, 🍎 Sync button"
   ],
   "broken": [],
-  "partial": [
-    "SQL migrations needed in Supabase: apple_note_id text, source text, updated_at timestamptz + unique index — see startup log"
-  ],
-  "next": "Run SQL migrations in Supabase dashboard for notes table (apple_note_id, source, updated_at columns)",
-  "notes": "Apple Notes Momentum folder must exist for notes to sync. Create it manually in Apple Notes app first."
+  "partial": [],
+  "next": "No pending tasks — ready for new work",
+  "notes": "Files in Obsidian/Notes/ are source of truth. Apple Notes is a mirror. Chokidar skips Notes/ to avoid brain sync pollution."
 }

@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-21] momentum-watcher.cjs + NotesTab.svelte — DONE
+TASK: apple-notes-obsidian-sync
+WHAT: Switched Apple Notes sync target from Supabase to Obsidian/Notes/ folder. Added GET/POST/PATCH/DELETE /notes endpoints (file-based). NotesTab fully rewritten to use watcher as source of truth — no Supabase. Edits debounce-save to .md + push back to Apple Notes via JXA. 5-min auto-sync Apple → Obsidian.
+RESULT: works — 7/7 Apple Notes synced to Obsidian/Notes/, GET /notes returns all with content
+BLOCKERS: none
+
+## [2026-04-21] momentum-watcher.cjs + NotesTab.svelte — DONE
 TASK: apple-notes-integration
 WHAT: Added Apple Notes integration — GET/POST /apple-notes + POST /apple-notes-sync endpoints; getAppleNotes() via JXA + createAppleNote() via AppleScript; 5-min auto-sync to Supabase notes table; NotesTab shows sync button, last-sync time, 🍎 badge on Apple-sourced notes
 RESULT: works — /apple-notes returns {ok:true,notes:[],count:0} (empty until Momentum folder created in Apple Notes); SQL migration needed for apple_note_id/source columns

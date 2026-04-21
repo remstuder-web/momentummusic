@@ -1,17 +1,73 @@
 <script>
-  import { supabase } from './supabase.js'
-
   let notes = $state([])
   let loading = $state(true)
   let newTopicName = $state('')
-  let syncStatus = $state(null)   // null | 'syncing' | 'done' | 'error'
+  let syncStatus = $state(null)  // null | 'syncing' | 'done' | 'error'
   let lastSync = $state(null)
   let syncCount = $state(null)
+  let savingFiles = $state({})   // filename → true while saving
 
   async function load() {
-    const { data } = await supabase.from('notes').select('*').order('position')
-    notes = (data || []).map(n => ({ ...n, _exp: false }))
+    loading = true
+    try {
+      const r = await fetch('http://localhost:4242/notes')
+      const d = await r.json()
+      notes = (d.notes || []).map(n => ({ ...n, _exp: false, _editing: false }))
+      if (d.lastSync) lastSync = new Date(d.lastSync)
+    } catch(e) { console.error('notes load error', e) }
     loading = false
+  }
+
+  async function addTopic() {
+    if (!newTopicName.trim()) return
+    const title = newTopicName.trim()
+    newTopicName = ''
+    const r = await fetch('http://localhost:4242/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, content: '' })
+    })
+    const d = await r.json()
+    if (d.ok) notes = [{ title, content: '', filename: d.filename, updated: new Date().toISOString(), _exp: true, _editing: false }, ...notes]
+  }
+
+  async function saveContent(note, text) {
+    note.content = text
+    notes = [...notes]
+    savingFiles[note.filename] = true
+    const r = await fetch('http://localhost:4242/notes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: note.filename, content: text })
+    })
+    const d = await r.json()
+    if (d.ok) note.filename = d.filename
+    delete savingFiles[note.filename]
+    savingFiles = { ...savingFiles }
+  }
+
+  async function renameNote(note, newTitle) {
+    const trimmed = newTitle.trim()
+    if (!trimmed || trimmed === note.title) { note._editing = false; notes = [...notes]; return }
+    const r = await fetch('http://localhost:4242/notes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: note.filename, title: trimmed, content: note.content })
+    })
+    const d = await r.json()
+    if (d.ok) { note.title = trimmed; note.filename = d.filename }
+    note._editing = false
+    notes = [...notes]
+  }
+
+  async function deleteNote(note) {
+    if (!confirm(`Delete "${note.title}"?`)) return
+    await fetch('http://localhost:4242/notes', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: note.filename })
+    })
+    notes = notes.filter(n => n.filename !== note.filename)
   }
 
   async function triggerAppleSync() {
@@ -31,54 +87,6 @@
     }
   }
 
-  async function fetchLastSyncTime() {
-    const r = await fetch('http://localhost:4242/apple-notes').catch(() => null)
-    if (!r) return
-    const d = await r.json().catch(() => null)
-    if (d?.lastSync) lastSync = new Date(d.lastSync)
-  }
-
-  async function addTopic() {
-    if (!newTopicName.trim()) return
-    const { data } = await supabase.from('notes')
-      .insert({ name: newTopicName.trim(), text: '', position: notes.length })
-      .select().single()
-    if (data) notes = [...notes, { ...data, _exp: true }]
-    newTopicName = ''
-  }
-
-  async function updateText(note, text) {
-    note.text = text
-    notes = [...notes]
-    await supabase.from('notes').update({ text }).eq('id', note.id)
-  }
-
-  async function updateName(note, name) {
-    note.name = name.trim() || note.name
-    notes = [...notes]
-    await supabase.from('notes').update({ name: note.name }).eq('id', note.id)
-  }
-
-  async function deleteTopic(id) {
-    if (!confirm('Delete this topic?')) return
-    await supabase.from('notes').delete().eq('id', id)
-    notes = notes.filter(n => n.id !== id)
-  }
-
-  async function moveNote(note, dir) {
-    const idx = notes.findIndex(n => n.id === note.id)
-    const ni = idx + dir
-    if (ni < 0 || ni >= notes.length) return
-    const a = notes[idx], b = notes[ni]
-    const pa = a.position ?? idx, pb = b.position ?? ni
-    a.position = pb; b.position = pa
-    notes = [...notes].sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
-    await Promise.all([
-      supabase.from('notes').update({ position: pb }).eq('id', a.id),
-      supabase.from('notes').update({ position: pa }).eq('id', b.id),
-    ])
-  }
-
   function toggle(note) { note._exp = !note._exp; notes = [...notes] }
 
   function autoResize(node) {
@@ -88,8 +96,15 @@
     return { destroy() { node.removeEventListener('input', resize) } }
   }
 
+  function focusInput(node) { setTimeout(() => node.focus(), 0) }
+
+  let saveTimers = {}
+  function debounceSave(note, text) {
+    clearTimeout(saveTimers[note.filename])
+    saveTimers[note.filename] = setTimeout(() => saveContent(note, text), 800)
+  }
+
   load()
-  fetchLastSyncTime()
 </script>
 
 <div class="notes-wrap">
@@ -115,25 +130,35 @@
   {#if loading}
     <div class="empty">Loading...</div>
   {:else if !notes.length}
-    <div class="empty">No topics yet.</div>
+    <div class="empty">No notes yet.</div>
   {:else}
     <div id="topic-list">
-      {#each notes as note (note.id)}
+      {#each notes as note (note.filename)}
         <div class="topic {note._exp ? 'exp' : ''}">
           <div class="topic-head" onclick={() => toggle(note)}>
             <span class="topic-arr">▶</span>
-            <span class="topic-name">{note.name}{#if note.source === 'apple_notes'} <span class="apple-badge">🍎</span>{/if}</span>
+            {#if note._editing}
+              <input class="topic-name-inp" value={note.title}
+                onclick={e => e.stopPropagation()}
+                onblur={e => renameNote(note, e.target.value)}
+                onkeydown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { note._editing = false; notes = [...notes] } }}
+                use:focusInput />
+            {:else}
+              <span class="topic-name">{note.title}</span>
+            {/if}
             <div class="topic-actions" onclick={e => e.stopPropagation()}>
-              <button class="act-btn" onclick={() => moveNote(note, -1)}>▲</button>
-              <button class="act-btn" onclick={() => moveNote(note, 1)}>▼</button>
-              <button class="act-btn del" onclick={() => deleteTopic(note.id)}>✕</button>
+              <button class="act-btn" onclick={() => { note._editing = true; notes = [...notes] }}>✎</button>
+              <button class="act-btn del" onclick={() => deleteNote(note)}>✕</button>
             </div>
+            {#if savingFiles[note.filename]}
+              <span class="saving-dot"></span>
+            {/if}
           </div>
           {#if note._exp}
             <div class="topic-body">
-              <textarea class="note-area" value={note.text || ''}
+              <textarea class="note-area" value={note.content || ''}
                 use:autoResize
-                oninput={e => updateText(note, e.target.value)}
+                oninput={e => debounceSave(note, e.target.value)}
                 placeholder="Write anything..."></textarea>
             </div>
           {/if}
@@ -146,13 +171,12 @@
 <style>
   .notes-wrap { width: 100%; }
   .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); }
   .apple-sync-row { display: flex; align-items: center; gap: 6px; }
   .apple-sync-ts { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
   .apple-sync-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 4px 10px; background: #1c1c1c; border: 1px solid #303030; color: #9e9690; border-radius: 3px; cursor: pointer; letter-spacing: .04em; }
   .apple-sync-btn:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .apple-sync-btn.syncing { opacity: .6; cursor: default; }
-  .apple-badge { font-size: 12px; opacity: .7; }
-  .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); }
   .add-row { display: flex; gap: 8px; margin-left: auto; }
   .inp { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; outline: none; border-radius: 3px; width: 220px; }
   .inp:focus { border-color: rgba(201,168,76,.4); }
@@ -171,23 +195,17 @@
   .topic.exp .topic-arr { transform: rotate(90deg); }
   .topic-name { font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 700; flex: 1; color: #cec9c1; }
   .topic.exp .topic-name { color: #c9a84c; }
+  .topic-name-inp { font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 700; flex: 1; background: #0a0a0a; border: 1px solid rgba(201,168,76,.4); color: #c9a84c; padding: 2px 6px; outline: none; border-radius: 2px; }
   .topic-actions { display: flex; align-items: center; gap: 3px; opacity: 0; transition: opacity .15s; }
   .topic-head:hover .topic-actions { opacity: 1; }
   .act-btn { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 6px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; }
   .act-btn:hover { border-color: #c9a84c; color: #c9a84c; }
   .act-btn.del:hover { border-color: #e05a4a; color: #e05a4a; }
+  .saving-dot { width: 6px; height: 6px; background: rgba(201,168,76,.6); border-radius: 50%; flex-shrink: 0; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: .4 } 50% { opacity: 1 } }
 
   .topic-body { padding: 0; border-top: 1px solid #2e2e2e; }
   .note-area { display: block; width: 100%; min-height: 120px; background: #0a0a0a; border: none; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 300; padding: 14px 18px; outline: none; resize: vertical; border-radius: 0; line-height: 1.8; white-space: pre-wrap; tab-size: 4; }
   .note-area:focus { background: #0d0d0d; }
   .note-area::placeholder { color: #333; }
-  .note-rendered { display: block; width: 100%; min-height: 48px; background: #0a0a0a; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 300; padding: 14px 18px; line-height: 1.8; cursor: text; word-break: break-word; }
-  .note-rendered:hover { background: #0d0d0d; }
-  .note-rendered.empty { min-height: 48px; }
-  .note-placeholder { color: #333; font-style: italic; font-size: 13px; }
-  .md-h1 { display: block; font-family: 'Space Mono', monospace; font-size: 15px; font-weight: 700; color: #c9a84c; margin: 4px 0 2px; }
-  .md-h2 { display: block; font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; color: rgba(201,168,76,.8); margin: 4px 0 2px; }
-  .md-h3 { display: block; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .06em; margin: 4px 0 2px; }
-  .md-li { display: block; padding-left: 8px; color: #cec9c1; }
-  .md-code { font-family: 'Space Mono', monospace; font-size: 12px; background: #1c1c1c; padding: 1px 5px; border-radius: 3px; color: #9e9690; }
 </style>

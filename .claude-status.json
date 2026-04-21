@@ -1,15 +1,16 @@
 {
-  "updated": "2026-04-21T12:15:00Z",
-  "last_task": "mozart-action-link-refs",
+  "updated": "2026-04-21T12:25:00Z",
+  "last_task": "mozart-refs-to-project",
   "status": "done",
   "working": [
-    "executeAction add_reference: after watcher saves reference_track, loads song work_data and pushes {id,title,artist,spotify_id,url,source:'mozart'} into reference_links array (deduped)",
-    "ProjectsTab system prompt now appends current song id + hint for Mozart to use correct song_id in ACTION commands",
-    "Watcher /agent-import-spotify query response now returns spotify_id field",
-    "expandedSong (full object with id/title/work_data) already passed as currentSong to executeAction"
+    "executeAction(action, supabase, currentSong, currentProject) — 4th param is project",
+    "add_reference saves to projects.project_meta.reference_links, deduped by name field",
+    "ProjectsTab passes selectedProject as 4th arg to executeAction",
+    "System prompt includes project_id hint so Mozart uses correct project_id in ACTION blocks",
+    "ACTION COMMANDS in prompt updated: add_reference param is now project_id (not song_id)"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test: open a song in Projects, ask Mozart 'Add X as reference' — should appear in that song's reference panel immediately after.",
-  "notes": "reference_links dedup check uses spotify_id. If track has no spotify_id (unlikely), it skips the work_data update silently."
+  "next": "Test: open a project, ask Mozart 'Add X as reference' — should appear in project reference panel.",
+  "notes": "currentProject.project_meta is mutated in-place after update so local state reflects change without reload. DailyTab/BrainTab pass null for currentProject — add_reference from those tabs skips the project_meta update."
 }

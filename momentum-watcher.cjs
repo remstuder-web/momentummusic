@@ -739,6 +739,25 @@ const MUSIC_SOURCES = [
   { name: 'A&R Factory',       url: 'https://www.anrfactory.com/feed/',                    type: 'rss' }
 ]
 
+const GEAR_SOURCES = [
+  { name: 'Bedroom Producers Blog', url: 'https://bedroomproducersblog.com/feed/' },
+  { name: 'CDM Create Digital Music', url: 'https://cdm.link/feed/' }
+]
+
+async function fetchGearNewsItems() {
+  const results = await Promise.allSettled(
+    GEAR_SOURCES.map(async src => {
+      const items = await fetchRssWithBody(src.url, 3)
+      return items
+        .filter(i => i.title && i.title.length > 10 && i.url && i.url.startsWith('http'))
+        .map(i => ({ ...i, source: src.name }))
+    })
+  )
+  const items = results.flatMap(r => r.status === 'fulfilled' ? r.value : [])
+  console.log(`  Gear news: ${items.length} items from ${GEAR_SOURCES.length} sources`)
+  return items
+}
+
 async function fetchMusicPressItems() {
   const results = await Promise.allSettled(
     MUSIC_SOURCES.map(async src => {
@@ -873,7 +892,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
   const today = new Date().toISOString().slice(0, 10)
 
   // Fetch all data sources in parallel
-  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, pressItems] = await Promise.all([
+  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, pressItems, gearThreads] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/connections?select=name`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?order=tempo.desc&limit=5&select=title,artist,genre_tags,tempo,key`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/watched_artists?active=eq.true&select=*`, { headers: sbHeaders }),
@@ -884,6 +903,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     fetchKworbTrending(),
     fetchKworbSpotify(),
     fetchMusicPressItems(),
+    fetchGearNewsItems(),
   ])
 
   const [connections, refTracks, watchedArtists] = await Promise.all([
@@ -955,7 +975,11 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     .map(([src, items]) => `${src.toUpperCase()}:\n` + items.map(i => `- ${i.title}${i.body ? `: ${i.body.slice(0, 300)}` : ''} (source: ${src})`).join('\n'))
     .join('\n\n') || 'No press fetched'
 
-  const sourcesUsed = ['spotify_new_releases', 'pitchfork', 'factmag', 'hypebot', 'kworb_youtube', 'kworb_spotify', 'watched_artists', ...MUSIC_SOURCES.map(s => s.name)]
+  const sourcesUsed = ['spotify_new_releases', 'pitchfork', 'factmag', 'hypebot', 'kworb_youtube', 'kworb_spotify', 'watched_artists', 'gear_news', ...MUSIC_SOURCES.map(s => s.name)]
+
+  const gearBlock = gearThreads.length
+    ? gearThreads.map((t, i) => `${i+1}. ${t.title}`).join('\n')
+    : 'Unavailable'
 
   const prompt = `Here is this week's REAL music data — do not invent anything outside this data:
 
@@ -977,6 +1001,9 @@ ${pressBlock}
 WATCHED ARTISTS — NEW RELEASES:
 ${watchedNewText || 'none this week'}
 
+## TECH — NEW GEAR & PLUGINS (top 5)
+${gearBlock}
+
 ${refTrackText ? `REFERENCE TRACKS (Remo's taste):\n${refTrackText}\n` : ''}Already known — skip: ${knownNames}
 ${brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]\n` : ''}
 Based ONLY on the above real data:
@@ -990,6 +1017,12 @@ Based ONLY on the above real data:
 
 ## Opportunities
 - Based on gaps in the real data vs Remo's sound (genres: ${SUB_GENRE_LABELS})
+
+## Tech
+- Summarize new gear from BPB/CDM relevant to music production
+- Flag anything useful for: mixing, recording, plugins, hardware, monitoring, synthesis
+- Keep to 3-4 bullet points maximum
+- If no gear data available, omit this section
 
 ## Next Step
 - Single most important action today
@@ -1043,6 +1076,29 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
         metadata: { url: item.url, source: item.source }
       })
     }).catch(() => {})
+  }
+
+  // Save Gear news items to brain_knowledge (deduplicated by title)
+  if (gearThreads.length) {
+    const existingRes = await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?source_type=eq.gear_news&select=title`, { headers: sbHeaders })
+    const existing = await existingRes.json().catch(() => [])
+    const existingTitles = new Set((Array.isArray(existing) ? existing : []).map(r => r.title))
+    for (const t of gearThreads) {
+      const brainTitle = 'GEAR: ' + t.title
+      if (existingTitles.has(brainTitle)) continue
+      fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+        method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          category: 'sound_design',
+          title: brainTitle,
+          content: t.title + ' (Gear News (BPB + CDM))',
+          entry_type_v2: 'observation',
+          source_type: 'gear_news',
+          confidence: 'weak',
+          active: true
+        })
+      }).catch(() => {})
+    }
   }
 
   // Encode kworb tracks as structured data in inbox message
@@ -2976,7 +3032,8 @@ async function getBrainHealth() {
         const in7days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
         const ago30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
-        // Fetch data from Supabase in parallel
+        // Fetch data from Supabase in parallel + gear news
+        const gearThreadsBriefing = await fetchGearNewsItems()
         const countHeaders = { ...sbHeaders, 'Prefer': 'count=exact' }
         const [songsRes, inboxRes, connectionsRes, brainKnowRes, goalsRes, demoCountRes, projectSongCountRes] = await Promise.all([
           fetch(`${SUPABASE_URL}/rest/v1/songs?select=title,code,work_data,project_id&not.project_id=is.null`, { headers: sbHeaders }),
@@ -3029,6 +3086,10 @@ async function getBrainHealth() {
           catch { return `- ${g.title}` }
         }).join('\n')
 
+        const gearBriefingBlock = gearThreadsBriefing.length
+          ? gearThreadsBriefing.map((t, i) => `${i+1}. ${t.title}`).join('\n')
+          : ''
+
         const context = [
           `Today: ${todayISO}`,
           `Songs by stage: ${Object.entries(stageCounts).map(([k,v]) => `${k}(${v})`).join(', ') || 'none'}`,
@@ -3037,6 +3098,7 @@ async function getBrainHealth() {
           `Unread feedback: ${unreadFeedback.join('; ') || 'none'}`,
           `Artists to follow up (30+ days no contact): ${overdueArtists.slice(0,5).join('; ') || 'none'}`,
           activeGoals ? `\nACTIVE GOALS:\n${activeGoals}` : '',
+          gearBriefingBlock ? `\nTECH — NEW GEAR & PLUGINS:\n${gearBriefingBlock}` : '',
           brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]` : ''
         ].filter(Boolean).join('\n')
 
@@ -3058,6 +3120,7 @@ Sections to include:
 ## Today's Focus
 ## Pipeline Status
 ## Watch Out
+## Tech (only if gear news data present — summarize new gear relevant to mixing/recording/plugins/hardware, 3-4 bullets max)
 ## Next Step
 
 ${context}` }]

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] mozartContext.js + ProjectsTab.svelte — DONE
+TASK: mozart-refs-to-project
+WHAT: executeAction add_reference now saves to projects.project_meta.reference_links (deduped by name) instead of songs.work_data. executeAction signature gains currentProject param. ProjectsTab passes selectedProject to executeAction and injects project_id into system prompt. ACTION COMMANDS updated to use project_id.
+RESULT: works — svelte-check 0 errors
+BLOCKERS: none
+
 ## [2026-04-21] mozartContext.js + ProjectsTab.svelte + momentum-watcher.cjs — DONE
 TASK: mozart-action-link-refs
 WHAT: executeAction add_reference now links saved reference_track into song work_data.reference_links (deduped by spotify_id). ProjectsTab injects current song id into system prompt so Mozart uses correct song_id in ACTION commands. Watcher query-import response now includes spotify_id field.

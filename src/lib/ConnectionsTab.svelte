@@ -97,6 +97,10 @@
 
       const updates = {}
       if (d.instagram && !conn.instagram) updates.instagram = d.instagram
+      if (!d.instagram && d.instagram_guess && !conn.instagram) {
+        updates.instagram = d.instagram_guess
+        updates._ig_guessed = true
+      }
       if (d.tiktok && !conn.tiktok) updates.tiktok = d.tiktok
       if (d.spotify_id && !conn.spotify_id) updates.spotify_id = d.spotify_id
       if (d.ig_followers) updates.ig_followers = d.ig_followers
@@ -306,6 +310,9 @@
                           <button class="social-btn insta" onclick={() => openLink(instaUrl(conn.instagram))}>IG</button>
                         {/if}
                       </div>
+                      {#if conn._ig_guessed}
+                        <div class="ig-guess-note">Instagram auto-guessed from TikTok handle — verify manually</div>
+                      {/if}
                       {#if conn.ig_followers}
                         <div class="ig-stats">
                           {conn.ig_followers?.toLocaleString()} followers
@@ -546,6 +553,7 @@
   .via-pick-opt:hover { background: #252525; color: #c9a84c; }
 
   .ig-stats { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #666; margin-top: 3px; font-style: italic; }
+  .ig-guess-note { font-family: 'DM Sans', sans-serif; font-size: 9px; color: #555; margin-top: 2px; font-style: italic; }
 
   .social-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 7px; border: none; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .social-btn.insta { background: linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045); color: #fff; }

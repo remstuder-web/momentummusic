@@ -5765,6 +5765,11 @@ async function enrichContact(name) {
     }
   } catch(e) {}
 
+  // If TikTok handle found but no Instagram: guess same handle on Instagram
+  if (results.tiktok && !results.instagram) {
+    results.instagram_guess = results.tiktok
+  }
+
   return results
 }
 

@@ -1,19 +1,22 @@
 {
-  "updated": "2026-04-21T07:40:00.000Z",
-  "last_task": "ig-auto-fetch",
+  "updated": "2026-04-21T07:45:00.000Z",
+  "last_task": "contact-enrichment",
   "status": "partial",
   "working": [
-    "POST /fetch-instagram endpoint live",
-    "fetchInstagramProfile() with JSON + HTML fallback",
-    "ConnectionsTab: 500ms debounce auto-fetch on instagram field change",
-    "Auto-fills name, ig_followers, ig_bio",
-    "ig-stats display below instagram input"
+    "POST /enrich-contact endpoint live",
+    "enrichContact(): Spotify exact-match, IG variations, TikTok handle",
+    "addConnection() triggers enrichNewContact() after save",
+    "Name input onblur triggers enrichment if no IG/TikTok yet",
+    "enriched indicator shows in expanded body",
+    "TikTok + Spotify stats displayed"
   ],
   "broken": [],
   "partial": [
-    "ig_followers/ig_bio columns missing — run: ALTER TABLE connections ADD COLUMN IF NOT EXISTS ig_followers integer; ALTER TABLE connections ADD COLUMN IF NOT EXISTS ig_bio text;",
-    "brain-collections SQL also needed: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS priority boolean DEFAULT false; ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS collection_name_display text; ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;"
+    "SQL needed for connections: tiktok text, spotify_id text, tiktok_followers integer, spotify_followers integer, spotify_genres text[]",
+    "SQL needed for connections: ig_followers integer, ig_bio text",
+    "SQL needed for brain_knowledge: priority boolean, collection_name_display text",
+    "SQL needed for reference_tracks: notes text"
   ],
-  "next": "Run SQL migrations in Supabase dashboard for both connections and brain_knowledge tables",
-  "notes": "Instagram scraping may be rate-limited by Instagram. JSON endpoint (?__a=1) often blocked; HTML fallback extracts from meta tags."
+  "next": "Run all pending SQL migrations in Supabase dashboard",
+  "notes": "IG and TikTok scraping may be blocked — these platforms rate-limit unauthenticated requests. Spotify exact-name match works reliably."
 }

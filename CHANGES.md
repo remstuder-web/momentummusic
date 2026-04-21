@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-21] momentum-watcher.cjs + ConnectionsTab.svelte — DONE
+TASK: contact-enrichment
+WHAT: enrichContact() searches Spotify exact-match + IG username variations + TikTok handle. POST /enrich-contact endpoint. addConnection() triggers enrichment after save. Name input onblur triggers enrichment if no instagram/tiktok yet. "✓ Profiles auto-filled" indicator. TikTok + Spotify stats displayed below respective fields.
+RESULT: works (endpoint live). Columns tiktok/spotify_id/tiktok_followers/spotify_followers/spotify_genres need SQL migration.
+BLOCKERS: Run in Supabase SQL editor: ALTER TABLE connections ADD COLUMN IF NOT EXISTS tiktok text; ALTER TABLE connections ADD COLUMN IF NOT EXISTS spotify_id text; ALTER TABLE connections ADD COLUMN IF NOT EXISTS tiktok_followers integer; ALTER TABLE connections ADD COLUMN IF NOT EXISTS spotify_followers integer; ALTER TABLE connections ADD COLUMN IF NOT EXISTS spotify_genres text[];
+
+## [2026-04-21] momentum-watcher.cjs + ConnectionsTab.svelte — DONE
 TASK: ig-auto-fetch
 WHAT: Added fetchInstagramProfile() helper + POST /fetch-instagram endpoint. ConnectionsTab instagram onchange triggers 500ms debounce fetch — auto-fills name if empty, saves ig_followers + ig_bio fields. ig-stats display below instagram input.
 RESULT: works (endpoint live). ig_followers/ig_bio display pending SQL migration.

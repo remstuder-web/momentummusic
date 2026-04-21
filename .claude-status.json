@@ -15,6 +15,6 @@
   ],
   "broken": [],
   "partial": [],
-  "next": "Test morning briefing Brain Health section. Test reference track promote flow. Check NOW.md appears at top of Notes tab.",
+  "next": "Test Notes tab — NOW.md at top, always expanded, no duplicate, auto-extract fires 30s after typing stops.",
   "notes": "getBrainHealth uses global sbHeaders (top-level). weeklyBrainReview checks getDay()===0 && getHours()===8 every minute. NOW_PATH = NOTES_PATH/NOW.md (position -1, always first). ensureNowNote() runs at startup."
 }

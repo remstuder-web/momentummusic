@@ -5480,7 +5480,9 @@ ${chatText.slice(0, 4000)}`
   // ── GET /notes — read all notes from Obsidian/Notes/ ─────────────────────────
   if (req.method === 'GET' && req.url === '/notes') {
     try {
-      const notes = readNotesDir()
+      const nowNote = parseNowNote()
+      const regularNotes = readNotesDir()
+      const notes = nowNote ? [nowNote, ...regularNotes] : regularNotes
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, notes, lastSync: appleNotesLastSync }))
     } catch(e) {
@@ -5535,6 +5537,16 @@ ${chatText.slice(0, 4000)}`
         }
         writeNoteFile(path.join(NOTES_PATH, filename), { content: body.content ?? '', position: existingPosition })
         updateAppleNote(title, body.content ?? '', 'Notes').catch(() => {})
+        // NOW.md: reset 30s extract timer on every save
+        if (filename === 'NOW.md') {
+          clearTimeout(nowExtractTimer)
+          nowExtractTimer = setTimeout(async () => {
+            try {
+              await extractNowEntries(body.content ?? '')
+              console.log('NOW auto-extracted to brain')
+            } catch(e) { console.error('NOW extract error:', e.message) }
+          }, 30000)
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, filename }))
       } catch(e) {
@@ -6189,10 +6201,18 @@ function writeNoteFile(filepath, { content, position, source = 'momentum' }) {
   fs.writeFileSync(filepath, `---\nsource: ${source}\n${posLine}updated: ${new Date().toISOString()}\n---\n\n${content}`, 'utf8')
 }
 
+function parseNowNote() {
+  if (!fs.existsSync(NOW_PATH)) return null
+  const raw = fs.readFileSync(NOW_PATH, 'utf8')
+  const stat = fs.statSync(NOW_PATH)
+  const { body } = parseFrontmatter(raw)
+  return { title: 'NOW', content: body, filename: 'NOW.md', updated: stat.mtime.toISOString(), position: -1, source: 'momentum', isNow: true }
+}
+
 function readNotesDir() {
   if (!fs.existsSync(NOTES_PATH)) return []
   const notes = fs.readdirSync(NOTES_PATH)
-    .filter(f => f.endsWith('.md'))
+    .filter(f => f.endsWith('.md') && f !== 'NOW.md')
     .map(f => {
       const fp = path.join(NOTES_PATH, f)
       const raw = fs.readFileSync(fp, 'utf8')
@@ -6208,10 +6228,8 @@ function readNotesDir() {
         source: fm.source || 'momentum'
       }
     })
-  // Force NOW.md to always be first, then positioned asc, then unpositioned by updated desc
-  const withNowFirst = notes.map(n => n.filename === 'NOW.md' ? { ...n, position: -1 } : n)
-  const positioned = withNowFirst.filter(n => n.position !== null).sort((a, b) => a.position - b.position)
-  const unpositioned = withNowFirst.filter(n => n.position === null).sort((a, b) => new Date(b.updated) - new Date(a.updated))
+  const positioned = notes.filter(n => n.position !== null).sort((a, b) => a.position - b.position)
+  const unpositioned = notes.filter(n => n.position === null).sort((a, b) => new Date(b.updated) - new Date(a.updated))
   return [...positioned, ...unpositioned]
 }
 

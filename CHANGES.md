@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] momentum-watcher.cjs + NotesTab.svelte — DONE
+TASK: fix-now-duplicate-extract-btn
+WHAT: (1) readNotesDir() skips NOW.md; parseNowNote() reads it separately; GET /notes prepends it → no more duplicate. (2) PATCH /notes resets 30s extract timer when filename===NOW.md. (3) Removed dedicated NOW block + all NOW-specific state/functions from NotesTab. NOW.md now renders via standard note loop: always expanded (_exp=true), toggle() no-ops for it, no delete/rename/reorder buttons, now-title gold style. (4) Removed extract button.
+RESULT: /notes returns 8 notes, NOW.md first, no duplicate — confirmed
+BLOCKERS: none
+
 ## [2026-04-21] momentum-watcher.cjs — DONE
 TASK: now-note-pinned-top
 WHAT: ensureNowNote() creates Notes/NOW.md on startup if missing (position -1). readNotesDir() forces NOW.md to position -1 so it's always first. NOW_PATH updated to NOTES_PATH/NOW.md.

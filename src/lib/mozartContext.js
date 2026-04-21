@@ -236,7 +236,7 @@ When the user asks you to ADD, SAVE, FETCH, or ANALYZE something, include an act
 [ACTION: action_type | param1=value1 | param2=value2]
 
 Available actions:
-- add_reference: adds a track as reference. params: track (artist - title), song_id (optional)
+- add_reference: adds a track as reference. params: track (artist - title), project_id (optional)
 - save_to_brain: saves text to brain. params: text, category
 - analyze_track: analyzes a Spotify URL. params: url
 - set_stage: changes song stage. params: song_id, stage
@@ -266,16 +266,14 @@ export function parseActions(text) {
   return actions
 }
 
-export async function executeAction(action, supabase, currentSong) {
+export async function executeAction(action, supabase, currentSong, currentProject) {
   switch (action.type) {
     case 'add_reference': {
-      const songId = action.params.song_id || currentSong?.id
       const res = await fetch('http://localhost:4242/agent-import-spotify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: action.params.track,
-          song_id: songId,
           collection: 'reference_current',
           source: 'mozart'
         })
@@ -283,21 +281,22 @@ export async function executeAction(action, supabase, currentSong) {
       const d = await res.json()
       if (!d.ok) return '✗ Could not find track'
 
-      if (songId && d.spotify_id) {
-        const { data: songData } = await supabase.from('songs').select('work_data').eq('id', songId).maybeSingle()
-        const wd = songData?.work_data || {}
-        const refs = Array.isArray(wd.reference_links) ? wd.reference_links : []
-        if (!refs.find(r => r.spotify_id === d.spotify_id)) {
+      const projectId = action.params.project_id || currentProject?.id
+      if (projectId && d.spotify_id) {
+        const { data: proj } = await supabase.from('projects').select('project_meta').eq('id', projectId).maybeSingle()
+        const meta = proj?.project_meta || {}
+        const refs = Array.isArray(meta.reference_links) ? meta.reference_links : []
+        if (!refs.find(r => r.name === d.title)) {
           refs.push({
-            id: 'ref' + Date.now(),
-            title: d.title,
-            artist: d.artist,
-            spotify_id: d.spotify_id,
+            id: 'r' + Date.now(),
             url: 'https://open.spotify.com/track/' + d.spotify_id,
+            name: d.title,
+            artist: d.artist,
             source: 'mozart'
           })
-          wd.reference_links = refs
-          await supabase.from('songs').update({ work_data: wd }).eq('id', songId)
+          meta.reference_links = refs
+          await supabase.from('projects').update({ project_meta: meta }).eq('id', projectId)
+          if (currentProject) currentProject.project_meta = meta
         }
       }
 

@@ -1,18 +1,15 @@
 {
-  "updated": "2026-04-21T12:30:00Z",
-  "last_task": "mozart-actions",
+  "updated": "2026-04-21T12:15:00Z",
+  "last_task": "mozart-action-link-refs",
   "status": "done",
   "working": [
-    "parseActions() exported from mozartContext.js — parses [ACTION: type | k=v] blocks",
-    "executeAction(action, supabase, currentSong) exported — handles add_reference, save_to_brain, analyze_track, set_stage",
-    "Action instructions added to Mozart system prompt in buildMozartContext()",
-    "All 3 sendAI functions (ProjectsTab, DailyTab, BrainTab) strip action tags from displayed reply and execute actions",
-    "_system: true flag on action result messages for potential styling",
-    "POST /agent-import-spotify query mode: search Spotify by text, Essentia BPM/key/camelot on preview, save to reference_tracks + optionally update songs.work_data.reference_links",
-    "watcher restarted and ping OK"
+    "executeAction add_reference: after watcher saves reference_track, loads song work_data and pushes {id,title,artist,spotify_id,url,source:'mozart'} into reference_links array (deduped)",
+    "ProjectsTab system prompt now appends current song id + hint for Mozart to use correct song_id in ACTION commands",
+    "Watcher /agent-import-spotify query response now returns spotify_id field",
+    "expandedSong (full object with id/title/work_data) already passed as currentSong to executeAction"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test by asking Mozart: 'Add Princess Nokia - Surfboard as a reference track' — should trigger add_reference action and appear in reference_tracks.",
-  "notes": "executeAction uses fetch to localhost:4242 — watcher must be running. set_stage does select+update pattern (no supabase.raw). DailyTab/BrainTab pass null as currentSong (no song context)."
+  "next": "Test: open a song in Projects, ask Mozart 'Add X as reference' — should appear in that song's reference panel immediately after.",
+  "notes": "reference_links dedup check uses spotify_id. If track has no spotify_id (unlikely), it skips the work_data update silently."
 }

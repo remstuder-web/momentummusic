@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] mozartContext.js + ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: mozart-action-link-refs
+WHAT: executeAction add_reference now links saved reference_track into song work_data.reference_links (deduped by spotify_id). ProjectsTab injects current song id into system prompt so Mozart uses correct song_id in ACTION commands. Watcher query-import response now includes spotify_id field.
+RESULT: works — svelte-check 0 errors, watcher restarted OK
+BLOCKERS: none
+
 ## [2026-04-21] mozartContext.js + ProjectsTab/DailyTab/BrainTab + momentum-watcher.cjs — DONE
 TASK: mozart-actions
 WHAT: Mozart can now signal actions via [ACTION: type | param=value] blocks. parseActions()/executeAction() exported from mozartContext.js. Actions: add_reference (Spotify search→save), save_to_brain, analyze_track, set_stage. /agent-import-spotify query mode added to watcher for text-based track search + Essentia analysis + reference_tracks save + song reference_links update.

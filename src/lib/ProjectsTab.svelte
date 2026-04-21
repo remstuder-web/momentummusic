@@ -2047,8 +2047,12 @@
       let system = brainContext + '\n\n' + buildProjectContext()
       if (expandedSong?.id) {
         system += '\n\nCurrent open song: ' + (expandedSong.title || expandedSong.code) +
-          ' (id: ' + expandedSong.id + ')\n' +
-          'When adding references, use song_id=' + expandedSong.id
+          ' (id: ' + expandedSong.id + ')'
+      }
+      if (selectedProject?.id) {
+        system += '\nCurrent project: ' + selectedProject.artist + ' — ' + selectedProject.name +
+          ' (project_id: ' + selectedProject.id + ')\n' +
+          'When adding project references use project_id=' + selectedProject.id
       }
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -2070,7 +2074,7 @@
       const cleanReply = reply.replace(/\[ACTION:[^\]]+\]/g, '').trim()
       aiMessages = [...aiMessages, { role: 'assistant', content: cleanReply }]
       for (const action of actions) {
-        const result = await executeAction(action, supabase, expandedSong)
+        const result = await executeAction(action, supabase, expandedSong, selectedProject)
         if (result) aiMessages = [...aiMessages, { role: 'assistant', content: result, _system: true }]
       }
     } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }

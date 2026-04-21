@@ -962,6 +962,8 @@ Return ONLY JSON (single item array):
   }
 </script>
 
+<div class="tab-layout">
+<div class="tab-main">
 <div class="brain-wrap">
 
   <!-- Left: dump input -->
@@ -1692,32 +1694,38 @@ Return ONLY JSON (single item array):
   </div>
 
 </div>
-
-<div class="mozart-block">
-  <div class="mozart-title-row">
-    <div class="mozart-title">ASK MOZART</div>
-    {#if aiMessages.length}
-      <button class="clear-chat" onclick={() => aiMessages = []}>Clear</button>
-    {/if}
+</div>
+<div class="tab-sidebar">
+  <div class="mozart-block">
+    <div class="mozart-title-row">
+      <div class="mozart-title">ASK MOZART</div>
+      {#if aiMessages.length}
+        <button class="clear-chat" onclick={() => aiMessages = []}>Clear</button>
+      {/if}
+    </div>
+    <div class="chat-input-row">
+      <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
+      <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
+    </div>
+    <div class="chat-out">
+      {#each aiMessages as msg}
+        <div class="chat-msg {msg.role}">
+          <div class="chat-who">{msg.role==='user'?'You':'Mozart'}</div>
+          <div class="chat-text">{@html msg.role === 'assistant' ? formatMozartOutput(msg.content) : msg.content}</div>
+        </div>
+      {/each}
+      {#if aiLoading}
+        <div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>
+      {/if}
+    </div>
   </div>
-  <div class="chat-input-row">
-    <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
-    <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
-  </div>
-  <div class="chat-out">
-    {#each aiMessages as msg}
-      <div class="chat-msg {msg.role}">
-        <div class="chat-who">{msg.role==='user'?'You':'Mozart'}</div>
-        <div class="chat-text">{@html msg.role === 'assistant' ? formatMozartOutput(msg.content) : msg.content}</div>
-      </div>
-    {/each}
-    {#if aiLoading}
-      <div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>
-    {/if}
-  </div>
+</div>
 </div>
 
 <style>
+  .tab-layout { display: grid; grid-template-columns: 1fr 320px; gap: 32px; min-height: calc(100vh - 100px); align-items: start; }
+  .tab-main { display: flex; flex-direction: column; min-width: 0; }
+  .tab-sidebar { border-left: 1px solid #1c1c1c; padding-left: 24px; display: flex; flex-direction: column; }
   .brain-wrap {
     display: grid;
     grid-template-columns: 40% 1fr;

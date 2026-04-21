@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] momentum-watcher.cjs + NotesTab.svelte — DONE
+TASK: now-brain-extract
+WHAT: NOW.md note — GET/POST/POST /now/extract endpoints; extractNowEntries() via Claude Haiku; 30s debounced auto-extract after save; dedup by title+source_type; NOW.md preserved intact. NotesTab: NOW textarea at top with "→ Extract to Brain" button, nowContent/saveNow/extractNow state.
+RESULT: works — /now GET + POST tested OK, watcher ping OK
+BLOCKERS: none
+
 ## [2026-04-21] ConnectionsTab + FinancesTab + NotesTab + BrainTab — DONE
 TASK: mozart-all-tabs
 WHAT: Added Mozart chat panel to 4 tabs (ReleasesTab doesn't exist). Each gets: buildMozartContext import, aiMessages/aiInput/aiLoading state, sendAI(), formatMozartOutput(), Mozart block HTML at bottom, full CSS. NotesTab also got supabase import.

@@ -101,7 +101,8 @@
   }
 </script>
 
-<div class="finances-wrap">
+<div class="tab-layout">
+<div class="tab-main">
   <div class="sh">Subscriptions &amp; Services</div>
 
   <div class="add-row">
@@ -168,6 +169,8 @@
     </div>
   {/if}
 
+</div>
+<div class="tab-sidebar">
   <div class="mozart-block">
     <div class="mozart-title-row">
       <div class="mozart-title">ASK MOZART</div>
@@ -192,9 +195,12 @@
     </div>
   </div>
 </div>
+</div>
 
 <style>
-  .finances-wrap { width: 100%; }
+  .tab-layout { display: grid; grid-template-columns: 1fr 320px; gap: 32px; min-height: calc(100vh - 100px); align-items: start; }
+  .tab-main { display: flex; flex-direction: column; min-width: 0; }
+  .tab-sidebar { border-left: 1px solid #1c1c1c; padding-left: 24px; display: flex; flex-direction: column; }
   .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); padding-bottom: 6px; border-bottom: 1px solid #303030; margin-bottom: 14px; }
   .empty { font-family: 'Space Mono', monospace; font-size: 12px; color: #9e9690; padding: 32px 0; text-align: center; }
 

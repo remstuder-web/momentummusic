@@ -1,18 +1,18 @@
 {
-  "updated": "2026-04-21T09:20:00.000Z",
-  "last_task": "notes-manual-ordering",
+  "updated": "2026-04-21T10:11:00Z",
+  "last_task": "now-brain-extract",
   "status": "done",
   "working": [
-    "parseFrontmatter + writeNoteFile helpers",
-    "readNotesDir: parses position, sorts positioned asc then unpositioned by updated desc",
-    "POST /notes/reorder: swaps adjacent notes, lazily assigns positions to all on first reorder",
-    "POST /notes: new notes get position = notes.length",
-    "PATCH /notes: preserves existing position when saving content or renaming",
-    "syncAppleNotesToObsidian: preserves existing position when re-syncing",
-    "NotesTab: ▲▼ buttons call /notes/reorder then reload"
+    "GET /now — reads NOW.md from Obsidian vault",
+    "POST /now — saves NOW.md, schedules 30s debounced extractNowEntries()",
+    "POST /now/extract — manual extract NOW.md → brain_knowledge immediately",
+    "extractNowEntries() — Claude Haiku parses free text, dedupes by title+source_type='now_note'",
+    "NotesTab NOW block — textarea at top, auto-save on input, Extract to Brain button",
+    "Two-column tab-layout on ConnectionsTab, FinancesTab, NotesTab, BrainTab",
+    "watcher ping OK"
   ],
   "broken": [],
   "partial": [],
-  "next": "No pending tasks",
-  "notes": "Positions are lazily assigned — unpositioned notes sort by mtime until first reorder. First ▲/▼ click assigns positions to all notes in the current sorted order."
+  "next": "Test NOW extract flow end-to-end with real content and API key",
+  "notes": "NOW.md lives at OBSIDIAN_VAULT_PATH/NOW.md. Extraction uses source_type='now_note'. nowExtractTimer is module-scoped so it survives across requests."
 }

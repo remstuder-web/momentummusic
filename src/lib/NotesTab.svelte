@@ -116,7 +116,47 @@
     saveTimers[note.filename] = setTimeout(() => saveContent(note, text), 800)
   }
 
+  // NOW note state
+  let nowContent = $state('')
+  let nowSaveTimer = null
+  let nowExtractStatus = $state(null) // null | 'extracting' | { count: number }
+
+  async function loadNow() {
+    try {
+      const r = await fetch('/watcher/now')
+      const d = await r.json()
+      nowContent = d.content || ''
+    } catch(e) { console.error('now load error', e) }
+  }
+
+  function saveNow(text) {
+    nowContent = text
+    clearTimeout(nowSaveTimer)
+    nowSaveTimer = setTimeout(async () => {
+      try {
+        await fetch('/watcher/now', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: text })
+        })
+      } catch(e) { console.error('now save error', e) }
+    }, 600)
+  }
+
+  async function extractNow() {
+    nowExtractStatus = 'extracting'
+    try {
+      const r = await fetch('/watcher/now/extract', { method: 'POST' })
+      const d = await r.json()
+      nowExtractStatus = { count: d.count ?? 0 }
+      setTimeout(() => { nowExtractStatus = null }, 4000)
+    } catch(e) {
+      nowExtractStatus = null
+    }
+  }
+
   load()
+  loadNow()
 
   let aiMessages = $state([])
   let aiInput = $state('')
@@ -160,7 +200,8 @@
   }
 </script>
 
-<div class="notes-wrap">
+<div class="tab-layout">
+<div class="tab-main">
   <div class="top-bar">
     <span class="sh">NOTES</span>
     <div class="apple-sync-row">
@@ -178,6 +219,28 @@
         onkeydown={e => e.key === 'Enter' && addTopic()} />
       <button class="btn btn-gold" onclick={addTopic}>+ Topic</button>
     </div>
+  </div>
+
+  <div class="now-block">
+    <div class="now-header">
+      <span class="now-label">NOW</span>
+      <button class="extract-btn"
+        onclick={extractNow}
+        disabled={nowExtractStatus === 'extracting'}>
+        {#if nowExtractStatus === 'extracting'}
+          Extracting...
+        {:else if nowExtractStatus !== null}
+          ✓ {nowExtractStatus.count} saved
+        {:else}
+          → Extract to Brain
+        {/if}
+      </button>
+    </div>
+    <textarea class="now-area"
+      value={nowContent}
+      oninput={e => saveNow(e.target.value)}
+      use:autoResize
+      placeholder="Write anything — thoughts, ideas, observations. Saved automatically. Extracts to brain 30s after you stop typing."></textarea>
   </div>
 
   {#if loading}
@@ -222,6 +285,8 @@
     </div>
   {/if}
 
+</div>
+<div class="tab-sidebar">
   <div class="mozart-block">
     <div class="mozart-title-row">
       <div class="mozart-title">ASK MOZART</div>
@@ -246,9 +311,21 @@
     </div>
   </div>
 </div>
+</div>
 
 <style>
-  .notes-wrap { width: 100%; }
+  .tab-layout { display: grid; grid-template-columns: 1fr 320px; gap: 32px; min-height: calc(100vh - 100px); align-items: start; }
+  .tab-main { display: flex; flex-direction: column; min-width: 0; }
+  .tab-sidebar { border-left: 1px solid #1c1c1c; padding-left: 24px; display: flex; flex-direction: column; }
+  .now-block { margin-bottom: 28px; }
+  .now-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .now-label { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); }
+  .now-area { width: 100%; min-height: 120px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; line-height: 1.6; padding: 12px; resize: none; outline: none; box-sizing: border-box; transition: border-color .2s; }
+  .now-area:focus { border-color: rgba(201,168,76,.4); }
+  .now-area::placeholder { color: #555; }
+  .extract-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 5px 10px; background: transparent; border: 1px solid #3c3c3c; color: #9e9690; border-radius: 3px; cursor: pointer; transition: all .2s; white-space: nowrap; }
+  .extract-btn:hover:not(:disabled) { border-color: #c9a84c; color: #c9a84c; }
+  .extract-btn:disabled { opacity: 0.6; cursor: default; }
   .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
   .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); }
   .apple-sync-row { display: flex; align-items: center; gap: 6px; }

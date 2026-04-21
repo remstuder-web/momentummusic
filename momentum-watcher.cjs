@@ -44,6 +44,9 @@ const GEMINI_API_KEY    = process.env.GEMINI_API_KEY
 // Obsidian vault
 const OBSIDIAN_VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || '/Users/remo/ObsidianVault/Momentum'
 const NOTES_PATH = path.join(OBSIDIAN_VAULT_PATH, 'Notes')
+const NOW_PATH = path.join(OBSIDIAN_VAULT_PATH, 'NOW.md')
+
+let nowExtractTimer = null
 
 const GENRE_LIST = [
   { label: 'ELECTRONIC & DANCE', type: 'main', tag: 'electronic' },
@@ -5560,6 +5563,61 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /now — read NOW.md content ───────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/now') {
+    try {
+      if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) fs.mkdirSync(OBSIDIAN_VAULT_PATH, { recursive: true })
+      const content = fs.existsSync(NOW_PATH) ? fs.readFileSync(NOW_PATH, 'utf8') : ''
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, content }))
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /now — save NOW.md, schedule extraction ─────────────────────────────
+  if (req.method === 'POST' && req.url === '/now') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        const content = body.content ?? ''
+        if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) fs.mkdirSync(OBSIDIAN_VAULT_PATH, { recursive: true })
+        fs.writeFileSync(NOW_PATH, content, 'utf8')
+        // Debounced extraction — 30s after last edit
+        clearTimeout(nowExtractTimer)
+        nowExtractTimer = setTimeout(() => {
+          extractNowEntries(content).catch(e => console.error('now extract error:', e.message))
+        }, 30000)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /now/extract — manual extract NOW.md → brain_knowledge immediately ──
+  if (req.method === 'POST' && req.url === '/now/extract') {
+    try {
+      const content = fs.existsSync(NOW_PATH) ? fs.readFileSync(NOW_PATH, 'utf8') : ''
+      if (!content.trim()) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, count: 0 }))
+        return
+      }
+      clearTimeout(nowExtractTimer) // cancel any pending auto-extract
+      const result = await extractNowEntries(content)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, count: result.count }))
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /obsidian-sync — sync all .md files from Obsidian vault to brain ──
   if (req.method === 'POST' && req.url === '/obsidian-sync') {
     try {
@@ -5970,6 +6028,76 @@ function textToAppleNotesHtml(text) {
 
 function noteToFilename(title) {
   return title.replace(/[^a-zA-Z0-9 ]/g, '').trim() + '.md'
+}
+
+// Extract knowledge entries from NOW.md content → brain_knowledge (source_type: now_note)
+// Does NOT modify NOW.md. Checks for duplicate titles before inserting.
+async function extractNowEntries(content) {
+  if (!content || content.trim().length < 20) return { count: 0 }
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) { console.warn('extractNowEntries: no ANTHROPIC_API_KEY'); return { count: 0 } }
+
+  const prompt = `You are extracting knowledge entries from a music producer's stream-of-consciousness notes (a "NOW" note — raw thoughts, ideas, observations written freely).
+
+Extract distinct knowledge items worth saving to a brain database. Each item should be self-contained and actionable or insightful on its own.
+
+For each item return JSON:
+{"title":"short label max 8 words","content":"verbatim or concise summary","category":"one of: own_production,reference_current,reference_mixing,reference_inspiration,reference_sound,market_knowledge,genre_strategy,artist_breaking,production_style,correction,question,artist_strategy,mixing_technique,release_strategy,sound_design,industry_insight,social_media,networking,creative_process,business_finance","entry_type":"observation|pattern|rule|reference|question","confidence":"weak|medium|strong"}
+
+Only extract items with clear informational value. Skip vague fragments, filler text, or incomplete thoughts.
+Return ONLY a JSON array. No explanation. No markdown. Start with [.
+
+NOW note content:
+${content.slice(0, 5000)}`
+
+  let items = []
+  try {
+    const cr = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
+    })
+    const cd = await cr.json()
+    const raw = cd.content?.[0]?.text || '[]'
+    const jsonStart = raw.indexOf('[')
+    items = JSON.parse(jsonStart >= 0 ? raw.slice(jsonStart) : raw)
+  } catch(e) {
+    console.error('extractNowEntries: Claude call failed:', e.message)
+    return { count: 0 }
+  }
+
+  if (!Array.isArray(items) || !items.length) return { count: 0 }
+
+  let saved = 0
+  for (const it of items) {
+    if (!it.title) continue
+    try {
+      // Deduplicate by title + source_type
+      const existing = await fetch(
+        `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(it.title)}&source_type=eq.now_note&select=id&limit=1`,
+        { headers: sbHeaders }
+      ).then(r => r.json()).catch(() => [])
+      if (Array.isArray(existing) && existing.length) continue // already saved
+
+      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+        method: 'POST',
+        headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          title: it.title,
+          content: it.content || '',
+          category: it.category || 'own_production',
+          entry_type_v2: it.entry_type || 'observation',
+          confidence: it.confidence || 'medium',
+          source_type: 'now_note',
+          active: true,
+          metadata: { extracted_from: 'NOW.md', extracted_at: new Date().toISOString() }
+        })
+      })
+      saved++
+    } catch(e) { console.warn('extractNowEntries: insert failed:', e.message) }
+  }
+  console.log(`✓ NOW extract: ${saved} new entries saved to brain_knowledge`)
+  return { count: saved }
 }
 
 function parseFrontmatter(raw) {

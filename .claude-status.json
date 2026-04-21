@@ -1,18 +1,17 @@
 {
-  "updated": "2026-04-21T00:10:00.000Z",
-  "last_task": "mozart-window-larger",
+  "updated": "2026-04-21T00:20:00.000Z",
+  "last_task": "connections-mixers-personal-ig",
   "status": "done",
   "working": [
-    "DailyTab: .chat-out max-height 70vh, min-height 300px",
-    "DailyTab: .mozart-block min-height 500px",
-    "ProjectsTab: .chat-out max-height 70vh, min-height 300px",
-    "ProjectsTab: .mozart-block min-height 500px",
-    "ProjectsTab: .right-col fixed height removed, expands with content"
+    "ConnectionsTab: MIXERS added to GROUPS",
+    "ConnectionsTab: personal checkbox in expanded body",
+    "ConnectionsTab: green dot in header for personal contacts",
+    "ConnectionsTab: IG button in header (stopPropagation)"
   ],
   "broken": [],
   "partial": [
     "brain-collections SQL migrations still needed: ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS priority boolean DEFAULT false; ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS collection_name_display text; ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS notes text;"
   ],
-  "next": "Run brain_knowledge SQL migrations in Supabase dashboard to activate collections/priority/notes features",
-  "notes": "Mozart panels now expand naturally. ProjectsTab right-col no longer sticky/fixed-height."
+  "next": "Run brain_knowledge SQL migrations in Supabase dashboard",
+  "notes": "Connections tab fully working. personal field needs to exist on contacts table or be stored in metadata — check if updateField handles arbitrary fields."
 }

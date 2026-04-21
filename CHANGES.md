@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-21] ConnectionsTab.svelte — DONE
+TASK: connections-mixers-personal-ig
+WHAT: Added MIXERS to GROUPS array. Personal contact checkbox in expanded body (saves to conn.personal). Green dot in header when personal=true. IG button in header (stopPropagation, opens Instagram link).
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-21] DailyTab.svelte + ProjectsTab.svelte — DONE
 TASK: mozart-window-larger
 WHAT: .chat-out max-height 70vh (was 300px), min-height 300px. .mozart-block min-height 500px both files. ProjectsTab .right-col fixed height removed (was calc(100vh-60px)), sticky/overflow removed so Mozart expands naturally.

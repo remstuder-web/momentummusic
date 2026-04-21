@@ -162,9 +162,9 @@
                   onclick={e => e.stopPropagation()}
                   onchange={e => updateField(conn, 'name', e.target.value)}
                   onkeydown={e => e.key === 'Enter' && e.target.blur()} />
-                {#if conn.personal}
-                  <span class="personal-dot" title="Personal contact"></span>
-                {/if}
+                {#each connTypes as t}
+                  <span class="type-badge">{t}</span>
+                {/each}
                 {#if conn.instagram}
                   <button
                     class="social-btn insta head-ig"
@@ -172,9 +172,9 @@
                     title="Open Instagram"
                   >IG</button>
                 {/if}
-                {#each connTypes as t}
-                  <span class="type-badge">{t}</span>
-                {/each}
+                {#if conn.personal}
+                  <span class="personal-dot" title="Personal contact"></span>
+                {/if}
                 {#if conn.genre}
                   <span class="conn-genre">{conn.genre}</span>
                 {/if}
@@ -415,7 +415,7 @@
   .conn-head:hover { background: rgba(255,255,255,.02); }
   .conn-card.exp .conn-head { background: rgba(201,168,76,.03); }
 
-  .conn-name-input { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: #c9a84c; background: transparent; border: none; outline: none; padding: 0; width: 120px; cursor: text; letter-spacing: .04em; flex-shrink: 0; }
+  .conn-name-input { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: #c9a84c; background: transparent; border: none; outline: none; padding: 0; width: 160px; min-width: 100px; max-width: 200px; cursor: text; letter-spacing: .04em; flex-shrink: 0; }
   .conn-name-input:focus { background: rgba(255,255,255,.03); border-radius: 2px; }
 
   .type-badge { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .08em; padding: 2px 5px; background: rgba(255,255,255,.04); border: 1px solid #222; color: #555; border-radius: 2px; white-space: nowrap; flex-shrink: 0; }

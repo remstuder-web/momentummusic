@@ -22,19 +22,21 @@
     document.addEventListener('mm-switch-tab', handler)
 
     const linkHandler = e => {
-      const link = e.target.closest('a[target="_blank"]')
+      const link = e.target.closest('a')
       if (!link) return
-      const url = link.href
-      if (!url || url.startsWith('javascript')) return
-      e.preventDefault()
-      e.stopPropagation()
-      openPopup(url)
+      const url = link.getAttribute('href')
+      if (!url || url.startsWith('#') || url.startsWith('javascript')) return
+      if (url.startsWith('http') || url.startsWith('//')) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        openPopup(url)
+      }
     }
-    document.addEventListener('click', linkHandler)
+    document.addEventListener('mousedown', linkHandler, { capture: true })
 
     return () => {
       document.removeEventListener('mm-switch-tab', handler)
-      document.removeEventListener('click', linkHandler)
+      document.removeEventListener('mousedown', linkHandler, { capture: true })
     }
   })
   // Link popup

@@ -1202,32 +1202,58 @@ ${context}` }] })
 async function fetchTikTokRealData() {
   const results = []
 
-  // 1. Try tokboard.com — mirrors TikTok trending sounds
+  // 1. tikcharts.com — primary TikTok chart source (weekly viral chart)
   try {
-    const res = await fetch('https://www.tokboard.com/', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
-      signal: AbortSignal.timeout(8000)
+    const res = await fetch('https://tikcharts.com/', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+      signal: AbortSignal.timeout(10000)
     })
     if (res.ok) {
       const html = await res.text()
-      // Extract quoted strings that look like song/artist names (3–40 chars, starts with letter)
-      const titleMatches = html.match(/["']([A-Za-z][^"']{3,40})["']/g) || []
-      for (const raw of titleMatches.slice(0, 30)) {
-        const text = raw.replace(/^["']|["']$/g, '').trim()
-        if (text && !/^(trending|music|tiktok|tokboard|https?|www\.|script|style|class|div|span)/i.test(text)) {
-          results.push({ title: text, artist: '', source: 'tokboard' })
+      // Table rows: <td> cells with rank, title, artist pattern
+      const rowMatches = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || []
+      for (const row of rowMatches.slice(0, 40)) {
+        const cells = (row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [])
+          .map(c => c.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim())
+          .filter(Boolean)
+        if (cells.length >= 2) {
+          const title = cells[1] || cells[0]
+          const artist = cells[2] || ''
+          if (title && title.length > 2 && !/^(title|song|track|#|rank)/i.test(title)) {
+            results.push({ title, artist, source: 'tikcharts' })
+          }
         }
       }
-      console.log(`  tokboard: ${results.length} candidates extracted`)
+      console.log(`  tikcharts: ${results.length} chart tracks extracted`)
     }
-  } catch(e) { console.warn('tokboard fetch failed:', e.message) }
+  } catch(e) { console.warn('tikcharts fetch failed:', e.message) }
 
-  // 2. kworb YouTube as proxy (always run — fill gaps)
+  // 2. Try tokboard.com as fallback
+  if (results.length < 5) {
+    try {
+      const res = await fetch('https://www.tokboard.com/', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(8000)
+      })
+      if (res.ok) {
+        const html = await res.text()
+        const titleMatches = html.match(/["']([A-Za-z][^"']{3,40})["']/g) || []
+        for (const raw of titleMatches.slice(0, 30)) {
+          const text = raw.replace(/^["']|["']$/g, '').trim()
+          if (text && !/^(trending|music|tiktok|tokboard|https?|www\.|script|style|class|div|span)/i.test(text)) {
+            results.push({ title: text, artist: '', source: 'tokboard' })
+          }
+        }
+        console.log(`  tokboard: ${results.length} total after fallback`)
+      }
+    } catch(e) { console.warn('tokboard fetch failed:', e.message) }
+  }
+
+  // 3. kworb YouTube as proxy (always run — fill remaining gaps)
   try {
     const kworbYT = await fetchKworbTrending()
     for (const line of kworbYT.slice(0, 10)) {
       const parts = line.split(' · ')
-      // Only include entries with artist – title pattern
       if (parts.length >= 2) {
         results.push({ title: parts[1] || line, artist: parts[0] || '', source: 'tiktok_proxy_youtube' })
       }

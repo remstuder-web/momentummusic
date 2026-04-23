@@ -87,6 +87,12 @@ export async function buildMozartContext(supabase, options = {}) {
       a.brightness    != null ? 'brt ' + Number(a.brightness).toFixed(2)     : null,
       a.bass_energy   != null ? 'bas ' + Number(a.bass_energy).toFixed(2)    : null,
       a.acousticness  != null ? 'aco ' + Number(a.acousticness).toFixed(2)   : null,
+      a.loudness_range != null ? 'LRA ' + a.loudness_range + 'dB'            : null,
+      a.dynamic_complexity != null ? 'dyn ' + Number(a.dynamic_complexity).toFixed(2) : null,
+      a.warmth        != null ? 'warmth ' + Number(a.warmth).toFixed(2)      : null,
+      a.rhythm_regularity != null ? 'groove ' + Number(a.rhythm_regularity).toFixed(2) : null,
+      a.harmonic_complexity != null ? 'harm ' + Number(a.harmonic_complexity).toFixed(2) : null,
+      a.vocal_root_note ? 'vocal ' + a.vocal_root_note + (a.vocal_octave != null ? a.vocal_octave : '') : null,
       a.duration_seconds      ? fmtDur(a.duration_seconds)                   : null
     ].filter(Boolean).join(' · ')
 

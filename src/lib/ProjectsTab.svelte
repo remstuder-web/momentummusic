@@ -2764,6 +2764,18 @@
                                 activeVfilt.analysis.valence != null ? 'val ' + activeVfilt.analysis.valence : null
                               ].filter(Boolean).join(' · ')}
                             </div>
+                            {#if [activeVfilt.analysis.loudness_range, activeVfilt.analysis.dynamic_complexity, activeVfilt.analysis.warmth, activeVfilt.analysis.rhythm_regularity, activeVfilt.analysis.harmonic_complexity, activeVfilt.analysis.vocal_root_note].some(v => v != null)}
+                            <div class="analysis-line">
+                              {[
+                                activeVfilt.analysis.loudness_range != null ? 'LRA ' + activeVfilt.analysis.loudness_range + 'dB' : null,
+                                activeVfilt.analysis.dynamic_complexity != null ? 'dyn ' + activeVfilt.analysis.dynamic_complexity : null,
+                                activeVfilt.analysis.warmth != null ? 'warm ' + activeVfilt.analysis.warmth : null,
+                                activeVfilt.analysis.rhythm_regularity != null ? 'groove ' + activeVfilt.analysis.rhythm_regularity : null,
+                                activeVfilt.analysis.harmonic_complexity != null ? 'harm ' + activeVfilt.analysis.harmonic_complexity : null,
+                                activeVfilt.analysis.vocal_root_note ? 'vocal ' + activeVfilt.analysis.vocal_root_note + (activeVfilt.analysis.vocal_octave != null ? activeVfilt.analysis.vocal_octave : '') : null
+                              ].filter(Boolean).join(' · ')}
+                            </div>
+                            {/if}
                           </div>
                           {#if hitBenchmark}
                             {@const a = activeVfilt.analysis}

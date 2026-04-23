@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + ProjectsTab.svelte + mozartContext.js — DONE
+TASK: analyze-audio-part2-part3
+WHAT: PART 2 — tikcharts.com added as primary TikTok chart source in fetchTikTokRealData() (tokboard demoted to fallback, kworb keeps as gap-fill). PART 3 — third analysis line in ProjectsTab version-analysis-row showing LRA/dyn/warm/groove/harm/vocal; formatVersion() in mozartContext.js updated with same 6 new fields.
+RESULT: 0 svelte errors; watcher restarted OK
+BLOCKERS: tikcharts.com structure may change — scraping extracts table cells
+
 ## [2026-04-23] analyze_audio.py + mozartContext.js + momentum-watcher.cjs + ProjectsTab.svelte — DONE
 TASK: expanded-essentia-vocal-cultural
 WHAT: BUILD 1 — 12 new Essentia signals (onset_rate, rhythm_regularity, dynamic_complexity, loudness_range, speechiness, instrumentalness, vocal_pitch_mean, vocal_root_note, vibrato_presence, harmonic_complexity, warmth) + mozartContext formatTrack updated. BUILD 2 — /analyze-vocal-style endpoint + buildVocalProfile() + 🎤 button in ProjectsTab ref chips. BUILD 3 — fetchCulturalTiming() + GET /cultural-timing + morning briefing cultural block + mozartContext CULTURAL MOMENTUM section. pytrends installed.

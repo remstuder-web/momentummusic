@@ -45,7 +45,7 @@ except Exception:
     results['scale'] = None
     results['camelot'] = None
 
-# Loudness + RMS + Energy (single RMS call shared across all three)
+# Loudness + RMS + Energy
 try:
     rms_val = float(es.RMS()(audio))
     results['rms'] = round(rms_val, 4)
@@ -62,6 +62,30 @@ except Exception as e:
     results['energy'] = None
     print('LUFS error:', str(e), file=sys.stderr)
 
+# LRA — proper windowed loudness range
+try:
+    window_size = 3 * 44100
+    hop = window_size // 2
+    short_term_loudness = []
+    for i in range(0, len(audio) - window_size, hop):
+        window = audio[i:i + window_size]
+        rms_w = float(es.RMS()(window))
+        if rms_w > 0:
+            lufs_w = round(20 * math.log10(rms_w) + 3.0, 1)
+            short_term_loudness.append(lufs_w)
+    if len(short_term_loudness) > 4:
+        sorted_l = sorted(short_term_loudness)
+        p10 = sorted_l[int(len(sorted_l) * 0.10)]
+        p95 = sorted_l[int(len(sorted_l) * 0.95)]
+        results['loudness_range'] = round(abs(p95 - p10), 1)
+        results['dynamic_complexity'] = round(float(np.std(short_term_loudness)), 2)
+    else:
+        results['loudness_range'] = None
+        results['dynamic_complexity'] = None
+except Exception:
+    results['loudness_range'] = None
+    results['dynamic_complexity'] = None
+
 # Danceability
 try:
     dance, _ = es.Danceability()(audio)
@@ -73,7 +97,6 @@ except Exception:
 try:
     frame_size = 2048
     hop_size = 1024
-
     centroids = []
     fluxes = []
     rolloffs = []
@@ -88,7 +111,6 @@ try:
             centroids.append(float(es.Centroid(range=22050)(spectrum)))
             fluxes.append(float(es.Flux()(spectrum)))
             rolloffs.append(float(es.RollOff()(spectrum)))
-
             try:
                 sc = es.SpectralContrast(frameSize=frame_size)
                 contrast, valley = sc(spectrum)
@@ -101,10 +123,8 @@ try:
         results['brightness'] = round(min(1.0, float(np.mean(centroids)) / 8000), 3)
         results['spectral_flux'] = round(float(np.mean(fluxes)), 4)
         results['spectral_rolloff'] = round(float(np.mean(rolloffs)), 1)
-
     if contrasts:
         results['spectral_contrast'] = round(float(np.mean(contrasts)), 3)
-
 except Exception:
     results['brightness'] = None
     results['spectral_centroid'] = None
@@ -125,9 +145,21 @@ try:
 except Exception:
     results['mfcc_mean'] = None
 
-# Valence proxy (mode-based)
+# Valence — multi-factor
 try:
-    results['valence'] = round(0.65 if results.get('scale') == 'major' else 0.35, 2)
+    valence_score = 0.0
+    if results.get('scale') == 'major': valence_score += 0.30
+    bpm_val = results.get('bpm') or 0
+    if bpm_val > 120: valence_score += 0.20
+    elif bpm_val > 90: valence_score += 0.10
+    dnc = results.get('danceability') or 0
+    if dnc > 0.6: valence_score += 0.20
+    elif dnc > 0.4: valence_score += 0.10
+    brt = results.get('brightness') or 0
+    if brt > 0.5: valence_score += 0.15
+    nrg = results.get('energy') or 0
+    if nrg > 0.6: valence_score += 0.15
+    results['valence'] = round(min(1.0, valence_score), 2)
 except Exception:
     results['valence'] = 0.5
 
@@ -150,16 +182,14 @@ except Exception:
 results['duration_seconds'] = round(len(audio) / 44100.0, 1)
 results['key_source'] = 'essentia'
 
-# ── RHYTHM & GROOVE ──────────────────────
+# Onset rate
 try:
     od = es.OnsetRate()(audio)
     results['onset_rate'] = round(float(od[1]), 3)
-
-    novelty, _ = es.BeatTrackerMultiFeature()(audio)
-    results['beat_count'] = len(novelty)
 except Exception:
     results['onset_rate'] = None
 
+# Rhythm regularity
 try:
     _, beats_loud, _ = es.BeatLoudness()(audio)
     if len(beats_loud) > 1:
@@ -168,53 +198,22 @@ try:
 except Exception:
     results['rhythm_regularity'] = None
 
-# ── DYNAMICS ─────────────────────────────
-try:
-    dc = es.DynamicComplexity()(audio)
-    results['dynamic_complexity'] = round(float(dc[0]), 3)
-    results['loudness_range'] = round(float(dc[1]), 3)
-except Exception:
-    results['dynamic_complexity'] = None
-    results['loudness_range'] = None
-
-# ── SPEECHINESS / INSTRUMENTALNESS ───────
-try:
-    zcr_vals = []
-    for i in range(0, len(audio) - 2048, 1024):
-        frame = audio[i:i+2048]
-        zcr_vals.append(float(es.ZeroCrossingRate()(frame)))
-    if zcr_vals:
-        zcr = float(np.mean(zcr_vals))
-        speechiness_proxy = min(1.0, zcr * 20)
-        results['speechiness'] = round(speechiness_proxy, 3)
-        results['instrumentalness'] = round(max(0, 1 - speechiness_proxy * 1.5), 3)
-except Exception:
-    results['speechiness'] = None
-    results['instrumentalness'] = None
-
-# ── VOCAL ANALYSIS (pitch statistics) ────
+# Vocal pitch statistics (run before speechiness so instrumentalness can use it)
 try:
     pitch_extractor = es.PredominantPitchMelodia(frameSize=2048, hopSize=128)
     pitch_values, pitch_confidence = pitch_extractor(audio)
-
     confident_pitches = [
         float(p) for p, c in zip(pitch_values, pitch_confidence)
         if c > 0.8 and float(p) > 80
     ]
-
     if confident_pitches:
         results['vocal_pitch_mean'] = round(float(np.mean(confident_pitches)), 1)
         results['vocal_pitch_range'] = round(float(np.max(confident_pitches) - np.min(confident_pitches)), 1)
-        results['vocal_pitch_std'] = round(float(np.std(confident_pitches)), 1)
-
         midi = 12 * math.log2(results['vocal_pitch_mean'] / 440.0) + 69
         notes = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
         results['vocal_root_note'] = notes[int(midi) % 12]
         results['vocal_octave'] = int(midi) // 12 - 1
-
-        if len(confident_pitches) > 10:
-            pitch_var = float(np.std(confident_pitches))
-            results['vibrato_presence'] = round(min(1.0, pitch_var / 50), 3)
+        results['vibrato_presence'] = round(min(1.0, float(np.std(confident_pitches)) / 50), 3)
     else:
         results['vocal_pitch_mean'] = None
         results['vocal_pitch_range'] = None
@@ -226,7 +225,34 @@ except Exception:
     results['vocal_root_note'] = None
     results['vibrato_presence'] = None
 
-# ── HARMONIC COMPLEXITY ───────────────────
+# Speechiness via spectral flatness
+try:
+    flatness_vals = []
+    for i in range(0, len(audio) - 2048, 1024):
+        frame = audio[i:i+2048]
+        windowed = es.Windowing(type='hann')(frame)
+        spectrum = es.Spectrum()(windowed)
+        if np.max(spectrum) > 0:
+            flat = float(es.Flatness()(spectrum))
+            flatness_vals.append(flat)
+    if flatness_vals:
+        mean_flat = float(np.mean(flatness_vals))
+        results['speechiness'] = round(min(1.0, mean_flat * 3), 3)
+        has_vocal = (results.get('vocal_pitch_mean') or 0) > 0
+        results['instrumentalness'] = round(max(0, 1 - (has_vocal * 0.8)), 3)
+except Exception:
+    results['speechiness'] = None
+    results['instrumentalness'] = None
+
+# Liveness proxy
+try:
+    onset_irreg = results.get('dynamic_complexity') or 0
+    noise_f = results.get('speechiness') or 0
+    results['liveness'] = round(min(1.0, (onset_irreg * 0.1) + (noise_f * 0.3)), 3)
+except Exception:
+    results['liveness'] = None
+
+# Harmonic complexity via HPCP
 try:
     hpcps = []
     for i in range(0, len(audio) - 4096, 2048):
@@ -237,7 +263,6 @@ try:
         if len(peaks_freq) > 0:
             hpcp = es.HPCP()(peaks_freq, peaks_mag)
             hpcps.append(hpcp)
-
     if hpcps:
         mean_hpcp = np.mean(hpcps, axis=0)
         hpcp_norm = mean_hpcp / (np.sum(mean_hpcp) + 1e-6)
@@ -246,11 +271,10 @@ try:
 except Exception:
     results['harmonic_complexity'] = None
 
-# ── TIMBRE WARMTH ─────────────────────────
+# Warmth
 try:
     if results.get('spectral_centroid'):
-        warmth = 1 - (results['spectral_centroid'] / 12000)
-        results['warmth'] = round(max(0, min(1, warmth)), 3)
+        results['warmth'] = round(max(0, min(1, 1 - results['spectral_centroid'] / 12000)), 3)
 except Exception:
     results['warmth'] = None
 

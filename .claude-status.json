@@ -1,19 +1,17 @@
 {
-  "updated": "2026-04-23T10:11:00Z",
-  "last_task": "whatsapp-daily-messages",
+  "updated": "2026-04-23T10:20:00Z",
+  "last_task": "show-whatsapp-messages-in-daily",
   "status": "done",
   "working": [
-    "MESSAGES section in Daily inbox — dedicated WhatsApp block with green left border",
-    "whatsappItems derived state filters n.metadata.platform === 'whatsapp'",
-    "WhatsApp items excluded from general todayInbox/olderInbox stream (no duplication)",
-    "Group chat support in pollWhatsApp: @g.us JIDs saved to inbox as type='message' without AI analysis",
-    "/whatsapp-contacts returns is_group flag — 57 groups, 39 monitored contacts confirmed",
-    "RAPHAEL MARTIN, NidjoMusic, Pilar Vega added to WHATSAPP_CONTACTS in .env",
-    "olderInbox now shows 📱 badge for WhatsApp items",
-    "pm2 restarted with --update-env, watcher online"
+    "MESSAGES section uses direct inline filter: inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp')",
+    "inbox-item + whatsapp-item dual class for correct styling",
+    "whatsappItems derived updated with type === 'message' guard",
+    "MESSAGES header only shows when whatsappItems.length > 0",
+    "WhatsApp items excluded from general todayInbox/olderInbox stream",
+    "svelte-check: 0 errors"
   ],
   "broken": [],
   "partial": [],
-  "next": "All tasks done. WhatsApp notifications will appear in MESSAGES section when pollWhatsApp detects new messages from monitored contacts.",
-  "notes": "Group chats matching monitored list (e.g. '29 seconds x Remo', '3 WMS / Remo - Project Nidjo') are already being detected. Group messages save without AI analysis — just raw message + from metadata."
+  "next": "All tasks done. WhatsApp messages with type='message' and metadata.platform='whatsapp' will render in dedicated MESSAGES section.",
+  "notes": "Previous approach used $derived(whatsappItems) which may have had reactivity issues. New approach uses inline filter directly in {#each} which is more reliable."
 }

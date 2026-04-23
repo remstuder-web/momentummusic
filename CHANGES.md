@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] DailyTab.svelte — DONE
+TASK: show-whatsapp-messages-in-daily
+WHAT: Replaced derived-state MESSAGES section with direct inline filter {#each inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp')}. Added inbox-item + whatsapp-item dual class. Updated CSS with DM Sans font-family on message fields. whatsappItems derived also updated with type guard.
+RESULT: works — 0 svelte-check errors
+BLOCKERS: none
+
 ## [2026-04-23] DailyTab.svelte + momentum-watcher.cjs — DONE
 TASK: whatsapp-daily-messages
 WHAT: Added dedicated MESSAGES section in Daily inbox for WhatsApp notifications. WhatsApp items filtered out of general inbox stream. Added group chat support in pollWhatsApp (saves to inbox without deep analysis). /whatsapp-contacts now returns is_group flag and includes 57 group chats. Added RAPHAEL MARTIN, NidjoMusic, Pilar Vega to WHATSAPP_CONTACTS. Fixed olderInbox to show WhatsApp badge.

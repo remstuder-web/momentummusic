@@ -746,7 +746,7 @@
   let agentLastRun = $state({})
   let todayBriefing = $derived(inboxItems.find(n => n.type === 'briefing' && n.created_at?.slice(0,10) === todayISO))
   let pressItems = $derived(inboxItems.filter(n => n.type === 'press' && n.created_at?.slice(0,10) === todayISO).slice(0, 3))
-  let whatsappItems = $derived(inboxItems.filter(n => n.metadata?.platform === 'whatsapp'))
+  let whatsappItems = $derived(inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp'))
   let pinnedTask = $derived((state.tasks || []).find(t => t.pinned))
   let scoutingArtists = $state(false)
   let matchingDemos = $state(false)
@@ -1828,33 +1828,38 @@ ${mozartContext}`
       <!-- Messages section (WhatsApp) -->
       {#if whatsappItems.length}
         <div class="year-today-sep" style="margin-bottom:6px">MESSAGES</div>
-        {#each whatsappItems as item (item.id)}
-          <div class="whatsapp-item {item.metadata?.boundary_alert ? 'boundary' : ''} {item.metadata?.urgency === 'high' ? 'urgent' : ''} {item.read ? '' : 'unread'}">
-            {#if item.metadata?.boundary_alert}
-              <div class="boundary-alert">⚠ {item.metadata.boundary_type?.toUpperCase() || ''} BOUNDARY: {item.metadata.boundary_alert}</div>
-            {/if}
-            <div class="notif-header">
-              <span class="notif-from">{item.metadata?.from}{item.metadata?.is_group ? ' 👥' : ''}</span>
-              {#if item.metadata?.urgency}<span class="notif-urgency {item.metadata.urgency}">{item.metadata.urgency}</span>{/if}
-              <span class="notif-time">{new Date(item.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
-              <button class="del-btn" onclick={() => deleteInboxItem(item.id)}>×</button>
-            </div>
-            <div class="notif-message">"{item.message?.slice(0,120)}"</div>
-            {#if item.metadata?.real_intent}
-              <div class="notif-real-intent">→ {item.metadata.real_intent}</div>
-            {/if}
-            {#if item.metadata?.best_next_step}
-              <div class="notif-next-step">✓ {item.metadata.best_next_step}</div>
-            {/if}
-            {#if item.metadata?.response_suggestion}
-              <div class="notif-suggestion">
-                <span>{item.metadata.response_suggestion}</span>
-                <button class="copy-btn" onclick={() => navigator.clipboard.writeText(item.metadata.response_suggestion)}>Copy</button>
-              </div>
-            {/if}
-          </div>
-        {/each}
       {/if}
+      {#each inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp') as item (item.id)}
+        <div class="inbox-item whatsapp-item {item.metadata?.boundary_alert ? 'boundary' : ''} {item.metadata?.urgency === 'high' ? 'urgent' : ''}">
+          {#if item.metadata?.boundary_alert}
+            <div class="boundary-alert">
+              ⚠ {item.metadata.boundary_type?.toUpperCase()} BOUNDARY:
+              {item.metadata.boundary_alert}
+            </div>
+          {/if}
+          <div class="notif-header">
+            <span class="notif-from">{item.metadata?.from || 'Unknown'}</span>
+            {#if item.metadata?.urgency && item.metadata.urgency !== 'low'}
+              <span class="notif-urgency {item.metadata.urgency}">{item.metadata.urgency}</span>
+            {/if}
+            <span style="margin-left:auto;font-size:9px;color:#444">{new Date(item.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+            <button class="del-btn" onclick={() => deleteInboxItem(item.id)}>×</button>
+          </div>
+          <div class="notif-message">"{item.message?.slice(0,120)}"</div>
+          {#if item.metadata?.real_intent}
+            <div class="notif-real-intent">→ {item.metadata.real_intent}</div>
+          {/if}
+          {#if item.metadata?.best_next_step}
+            <div class="notif-next-step">✓ {item.metadata.best_next_step}</div>
+          {/if}
+          {#if item.metadata?.response_suggestion}
+            <div class="notif-suggestion">
+              💬 {item.metadata.response_suggestion}
+              <button class="copy-btn" onclick={() => navigator.clipboard.writeText(item.metadata.response_suggestion)}>Copy</button>
+            </div>
+          {/if}
+        </div>
+      {/each}
 
       <!-- Inbox stream -->
       {#if !inboxItems.filter(n => n.metadata?.platform !== 'whatsapp').length}
@@ -2209,22 +2214,18 @@ ${mozartContext}`
   .whatsapp-item { border-left: 2px solid #25d366; background: rgba(37,211,102,.03); padding: 8px 10px; margin-bottom: 6px; border-radius: 0 3px 3px 0; }
   .whatsapp-item.boundary { border-left-color: #e05a4a; background: rgba(224,90,74,.05); }
   .whatsapp-item.urgent { border-left-color: #e8a838; }
-  .whatsapp-item.unread { background: rgba(37,211,102,.06); }
   .notif-header { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
   .notif-from { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: #c9a84c; }
-  .notif-time { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; margin-left: auto; }
-  .notif-urgency { font-family: 'Space Mono', monospace; font-size: 9px; text-transform: uppercase; }
-  .notif-urgency.high { color: #e05a4a; }
-  .notif-urgency.medium { color: #e8a838; }
-  .notif-urgency.low { color: #555; }
-  .notif-message { font-size: 12px; color: #9e9690; font-style: italic; margin: 3px 0; }
-  .notif-real-intent { font-size: 11px; color: #cec9c1; margin: 2px 0; }
-  .notif-next-step { font-size: 11px; color: #4caf82; margin: 2px 0; }
-  .notif-suggestion { font-size: 11px; color: #9e9690; background: #1c1c1c; padding: 4px 8px; border-radius: 3px; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+  .notif-urgency.high { color: #e05a4a; font-size: 9px; font-family: 'Space Mono', monospace; }
+  .notif-urgency.medium { color: #e8a838; font-size: 9px; font-family: 'Space Mono', monospace; }
+  .notif-message { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; font-style: italic; margin: 4px 0; }
+  .notif-real-intent { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #cec9c1; margin: 2px 0; }
+  .notif-next-step { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #4caf82; margin: 2px 0; }
+  .notif-suggestion { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; background: #1c1c1c; padding: 4px 8px; border-radius: 3px; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
   .boundary-alert { font-family: 'Space Mono', monospace; font-size: 9px; color: #e05a4a; background: rgba(224,90,74,.1); padding: 3px 8px; border-radius: 2px; margin-bottom: 4px; }
   .del-btn { font-size: 12px; background: transparent; border: none; color: #444; cursor: pointer; padding: 0 2px; line-height: 1; flex-shrink: 0; }
   .del-btn:hover { color: #e05a4a; }
-  .copy-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #303030; color: #555; padding: 1px 5px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .copy-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #303030; color: #555; padding: 1px 5px; border-radius: 2px; cursor: pointer; margin-left: auto; flex-shrink: 0; }
   .copy-btn:hover { color: #c9a84c; border-color: #c9a84c; }
 
   :global(.inline-play-btn) {

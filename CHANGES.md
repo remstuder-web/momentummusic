@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-22] mozartContext.js + ProjectsTab.svelte — DONE
+TASK: four-improvements
+WHAT: Version narrative, release checklist, brain milestone logging, Mozart sort fix
+RESULT: works — svelte-check 0 errors, committed baed880
+BLOCKERS: none
+
 ## [2026-04-23] DailyTab.svelte — DONE
 TASK: show-whatsapp-messages-in-daily
 WHAT: Replaced derived-state MESSAGES section with direct inline filter {#each inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp')}. Added inbox-item + whatsapp-item dual class. Updated CSS with DM Sans font-family on message fields. whatsappItems derived also updated with type guard.

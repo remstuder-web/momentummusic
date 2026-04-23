@@ -1,17 +1,21 @@
 {
-  "updated": "2026-04-23T10:20:00Z",
-  "last_task": "show-whatsapp-messages-in-daily",
+  "updated": "2026-04-22T12:00:00Z",
+  "last_task": "four-improvements",
   "status": "done",
   "working": [
-    "MESSAGES section uses direct inline filter: inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp')",
-    "inbox-item + whatsapp-item dual class for correct styling",
-    "whatsappItems derived updated with type === 'message' guard",
-    "MESSAGES header only shows when whatsappItems.length > 0",
-    "WhatsApp items excluded from general todayInbox/olderInbox stream",
+    "mozartContext: versionsWithAnalysis sorted by created_at desc, max 3 shown",
+    "mozartContext: MIXING HISTORY section added from own_production/version_history brain entries",
+    "ProjectsTab: latestWithAnalysis now sorts desc (was slice(-1)[0])",
+    "ProjectsTab: generateNarrative() calls /generate-version-narrative watcher endpoint",
+    "ProjectsTab: 'Learn from versions' button in Mozart title (2+ mix versions only)",
+    "ProjectsTab: RELEASE button logs brain milestone + triggers narrative",
+    "ProjectsTab: RELEASE_CHECKLIST (8 items) with toggleReleaseCheck()",
+    "ProjectsTab: release checklist UI shown at mastering/stems/released stages",
+    "ProjectsTab: CSS for .release-checklist, .rl-title, .rl-progress, .rl-item",
     "svelte-check: 0 errors"
   ],
   "broken": [],
   "partial": [],
-  "next": "All tasks done. WhatsApp messages with type='message' and metadata.platform='whatsapp' will render in dedicated MESSAGES section.",
-  "notes": "Previous approach used $derived(whatsappItems) which may have had reactivity issues. New approach uses inline filter directly in {#each} which is more reliable."
+  "next": "All four improvements done. Next: test release checklist + narrative flow in browser, or add new tasks.",
+  "notes": "Release checklist shows when song is at mastering or stems stage, or has been released. Checklist state persisted in work_data.release_checklist JSONB."
 }

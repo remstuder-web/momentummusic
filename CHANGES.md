@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] ConnectionsTab.svelte + momentum-watcher.cjs — DONE
+TASK: personal-checkbox-persist
+WHAT: Confirmed personal checkbox already calls updateField → Supabase. Added watcher startup warning for missing personal column. Column must be added manually in Supabase.
+RESULT: code correct; watcher logs SQL to run; column not yet in DB
+BLOCKERS: Run in Supabase SQL editor: ALTER TABLE connections ADD COLUMN IF NOT EXISTS personal boolean DEFAULT false;
+
 ## [2026-04-23] ConnectionsTab.svelte — DONE
 TASK: target-contact-color
 WHAT: Contacts with no via tags and personal=false shown in red with tooltip "Target — not yet connected"

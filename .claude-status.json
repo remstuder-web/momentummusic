@@ -1,14 +1,16 @@
 {
-  "updated": "2026-04-23T12:25:00.000Z",
-  "last_task": "target-contact-color",
-  "status": "done",
+  "updated": "2026-04-23T12:33:30.000Z",
+  "last_task": "personal-checkbox-persist",
+  "status": "partial",
   "working": [
-    "ConnectionsTab: contacts with no via_ids and personal=false render name in red (#e05a4a)",
-    "Tooltip: 'Target — not yet connected' on red names",
-    "0 svelte-check errors"
+    "personal checkbox onchange already calls updateField(conn, 'personal', e.target.checked)",
+    "updateField does supabase.from('connections').update({ [field]: value }).eq('id', conn.id)",
+    "Watcher startup check logs SQL warning if personal column missing"
   ],
   "broken": [],
-  "partial": [],
-  "next": "Run SQL for checkout_date column: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;",
-  "notes": "Target contact = no via connection path AND not a personal contact. Color resets to gold when either condition is met."
+  "partial": [
+    "personal column missing from connections table in Supabase — saves will fail silently until added"
+  ],
+  "next": "Run in Supabase SQL editor: ALTER TABLE connections ADD COLUMN IF NOT EXISTS personal boolean DEFAULT false;",
+  "notes": "Cannot run DDL via REST API — requires Supabase dashboard. Watcher now logs the exact SQL on startup."
 }

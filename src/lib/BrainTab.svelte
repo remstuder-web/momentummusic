@@ -37,6 +37,9 @@
 
   let dumpText = $state('')
   let dumpDragging = $state(null)
+  let fileDragging = $state(false)
+  let uploadedFile = $state(null)
+  let fileUploading = $state(false)
   let processing = $state(false)
   let capturing = $state(false)
   let captureResult = $state(null)
@@ -393,6 +396,22 @@ Return ONLY JSON:
     await loadEntries()
   }
 
+  async function handleFileDrop(file) {
+    fileUploading = true
+    uploadedFile = null
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const r = await fetch('http://localhost:4242/brain-file-upload', { method: 'POST', body: fd })
+      const d = await r.json()
+      uploadedFile = d.ok ? { name: file.name, ok: true } : { name: file.name, ok: false, error: d.error }
+    } catch(e) {
+      uploadedFile = { name: file.name, ok: false, error: e.message }
+    } finally {
+      fileUploading = false
+    }
+  }
+
   async function processDump() {
     if (processing) return
     if (!dumpText.trim()) return
@@ -671,7 +690,7 @@ Return ONLY JSON (single item array):
       }
       const { data: existing } = await supabase.from('brain_knowledge').select('id').eq('category', item.suggestedCategory).eq('title', item.title).maybeSingle()
       if (existing) { console.warn('Duplicate skipped:', item.title); continue }
-      const { data: inserted } = await supabase.from('brain_knowledge').insert({
+      const _entry = {
         category: item.suggestedCategory,
         title: item.title,
         content: item.content,
@@ -681,8 +700,10 @@ Return ONLY JSON (single item array):
         verbatim_full: item.entry_type === 'chunk' ? pendingOriginalText : null,
         active: true,
         collection_name_display: dumpCollection.trim() || null
-      }).select('id').single()
+      }
+      const { data: inserted } = await supabase.from('brain_knowledge').insert(_entry).select('id').single()
       if (inserted?.id) pushBrainUndo('Added: ' + item.title, inserted.id, null)
+      fetch('http://localhost:4242/save-brain-file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(_entry) }).catch(() => {})
     }
     pendingApproval = []
     pendingOriginalText = ''
@@ -1025,16 +1046,19 @@ Return ONLY JSON (single item array):
     ondragover={e => {
       e.preventDefault()
       const hasImage = [...(e.dataTransfer?.items||[])].some(i => i.type.startsWith('image/'))
+      const isText = [...(e.dataTransfer?.items||[])].some(i => i.type === 'text/plain')
       dumpDragging = hasImage ? 'image' : 'text'
+      fileDragging = !hasImage && !isText
     }}
-    ondragleave={() => dumpDragging = null}
+    ondragleave={() => { dumpDragging = null; fileDragging = false }}
     ondrop={async e => {
       e.preventDefault()
-      dumpDragging = null
+      dumpDragging = null; fileDragging = false
       const file = [...e.dataTransfer.files][0]
       if (!file) return
       if (file.type.startsWith('image/')) { await processImageDump(file); return }
       if (file.type === 'text/plain') { dumpText = await file.text(); return }
+      await handleFileDrop(file)
     }}>
 
     <div class="brain-screen-section">
@@ -1088,6 +1112,17 @@ Return ONLY JSON (single item array):
     ></textarea>
     {#if dumpDragging === 'image'}
       <p class="brain-image-drop-hint">📷 Drop image — Claude will read and extract info</p>
+    {/if}
+    {#if fileDragging}
+      <p class="brain-image-drop-hint">📎 Drop file — saved to Dropbox/Brain/uploads</p>
+    {/if}
+    {#if fileUploading}
+      <p class="brain-file-status">⏳ Uploading file...</p>
+    {/if}
+    {#if uploadedFile}
+      <p class="brain-file-status {uploadedFile.ok ? 'ok' : 'err'}">
+        {uploadedFile.ok ? `✓ ${uploadedFile.name} saved to Brain` : `✗ ${uploadedFile.error || 'Upload failed'}`}
+      </p>
     {/if}
     {#if dumpText.match(/open\.spotify\.com/)}
       {#each [dumpText.match(/open\.spotify\.com\/(playlist|artist|album|track)/)?.[1] || 'link'] as urlType}
@@ -1847,6 +1882,9 @@ Return ONLY JSON (single item array):
   .brain-textarea.drag-image { border-color: #4caf82; background: rgba(76,175,130,.04); }
   .brain-spotify-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; margin: 4px 0 0; letter-spacing: .04em; }
   .brain-image-drop-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; margin: 4px 0 0; letter-spacing: .04em; }
+  .brain-file-status { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; margin: 4px 0 0; letter-spacing: .04em; }
+  .brain-file-status.ok { color: #4caf82; }
+  .brain-file-status.err { color: #c0392b; }
 
   .brain-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
   .brain-process-btn {

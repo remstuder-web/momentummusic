@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + BrainTab.svelte — DONE
+TASK: brain-file-storage
+WHAT: saveBrainFile() hooked into agent-chart-analysis (both reference track + assessment inserts), morning-briefing (inbox insert), analyze-spotify-track (track data). Added POST /save-brain-file thin wrapper endpoint. Added POST /brain-file-upload (formidable, 50MB, saves to Dropbox/Brain/uploads + Obsidian Attachments). POST /now now copies to BRAIN_FILES_PATH/NOW.md. BrainTab: fileDragging/uploadedFile/fileUploading state, handleFileDrop(), ondrop routes non-text/non-image files to /brain-file-upload, status UI. saveApproved() calls /save-brain-file after each insert.
+RESULT: watcher restarted OK, svelte-check 0 errors
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs — DONE
 TASK: weekly-system-review
 WHAT: weeklySystemReview() added as module-level function (so /improve Telegram command can call it). Pulls brain stats (total/weak/locked), song analysis coverage, releases count, crypto trades this week via Promise.allSettled. Sends to Haiku for 3-5 concrete improvement suggestions. Saves result to brain_knowledge (category=observation, source_type=system_review). Tracks cost. Fires Sunday 8am alongside weeklyBrainReview() via setInterval. /improve Telegram command triggers on demand. Added to /help list.

@@ -1,15 +1,16 @@
 {
-  "updated": "2026-04-23T16:02:00.000Z",
-  "last_task": "weekly-system-review",
+  "updated": "2026-04-23T16:15:00.000Z",
+  "last_task": "brain-file-storage",
   "status": "done",
   "working": [
-    "weeklySystemReview() is module-level (callable from pollTelegram /improve command)",
-    "Fires Sunday 8am via setInterval alongside weeklyBrainReview()",
-    "/improve Telegram command triggers on demand, sends ⏳ ack first",
-    "Saves review to brain_knowledge (observation, system_review)",
-    "Tracks cost to api_usage table",
-    "Added to /help list",
-    "Watcher restarted OK, no startup errors"
+    "saveBrainFile() hooked: agent-chart-analysis (ref track + assessment), morning-briefing, analyze-spotify-track",
+    "POST /save-brain-file thin wrapper endpoint (browser-side inserts)",
+    "POST /brain-file-upload (formidable 50MB, Dropbox/Brain/uploads + Obsidian Attachments)",
+    "POST /now copies content to BRAIN_FILES_PATH/NOW.md",
+    "BrainTab: file drop works for non-image/non-text files, shows upload status",
+    "BrainTab saveApproved() calls /save-brain-file after each brain_knowledge insert",
+    "watcher restarted OK, ping responds",
+    "svelte-check: 0 errors"
   ],
   "broken": [],
   "partial": [
@@ -18,6 +19,6 @@
     "active_trades table must exist in Supabase",
     "releases table needs ALTER TABLE for new columns"
   ],
-  "next": "Test /improve Telegram command. Clean up WhatsApp debug logging. Create Supabase tables (vocal_eq_curves, active_trades) and run ALTER TABLE releases.",
-  "notes": "weeklySystemReview was initially placed inside server.listen callback (not module-level), which would have caused ReferenceError when called from pollTelegram. Fixed by moving to module scope before server.listen."
+  "next": "Create Supabase tables (vocal_eq_curves, active_trades), run ALTER TABLE releases. Test /improve Telegram command. Clean up WhatsApp debug logging.",
+  "notes": "Brain file storage complete. saveBrainFile() now fires after all major brain_knowledge inserts. Dropbox/Brain folder structure created at startup. Files mirrored to ObsidianVault/Brain/{category}/."
 }

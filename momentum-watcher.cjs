@@ -19,6 +19,7 @@ const https = require('https')
 const { execSync, exec } = require('child_process')
 const { Readable } = require('stream')
 const chokidar = require('chokidar')
+const formidable = require('formidable')
 
 let Database = null
 try { Database = require('better-sqlite3') } catch(e) { console.warn('better-sqlite3 not available:', e.message) }
@@ -45,6 +46,18 @@ const GEMINI_API_KEY    = process.env.GEMINI_API_KEY
 const OBSIDIAN_VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || '/Users/remo/ObsidianVault/Momentum'
 const NOTES_PATH = path.join(OBSIDIAN_VAULT_PATH, 'Notes')
 const NOW_PATH = path.join(OBSIDIAN_VAULT_PATH, 'Notes', 'NOW.md')
+
+// Brain file storage (Dropbox → synced to Obsidian)
+const BRAIN_FILES_PATH = process.env.BRAIN_FILES_PATH || '/Users/remo/Dropbox/Brain'
+const BRAIN_FOLDERS = [
+  'goal', 'mixing_technique', 'production_style', 'creative_process',
+  'market_knowledge', 'own_production', 'contact_profile', 'collaboration',
+  'observation', 'reference_current', 'business', 'sound_design', 'uncategorized'
+]
+for (const folder of BRAIN_FOLDERS) {
+  fs.mkdirSync(path.join(BRAIN_FILES_PATH, folder), { recursive: true })
+}
+fs.mkdirSync(path.join(BRAIN_FILES_PATH, 'uploads'), { recursive: true })
 
 let nowExtractTimer = null
 
@@ -636,6 +649,7 @@ async function runAgentChartAnalysis(apiKey) {
           active: true
         })
       })
+      setImmediate(() => saveBrainFile({ category: 'reference_current', title: chartBrainTitle, content: chartContent, confidence: 'medium', source_type: 'chart_agent', source_url: `https://open.spotify.com/track/${trackId}` }).catch(() => {}))
     }
   }
 
@@ -696,6 +710,7 @@ async function runAgentChartAnalysis(apiKey) {
         active: true
       })
     })
+    setImmediate(() => saveBrainFile({ category: 'market_knowledge', title: `Chart Analysis ${today}`, content: assessment, confidence: 'medium', source_type: 'chart_agent' }).catch(() => {}))
   }
 
   // Save to inbox with structured tracks encoded
@@ -1047,14 +1062,12 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   }).catch(() => {})
 
   // Save scout report to brain_knowledge with source metadata
+  const _scoutEntry = { category: 'market_knowledge', title: `Scout Report ${today}`, content: scoutText, confidence: 'weak', source_type: 'scout_agent' }
   fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
     method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-    body: JSON.stringify({
-      category: 'market_knowledge', title: `Scout Report ${today}`, content: scoutText,
-      entry_type: 'observation', confidence: 'weak', active: true,
-      metadata: { source_type: 'scout_agent', sources: sourcesUsed, date: today }
-    })
+    body: JSON.stringify({ ..._scoutEntry, entry_type: 'observation', active: true, metadata: { source_type: 'scout_agent', sources: sourcesUsed, date: today } })
   }).catch(() => {})
+  setImmediate(() => saveBrainFile(_scoutEntry).catch(() => {}))
 
   // Save press articles to inbox as type='press' (top 1 per source, max 5)
   const pressToSave = Object.values(
@@ -3160,6 +3173,50 @@ async function seedProductionRules() {
   return { seeded, skipped, total: rules.length }
 }
 
+// ── Brain file storage (Dropbox + Obsidian) ───────────────────────────────
+async function saveBrainFile(entry) {
+  try {
+    const category = entry.category || 'uncategorized'
+    const folderPath = path.join(BRAIN_FILES_PATH, category)
+    fs.mkdirSync(folderPath, { recursive: true })
+
+    const safeTitle = (entry.title || 'untitled')
+      .replace(/[^a-zA-Z0-9 \-_]/g, '')
+      .trim()
+      .slice(0, 60)
+
+    const filename = new Date().toISOString().slice(0, 10) + '_' + safeTitle + '.md'
+    const filepath = path.join(folderPath, filename)
+
+    const lines = [
+      '---',
+      'category: ' + category,
+      'confidence: ' + (entry.confidence || 'weak'),
+      'source: ' + (entry.source_type || 'manual'),
+      'created: ' + new Date().toISOString(),
+      entry.source_url ? 'url: ' + entry.source_url : null,
+      '---',
+      '',
+      '# ' + (entry.title || 'Untitled'),
+      '',
+      entry.content || ''
+    ].filter(s => s !== null)
+    const content = lines.join('\n')
+
+    fs.writeFileSync(filepath, content, 'utf8')
+
+    // Mirror into Obsidian vault under Brain/category/
+    const obsidianPath = path.join(OBSIDIAN_VAULT_PATH, 'Brain', category, filename)
+    fs.mkdirSync(path.dirname(obsidianPath), { recursive: true })
+    fs.writeFileSync(obsidianPath, content, 'utf8')
+
+    return filepath
+  } catch(e) {
+    console.error('saveBrainFile error:', e.message)
+    return null
+  }
+}
+
 // ── Weekly system improvement review ─────────────────────────────────────
 async function weeklySystemReview() {
   try {
@@ -3222,19 +3279,13 @@ Each suggestion max 2 sentences. Be concrete not general.` }]
       )
     }
 
+    const _sysRevEntry = { category: 'observation', title: 'System Review ' + new Date().toLocaleDateString('de-CH'), content: review, confidence: 'weak', source_type: 'system_review' }
     await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
       method: 'POST',
       headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({
-        category: 'observation',
-        title: 'System Review ' + new Date().toLocaleDateString('de-CH'),
-        content: review,
-        entry_type_v2: 'observation',
-        confidence: 'weak',
-        source_type: 'system_review',
-        active: true
-      })
+      body: JSON.stringify({ ..._sysRevEntry, entry_type_v2: 'observation', active: true })
     }).catch(() => {})
+    setImmediate(() => saveBrainFile(_sysRevEntry).catch(() => {}))
 
     fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
       method: 'POST',
@@ -4389,6 +4440,7 @@ ${context}` }]
             read: false
           })
         })
+        setImmediate(() => saveBrainFile({ category: 'observation', title: `Morning Briefing ${todayISO}`, content: briefingText, confidence: 'medium', source_type: 'morning_briefing' }).catch(() => {}))
 
         if (TELEGRAM_TOKEN) {
           sendTelegram(TELEGRAM_OWNER_ID, '🌅 Morning Briefing\n\n' + briefingText.slice(0, 3000)).catch(() => {})
@@ -4724,6 +4776,10 @@ ${context}` }]
 
         console.log(`✓ analyze-spotify-track: ${track.name} — ${track.artists[0]?.name} | ${bpm || '?'}bpm ${key || '?'}`)
         setImmediate(() => brainToObsidian().catch(() => {}))
+        if (bpm || key) {
+          const _trackEntry = { category: 'reference_current', title: `${track.name} — ${track.artists[0]?.name || ''}`, content: [bpm ? `${Math.round(bpm)}bpm` : null, key ? `${key} ${scale || ''}`.trim() : null, energy ? `nrg ${energy}` : null, loudness ? `${loudness}LUFS` : null, genres.length ? `Genres: ${genres.slice(0,3).join(', ')}` : null].filter(Boolean).join(' · '), confidence: 'medium', source_type: 'spotify', source_url: `https://open.spotify.com/track/${trackId}` }
+          setImmediate(() => saveBrainFile(_trackEntry).catch(() => {}))
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
           ok: true,
@@ -7410,6 +7466,7 @@ ${chatText.slice(0, 4000)}`
         const content = body.content ?? ''
         if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) fs.mkdirSync(OBSIDIAN_VAULT_PATH, { recursive: true })
         fs.writeFileSync(NOW_PATH, content, 'utf8')
+        try { fs.writeFileSync(path.join(BRAIN_FILES_PATH, 'NOW.md'), content, 'utf8') } catch(e) {}
         // Debounced extraction — 30s after last edit
         clearTimeout(nowExtractTimer)
         nowExtractTimer = setTimeout(() => {
@@ -7567,21 +7624,85 @@ ${chatText.slice(0, 4000)}`
         const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
         const text = body.text || ''
         if (!text.trim()) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'text required' })); return }
+        const entry = {
+          category: body.category || 'observation',
+          title: text.slice(0, 60),
+          content: text,
+          entry_type_v2: 'observation',
+          confidence: 'weak',
+          source_type: body.source || 'external',
+          active: true
+        }
         await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
           method: 'POST',
           headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({
-            category: body.category || 'observation',
-            title: text.slice(0, 60),
-            content: text,
-            entry_type_v2: 'observation',
-            confidence: 'weak',
-            source_type: body.source || 'external',
-            active: true
-          })
+          body: JSON.stringify(entry)
         })
+        setImmediate(() => saveBrainFile(entry).catch(() => {}))
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /save-brain-file — thin wrapper: write entry to Dropbox/Brain + Obsidian ──
+  if (req.method === 'POST' && req.url === '/save-brain-file') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const entry = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        const filepath = await saveBrainFile(entry)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, filepath }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /brain-file-upload — multipart upload to Dropbox/Brain/uploads + Obsidian ──
+  if (req.method === 'POST' && req.url === '/brain-file-upload') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const form = formidable({ maxFileSize: 50 * 1024 * 1024, keepExtensions: true })
+    form.parse(req, async (err, fields, files) => {
+      if (err) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: err.message })); return }
+      try {
+        const fileObj = Array.isArray(files.file) ? files.file[0] : files.file
+        if (!fileObj) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'No file' })); return }
+        const originalName = fileObj.originalFilename || fileObj.newFilename
+        const uploadsDir = path.join(BRAIN_FILES_PATH, 'uploads')
+        fs.mkdirSync(uploadsDir, { recursive: true })
+        const destPath = path.join(uploadsDir, originalName)
+        fs.copyFileSync(fileObj.filepath, destPath)
+        // Mirror to Obsidian Attachments
+        const obsAttachDir = path.join(OBSIDIAN_VAULT_PATH, 'Attachments')
+        fs.mkdirSync(obsAttachDir, { recursive: true })
+        fs.copyFileSync(fileObj.filepath, path.join(obsAttachDir, originalName))
+        fs.unlinkSync(fileObj.filepath)
+        // Brain entry
+        const note = (Array.isArray(fields.note) ? fields.note[0] : fields.note) || ''
+        const title = originalName
+        const entry = {
+          category: 'observation',
+          title,
+          content: note || `File upload: ${originalName}`,
+          confidence: 'weak',
+          source_type: 'file_upload',
+          active: true
+        }
+        await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+          method: 'POST',
+          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify(entry)
+        })
+        setImmediate(() => saveBrainFile(entry).catch(() => {}))
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, filename: originalName, path: destPath }))
       } catch(e) {
         res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
       }

@@ -1,24 +1,22 @@
 {
-  "updated": "2026-04-23T16:15:00.000Z",
-  "last_task": "brain-file-storage",
+  "updated": "2026-04-23T16:18:00.000Z",
+  "last_task": "housekeeping",
   "status": "done",
   "working": [
-    "saveBrainFile() hooked: agent-chart-analysis (ref track + assessment), morning-briefing, analyze-spotify-track",
-    "POST /save-brain-file thin wrapper endpoint (browser-side inserts)",
-    "POST /brain-file-upload (formidable 50MB, Dropbox/Brain/uploads + Obsidian Attachments)",
-    "POST /now copies content to BRAIN_FILES_PATH/NOW.md",
-    "BrainTab: file drop works for non-image/non-text files, shows upload status",
-    "BrainTab saveApproved() calls /save-brain-file after each brain_knowledge insert",
-    "watcher restarted OK, ping responds",
-    "svelte-check: 0 errors"
+    "8/8 tests passing",
+    "65 brain duplicates cleaned (173 entries remain)",
+    "WhatsApp debug console.logs removed from readWhatsAppMessages()",
+    "All brain file storage hooks working",
+    "vocal_eq_curves table exists (needs ALTER TABLE for columns)",
+    "active_trades table exists (needs ALTER TABLE for columns)",
+    "releases table exists (needs ALTER TABLE for new columns)"
   ],
   "broken": [],
   "partial": [
-    "Debug console.log lines in readWhatsAppMessages() still present — remove when WhatsApp monitoring confirmed stable",
-    "vocal_eq_curves table must exist in Supabase",
-    "active_trades table must exist in Supabase",
-    "releases table needs ALTER TABLE for new columns"
+    "vocal_eq_curves: needs ALTER TABLE to add type, url, song_id, label, curve, created_at",
+    "active_trades: needs ALTER TABLE to add coin, amount_coin, amount_eur, entry_price, entry_signal, entry_time, status",
+    "releases: needs ALTER TABLE to add code, label, distributor, isrc, upc, folder_path, status, spotify_streams"
   ],
-  "next": "Create Supabase tables (vocal_eq_curves, active_trades), run ALTER TABLE releases. Test /improve Telegram command. Clean up WhatsApp debug logging.",
-  "notes": "Brain file storage complete. saveBrainFile() now fires after all major brain_knowledge inserts. Dropbox/Brain folder structure created at startup. Files mirrored to ObsidianVault/Brain/{category}/."
+  "next": "Run ALTER TABLE SQL in Supabase dashboard for vocal_eq_curves, active_trades, releases. Then test /improve Telegram command and vocal EQ analysis end-to-end.",
+  "notes": "All three tables exist but were created with minimal columns. Full SQL block ready — run in Supabase SQL Editor at https://supabase.com/dashboard/project/ukqpnjgvjeduipmdaczn/sql"
 }

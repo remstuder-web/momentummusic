@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs — DONE
+TASK: housekeeping
+WHAT: Removed 3 debug console.log lines from readWhatsAppMessages() (waSince, Invictus CoreData ts, Will catch flag). Ran /cleanup-brain-dupes (deleted 65 duplicates, 173 remaining). 8/8 tests passing.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs + BrainTab.svelte — DONE
 TASK: brain-file-storage
 WHAT: saveBrainFile() hooked into agent-chart-analysis (both reference track + assessment inserts), morning-briefing (inbox insert), analyze-spotify-track (track data). Added POST /save-brain-file thin wrapper endpoint. Added POST /brain-file-upload (formidable, 50MB, saves to Dropbox/Brain/uploads + Obsidian Attachments). POST /now now copies to BRAIN_FILES_PATH/NOW.md. BrainTab: fileDragging/uploadedFile/fileUploading state, handleFileDrop(), ondrop routes non-text/non-image files to /brain-file-upload, status UI. saveApproved() calls /save-brain-file after each insert.

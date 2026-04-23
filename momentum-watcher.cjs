@@ -8405,9 +8405,6 @@ function readWhatsAppMessages(dbPath, since) {
   const db = new Database(dbPath, { readonly: true, fileMustExist: true })
   // since = Unix ms → convert to CoreData seconds for the WHERE clause
   const waSince = (since / 1000) - COREDATA_EPOCH_OFFSET
-  console.log('readWhatsApp since (CoreData):', waSince)
-  console.log('Latest Invictus msg (CoreData):', 798648620)
-  console.log('Will catch Invictus:', waSince < 798648620)
   try {
     const msgs = db.prepare(`
       SELECT

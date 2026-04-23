@@ -24,6 +24,17 @@ export async function buildMozartContext(supabase, options = {}) {
     supabase.from('brain_knowledge').select('title,content').eq('category', 'own_production').eq('source_type', 'version_history').order('created_at', { ascending: false }).limit(5)
   ])
 
+  let targetContacts = []
+  try {
+    const { data: tc } = await supabase
+      .from('connections')
+      .select('name, group_types, instagram, spotify_id, notes')
+      .eq('personal', false)
+      .or('via_ids.is.null,via_ids.eq.{}')
+      .limit(10)
+    targetContacts = tc || []
+  } catch(e) {}
+
   const userRefs = (allRefs || []).filter(t => t.source === 'user' || t.promoted)
   const chartRefs = (allRefs || []).filter(t => t.source === 'agent' && !t.promoted)
 
@@ -237,6 +248,15 @@ FORMATTING RULES — always follow these:
   if (mixingHistories?.length) {
     context += '\n\n## MIXING HISTORY (what I learned)\n'
     context += mixingHistories.map(h => h.title + ': ' + h.content.slice(0, 120)).join('\n')
+  }
+
+  if (targetContacts.length) {
+    context += '\n\n## TARGET CONTACTS (not yet reached)\n'
+    context += 'Remo wants to connect with these people.\n'
+    context += 'Flag any opportunity to reach them naturally.\n'
+    context += targetContacts.map(c =>
+      c.name + (c.group_types?.length ? ' (' + c.group_types.slice(0, 2).join(', ') + ')' : '')
+    ).join('\n')
   }
 
   context += `\n\n## ACTION COMMANDS

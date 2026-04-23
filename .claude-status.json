@@ -1,16 +1,17 @@
 {
-  "updated": "2026-04-23T12:33:30.000Z",
-  "last_task": "personal-checkbox-persist",
-  "status": "partial",
+  "updated": "2026-04-23T12:40:00.000Z",
+  "last_task": "mozart-target-contacts",
+  "status": "done",
   "working": [
-    "personal checkbox onchange already calls updateField(conn, 'personal', e.target.checked)",
-    "updateField does supabase.from('connections').update({ [field]: value }).eq('id', conn.id)",
-    "Watcher startup check logs SQL warning if personal column missing"
+    "buildMozartContext fetches connections with personal=false and via_ids null/empty",
+    "TARGET CONTACTS section appended to Mozart context with name + group type",
+    "try/catch so query degrades gracefully if personal column not yet in DB",
+    "0 svelte-check errors"
   ],
   "broken": [],
   "partial": [
-    "personal column missing from connections table in Supabase — saves will fail silently until added"
+    "Target contacts query returns nothing until personal column added to DB"
   ],
-  "next": "Run in Supabase SQL editor: ALTER TABLE connections ADD COLUMN IF NOT EXISTS personal boolean DEFAULT false;",
-  "notes": "Cannot run DDL via REST API — requires Supabase dashboard. Watcher now logs the exact SQL on startup."
+  "next": "Run SQL: ALTER TABLE connections ADD COLUMN IF NOT EXISTS personal boolean DEFAULT false; — then target contacts will appear in Mozart context",
+  "notes": "Column name is via_ids (not via as in spec). PostgREST empty array syntax is {} not []. Both fixed in implementation."
 }

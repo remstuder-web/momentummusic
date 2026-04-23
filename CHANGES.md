@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] src/lib/mozartContext.js — DONE
+TASK: mozart-target-contacts
+WHAT: buildMozartContext() fetches connections with personal=false and no via_ids, appends as TARGET CONTACTS section so Mozart flags networking opportunities
+RESULT: works, 0 svelte errors; query has try/catch so it degrades gracefully if personal column missing
+BLOCKERS: Needs personal column in DB first: ALTER TABLE connections ADD COLUMN IF NOT EXISTS personal boolean DEFAULT false;
+
 ## [2026-04-23] ConnectionsTab.svelte + momentum-watcher.cjs — DONE
 TASK: personal-checkbox-persist
 WHAT: Confirmed personal checkbox already calls updateField → Supabase. Added watcher startup warning for missing personal column. Column must be added manually in Supabase.

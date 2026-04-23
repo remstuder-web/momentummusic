@@ -2921,7 +2921,7 @@
                       loadVocalEq(song.id)
                     }
                   }}>
-                    <span class="vocal-eq-title">VOCAL EQ</span>
+                    <span class="vocal-eq-title">🎤 ANALYZER</span>
                     <span class="vocal-eq-arr {showVocalEq[song.id] ? 'open' : ''}">▶</span>
                   </button>
                   {#if showVocalEq[song.id]}

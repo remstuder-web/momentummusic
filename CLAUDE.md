@@ -4,7 +4,7 @@
 A purpose-built music production management tool for a professional music producer.
 SvelteKit + Svelte 5 + Supabase web app. Local at localhost:5173. Watcher on port 4242.
 Public listen page: momentummusic.vercel.app (deployed via GitHub).
-Project root: /Users/remo/momentum
+Project root: /Users/remo/Dropbox/!MOMENTUM MUSIC/!BACKUP/momentum
 
 ## Spotify API notes (important)
 - Client Credentials flow is sufficient — no user login/OAuth required
@@ -18,7 +18,7 @@ Project root: /Users/remo/momentum
 - SvelteKit + Svelte 5 runes ($state, $derived) — NO Svelte 4 syntax
 - Supabase (postgres) for all data
 - Tailwind installed but NOT used — manual CSS in component <style> blocks
-- Node.js watcher: /Users/remo/momentum/momentum-watcher.cjs (port 4242) — always use .cjs, not .js (package.json "type":"module" breaks require in .js)
+- Node.js watcher: /Users/remo/Dropbox/!MOMENTUM MUSIC/!BACKUP/momentum/momentum-watcher.cjs (port 4242) — always use .cjs, not .js (package.json "type":"module" breaks require in .js)
 - npm for package management
 
 ## Supabase
@@ -148,7 +148,7 @@ NEXT: what the next session should tackle first
 ```
 
 ## Status tracking (REQUIRED after every task)
-After completing every task, write /Users/remo/momentum/.claude-status.json with:
+After completing every task, write /Users/remo/Dropbox/!MOMENTUM MUSIC/!BACKUP/momentum/.claude-status.json with:
 ```json
 {
   "updated": "<ISO timestamp>",

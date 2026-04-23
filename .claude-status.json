@@ -1,9 +1,10 @@
 {
-  "updated": "2026-04-23T20:45:00.000Z",
-  "last_task": "fix-reference-tracks-order",
+  "updated": "2026-04-23T21:00:00.000Z",
+  "last_task": "brain-loadentries-onmount",
   "status": "done",
   "working": [
-    "fix-reference-tracks-order: BrainTab reference_tracks query now orders by created_at DESC — checkout tracks with null tempo load correctly",
+    "brain-loadentries-onmount: onMount is async, awaits loadEntries(), debug console.logs removed",
+    "fix-reference-tracks-order: reference_tracks query orders by created_at DESC — null tempo tracks load correctly",
     "scout-tracks-checkout: /agent-scout endpoint saves result.tracks to reference_tracks (ilike dedup, collection_name scout_YYYY-MM-DD, source checkout)",
     "sync-project-refs: POST /sync-project-refs reads project_meta.reference_links, Essentia-analyzes each Spotify URL, saves with source:'agent'",
     "fix-vocal-eq-header-click: vocal-eq-section position:relative z-index:1, vocal-eq-header position:relative z-index:2 pointer-events:all",
@@ -15,8 +16,8 @@
   "broken": [],
   "partial": [
     "vocal-eq-stems: SQL migration not yet run — vocal_eq_curves missing stem_type and source_type columns",
-    "fix-reference-tracks-order: console.log debug lines still in BrainTab — remove after confirming checkout tracks appear"
+    "checkout_date column: may not exist in reference_tracks — run SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;"
   ],
-  "next": "1. Check browser console after opening BrainTab — confirm checkout count > 0, then remove the two console.log lines from BrainTab.svelte. 2. Run Supabase SQL: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix';",
-  "notes": "reference_tracks with null tempo were being excluded by .order('tempo') — now fixed with created_at DESC order."
+  "next": "Run both SQL migrations in Supabase dashboard: (1) ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; (2) ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;",
+  "notes": "BrainTab now reliably loads reference_tracks on mount including checkout tracks with null tempo. Scout tracks saved with collection_name scout_YYYY-MM-DD."
 }

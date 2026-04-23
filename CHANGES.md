@@ -1,9 +1,10 @@
 # CHANGES
 
 ## [2026-04-23] BrainTab.svelte — DONE
-TASK: fix-reference-tracks-order
-WHAT: Changed reference_tracks query from .order('tempo') to .order('created_at', { ascending: false }) so checkout tracks with null tempo load correctly. Added temporary console.log for debug confirmation.
-RESULT: works — remove console.log after confirming checkout tracks appear
+TASK: brain-loadentries-onmount
+WHAT: onMount made async + await loadEntries(); removed debug console.log lines. loadEntries already moved to onMount in prior commit. checkout_date column needs SQL migration in Supabase (timestamptz).
+RESULT: works
+BLOCKERS: Run SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;
 BLOCKERS: none
 
 ## [2026-04-23] momentum-watcher.cjs — DONE

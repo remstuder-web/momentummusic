@@ -3,6 +3,7 @@
   import { buildMozartContext, parseActions, executeAction } from './mozartContext.js'
   import { GENRE_LIST } from '$lib/genres.js'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
+  import VocalEqChart from './VocalEqChart.svelte'
   import { onDestroy } from 'svelte'
 
   let projects = $state([])
@@ -41,6 +42,13 @@
   let undoStack = $state([])
   let undoFlash = $state(false)
   const MAX_UNDO = 10
+
+  // Vocal EQ
+  let vocalEqCurves = $state({}) // song.id -> { mix: [...], refs: [...] }
+  let vocalEqLoading = $state({}) // song.id -> bool
+  let vocalRefUrl = $state({}) // song.id -> url input string
+  let showVocalEq = $state({}) // song.id -> bool
+  let vocalComparison = $state({}) // song.id -> comparison result
 
   function formatMinSec(sec) {
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60)
@@ -2045,6 +2053,73 @@
     })
   }
 
+  async function loadVocalEq(songId) {
+    try {
+      const r = await fetch(`http://localhost:4242/vocal-eq-curves?song_id=${songId}`)
+      const d = await r.json()
+      if (d.ok) {
+        vocalEqCurves[songId] = { mix: d.mix_curves, refs: d.ref_curves }
+        vocalEqCurves = { ...vocalEqCurves }
+        const latestMix = d.mix_curves?.[0]
+        const latestRef = d.ref_curves?.[0]
+        if (latestMix && latestRef) {
+          const cr = await fetch('http://localhost:4242/compare-vocal-eq', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mix_curve: latestMix.curve, ref_curve: latestRef.curve })
+          })
+          const cd = await cr.json()
+          if (cd.ok) {
+            vocalComparison[songId] = cd
+            vocalComparison = { ...vocalComparison }
+          }
+        }
+      }
+    } catch(e) {}
+  }
+
+  async function analyzeMyVocal(song) {
+    const sid = song.id
+    vocalEqLoading[sid] = 'mix'
+    vocalEqLoading = { ...vocalEqLoading }
+    try {
+      const r = await fetch('http://localhost:4242/analyze-vocal-eq', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'mix', song_id: sid })
+      })
+      const d = await r.json()
+      if (!d.ok) throw new Error(d.error || 'failed')
+      await loadVocalEq(sid)
+    } catch(e) {
+      alert('Vocal EQ analysis failed: ' + e.message)
+    } finally {
+      vocalEqLoading[sid] = null
+      vocalEqLoading = { ...vocalEqLoading }
+    }
+  }
+
+  async function addReferenceVocal(song, url, label) {
+    if (!url) return
+    const sid = song.id
+    vocalEqLoading[sid] = 'ref'
+    vocalEqLoading = { ...vocalEqLoading }
+    try {
+      const r = await fetch('http://localhost:4242/analyze-vocal-eq', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'reference', song_id: sid, url, label: label || url })
+      })
+      const d = await r.json()
+      if (!d.ok) throw new Error(d.error || 'failed')
+      vocalRefUrl[sid] = ''
+      vocalRefUrl = { ...vocalRefUrl }
+      await loadVocalEq(sid)
+    } catch(e) {
+      alert('Reference vocal analysis failed: ' + e.message)
+    } finally {
+      vocalEqLoading[sid] = null
+      vocalEqLoading = { ...vocalEqLoading }
+    }
+  }
+
   onDestroy(() => stopWorkTimer(true))
 
   if (typeof document !== 'undefined') {
@@ -2822,6 +2897,76 @@
                     {/each}
                   </div>
                 {/if}
+
+                <!-- Vocal EQ section -->
+                <div class="vocal-eq-section">
+                  <button class="vocal-eq-header" onclick={() => {
+                    showVocalEq[song.id] = !showVocalEq[song.id]
+                    showVocalEq = { ...showVocalEq }
+                    if (showVocalEq[song.id] && !vocalEqCurves[song.id]) loadVocalEq(song.id)
+                  }}>
+                    <span class="vocal-eq-title">VOCAL EQ</span>
+                    <span class="vocal-eq-arr {showVocalEq[song.id] ? 'open' : ''}">▶</span>
+                  </button>
+                  {#if showVocalEq[song.id]}
+                    {@const eqData = vocalEqCurves[song.id]}
+                    {@const cmp = vocalComparison[song.id]}
+                    {@const loading = vocalEqLoading[song.id]}
+                    <div class="vocal-eq-body">
+                      <!-- Chart -->
+                      <VocalEqChart
+                        refCurve={eqData?.refs?.[0]?.curve ?? null}
+                        mixCurve={eqData?.mix?.[0]?.curve ?? null}
+                      />
+
+                      <!-- Action row -->
+                      <div class="vocal-eq-actions">
+                        <button class="vocal-btn" disabled={!!loading}
+                          onclick={() => analyzeMyVocal(song)}>
+                          {loading === 'mix' ? 'Analyzing…' : 'Analyze My Vocal'}
+                        </button>
+                        <div class="vocal-ref-row">
+                          <input class="vocal-ref-inp" type="text"
+                            placeholder="Spotify / YouTube URL…"
+                            value={vocalRefUrl[song.id] || ''}
+                            oninput={e => { vocalRefUrl[song.id] = e.currentTarget.value; vocalRefUrl = { ...vocalRefUrl } }} />
+                          <button class="vocal-btn vocal-btn-ref" disabled={!!loading || !vocalRefUrl[song.id]}
+                            onclick={() => addReferenceVocal(song, vocalRefUrl[song.id], '')}>
+                            {loading === 'ref' ? 'Fetching…' : '+ Add Reference'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Comparison results -->
+                      {#if cmp}
+                        <div class="eq-match-score">Match score: <span class="{cmp.match_score >= 70 ? 'eq-match-good' : cmp.match_score >= 40 ? 'eq-match-mid' : 'eq-match-low'}">{cmp.match_score}%</span></div>
+                        {#if cmp.instructions?.length}
+                          <div class="eq-instructions">
+                            {#each cmp.instructions as inst}
+                              <div class="eq-inst {inst.action === 'BOOST' ? 'boost' : 'cut'}">
+                                <span class="eq-inst-action">{inst.action}</span>
+                                <span class="eq-inst-db">{inst.action === 'BOOST' ? '+' : ''}{inst.db}dB</span>
+                                <span class="eq-inst-band">{inst.freq_label}</span>
+                              </div>
+                            {/each}
+                          </div>
+                        {/if}
+                      {/if}
+
+                      <!-- Curve list -->
+                      {#if eqData?.refs?.length}
+                        <div class="eq-curve-list">
+                          {#each eqData.refs as ref}
+                            <div class="eq-curve-item eq-curve-ref">● {ref.label || ref.source_url || 'Reference'}</div>
+                          {/each}
+                          {#each (eqData.mix || []) as mix}
+                            <div class="eq-curve-item eq-curve-mix">● My Vocal ({new Date(mix.created_at).toLocaleDateString()})</div>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
 
                 <!-- Release checklist -->
                 {#if releasedSongIds.includes(song.id) || releasedSongIds.includes(song.code) || wd.current_stage === 'mastering' || wd.current_stage === 'stems'}
@@ -3603,4 +3748,40 @@
   .color-dot-lg:hover { transform: scale(1.1); }
   .daw-capture-btn { background: transparent; border: none; cursor: pointer; font-size: 13px; padding: 2px 4px; opacity: .25; transition: opacity .15s; flex-shrink: 0; }
   .daw-capture-btn:hover { opacity: 1; }
+
+  /* Vocal EQ */
+  .vocal-eq-section { border-top: 1px solid #1a1a1a; margin-top: 4px; }
+  .vocal-eq-header { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; background: transparent; border: none; cursor: pointer; }
+  .vocal-eq-header:hover { background: rgba(255,255,255,.02); }
+  .vocal-eq-title { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; }
+  .vocal-eq-arr { font-size: 9px; color: #555; transition: transform .2s; font-family: 'Space Mono', monospace; }
+  .vocal-eq-arr.open { transform: rotate(90deg); }
+  .vocal-eq-body { padding: 6px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .vocal-eq-actions { display: flex; flex-direction: column; gap: 6px; }
+  .vocal-ref-row { display: flex; gap: 6px; }
+  .vocal-ref-inp { flex: 1; background: #111; border: 1px solid #1c1c1c; color: #f5f1ea; font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 5px 9px; border-radius: 3px; outline: none; min-width: 0; }
+  .vocal-ref-inp:focus { border-color: rgba(201,168,76,.4); }
+  .vocal-ref-inp::placeholder { color: #333; }
+  .vocal-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .07em; padding: 5px 12px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 2px; cursor: pointer; white-space: nowrap; }
+  .vocal-btn:hover:not(:disabled) { border-color: #c9a84c; color: #c9a84c; }
+  .vocal-btn:disabled { opacity: .4; cursor: default; }
+  .vocal-btn-ref { border-color: rgba(74,159,212,.3); color: #4a9fd4; flex-shrink: 0; }
+  .vocal-btn-ref:hover:not(:disabled) { border-color: #4a9fd4; background: rgba(74,159,212,.05); color: #4a9fd4; }
+  .eq-match-score { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; }
+  .eq-match-good { color: #4caf82; }
+  .eq-match-mid { color: #f5a623; }
+  .eq-match-low { color: #e05a4a; }
+  .eq-instructions { display: flex; flex-wrap: wrap; gap: 5px; }
+  .eq-inst { display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 3px; font-family: 'Space Mono', monospace; font-size: 10px; }
+  .eq-inst.boost { background: rgba(76,175,130,.08); border: 1px solid rgba(76,175,130,.25); }
+  .eq-inst.cut { background: rgba(224,90,74,.08); border: 1px solid rgba(224,90,74,.25); }
+  .eq-inst-action { font-weight: 700; }
+  .eq-inst.boost .eq-inst-action { color: #4caf82; }
+  .eq-inst.cut .eq-inst-action { color: #e05a4a; }
+  .eq-inst-db { color: #cec9c1; min-width: 32px; }
+  .eq-inst-band { color: #9e9690; }
+  .eq-curve-list { display: flex; flex-direction: column; gap: 2px; }
+  .eq-curve-item { font-family: 'Space Mono', monospace; font-size: 10px; }
+  .eq-curve-ref { color: rgba(201,168,76,.7); }
+  .eq-curve-mix { color: rgba(74,159,212,.7); }
 </style>

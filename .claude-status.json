@@ -1,29 +1,22 @@
 {
-  "updated": "2026-04-23T15:22:00.000Z",
-  "last_task": "buy-sell-cycle-4h-binance-portfolio",
+  "updated": "2026-04-23T15:34:00.000Z",
+  "last_task": "vocal-eq-analysis",
   "status": "done",
   "working": [
-    "PART 1: Portfolio source is Binance live balances (or user_settings fallback); entry prices enriched from crypto_trades buy history (weighted avg)",
-    "PART 2: active_trades loaded in buildCryptoSignal(); P&L computed per trade; EXIT ALERT via Telegram (3h cooldown) for take-profit ≥8%, stop-loss ≤-5%, bearish signal",
-    "/buy [€] and /buyeth [€]: logs to crypto_trades (type=buy) + upserts active_trades (on_conflict=coin)",
-    "/sell confirm now also PATCHes active_trades status=closed",
-    "/hold: snoozes exit alerts 3h for BTC+ETH",
-    "lastSignalResult caches last signal for /buy command context",
-    "lastExitAlertSent[coin] prevents alert spam (3h cooldown per coin)",
-    "PART 3: fetch4HCandles() BTCEUR (fallback BTCUSDT); MA5/MA10 scoring; strong candle body scoring; trend_4h/ma5_4h/ma10_4h in signal response",
-    "4H trend shown in /crypto Telegram message",
-    "Active trades block in /crypto Telegram message",
-    "PART 4: 5 signal CSS classes with distinct colors (strong-buy #00c853, bullish #4caf82, neutral #f5a623, bearish #ff6b35, strong-sell #e05a4a)",
-    "FinancesTab: active trades block with P&L per row, green/red border by profit/loss",
-    "Live test: BULLISH, uptrend, MA5=€66692, active_trades=[], 0 svelte errors"
+    "PART A: analyze_vocal_eq.py — Demucs vocal separation + 30-band ISO third-octave EQ (25%-75% of audio, mean-normalized)",
+    "PART B: POST /analyze-vocal-eq (type=reference or type=mix), GET /vocal-eq-curves?song_id=, POST /compare-vocal-eq",
+    "PART B: getFreqDescription() + interpretVocalComparison() helpers in watcher",
+    "PART C: VocalEqChart.svelte — SVG chart log-frequency x-axis, ±20dB y-axis, gold ref + blue mix lines",
+    "PART C: ProjectsTab vocal EQ collapsible section — chart + analyze button + reference URL input + BOOST/CUT instructions + match score",
+    "0 svelte errors; watcher restarted; ping OK"
   ],
   "broken": [],
   "partial": [
-    "active_trades table must be created in Supabase (CREATE TABLE active_trades...)",
-    "Binance live balances require BINANCE_API_KEY + BINANCE_SECRET_KEY in .env",
-    "crypto_trades table must exist in Supabase for buy/sell logging",
-    "Supabase releases table needs new columns (ALTER TABLE)"
+    "vocal_eq_curves table must be created in Supabase: CREATE TABLE vocal_eq_curves (id uuid primary key default gen_random_uuid(), song_id text, curve_type text, source_url text, label text, curve jsonb, created_at timestamptz default now())",
+    "active_trades table must be created in Supabase (from previous task)",
+    "releases table needs ALTER TABLE for new columns (from previous task)",
+    "Binance API keys needed in .env for live portfolio"
   ],
-  "next": "Run CREATE TABLE active_trades SQL in Supabase. Add BINANCE_API_KEY + BINANCE_SECRET_KEY to .env. Run ALTER TABLE releases ADD COLUMN for new fields.",
-  "notes": "active_trades uses on_conflict=coin so buying BTC again overwrites the current open trade entry. /buy defaults to €500 if no amount given."
+  "next": "Run CREATE TABLE vocal_eq_curves in Supabase. Test vocal EQ analysis on a real song. Create active_trades table if not done.",
+  "notes": "Reference curves are global (no song_id filter) so any analyzed reference can compare with any song. yt-dlp fetches 90s from 00:30 for reference tracks. Mix analysis uses latest file in MIXING_DIR by song_id prefix."
 }

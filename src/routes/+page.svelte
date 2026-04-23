@@ -13,6 +13,8 @@
 
   let activeTab = $state('daily')
   let listenSessionId = $state(null) // set when ?s= param detected
+  let originalOpen = null
+
   onMount(() => {
     // Detect listen session — ?s=XXXX means show public listen page, not admin app
     const s = new URLSearchParams(window.location.search).get('s')
@@ -20,6 +22,16 @@
 
     const handler = e => { activeTab = e.detail }
     document.addEventListener('mm-switch-tab', handler)
+
+    // Override window.open so JS-triggered popups also go through our popup
+    originalOpen = window.open
+    window.open = (url, target, features) => {
+      if (url && url.startsWith('http')) {
+        openPopup(url)
+        return null
+      }
+      return originalOpen(url, target, features)
+    }
 
     const linkHandler = e => {
       const link = e.target.closest('a')
@@ -32,33 +44,33 @@
         openPopup(url)
       }
     }
-    document.addEventListener('mousedown', linkHandler, { capture: true })
+    document.addEventListener('click', linkHandler, true)
 
     return () => {
+      window.open = originalOpen
       document.removeEventListener('mm-switch-tab', handler)
-      document.removeEventListener('mousedown', linkHandler, { capture: true })
+      document.removeEventListener('click', linkHandler, true)
     }
   })
   // Link popup
   let popupUrl = $state('')
   let popupVisible = $state(false)
   let popupTitle = $state('')
-  let popupBlocked = $state(false)
+  let iframeBlocked = $state(false)
 
   function openPopup(url) {
     popupUrl = url
+    iframeBlocked = false
     popupVisible = true
-    popupBlocked = false
     try {
-      const u = new URL(url)
-      popupTitle = u.hostname.replace('www.', '')
+      popupTitle = new URL(url).hostname.replace('www.', '')
     } catch(e) { popupTitle = 'Link' }
   }
 
   function closePopup() {
     popupVisible = false
     popupUrl = ''
-    popupBlocked = false
+    iframeBlocked = false
   }
 
   let showSettings = $state(false)
@@ -616,22 +628,27 @@
           <a href={popupUrl} target="_blank" rel="noopener"
              class="link-popup-external"
              title="Open in new tab"
-             onclick={e => e.stopPropagation()}>↗</a>
+             onclick={e => { e.stopPropagation(); if (originalOpen) window.open = originalOpen }}>↗</a>
           <button class="link-popup-close" onclick={closePopup}>×</button>
         </div>
       </div>
-      {#if popupBlocked}
+      {#if iframeBlocked}
         <div class="link-popup-blocked">
-          This site doesn't allow embedding. Click ↗ to open in new tab.
+          <div style="color:#9e9690;font-family:'DM Sans',sans-serif;font-size:13px;text-align:center;padding:40px">
+            This site doesn't allow embedding.<br><br>
+            <a href={popupUrl} target="_blank" rel="noopener"
+               onclick={e => { e.stopPropagation(); if (originalOpen) window.open = originalOpen }}
+               style="color:#c9a84c">Open in new tab ↗</a>
+          </div>
         </div>
       {:else}
         <iframe
           src={popupUrl}
           class="link-popup-frame"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation"
           title={popupTitle}
-          onload={e => { try { e.target.contentDocument; popupBlocked = false } catch(_) { popupBlocked = true } }}
-          onerror={() => { popupBlocked = true }}
+          onload={() => { iframeBlocked = false }}
+          onerror={() => { iframeBlocked = true }}
         ></iframe>
       {/if}
     </div>

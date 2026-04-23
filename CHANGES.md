@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-23] +page.svelte — DONE
+TASK: popup-window-open-override
+WHAT: Override window.open so JS-triggered popups also use iframe popup. Switched link interceptor from mousedown capture to click capture (true). ↗ and fallback link temporarily restore originalOpen so real new-tab still works. iframeBlocked state replaces popupBlocked.
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-23] +page.svelte — DONE
 TASK: floating-link-popup
 WHAT: Global click interceptor on all a[target="_blank"] links opens 85vw/85vh iframe popup instead of new tab. Header shows hostname + ↗ new-tab button + × close. onload detects cross-origin block and shows fallback message. ESC/overlay click closes. CSS matches dark palette.
 RESULT: works — sites blocking iframes (Spotify, Instagram) show fallback message with ↗ button

@@ -3155,6 +3155,64 @@ async function seedProductionRules() {
   return { seeded, skipped, total: rules.length }
 }
 
+// ── Vocal EQ — standalone reference analysis function ────────────────────
+const VOCAL_EQ_SCRIPT = path.join(__dirname, 'analyze_vocal_eq.py')
+const VOCAL_EQ_PYTHON = '/opt/homebrew/bin/python3.11'
+
+async function analyzeVocalEqUrl(url, songId, label) {
+  const tmpAudio = `/tmp/vocal_ref_${Date.now()}.mp3`
+  let audioReady = false
+
+  if (url.includes('spotify.com/track/')) {
+    const trackId = url.split('/track/')[1].split('?')[0].split('/')[0]
+    try {
+      const token = await getSpotifyToken()
+      const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: { 'Authorization': 'Bearer ' + token } })
+      const track = await trackRes.json()
+      if (track.preview_url) {
+        execSync(`curl -s -o "${tmpAudio}" "${track.preview_url}"`, { timeout: 15000 })
+        audioReady = true
+        console.log('✓ Spotify preview for vocal EQ ref:', track.name)
+      }
+      if (!audioReady) {
+        const q = ((track.artists?.[0]?.name || '') + ' ' + track.name).replace(/"/g, '')
+        execSync(`yt-dlp -x --audio-format mp3 --download-sections "*0-90" -o "${tmpAudio}" "ytsearch1:${q}"`, { timeout: 90000 })
+        audioReady = true
+        console.log('✓ yt-dlp fallback for vocal EQ ref:', q)
+      }
+    } catch(e) { throw new Error('Audio download failed: ' + e.message.slice(0, 100)) }
+  } else {
+    try {
+      execSync(`yt-dlp -x --audio-format mp3 --download-sections "*0-90" -o "${tmpAudio}" "${url}"`, { timeout: 90000 })
+      audioReady = true
+    } catch(e) { throw new Error('yt-dlp failed: ' + e.message.slice(0, 100)) }
+  }
+  if (!audioReady) throw new Error('Could not download audio for vocal EQ')
+
+  console.log('⏳ Running stem EQ analysis (ref):', label || url)
+  const raw = execSync(`"${VOCAL_EQ_PYTHON}" "${VOCAL_EQ_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 400000 }).trim()
+  try { fs.unlinkSync(tmpAudio) } catch(e) {}
+
+  const result = JSON.parse(raw)
+  if (!result.ok) throw new Error(result.error || 'Script failed')
+
+  const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves`, {
+    method: 'POST',
+    headers: { ...sbHeaders, 'Prefer': 'return=representation' },
+    body: JSON.stringify({
+      label: label || 'Reference',
+      type: 'reference',
+      url: url,
+      song_id: songId || null,
+      curve: result.stems,
+      created_at: new Date().toISOString()
+    })
+  })
+  const inserted = await insertRes.json()
+  const savedId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
+  return { id: savedId, stems: result.stems }
+}
+
 // ── HTTP server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -5818,52 +5876,20 @@ Respond ONLY in JSON:
     return { diffs, instructions, matchScore, boostNeeded, cutNeeded }
   }
 
-  // ── POST /analyze-vocal-eq — Demucs vocal separation + ISO 30-band EQ curve ──
+  // ── POST /analyze-vocal-eq — Demucs 4-stem separation + ISO 30-band EQ ──
   if (req.method === 'POST' && req.url === '/analyze-vocal-eq') {
     res.setHeader('Access-Control-Allow-Origin', '*')
     const chunks = []; req.on('data', c => chunks.push(c))
     req.on('end', async () => {
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString())
-        const { type, url, song_id, label, version_name } = body
-        const VOCAL_EQ_SCRIPT = path.join(__dirname, 'analyze_vocal_eq.py')
-        const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
-
-        let audioFilePath = null
+        const { type, url, song_id, label } = body
 
         if (type === 'reference') {
           if (!url) throw new Error('url required for reference type')
-          const tmpAudio = `/tmp/vocal_ref_${Date.now()}.mp3`
-          let audioReady = false
-
-          // Try Spotify preview
-          if (url.includes('spotify.com/track/')) {
-            try {
-              const trackId = url.split('/track/')[1].split('?')[0].split('/')[0]
-              const token = await getSpotifyToken()
-              const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: { 'Authorization': 'Bearer ' + token } })
-              const track = await trackRes.json()
-              if (track.preview_url) {
-                execSync(`curl -s -o "${tmpAudio}" "${track.preview_url}"`, { timeout: 15000 })
-                audioReady = true
-                console.log('✓ Spotify preview for vocal EQ:', track.name)
-              }
-              if (!audioReady) {
-                const q = ((track.artists?.[0]?.name || '') + ' ' + track.name).replace(/"/g, '')
-                execSync(`yt-dlp -x --audio-format mp3 --download-sections "*0-90" -o "${tmpAudio}" "ytsearch1:${q}"`, { timeout: 90000 })
-                audioReady = true
-                console.log('✓ yt-dlp fallback for vocal EQ:', q)
-              }
-            } catch(e) { throw new Error('Audio download failed: ' + e.message.slice(0, 100)) }
-          } else {
-            // Direct yt-dlp for non-Spotify
-            try {
-              execSync(`yt-dlp -x --audio-format mp3 --download-sections "*0-90" -o "${tmpAudio}" "${url}"`, { timeout: 90000 })
-              audioReady = true
-            } catch(e) { throw new Error('yt-dlp failed: ' + e.message.slice(0, 100)) }
-          }
-          if (!audioReady) throw new Error('Could not download audio')
-          audioFilePath = tmpAudio
+          const { id: savedId, stems } = await analyzeVocalEqUrl(url, song_id, label)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, id: savedId, stems, stem_count: Object.keys(stems).length }))
 
         } else if (type === 'mix') {
           if (!song_id) throw new Error('song_id required for mix type')
@@ -5874,42 +5900,53 @@ Respond ONLY in JSON:
           const versions = (wd.versions || []).filter(v => v.version_type === 'mixing' && v.audio_path)
           if (!versions.length) throw new Error('No mixing versions with audio found')
           const latest = versions[versions.length - 1]
-          audioFilePath = path.join(MIXING_DIR, latest.audio_path)
+          const audioFilePath = path.join(MIXING_DIR, latest.audio_path)
           if (!fs.existsSync(audioFilePath)) throw new Error('Audio file not found: ' + audioFilePath)
+
+          console.log('⏳ Running 4-stem EQ analysis on:', audioFilePath)
+          const raw = execSync(`"${VOCAL_EQ_PYTHON}" "${VOCAL_EQ_SCRIPT}" "${audioFilePath}" 2>/dev/null`, { encoding: 'utf8', timeout: 400000 }).trim()
+          const result = JSON.parse(raw)
+          if (!result.ok) throw new Error(result.error || 'Script failed')
+
+          const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves`, {
+            method: 'POST',
+            headers: { ...sbHeaders, 'Prefer': 'return=representation' },
+            body: JSON.stringify({
+              label: label || 'My Mix',
+              type: 'mix',
+              url: null,
+              song_id,
+              curve: result.stems,
+              created_at: new Date().toISOString()
+            })
+          })
+          const inserted = await insertRes.json()
+          const savedId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
+
+          // Auto-queue song's reference_links that haven't been analyzed yet
+          const refLinks = wd.reference_links || []
+          for (const ref of refLinks) {
+            if (!ref.spotify_id && !ref.url) continue
+            const refUrl = ref.url || 'https://open.spotify.com/track/' + ref.spotify_id
+            const existRes = await fetch(
+              `${SUPABASE_URL}/rest/v1/vocal_eq_curves?type=eq.reference&url=eq.${encodeURIComponent(refUrl)}&select=id&limit=1`,
+              { headers: sbHeaders }
+            ).then(r => r.json()).catch(() => [])
+            if (!existRes[0]) {
+              setImmediate(async () => {
+                try {
+                  await analyzeVocalEqUrl(refUrl, song_id, ref.name || 'Reference')
+                  console.log('✓ Auto-analyzed ref for song', song_id, ':', ref.name || refUrl)
+                } catch(e) { console.error('auto-ref vocal eq:', e.message) }
+              })
+            }
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, id: savedId, stems: result.stems, stem_count: Object.keys(result.stems).length }))
         } else {
           throw new Error('type must be reference or mix')
         }
-
-        // Run vocal EQ analysis (slow — Demucs takes 1-5 min)
-        console.log('⏳ Running vocal EQ analysis on:', audioFilePath)
-        const raw = execSync(`"${ESSENTIA_PYTHON}" "${VOCAL_EQ_SCRIPT}" "${audioFilePath}" 2>/dev/null`, { encoding: 'utf8', timeout: 360000 }).trim()
-        const result = JSON.parse(raw)
-        if (!result.ok) throw new Error(result.error || 'Script failed')
-
-        // Clean up temp file for reference type
-        if (type === 'reference' && audioFilePath.startsWith('/tmp/')) {
-          try { fs.unlinkSync(audioFilePath) } catch(e) {}
-        }
-
-        // Save to vocal_eq_curves
-        const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves`, {
-          method: 'POST',
-          headers: { ...sbHeaders, 'Prefer': 'return=representation' },
-          body: JSON.stringify({
-            label: label || (type === 'mix' ? 'My Mix' : 'Reference'),
-            type,
-            url: url || null,
-            song_id: song_id || null,
-            version_name: version_name || null,
-            curve: result.curve,
-            created_at: new Date().toISOString()
-          })
-        })
-        const inserted = await insertRes.json()
-        const savedId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
-
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, id: savedId, curve: result.curve, bands: result.bands }))
       } catch(err) {
         console.error('✗ analyze-vocal-eq:', err.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })

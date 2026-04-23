@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] analyze_vocal_eq.py + momentum-watcher.cjs + ProjectsTab.svelte + VocalEqChart.svelte — DONE
+TASK: vocal-eq-four-fixes
+WHAT: FIX 1 — analyze_vocal_eq.py: Demucs now uses --name htdemucs (4 stems: vocals/drums/bass/other); returns { ok, stems: { vocals:{...}, drums:{...}, ... }, stem_count }. FIX 2 — watcher: analyzeVocalEqUrl() extracted as module-level standalone function; /analyze-vocal-eq saves stems dict; type=mix auto-queues song's reference_links via setImmediate for background analysis. FIX 3 — ProjectsTab: vocalEqCache Map for persistence across expand/collapse; loadVocalEq correctly reads d.curves (was d.mix_curves/d.ref_curves — bug); vocalEqStatus state ('idle'|'separating'|'done'|'error') with pulsing status line; auto-compare extracts vocals stem for comparison. FIX 4 — VocalEqChart: stem tabs (VOCALS/DRUMS/BASS/OTHER); getStemCurve() handles both new {vocals:{}} and old flat format; multiple ref curves (gold/green/blue); mix curve is light/white; legend uses REF 1/2/3 + MY MIX labels.
+RESULT: 0 svelte errors; watcher restarted OK
+BLOCKERS: vocal_eq_curves table must have curve column as jsonb (stores stem dict directly)
+
 ## [2026-04-23] momentum-watcher.cjs — DONE
 TASK: whatsapp-group-fix
 WHAT: Three fixes: (1) readWhatsAppMessages() — confirmed COREDATA_EPOCH_OFFSET=978307200 correct; added debug logging (waSince, Invictus CoreData ts 798648620, Will catch bool). (2) /whatsapp-backfill — removed hard `@g.us` skip at line 6905; group chats now processed without AI analysis (inbox save + push to processed with is_group=true). (3) pollWhatsApp() — fixed ReferenceError: `history` was undefined, renamed to `conversation` to match the variable defined in that scope.

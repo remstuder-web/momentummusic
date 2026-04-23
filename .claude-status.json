@@ -1,18 +1,20 @@
 {
-  "updated": "2026-04-23T15:40:00.000Z",
-  "last_task": "whatsapp-group-fix",
+  "updated": "2026-04-23T15:58:00.000Z",
+  "last_task": "vocal-eq-four-fixes",
   "status": "done",
   "working": [
-    "COREDATA_EPOCH_OFFSET=978307200 correct — waSince < Invictus CoreData ts = true",
-    "Debug logging added to readWhatsAppMessages() (temporary)",
-    "/whatsapp-backfill: group chats no longer skipped — Invictus Records (25 msgs) confirmed in processed list",
-    "pollWhatsApp(): `history` → `conversation` bug fixed — ReferenceError no longer thrown for group chats",
-    "Backfill response: ok=true, 4 contacts processed including Invictus Records (is_group:true)"
+    "FIX 1: analyze_vocal_eq.py uses --name htdemucs; returns all 4 stems (vocals/drums/bass/other); find_stem_file() per stem",
+    "FIX 2: analyzeVocalEqUrl() is module-level function reusable from setImmediate; /analyze-vocal-eq saves result.stems; auto-queues song reference_links in background",
+    "FIX 3: vocalEqCache Map persists curves across song expand/collapse; loadVocalEq uses d.curves (not d.mix_curves bug); vocalEqStatus shows Demucs progress; auto-compare uses vocals stem",
+    "FIX 4: VocalEqChart has VOCALS/DRUMS/BASS/OTHER stem tabs; getStemCurve() handles new+old formats; up to 3 ref curves (gold/green/blue); mix is light/white; legend REF 1/2/3 + MY MIX",
+    "0 svelte errors; watcher restarted OK"
   ],
   "broken": [],
   "partial": [
-    "Debug console.log lines in readWhatsAppMessages() are temporary — remove after confirmed stable"
+    "vocal_eq_curves table must exist in Supabase with curve column as jsonb",
+    "htdemucs model auto-downloads first run (~200MB) — first analysis will take longer",
+    "Debug logging in readWhatsAppMessages() still present — remove when stable"
   ],
-  "next": "Remove temporary debug logging from readWhatsAppMessages() once WhatsApp group monitoring is confirmed stable over several poll cycles.",
-  "notes": "Poll handler group branch was silently crashing (ReferenceError: history is not defined) which caused the outer try/catch to abort the entire poll. Fix: conversation is the correct variable name. Backfill was filtering @g.us entirely — now passes through to inbox save without AI analysis."
+  "next": "Test vocal EQ flow on a real song with a mix file. First Demucs run downloads htdemucs model (~200MB). Remove debug WhatsApp logging when confirmed stable.",
+  "notes": "Curve storage format: curve column stores { vocals:{30-band}, drums:{30-band}, bass:{30-band}, other:{30-band} } directly (no wrapper). Chart getStemCurve() handles both this and old flat format via duck-typing (checks for stem key vs freq key)."
 }

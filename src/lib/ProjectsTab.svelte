@@ -44,8 +44,10 @@
   const MAX_UNDO = 10
 
   // Vocal EQ
-  let vocalEqCurves = $state({}) // song.id -> { mix: [...], refs: [...] }
-  let vocalEqLoading = $state({}) // song.id -> bool
+  let vocalEqCurves = $state({}) // song.id -> curves[] (flat array from API)
+  const vocalEqCache = new Map() // persistent cache across expand/collapse
+  let vocalEqStatus = $state('idle') // 'idle' | 'separating' | 'done' | 'error'
+  let vocalEqLoading = $state({}) // song.id -> 'ref' | null
   let vocalRefUrl = $state({}) // song.id -> url input string
   let showVocalEq = $state({}) // song.id -> bool
   let vocalComparison = $state({}) // song.id -> comparison result
@@ -2058,19 +2060,26 @@
       const r = await fetch(`http://localhost:4242/vocal-eq-curves?song_id=${songId}`)
       const d = await r.json()
       if (d.ok) {
-        vocalEqCurves[songId] = { mix: d.mix_curves, refs: d.ref_curves }
+        const curves = d.curves || []
+        vocalEqCache.set(songId, curves)
+        vocalEqCurves[songId] = curves
         vocalEqCurves = { ...vocalEqCurves }
-        const latestMix = d.mix_curves?.[0]
-        const latestRef = d.ref_curves?.[0]
+        // Auto-compare: vocals stem of latest mix vs latest ref
+        const latestMix = curves.find(c => c.type === 'mix')
+        const latestRef = curves.find(c => c.type === 'reference')
         if (latestMix && latestRef) {
-          const cr = await fetch('http://localhost:4242/compare-vocal-eq', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mix_curve: latestMix.curve, ref_curve: latestRef.curve })
-          })
-          const cd = await cr.json()
-          if (cd.ok) {
-            vocalComparison[songId] = cd
-            vocalComparison = { ...vocalComparison }
+          const mixVocals = latestMix.curve?.vocals || latestMix.curve
+          const refVocals = latestRef.curve?.vocals || latestRef.curve
+          if (mixVocals && refVocals && typeof mixVocals === 'object' && !Array.isArray(mixVocals)) {
+            const cr = await fetch('http://localhost:4242/compare-vocal-eq', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mix_curve: mixVocals, ref_curve: refVocals })
+            })
+            const cd = await cr.json()
+            if (cd.ok) {
+              vocalComparison[songId] = cd
+              vocalComparison = { ...vocalComparison }
+            }
           }
         }
       }
@@ -2079,21 +2088,19 @@
 
   async function analyzeMyVocal(song) {
     const sid = song.id
-    vocalEqLoading[sid] = 'mix'
-    vocalEqLoading = { ...vocalEqLoading }
+    vocalEqStatus = 'separating'
     try {
       const r = await fetch('http://localhost:4242/analyze-vocal-eq', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'mix', song_id: sid })
+        body: JSON.stringify({ type: 'mix', song_id: sid, label: 'MIX ' + new Date().toLocaleDateString() })
       })
       const d = await r.json()
       if (!d.ok) throw new Error(d.error || 'failed')
+      vocalEqStatus = 'done'
       await loadVocalEq(sid)
     } catch(e) {
+      vocalEqStatus = 'error'
       alert('Vocal EQ analysis failed: ' + e.message)
-    } finally {
-      vocalEqLoading[sid] = null
-      vocalEqLoading = { ...vocalEqLoading }
     }
   }
 
@@ -2903,50 +2910,69 @@
                   <button class="vocal-eq-header" onclick={() => {
                     showVocalEq[song.id] = !showVocalEq[song.id]
                     showVocalEq = { ...showVocalEq }
-                    if (showVocalEq[song.id] && !vocalEqCurves[song.id]) loadVocalEq(song.id)
+                    if (showVocalEq[song.id]) {
+                      // Restore from cache immediately, then refresh
+                      if (vocalEqCache.has(song.id)) {
+                        vocalEqCurves[song.id] = vocalEqCache.get(song.id)
+                        vocalEqCurves = { ...vocalEqCurves }
+                      }
+                      loadVocalEq(song.id)
+                    }
                   }}>
                     <span class="vocal-eq-title">VOCAL EQ</span>
                     <span class="vocal-eq-arr {showVocalEq[song.id] ? 'open' : ''}">▶</span>
                   </button>
                   {#if showVocalEq[song.id]}
-                    {@const eqData = vocalEqCurves[song.id]}
+                    {@const songCurves = vocalEqCurves[song.id] || []}
+                    {@const mixCurves = songCurves.filter(c => c.type === 'mix')}
+                    {@const refCurves = songCurves.filter(c => c.type === 'reference')}
                     {@const cmp = vocalComparison[song.id]}
-                    {@const loading = vocalEqLoading[song.id]}
+                    {@const refLoading = vocalEqLoading[song.id]}
                     <div class="vocal-eq-body">
                       <!-- Chart -->
                       <VocalEqChart
-                        refCurve={eqData?.refs?.[0]?.curve ?? null}
-                        mixCurve={eqData?.mix?.[0]?.curve ?? null}
+                        mixCurve={mixCurves[0]?.curve ?? null}
+                        refCurves={refCurves.map(r => r.curve)}
                       />
+
+                      <!-- Status -->
+                      {#if vocalEqStatus === 'separating'}
+                        <div class="vocal-status">⏳ Separating stems with Demucs… (30–60s)</div>
+                      {:else if vocalEqStatus === 'done'}
+                        <div class="vocal-status done">✓ Analysis complete</div>
+                      {:else if vocalEqStatus === 'error'}
+                        <div class="vocal-status err">✗ Analysis failed</div>
+                      {/if}
 
                       <!-- Action row -->
                       <div class="vocal-eq-actions">
-                        <button class="vocal-btn" disabled={!!loading}
-                          onclick={() => analyzeMyVocal(song)}>
-                          {loading === 'mix' ? 'Analyzing…' : 'Analyze My Vocal'}
+                        <button class="vocal-btn" disabled={vocalEqStatus === 'separating'}
+                          onclick={() => { vocalEqStatus = 'idle'; analyzeMyVocal(song) }}>
+                          {vocalEqStatus === 'separating' ? 'Analyzing…' : 'Analyze My Stems'}
                         </button>
                         <div class="vocal-ref-row">
                           <input class="vocal-ref-inp" type="text"
                             placeholder="Spotify / YouTube URL…"
                             value={vocalRefUrl[song.id] || ''}
                             oninput={e => { vocalRefUrl[song.id] = e.currentTarget.value; vocalRefUrl = { ...vocalRefUrl } }} />
-                          <button class="vocal-btn vocal-btn-ref" disabled={!!loading || !vocalRefUrl[song.id]}
+                          <button class="vocal-btn vocal-btn-ref" disabled={!!refLoading || !vocalRefUrl[song.id]}
                             onclick={() => addReferenceVocal(song, vocalRefUrl[song.id], '')}>
-                            {loading === 'ref' ? 'Fetching…' : '+ Add Reference'}
+                            {refLoading === 'ref' ? 'Fetching…' : '+ Add Reference'}
                           </button>
                         </div>
                       </div>
 
                       <!-- Comparison results -->
                       {#if cmp}
-                        <div class="eq-match-score">Match score: <span class="{cmp.match_score >= 70 ? 'eq-match-good' : cmp.match_score >= 40 ? 'eq-match-mid' : 'eq-match-low'}">{cmp.match_score}%</span></div>
+                        <div class="eq-match-score">Vocals match: <span class="{cmp.match_score >= 70 ? 'eq-match-good' : cmp.match_score >= 40 ? 'eq-match-mid' : 'eq-match-low'}">{cmp.match_score}%</span></div>
                         {#if cmp.instructions?.length}
                           <div class="eq-instructions">
                             {#each cmp.instructions as inst}
                               <div class="eq-inst {inst.action === 'BOOST' ? 'boost' : 'cut'}">
                                 <span class="eq-inst-action">{inst.action}</span>
-                                <span class="eq-inst-db">{inst.action === 'BOOST' ? '+' : ''}{inst.db}dB</span>
-                                <span class="eq-inst-band">{inst.freq_label}</span>
+                                <span class="eq-inst-db">{inst.action === 'BOOST' ? '+' : '-'}{inst.amount}dB</span>
+                                <span class="eq-inst-band">{inst.freqLabel}</span>
+                                <span class="eq-inst-reason">{inst.reason}</span>
                               </div>
                             {/each}
                           </div>
@@ -2954,13 +2980,13 @@
                       {/if}
 
                       <!-- Curve list -->
-                      {#if eqData?.refs?.length}
+                      {#if refCurves.length || mixCurves.length}
                         <div class="eq-curve-list">
-                          {#each eqData.refs as ref}
-                            <div class="eq-curve-item eq-curve-ref">● {ref.label || ref.source_url || 'Reference'}</div>
+                          {#each refCurves as ref, i}
+                            <div class="eq-curve-item eq-curve-ref" style="color: {['rgba(201,168,76,.7)','rgba(76,175,130,.7)','rgba(74,159,212,.7)'][i] || 'rgba(201,168,76,.7)'}">● {ref.label || 'Reference ' + (i+1)}</div>
                           {/each}
-                          {#each (eqData.mix || []) as mix}
-                            <div class="eq-curve-item eq-curve-mix">● My Vocal ({new Date(mix.created_at).toLocaleDateString()})</div>
+                          {#each mixCurves as mix}
+                            <div class="eq-curve-item eq-curve-mix">● My Mix ({new Date(mix.created_at).toLocaleDateString()})</div>
                           {/each}
                         </div>
                       {/if}
@@ -3783,5 +3809,10 @@
   .eq-curve-list { display: flex; flex-direction: column; gap: 2px; }
   .eq-curve-item { font-family: 'Space Mono', monospace; font-size: 10px; }
   .eq-curve-ref { color: rgba(201,168,76,.7); }
-  .eq-curve-mix { color: rgba(74,159,212,.7); }
+  .eq-curve-mix { color: rgba(224,219,210,.5); }
+  .eq-inst-reason { color: #555; font-style: italic; }
+  .vocal-status { font-family: 'Space Mono', monospace; font-size: 10px; color: #c9a84c; padding: 5px 0; animation: va-pulse 1.5s ease-in-out infinite; }
+  .vocal-status.done { color: #4caf82; animation: none; }
+  .vocal-status.err { color: #e05a4a; animation: none; }
+  @keyframes va-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 </style>

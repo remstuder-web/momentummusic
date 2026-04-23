@@ -1,7 +1,7 @@
 #!/opt/homebrew/bin/python3.11
 """
-Vocal EQ curve analyzer using Demucs + Essentia
-Extracts 30-band ISO third-octave spectrum from vocal stem
+Stem EQ curve analyzer using Demucs + Essentia
+Extracts 30-band ISO third-octave spectrum from all 4 stems
 """
 
 import sys
@@ -13,39 +13,40 @@ import tempfile
 import shutil
 
 
-def separate_vocals(audio_path, output_dir):
-    """Use Demucs to separate vocals from mix"""
+def separate_stems(audio_path, output_dir):
+    """Use Demucs htdemucs model to separate all 4 stems"""
     try:
         result = subprocess.run([
             '/opt/homebrew/bin/python3.11', '-m', 'demucs',
-            '--two-stems', 'vocals',
+            '--name', 'htdemucs',
             '--out', output_dir,
-            '--mp3',
             audio_path
-        ], capture_output=True, text=True, timeout=300)
+        ], capture_output=True, text=True, timeout=360)
 
         if result.returncode != 0:
-            return None, result.stderr
-
-        # Find vocals file
-        for root, dirs, files in os.walk(output_dir):
-            for f in files:
-                if 'vocals' in f and f.endswith('.mp3'):
-                    return os.path.join(root, f), None
-        return None, 'Vocals file not found'
+            return result.stderr
+        return None
     except Exception as e:
-        return None, str(e)
+        return str(e)
 
 
-def analyze_vocal_spectrum(vocal_path):
-    """Extract 30-band ISO third-octave EQ curve"""
+def find_stem_file(output_dir, stem_name):
+    """Find a stem file by name in the output directory"""
+    for root, dirs, files in os.walk(output_dir):
+        for f in files:
+            if stem_name in f.lower() and (f.endswith('.wav') or f.endswith('.mp3')):
+                return os.path.join(root, f)
+    return None
+
+
+def analyze_spectrum(audio_path):
+    """Extract 30-band ISO third-octave EQ curve, mean-normalized"""
     import essentia.standard as es
 
-    # Load audio
-    loader = es.MonoLoader(filename=vocal_path, sampleRate=44100)
+    loader = es.MonoLoader(filename=audio_path, sampleRate=44100)
     audio = loader()
 
-    # Start from 25% to skip intros
+    # Use 25%-75% to skip intro/outro
     start = int(len(audio) * 0.25)
     end = int(len(audio) * 0.75)
     audio = audio[start:end]
@@ -53,7 +54,6 @@ def analyze_vocal_spectrum(vocal_path):
     fft_size = 8192
     hop_size = 4096
 
-    # ISO third-octave center frequencies (20Hz - 16kHz)
     iso_freqs = [
         20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160,
         200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600,
@@ -61,7 +61,6 @@ def analyze_vocal_spectrum(vocal_path):
     ]
 
     band_powers = {f: [] for f in iso_freqs}
-
     window = es.Windowing(type='hann')
     spectrum_extractor = es.Spectrum(size=fft_size)
 
@@ -69,7 +68,6 @@ def analyze_vocal_spectrum(vocal_path):
         frame = audio[i:i + fft_size]
         windowed = window(frame)
         spec = spectrum_extractor(windowed)
-
         power = np.maximum(spec ** 2, 1e-10)
         freq_resolution = 44100 / fft_size
 
@@ -82,7 +80,6 @@ def analyze_vocal_spectrum(vocal_path):
                 band_power = np.mean(power[bin_low:bin_high+1])
                 band_powers[cf].append(float(band_power))
 
-    # Average across frames, convert to dB
     curve = {}
     for cf in iso_freqs:
         if band_powers[cf]:
@@ -90,11 +87,8 @@ def analyze_vocal_spectrum(vocal_path):
             db = 10 * np.log10(avg_power + 1e-10)
             curve[cf] = round(float(db), 2)
 
-    # Mean-normalize
     mean_db = np.mean(list(curve.values()))
-    normalized = {str(k): round(v - mean_db, 2) for k, v in curve.items()}
-
-    return normalized
+    return {str(k): round(v - mean_db, 2) for k, v in curve.items()}
 
 
 def main():
@@ -107,21 +101,32 @@ def main():
         print(json.dumps({'error': 'File not found: ' + audio_path}))
         return
 
-    temp_dir = tempfile.mkdtemp(prefix='vocal_eq_')
+    temp_dir = tempfile.mkdtemp(prefix='stem_eq_')
 
     try:
-        vocals_path, error = separate_vocals(audio_path, temp_dir)
-        if error or not vocals_path:
+        error = separate_stems(audio_path, temp_dir)
+        if error:
             print(json.dumps({'error': 'Demucs failed: ' + str(error)}))
             return
 
-        curve = analyze_vocal_spectrum(vocals_path)
+        stems_to_analyze = ['vocals', 'drums', 'bass', 'other']
+        results = {}
+        for stem in stems_to_analyze:
+            stem_path = find_stem_file(temp_dir, stem)
+            if stem_path:
+                try:
+                    results[stem] = analyze_spectrum(stem_path)
+                except Exception as e:
+                    results[stem] = None
+
+        if not results:
+            print(json.dumps({'error': 'No stems found after separation'}))
+            return
 
         print(json.dumps({
             'ok': True,
-            'curve': curve,
-            'bands': len(curve),
-            'vocals_extracted': True
+            'stems': results,
+            'stem_count': len(results)
         }))
 
     except Exception as e:

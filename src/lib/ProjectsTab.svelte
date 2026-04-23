@@ -51,6 +51,7 @@
   let vocalRefUrl = $state({}) // song.id -> url input string
   let showVocalEq = $state({}) // song.id -> bool
   let vocalComparison = $state({}) // song.id -> comparison result
+  let activeStem = $state({}) // song.id -> 'vocals' | 'drums' | 'bass' | 'other'
 
   function formatMinSec(sec) {
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60)
@@ -2065,21 +2066,18 @@
         vocalEqCurves[songId] = curves
         vocalEqCurves = { ...vocalEqCurves }
         // Auto-compare: vocals stem of latest mix vs latest ref
-        const latestMix = curves.find(c => c.type === 'mix')
-        const latestRef = curves.find(c => c.type === 'reference')
+        const stemKey = activeStem[songId] || 'vocals'
+        const latestMix = curves.find(c => (c.source_type || c.type) === 'mix' && (c.stem_type || 'vocals') === stemKey)
+        const latestRef = curves.find(c => (c.source_type || c.type) === 'reference' && (c.stem_type || 'vocals') === stemKey)
         if (latestMix && latestRef) {
-          const mixVocals = latestMix.curve?.vocals || latestMix.curve
-          const refVocals = latestRef.curve?.vocals || latestRef.curve
-          if (mixVocals && refVocals && typeof mixVocals === 'object' && !Array.isArray(mixVocals)) {
-            const cr = await fetch('http://localhost:4242/compare-vocal-eq', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ mix_curve: mixVocals, ref_curve: refVocals })
-            })
-            const cd = await cr.json()
-            if (cd.ok) {
-              vocalComparison[songId] = cd
-              vocalComparison = { ...vocalComparison }
-            }
+          const cr = await fetch('http://localhost:4242/compare-vocal-eq', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mix_curve: latestMix.curve, reference_curve: latestRef.curve })
+          })
+          const cd = await cr.json()
+          if (cd.ok) {
+            vocalComparison[songId] = cd
+            vocalComparison = { ...vocalComparison }
           }
         }
       }
@@ -2096,8 +2094,10 @@
       })
       const d = await r.json()
       if (!d.ok) throw new Error(d.error || 'failed')
-      vocalEqStatus = 'done'
       await loadVocalEq(sid)
+      showVocalEq[sid] = true
+      showVocalEq = { ...showVocalEq }
+      vocalEqStatus = 'done'
     } catch(e) {
       vocalEqStatus = 'error'
       alert('Vocal EQ analysis failed: ' + e.message)
@@ -2926,15 +2926,27 @@
                   </button>
                   {#if showVocalEq[song.id]}
                     {@const songCurves = vocalEqCurves[song.id] || []}
-                    {@const mixCurves = songCurves.filter(c => c.type === 'mix')}
-                    {@const refCurves = songCurves.filter(c => c.type === 'reference')}
+                    {@const stemKey = activeStem[song.id] || 'vocals'}
+                    {@const mixCurveData = songCurves.find(c => (c.source_type || c.type) === 'mix' && (c.stem_type || 'vocals') === stemKey)}
+                    {@const refCurveData = songCurves.find(c => (c.source_type || c.type) === 'reference' && (c.stem_type || 'vocals') === stemKey)}
                     {@const cmp = vocalComparison[song.id]}
                     {@const refLoading = vocalEqLoading[song.id]}
                     <div class="vocal-eq-body">
+                      <!-- Stem selector -->
+                      <div class="stem-tabs">
+                        {#each ['vocals', 'drums', 'bass', 'other'] as stem}
+                          <button class="stem-tab {stemKey === stem ? 'active' : ''}"
+                            onclick={() => { activeStem[song.id] = stem; activeStem = { ...activeStem }; loadVocalEq(song.id) }}>
+                            {stem.toUpperCase()}
+                          </button>
+                        {/each}
+                      </div>
                       <!-- Chart -->
                       <VocalEqChart
-                        mixCurve={mixCurves[0]?.curve ?? null}
-                        refCurves={refCurves.map(r => r.curve)}
+                        mixCurve={mixCurveData?.curve ?? null}
+                        refCurve={refCurveData?.curve ?? null}
+                        mixLabel={mixCurveData?.label ?? ''}
+                        refLabel={refCurveData?.label ?? ''}
                       />
 
                       <!-- Status -->
@@ -3817,4 +3829,8 @@
   .vocal-status.done { color: #4caf82; animation: none; }
   .vocal-status.err { color: #e05a4a; animation: none; }
   @keyframes va-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+  .stem-tabs { display: flex; gap: 4px; margin-bottom: 4px; }
+  .stem-tab { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; padding: 3px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; letter-spacing: .06em; }
+  .stem-tab.active { border-color: #c9a84c; color: #c9a84c; background: rgba(201,168,76,.08); }
+  .stem-tab:hover:not(.active) { border-color: #333; color: #666; }
 </style>

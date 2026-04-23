@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + ProjectsTab.svelte + VocalEqChart.svelte — PARTIAL
+TASK: vocal-eq-stems
+WHAT: Save each stem (vocals/drums/bass/other) as a separate vocal_eq_curves row with stem_type + source_type columns. Both analyzeVocalEqUrl (reference) and /analyze-vocal-eq mix branch now insert 4 rows per analysis. GET /vocal-eq-curves limits raised to 20+40. ProjectsTab: added activeStem state, stem selector tabs UI, loadVocalEq filters by source_type+stem_type, analyzeMyVocal sets showVocalEq[sid]=true after load. VocalEqChart simplified to single refCurve prop + refLabel, stem selector removed (now in ProjectsTab).
+RESULT: watcher restarted OK — code ready but blocked on SQL migration
+BLOCKERS: vocal_eq_curves table missing stem_type and source_type columns — run SQL in Supabase dashboard: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix';
+
 ## [2026-04-23] mozartContext.js + ProjectsTab.svelte — DONE
 TASK: mozart-ref-context
 WHAT: Mozart add_reference now routes to correct level. song_id param → songs.reference_links column. project_id param (or no song expanded) → project_meta.reference_links. System prompt tells Mozart which context is active and which ACTION format to use (project_id= vs song_id=).

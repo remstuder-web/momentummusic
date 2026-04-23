@@ -3341,17 +3341,21 @@ async function analyzeVocalEqUrl(url, songId, label) {
   const result = JSON.parse(raw)
   if (!result.ok) throw new Error(result.error || 'Script failed')
 
+  const now = new Date().toISOString()
+  const refRows = Object.entries(result.stems).map(([stemName, curve]) => ({
+    label: (label || 'Reference') + ' — ' + stemName,
+    type: 'reference',
+    source_type: 'reference',
+    stem_type: stemName,
+    url,
+    song_id: songId || null,
+    curve,
+    created_at: now
+  }))
   const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves`, {
     method: 'POST',
     headers: { ...sbHeaders, 'Prefer': 'return=representation' },
-    body: JSON.stringify({
-      label: label || 'Reference',
-      type: 'reference',
-      url: url,
-      song_id: songId || null,
-      curve: result.stems,
-      created_at: new Date().toISOString()
-    })
+    body: JSON.stringify(refRows)
   })
   const inserted = await insertRes.json()
   const savedId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
@@ -6058,17 +6062,21 @@ Respond ONLY in JSON:
           const result = JSON.parse(raw)
           if (!result.ok) throw new Error(result.error || 'Script failed')
 
+          const now = new Date().toISOString()
+          const mixRows = Object.entries(result.stems).map(([stemName, curve]) => ({
+            label: (label || 'My Mix') + ' — ' + stemName,
+            type: 'mix',
+            source_type: 'mix',
+            stem_type: stemName,
+            url: null,
+            song_id,
+            curve,
+            created_at: now
+          }))
           const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves`, {
             method: 'POST',
             headers: { ...sbHeaders, 'Prefer': 'return=representation' },
-            body: JSON.stringify({
-              label: label || 'My Mix',
-              type: 'mix',
-              url: null,
-              song_id,
-              curve: result.stems,
-              created_at: new Date().toISOString()
-            })
+            body: JSON.stringify(mixRows)
           })
           const inserted = await insertRes.json()
           const savedId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
@@ -6112,8 +6120,8 @@ Respond ONLY in JSON:
     try {
       const songId = new URL('http://x' + req.url).searchParams.get('song_id')
       const [mixRes, refRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?type=eq.mix&song_id=eq.${songId}&order=created_at.desc&limit=5`, { headers: sbHeaders }),
-        fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?type=eq.reference&order=created_at.desc&limit=10`, { headers: sbHeaders })
+        fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?type=eq.mix&song_id=eq.${songId}&order=created_at.desc&limit=20`, { headers: sbHeaders }),
+        fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?type=eq.reference&order=created_at.desc&limit=40`, { headers: sbHeaders })
       ])
       const mixCurves = await mixRes.json()
       const refCurves = await refRes.json()
@@ -8824,6 +8832,9 @@ Max 150 words. Be specific and actionable.` }]
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/notes?select=apple_note_id,source&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ notes table missing Apple Notes columns — run SQL in Supabase:\nALTER TABLE notes ADD COLUMN IF NOT EXISTS apple_note_id text;\nALTER TABLE notes ADD COLUMN IF NOT EXISTS source text DEFAULT \'momentum\';\nALTER TABLE notes ADD COLUMN IF NOT EXISTS updated_at timestamptz;\nCREATE UNIQUE INDEX IF NOT EXISTS notes_apple_note_id_idx ON notes(apple_note_id) WHERE apple_note_id IS NOT NULL;') })
+    .catch(() => {})
+  fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?select=stem_type,source_type&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ vocal_eq_curves missing columns — run SQL in Supabase:\nALTER TABLE vocal_eq_curves\n  ADD COLUMN IF NOT EXISTS stem_type text DEFAULT \'vocals\',\n  ADD COLUMN IF NOT EXISTS source_type text DEFAULT \'mix\';') })
     .catch(() => {})
 })
 

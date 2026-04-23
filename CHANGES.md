@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + ReleaseTab.svelte + ProjectsTab.svelte + mozartContext.js — DONE
+TASK: releases-tab-full-rebuild
+WHAT: buildReleaseSummary() added to watcher (CRITICAL fix — was called but undefined). ReleaseTab rebuilt with label/distributor/ISRC/UPC, publishing PRO, spotify_streams, playlist placements (name/followers/date/notes grid), split sheet (name/role/pct per row), revenue_eur, open folder button, regenerate SUMMARY.txt button, + Add from scratch form. RELEASE button in ProjectsTab updated to call POST /create-release-entry (creates folder + SUMMARY.txt + Supabase insert). mozartContext.js adds releases query with stream/revenue/invoice status per release.
+RESULT: 0 svelte errors; watcher restarted OK
+BLOCKERS: Run ALTER TABLE releases ADD COLUMN IF NOT EXISTS for new fields (label, distributor, isrc, upc, spotify_streams, peak_position, peak_date, playlist_placements, revenue_eur, split_sheet, publishing_pro, publishing_registered, folder_path, song_id, status)
+
 ## [2026-04-23] momentum-watcher.cjs + FinancesTab.svelte — DONE
 TASK: crypto-strong-sell-binance-portfolio
 WHAT: PART 1 — STRONG SELL signal (bearPoints >= 4); scoring split so bull/sell conditions independent; BEARISH binanceAction='sell'. PART 2 — /crypto shows P&L profit on sell signal; /sell and /selleth commands with pendingConfirmations; /portfolio command shows holdings + live Binance. PART 3 — fetchBinancePortfolio() using HMAC SHA256; /crypto-signal endpoint includes binance_portfolio. PART 4 — FinancesTab LIVE BINANCE section with total; onMount auto-refresh 5 min; red sell button on bearish signal.

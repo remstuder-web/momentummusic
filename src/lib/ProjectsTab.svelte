@@ -2383,16 +2383,18 @@
                         alert('A release has already been created for this song. Edit it in the RELEASES tab.')
                         return
                       }
-                      await supabase.from('releases').insert({
-                        song_id: song.id, song_code: song.code,
-                        song_title: song.title || song.code,
-                        artist: selectedProject?.artist || '',
-                        project_name: selectedProject?.name || '',
-                        release_date: song.release_date || '',
-                        spotify_url: song.spotify_url || ''
-                      })
-                      // Delete instrumental file on release
                       const _wd = workData(song)
+                      const res = await fetch('http://localhost:4242/create-release-entry', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          song_id: song.id, code: song.code, title: song.title || song.code,
+                          artist: selectedProject?.artist || '', release_date: song.release_date || '',
+                          work_data: _wd
+                        })
+                      })
+                      const r = await res.json()
+                      if (!r.ok) { alert('Release creation failed: ' + r.error); return }
+                      // Delete instrumental file on release
                       if (_wd.instr_audio) fetch(`http://localhost:4242/delete-audio?dir=instrumental&filename=${encodeURIComponent(_wd.instr_audio)}`, { method: 'POST' }).catch(() => {})
                       releasedSongIds = [...releasedSongIds, song.id, song.code]
                       // Log release milestone to brain
@@ -2400,12 +2402,8 @@
                         category: 'own_production',
                         title: 'Released: ' + (song.title || song.code),
                         content: (selectedProject?.artist ? selectedProject.artist + ' — ' : '') + (song.title || song.code) + ' released on ' + new Date().toLocaleDateString() + '. Mix versions: ' + (_wd.versions?.filter(v=>v.version_type==='mixing').length || 0) + '. Production versions: ' + (_wd.versions?.filter(v=>v.version_type==='production').length || 0) + '.',
-                        entry_type_v2: 'milestone',
-                        confidence: 'high',
-                        source_type: 'release_event',
-                        active: true
+                        entry_type_v2: 'milestone', confidence: 'high', source_type: 'release_event', active: true
                       }).then(() => {})
-                      // Trigger version narrative generation
                       generateNarrative(song)
                     }}>
                     {releasedSongIds.includes(song.id)||releasedSongIds.includes(song.code) ? 'RELEASED ✓' : 'RELEASE'}

@@ -2601,6 +2601,45 @@ async function fetchFundingRate() {
   } catch(e) { return null }
 }
 
+function buildReleaseSummary({ title, artist, code, release_date }, work_data) {
+  const lines = []
+  lines.push('RELEASE SUMMARY')
+  lines.push('===============')
+  lines.push(`Code:   ${code || '—'}`)
+  lines.push(`Title:  ${title || '—'}`)
+  lines.push(`Artist: ${artist || '—'}`)
+  lines.push(`Date:   ${release_date || '—'}`)
+  lines.push('')
+
+  if (work_data) {
+    const versions = work_data.versions || []
+    const mixVersions = versions.filter(v => v.version_type === 'mixing')
+    const prodVersions = versions.filter(v => v.version_type === 'production')
+    if (prodVersions.length || mixVersions.length) {
+      lines.push('VERSIONS')
+      lines.push('--------')
+      if (prodVersions.length) lines.push(`Production: ${prodVersions.length} version(s) — latest: ${prodVersions[prodVersions.length - 1]?.name || '—'}`)
+      if (mixVersions.length) lines.push(`Mix:        ${mixVersions.length} version(s) — latest: ${mixVersions[mixVersions.length - 1]?.name || '—'}`)
+      lines.push('')
+    }
+
+    const log = work_data.session_log || []
+    if (log.length) {
+      const totalSec = log.reduce((s, e) => s + (e.seconds || 0), 0)
+      const fmtTime = s => { const m = Math.floor(s / 60); const sec = s % 60; return m + 'm ' + sec + 's' }
+      lines.push('WORK LOG')
+      lines.push('--------')
+      const stageLabels = { production: 'PRODUCTION', mix_prep: 'MIX PREP', mixing: 'MIXING', mastering: 'MASTERING', stems: 'STEMS' }
+      for (const e of log) lines.push(`${e.date || ''}  ${stageLabels[e.stage] || e.stage || ''}  ${fmtTime(e.seconds || 0)}`)
+      lines.push(`TOTAL: ${fmtTime(totalSec)}`)
+      lines.push('')
+    }
+  }
+
+  lines.push(`Generated: ${new Date().toISOString()}`)
+  return lines.join('\n')
+}
+
 async function fetchExchangeNetflow() {
   try {
     const r = await fetch(
@@ -3209,6 +3248,76 @@ async function restore(input) {
         res.end(`<html><body style="background:#0a0a0a;color:#e05a4a;font-family:monospace;padding:40px"><h2>✗ Error</h2><pre>${JSON.stringify(data,null,2)}</pre></body></html>`)
       }
     } catch(err) { res.writeHead(500); res.end(err.message) }
+    return
+  }
+
+  // ── POST /open-folder — open path in Finder ──────────────────────────────
+  if (req.method === 'POST' && req.url === '/open-folder') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', () => {
+      try {
+        const { path: folderPath } = JSON.parse(body)
+        if (!folderPath) throw new Error('path required')
+        exec(`open "${folderPath}"`)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
+      } catch(err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: err.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /create-release-entry — folder + SUMMARY.txt + Supabase insert ─
+  if (req.method === 'POST' && req.url === '/create-release-entry') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', async () => {
+      try {
+        const { song_id, title, artist, code, release_date, label, distributor, isrc, upc, notes, work_data } = JSON.parse(body)
+        const safeName = s => (s || '').replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_').trim()
+        const folderName = [safeName(code), safeName(artist).toUpperCase(), safeName(title).toUpperCase()].filter(Boolean).join('_')
+        const folderPath = path.join(RELEASES_DIR, folderName)
+        fs.mkdirSync(folderPath, { recursive: true })
+
+        const summary = buildReleaseSummary({ title, artist, code, release_date }, work_data)
+        fs.writeFileSync(path.join(folderPath, 'SUMMARY.txt'), summary, 'utf8')
+        console.log('✓ Created release entry:', folderPath)
+
+        const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/releases`, {
+          method: 'POST',
+          headers: { ...sbHeaders, 'Prefer': 'return=representation' },
+          body: JSON.stringify({
+            song_id: song_id || null,
+            song_title: title,
+            song_code: code,
+            artist: artist || null,
+            code: code || null,
+            release_date: release_date || null,
+            label: label || null,
+            distributor: distributor || null,
+            isrc: isrc || null,
+            upc: upc || null,
+            notes: notes || null,
+            folder_path: folderPath,
+            status: 'released'
+          })
+        })
+        const inserted = await insertRes.json()
+        const newId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, folder_path: folderPath, folder_name: folderName, id: newId }))
+      } catch(err) {
+        console.error('✗ create-release-entry:', err.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: err.message }))
+      }
+    })
     return
   }
 

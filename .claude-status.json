@@ -1,27 +1,29 @@
 {
-  "updated": "2026-04-23T14:19:00.000Z",
-  "last_task": "crypto-strong-sell-binance-portfolio",
+  "updated": "2026-04-23T14:52:00.000Z",
+  "last_task": "releases-tab-full-rebuild",
   "status": "done",
   "working": [
-    "STRONG SELL signal when bearPoints>=4, BEARISH when bearPoints>=2; binanceAction='sell' for both",
-    "Fear/greed, funding, btcChange24h scoring split into independent bull/bear blocks",
-    "/crypto Telegram command shows P&L profit breakdown when sell signal active",
-    "/sell and /selleth commands: calculate profit, set pendingConfirmations, log to crypto_trades on YES",
-    "/portfolio command: logged holdings P&L + live Binance balances",
-    "/confirm and /cancel aliases for YES/NO confirmation system",
-    "fetchBinancePortfolio() with HMAC SHA256 signature",
-    "/crypto-signal endpoint returns binance_portfolio (null if key missing)",
-    "FinancesTab LIVE BINANCE section with per-coin EUR values + total",
-    "FinancesTab auto-refresh every 5 minutes via setInterval in onMount",
-    "Red 'Sell on Binance' button shown on bearish signals",
-    "0 svelte-check errors",
-    "watcher restarted OK"
+    "buildReleaseSummary() defined in watcher — no longer crashes on /create-release-entry",
+    "POST /create-release-entry creates RELEASES_DIR/CODE_ARTIST_TITLE folder + SUMMARY.txt + Supabase insert",
+    "POST /open-folder opens folder in Finder",
+    "ReleaseTab: DISTRIBUTION section (label, distributor, ISRC, UPC, publishing PRO + registered checkbox)",
+    "ReleaseTab: STREAMS single value field (spotify_streams) with formatted display",
+    "ReleaseTab: PLAYLIST PLACEMENTS grid (name, followers, date, notes per row)",
+    "ReleaseTab: SPLIT SHEET (name, role, pct per row)",
+    "ReleaseTab: REVENUE section (revenue_eur EUR field)",
+    "ReleaseTab: label chip shown in card header",
+    "ReleaseTab: Open folder + regenerate SUMMARY.txt buttons in footer",
+    "ReleaseTab: + Add from scratch form at top",
+    "ProjectsTab RELEASE button → calls POST /create-release-entry (no direct Supabase insert)",
+    "mozartContext.js: releases query included (streams, revenue, invoice status)",
+    "0 svelte-check errors; watcher restarted OK"
   ],
   "broken": [],
   "partial": [
-    "Binance live balances require BINANCE_API_KEY + BINANCE_SECRET_KEY in .env (read-only key)",
-    "crypto_trades table must exist in Supabase for sell logging (insert will fail silently if missing)"
+    "Supabase releases table needs new columns (ALTER TABLE required — see CHANGES.md for column list)",
+    "Binance live balances require BINANCE_API_KEY + BINANCE_SECRET_KEY in .env",
+    "crypto_trades table must exist in Supabase for sell logging"
   ],
-  "next": "Add BINANCE_API_KEY and BINANCE_SECRET_KEY to .env (read-only key from Binance API Management). Create crypto_trades table in Supabase if needed.",
-  "notes": "Sell flow: /sell calculates P&L → shows Binance URL → YES confirms → clears portfolio holdings + inserts to crypto_trades. /confirm and /cancel work as aliases for YES/NO."
+  "next": "Run ALTER TABLE releases ADD COLUMN IF NOT EXISTS for: label, distributor, isrc, upc, spotify_streams bigint, playlist_placements jsonb, revenue_eur float, split_sheet jsonb, publishing_pro text, publishing_registered boolean, folder_path text, song_id text, status text. Then add BINANCE keys to .env.",
+  "notes": "Releases tab full rebuild complete. buildReleaseSummary() was the critical missing piece. All PARTS A–E done."
 }

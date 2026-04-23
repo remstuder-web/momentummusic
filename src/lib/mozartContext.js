@@ -7,7 +7,7 @@ export async function buildMozartContext(supabase, options = {}) {
     { data: projectSongs }, { data: demoSongs },
     { data: pendingInbox }, { data: marketNews },
     { data: watchedArtists }, { data: activeProjects },
-    { data: mixingHistories }
+    { data: mixingHistories }, { data: recentReleases }
   ] = await Promise.all([
     supabase.from('reference_tracks').select('*').eq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(5),
     supabase.from('reference_tracks').select('*').neq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(20),
@@ -21,7 +21,8 @@ export async function buildMozartContext(supabase, options = {}) {
     supabase.from('brain_knowledge').select('title,content,created_at').eq('category', 'market_knowledge').order('created_at', { ascending: false }).limit(3),
     supabase.from('watched_artists').select('artist_name,genres').eq('active', true).limit(5),
     supabase.from('projects').select('name,artist,status,deadlines').eq('status', 'active').limit(5),
-    supabase.from('brain_knowledge').select('title,content').eq('category', 'own_production').eq('source_type', 'version_history').order('created_at', { ascending: false }).limit(5)
+    supabase.from('brain_knowledge').select('title,content').eq('category', 'own_production').eq('source_type', 'version_history').order('created_at', { ascending: false }).limit(5),
+    supabase.from('releases').select('song_code,song_title,artist,release_date,label,spotify_streams,revenue_eur,invoice_sent,payment_received').order('release_date', { ascending: false }).limit(8)
   ])
 
   let targetContacts = []
@@ -259,6 +260,21 @@ FORMATTING RULES — always follow these:
   if (mixingHistories?.length) {
     context += '\n\n## MIXING HISTORY (what I learned)\n'
     context += mixingHistories.map(h => h.title + ': ' + h.content.slice(0, 120)).join('\n')
+  }
+
+  if (recentReleases?.length) {
+    context += '\n\n## RELEASES\n'
+    context += recentReleases.map(r => {
+      const parts = [r.song_code || '—', r.artist ? r.artist + ' — ' + (r.song_title || '') : (r.song_title || '')]
+      if (r.release_date) parts.push(r.release_date.slice(0, 7))
+      if (r.label) parts.push(r.label)
+      if (r.spotify_streams) parts.push(Number(r.spotify_streams).toLocaleString() + ' streams')
+      if (r.revenue_eur) parts.push('€' + Number(r.revenue_eur).toFixed(0))
+      if (!r.invoice_sent) parts.push('[no invoice]')
+      else if (!r.payment_received) parts.push('[unpaid]')
+      else parts.push('[paid]')
+      return parts.join(' · ')
+    }).join('\n')
   }
 
   try {

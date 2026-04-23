@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] ConnectionsTab.svelte — DONE
+TASK: target-contact-color
+WHAT: Contacts with no via tags and personal=false shown in red with tooltip "Target — not yet connected"
+RESULT: works, 0 svelte errors
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs + BrainTab.svelte — DONE
 TASK: reference-tracks-checkout
 WHAT: Add checkout source to reference_tracks; chart/tiktok agents now save source='checkout' + checkout_date; BrainTab restructured into three always-visible sections: CHECKOUT / MY REFERENCES / LIBRARY with promote/delete actions

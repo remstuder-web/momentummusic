@@ -257,7 +257,8 @@
 
               <!-- Collapsed row -->
               <div class="conn-head" onclick={() => expandedId = expandedId === conn.id ? null : conn.id}>
-                <input class="conn-name-input" value={conn.name}
+                <input class="conn-name-input {!conn.personal && !(conn.via_ids?.length) ? 'target-contact' : ''}" value={conn.name}
+                  title={!conn.personal && !(conn.via_ids?.length) ? 'Target — not yet connected' : ''}
                   onclick={e => e.stopPropagation()}
                   onchange={e => updateField(conn, 'name', e.target.value)}
                   onkeydown={e => e.key === 'Enter' && e.target.blur()}
@@ -603,6 +604,7 @@
 
   .conn-name-input { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: #c9a84c; background: transparent; border: none; outline: none; padding: 0; width: 160px; min-width: 100px; max-width: 200px; cursor: text; letter-spacing: .04em; flex-shrink: 0; }
   .conn-name-input:focus { background: rgba(255,255,255,.03); border-radius: 2px; }
+  .conn-name-input.target-contact { color: #e05a4a; }
 
   .type-badge { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .08em; padding: 2px 5px; background: rgba(255,255,255,.04); border: 1px solid #222; color: #555; border-radius: 2px; white-space: nowrap; flex-shrink: 0; }
   .conn-genre { font-family: 'Space Mono', monospace; font-size: 9px; color: #3a3a3a; flex-shrink: 0; }

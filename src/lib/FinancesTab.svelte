@@ -1,6 +1,7 @@
 <script>
   import { supabase } from './supabase.js'
   import { buildMozartContext } from './mozartContext.js'
+  import { onMount } from 'svelte'
 
   let items = $state([])
   let loading = $state(true)
@@ -56,6 +57,58 @@
   function amtStr(f) {
     return f.amount ? 'CHF ' + parseFloat(f.amount).toFixed(2) + ' / ' + (f.renewal || 'monthly') : ''
   }
+
+  // ── Crypto signal ──────────────────────────────────────────────────────────
+  let cryptoSignal = $state(null)
+  let cryptoLoading = $state(false)
+  let portfolio = $state([])
+  let newCoin = $state('BTC')
+  let newAmount = $state('')
+  let newEntryPrice = $state('')
+
+  async function loadCryptoSignal() {
+    cryptoLoading = true
+    try {
+      const r = await fetch('http://localhost:4242/crypto-signal')
+      cryptoSignal = await r.json()
+    } catch(e) {}
+    cryptoLoading = false
+  }
+
+  async function loadPortfolio() {
+    const { data } = await supabase.from('user_settings').select('value').eq('key', 'crypto_portfolio').single()
+    if (data?.value) portfolio = JSON.parse(data.value)
+  }
+
+  async function savePortfolio() {
+    await supabase.from('user_settings').upsert({ key: 'crypto_portfolio', value: JSON.stringify(portfolio) }, { onConflict: 'key' })
+  }
+
+  async function addPortfolioEntry() {
+    if (!newAmount || !newEntryPrice) return
+    portfolio = [...portfolio, {
+      id: Date.now().toString(),
+      coin: newCoin,
+      amount: parseFloat(newAmount),
+      entryPrice: parseFloat(newEntryPrice)
+    }]
+    newAmount = ''; newEntryPrice = ''
+    await savePortfolio()
+  }
+
+  async function removePortfolioEntry(id) {
+    portfolio = portfolio.filter(e => e.id !== id)
+    await savePortfolio()
+  }
+
+  function currentPrice(coin) {
+    if (!cryptoSignal) return 0
+    if (coin === 'BTC') return cryptoSignal.btcPrice || 0
+    if (coin === 'ETH') return cryptoSignal.ethPrice || 0
+    return 0
+  }
+
+  onMount(() => { loadCryptoSignal(); loadPortfolio() })
 
   load()
 
@@ -170,6 +223,104 @@
     </div>
   {/if}
 
+  <!-- CRYPTO SIGNAL -->
+  <div class="crypto-section">
+    <div class="sh" style="margin-top:24px">CRYPTO SIGNAL</div>
+
+    {#if cryptoLoading}
+      <div class="empty" style="padding:16px 0">Loading signals...</div>
+    {:else if cryptoSignal?.ok}
+
+      <div class="signal-block signal-{cryptoSignal.signal.toLowerCase().replace(/ /g,'-')}">
+        <div class="signal-label">{cryptoSignal.emoji} {cryptoSignal.signal}</div>
+        <div class="signal-suggestion">{cryptoSignal.suggestion}</div>
+      </div>
+
+      <div class="price-row">
+        <span class="coin-label">BTC</span>
+        <span class="coin-price">€{Math.round(cryptoSignal.btcPrice).toLocaleString()}</span>
+        <span class="coin-change {cryptoSignal.btcChange24h > 0 ? 'up' : 'down'}">
+          {cryptoSignal.btcChange24h > 0 ? '+' : ''}{cryptoSignal.btcChange24h?.toFixed(1)}%
+        </span>
+      </div>
+      <div class="price-row">
+        <span class="coin-label">ETH</span>
+        <span class="coin-price">€{Math.round(cryptoSignal.ethPrice).toLocaleString()}</span>
+        <span class="coin-change {cryptoSignal.ethChange24h > 0 ? 'up' : 'down'}">
+          {cryptoSignal.ethChange24h > 0 ? '+' : ''}{cryptoSignal.ethChange24h?.toFixed(1)}%
+        </span>
+      </div>
+
+      <div class="indicators">
+        <div class="ind-row">
+          <span class="ind-label">Fear &amp; Greed</span>
+          <span class="ind-val">{cryptoSignal.fearGreed.value} · {cryptoSignal.fearGreed.label}</span>
+        </div>
+        {#if cryptoSignal.funding !== null}
+          <div class="ind-row">
+            <span class="ind-label">Funding Rate</span>
+            <span class="ind-val">{cryptoSignal.funding?.toFixed(3)}%</span>
+          </div>
+        {/if}
+        <div class="ind-row">
+          <span class="ind-label">BTC Dominance</span>
+          <span class="ind-val">{cryptoSignal.dominance}%</span>
+        </div>
+        <div class="ind-row">
+          <span class="ind-label">Altseason</span>
+          <span class="ind-val {cryptoSignal.altseasonSignal === 'ACTIVE' ? 'active' : ''}">{cryptoSignal.altseasonSignal}</span>
+        </div>
+      </div>
+
+      {#if cryptoSignal.reasons?.length}
+        <div class="signal-reasons">
+          {#each cryptoSignal.reasons as reason}
+            <div class="reason-item">· {reason}</div>
+          {/each}
+        </div>
+      {/if}
+
+      {#if cryptoSignal.binanceAction === 'buy'}
+        <a href={cryptoSignal.binanceDeepLink} target="_blank" class="binance-btn">Open Binance →</a>
+      {/if}
+
+      <button class="refresh-btn" onclick={loadCryptoSignal}>↻ Refresh</button>
+    {:else if cryptoSignal}
+      <div class="empty" style="padding:10px 0;font-size:11px;color:#444">Signal unavailable — check watcher</div>
+      <button class="refresh-btn" onclick={loadCryptoSignal}>↻ Retry</button>
+    {/if}
+
+    <!-- Portfolio tracker -->
+    <div class="sh" style="margin-top:20px">MY PORTFOLIO</div>
+
+    {#each portfolio as entry}
+      {@const cur = currentPrice(entry.coin)}
+      {@const curVal = Math.round(entry.amount * cur)}
+      {@const pnlPct = cur > 0 ? ((cur - entry.entryPrice) / entry.entryPrice * 100).toFixed(1) : null}
+      <div class="portfolio-row">
+        <span class="p-coin">{entry.coin}</span>
+        <span class="p-amount">{entry.amount}</span>
+        <span class="p-entry">@ €{entry.entryPrice.toLocaleString()}</span>
+        <span class="p-value">€{cur > 0 ? curVal.toLocaleString() : '—'}</span>
+        {#if pnlPct !== null}
+          <span class="p-pnl {parseFloat(pnlPct) >= 0 ? 'up' : 'down'}">{parseFloat(pnlPct) >= 0 ? '+' : ''}{pnlPct}%</span>
+        {/if}
+        <button class="del-btn" onclick={() => removePortfolioEntry(entry.id)}>×</button>
+      </div>
+    {/each}
+
+    <div class="add-row" style="margin-top:8px">
+      <select bind:value={newCoin} class="inp" style="width:auto;flex-shrink:0">
+        <option>BTC</option>
+        <option>ETH</option>
+        <option>SOL</option>
+      </select>
+      <input class="inp" bind:value={newAmount} placeholder="Amount" type="number" step="any" />
+      <input class="inp" bind:value={newEntryPrice} placeholder="Entry €" type="number" step="any" />
+      <button class="btn btn-gold" onclick={addPortfolioEntry}>+</button>
+    </div>
+  </div>
+
 </div>
 <div class="tab-sidebar">
   <div class="mozart-block">
@@ -255,4 +406,40 @@
   .chat-inp { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; border-radius: 3px; }
   .chat-inp:focus { border-color: rgba(201,168,76,.4); }
   .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 7px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
+
+  /* Crypto */
+  .crypto-section { margin-top: 4px; }
+  .signal-block { padding: 10px 12px; border-radius: 3px; margin-bottom: 10px; border-left: 3px solid #444; }
+  .signal-block.signal-strong-buy { border-left-color: #4caf82; background: rgba(76,175,130,.06); }
+  .signal-block.signal-bullish { border-left-color: #4caf82; background: rgba(76,175,130,.03); }
+  .signal-block.signal-bearish { border-left-color: #e05a4a; background: rgba(224,90,74,.04); }
+  .signal-block.signal-strong-caution { border-left-color: #e05a4a; background: rgba(224,90,74,.07); }
+  .signal-block.signal-neutral { border-left-color: #444; background: transparent; }
+  .signal-label { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: #cec9c1; margin-bottom: 4px; }
+  .signal-suggestion { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #9e9690; }
+  .price-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid #111; }
+  .coin-label { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; width: 30px; }
+  .coin-price { font-family: 'Space Mono', monospace; font-size: 13px; color: #cec9c1; flex: 1; }
+  .coin-change { font-family: 'Space Mono', monospace; font-size: 11px; }
+  .coin-change.up { color: #4caf82; }
+  .coin-change.down { color: #e05a4a; }
+  .indicators { margin: 10px 0; }
+  .ind-row { display: flex; justify-content: space-between; padding: 3px 0; font-family: 'DM Sans', sans-serif; font-size: 11px; }
+  .ind-label { color: #555; }
+  .ind-val { color: #9e9690; }
+  .ind-val.active { color: #c9a84c; }
+  .signal-reasons { margin: 8px 0; }
+  .reason-item { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #666; padding: 1px 0; }
+  .binance-btn { display: inline-block; margin-top: 10px; font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: #c9a84c; color: #0a0a0a; padding: 6px 14px; border-radius: 3px; text-decoration: none; letter-spacing: .06em; }
+  .binance-btn:hover { background: #d4b862; }
+  .refresh-btn { display: block; margin-top: 8px; font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #252525; color: #444; padding: 3px 8px; border-radius: 2px; cursor: pointer; }
+  .refresh-btn:hover { color: #9e9690; }
+  .portfolio-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #111; font-family: 'Space Mono', monospace; font-size: 10px; flex-wrap: wrap; }
+  .p-coin { color: #c9a84c; width: 30px; }
+  .p-amount { color: #cec9c1; }
+  .p-entry { color: #555; }
+  .p-value { color: #cec9c1; margin-left: auto; }
+  .p-pnl { font-size: 10px; }
+  .p-pnl.up { color: #4caf82; }
+  .p-pnl.down { color: #e05a4a; }
 </style>

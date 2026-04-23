@@ -2025,6 +2025,25 @@ async function handleOwnerCommand(chatId, text) {
       await sendTelegram(chatId, reply)
     } catch(e) { await sendTelegram(chatId, '❌ WhatsApp analyze error: ' + e.message) }
   }
+  else if (cmd === '/crypto') {
+    await sendTelegram(chatId, '⏳ Fetching crypto signal...')
+    try {
+      const crypto = await buildCryptoSignal()
+      let msg = '📊 CRYPTO SIGNAL: ' + crypto.emoji + ' ' + crypto.signal
+      msg += '\n\nBTC: €' + Math.round(crypto.btcPrice).toLocaleString() +
+        ' (' + (crypto.btcChange24h > 0 ? '+' : '') + crypto.btcChange24h?.toFixed(1) + '% 24h)'
+      msg += '\nETH: €' + Math.round(crypto.ethPrice).toLocaleString() +
+        ' (' + (crypto.ethChange24h > 0 ? '+' : '') + crypto.ethChange24h?.toFixed(1) + '% 24h)'
+      msg += '\nFear & Greed: ' + crypto.fearGreed.value + ' (' + crypto.fearGreed.label + ')'
+      if (crypto.funding !== null) msg += '\nFunding: ' + crypto.funding.toFixed(3) + '%'
+      msg += '\nBTC Dominance: ' + crypto.dominance + '%'
+      msg += '\nAltseason: ' + crypto.altseasonSignal
+      msg += '\n\n' + crypto.suggestion
+      if (crypto.reasons.length) msg += '\n\nReasons:\n' + crypto.reasons.map(r => '· ' + r).join('\n')
+      if (crypto.binanceAction === 'buy') msg += '\n\n→ Open Binance: ' + crypto.binanceDeepLink
+      await sendTelegram(chatId, msg)
+    } catch(e) { await sendTelegram(chatId, '❌ Crypto signal error: ' + e.message) }
+  }
   else if (cmd === '/help') {
     await sendTelegram(chatId,
       '🎵 Momentum Commands:\n\n' +
@@ -2036,6 +2055,7 @@ async function handleOwnerCommand(chatId, text) {
       '/brain [text] — Save to Brain\n' +
       '/ask [question] — Ask Mozart\n' +
       '/morning — Full morning agent run\n' +
+      '/crypto — Live BTC/ETH signal + Fear & Greed\n' +
       '/obsidian [title] — Create Obsidian note\n' +
       '/demo [artist] — Check demo status\n' +
       '/mix [song] — Get mix gap analysis\n' +
@@ -2338,6 +2358,158 @@ async function brainToObsidian() {
   pushVaultToGit()
   console.log(`✓ brainToObsidian: ${written} entries, ${indexFiles.length} index notes`)
   return { written, index_notes: indexFiles.length }
+}
+
+// ── Generate mixing journey narrative from version feedback history ────────
+async function generateVersionNarrative(song, versions) {
+  if (!versions?.length) return null
+  const mixVersions = versions
+    .filter(v => v.version_type === 'mixing')
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  if (mixVersions.length < 2) return null
+
+  const history = mixVersions.map(v => {
+    const doneFeedback = (v.feedback || []).filter(f => f.done).map(f => f.text)
+    const openFeedback = (v.feedback || []).filter(f => !f.done).map(f => f.text)
+    return v.name + ': ' +
+      (doneFeedback.length ? 'Fixed: ' + doneFeedback.join(', ') : '') +
+      (openFeedback.length ? ' Open: ' + openFeedback.join(', ') : '')
+  }).join('\n')
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: 'Summarize a mixing journey in 2-3 sentences. Be specific about what the main issues were and how they were resolved. No bullet points.',
+      messages: [{ role: 'user', content: 'Song: ' + (song.title || song.code) + '\nVersions: ' + mixVersions.length + '\nFeedback history:\n' + history + '\n\nWrite a 2-sentence narrative of this mixing journey.' }]
+    })
+  })
+  const d = await res.json()
+  return d.content?.[0]?.text || null
+}
+
+// ── Crypto signal data fetchers ───────────────────────────────────────────
+async function fetchFearGreed() {
+  const r = await fetch('https://api.alternative.me/fng/?limit=1')
+  const d = await r.json()
+  return {
+    value: parseInt(d.data[0].value),
+    label: d.data[0].value_classification
+  }
+}
+
+async function fetchBTCData() {
+  const r = await fetch(
+    'https://api.coingecko.com/api/v3/simple/price?' +
+    'ids=bitcoin,ethereum,solana&vs_currencies=eur,usd' +
+    '&include_24hr_change=true&include_market_cap=true',
+    { headers: { 'Accept': 'application/json' } }
+  )
+  return await r.json()
+}
+
+async function fetchBTCDominance() {
+  const r = await fetch('https://api.coingecko.com/api/v3/global')
+  const d = await r.json()
+  return Math.round(d.data.market_cap_percentage.btc * 10) / 10
+}
+
+async function fetchFundingRate() {
+  try {
+    const r = await fetch('https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=1')
+    const d = await r.json()
+    return parseFloat(d[0]?.fundingRate || 0) * 100
+  } catch(e) { return null }
+}
+
+async function fetchExchangeNetflow() {
+  try {
+    const r = await fetch(
+      'https://api.coingecko.com/api/v3/coins/bitcoin?' +
+      'localization=false&tickers=false&market_data=true' +
+      '&community_data=false&developer_data=false'
+    )
+    const d = await r.json()
+    return {
+      volume_24h: d.market_data?.total_volume?.eur,
+      price_change_7d: d.market_data?.price_change_percentage_7d
+    }
+  } catch(e) { return null }
+}
+
+async function buildCryptoSignal() {
+  const [fearGreed, btcData, dominance, funding, netflow] =
+    await Promise.all([
+      fetchFearGreed(),
+      fetchBTCData(),
+      fetchBTCDominance(),
+      fetchFundingRate(),
+      fetchExchangeNetflow()
+    ])
+
+  const btcPrice = btcData?.bitcoin?.eur
+  const btcChange24h = btcData?.bitcoin?.eur_24h_change
+  const ethPrice = btcData?.ethereum?.eur
+  const ethChange24h = btcData?.ethereum?.eur_24h_change
+
+  let bullPoints = 0
+  let bearPoints = 0
+  const reasons = []
+
+  if (fearGreed.value < 20) { bullPoints += 2; reasons.push('Extreme fear = buying opportunity') }
+  else if (fearGreed.value < 35) { bullPoints += 1; reasons.push('Fear present = cautious bullish') }
+  else if (fearGreed.value > 75) { bearPoints += 2; reasons.push('Greed = overheated') }
+  else if (fearGreed.value > 60) { bearPoints += 1; reasons.push('Greed building') }
+
+  if (funding !== null) {
+    if (funding < -0.05) { bullPoints += 2; reasons.push('Shorts paying = squeeze potential') }
+    else if (funding < -0.01) { bullPoints += 1; reasons.push('Slightly negative funding') }
+    else if (funding > 0.05) { bearPoints += 2; reasons.push('Longs overextended') }
+    else if (funding > 0.02) { bearPoints += 1; reasons.push('Funding elevated') }
+  }
+
+  let altseasonSignal = 'NO'
+  if (dominance < 50) altseasonSignal = 'ACTIVE'
+  else if (dominance < 54) altseasonSignal = 'STARTING'
+
+  if (btcChange24h > 3) { bullPoints += 1; reasons.push('Strong 24h momentum') }
+  else if (btcChange24h < -5) { bearPoints += 1; reasons.push('Selling pressure') }
+
+  let signal, emoji, suggestion, binanceAction
+
+  if (bullPoints >= 4) {
+    signal = 'STRONG BUY'; emoji = '🟢🟢'
+    suggestion = 'Multiple bullish signals aligned. Consider adding to position.'
+    binanceAction = 'buy'
+  } else if (bullPoints >= 2 && bullPoints > bearPoints) {
+    signal = 'BULLISH'; emoji = '🟢'
+    suggestion = 'Cautiously bullish. DCA opportunity.'
+    binanceAction = 'buy'
+  } else if (bearPoints >= 4) {
+    signal = 'STRONG CAUTION'; emoji = '🔴🔴'
+    suggestion = 'Multiple warning signs. Reduce or hold cash.'
+    binanceAction = null
+  } else if (bearPoints >= 2 && bearPoints > bullPoints) {
+    signal = 'BEARISH'; emoji = '🔴'
+    suggestion = 'Caution warranted. Wait for better entry.'
+    binanceAction = null
+  } else {
+    signal = 'NEUTRAL'; emoji = '🟡'
+    suggestion = 'No clear setup. Do nothing — wait.'
+    binanceAction = null
+  }
+
+  const binanceDeepLink = 'https://www.binance.com/en/trade/BTC_EUR'
+
+  return {
+    signal, emoji, suggestion, reasons, fearGreed,
+    btcPrice, btcChange24h, ethPrice, ethChange24h,
+    dominance, funding, netflow, altseasonSignal,
+    binanceDeepLink, binanceAction,
+    timestamp: new Date().toISOString()
+  }
 }
 
 // ── Seed production rules into brain_knowledge ────────────────────────────
@@ -3401,6 +3573,23 @@ ${context}` }]
 
         if (TELEGRAM_TOKEN) {
           sendTelegram(TELEGRAM_OWNER_ID, '🌅 Morning Briefing\n\n' + briefingText.slice(0, 3000)).catch(() => {})
+          // Send crypto signal separately
+          try {
+            const crypto = await buildCryptoSignal()
+            let cryptoMsg = '📊 CRYPTO SIGNAL: ' + crypto.emoji + ' ' + crypto.signal
+            cryptoMsg += '\n\nBTC: €' + Math.round(crypto.btcPrice).toLocaleString() +
+              ' (' + (crypto.btcChange24h > 0 ? '+' : '') + crypto.btcChange24h?.toFixed(1) + '% 24h)'
+            cryptoMsg += '\nETH: €' + Math.round(crypto.ethPrice).toLocaleString() +
+              ' (' + (crypto.ethChange24h > 0 ? '+' : '') + crypto.ethChange24h?.toFixed(1) + '% 24h)'
+            cryptoMsg += '\nFear & Greed: ' + crypto.fearGreed.value + ' (' + crypto.fearGreed.label + ')'
+            if (crypto.funding !== null) cryptoMsg += '\nFunding: ' + crypto.funding.toFixed(3) + '%'
+            cryptoMsg += '\nBTC Dominance: ' + crypto.dominance + '%'
+            cryptoMsg += '\nAltseason: ' + crypto.altseasonSignal
+            cryptoMsg += '\n\n' + crypto.suggestion
+            if (crypto.reasons.length) cryptoMsg += '\n\nReasons:\n' + crypto.reasons.map(r => '· ' + r).join('\n')
+            if (crypto.binanceAction === 'buy') cryptoMsg += '\n\n→ Open Binance: ' + crypto.binanceDeepLink
+            sendTelegram(TELEGRAM_OWNER_ID, cryptoMsg).catch(() => {})
+          } catch(e) { console.warn('crypto signal in briefing failed:', e.message) }
         }
         console.log(`✓ Morning briefing generated for ${todayISO}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -6253,6 +6442,71 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /generate-version-narrative ─────────────────────────────────────
+  if (req.method === 'POST' && req.url === '/generate-version-narrative') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', async () => {
+      try {
+        const { song_id } = JSON.parse(body || '{}')
+        if (!song_id) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'song_id required' })); return }
+        const songRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/songs?id=eq.${song_id}&select=id,title,code,work_data&limit=1`,
+          { headers: sbHeaders }
+        )
+        const songRows = await songRes.json()
+        const song = songRows[0]
+        if (!song) { res.writeHead(404); res.end(JSON.stringify({ ok: false, error: 'Song not found' })); return }
+
+        const versions = song.work_data?.versions || []
+        const narrative = await generateVersionNarrative(song, versions)
+
+        if (narrative) {
+          const mixVersions = versions
+            .filter(v => v.version_type === 'mixing')
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          const lastV = mixVersions[0]
+          await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+            method: 'POST',
+            headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({
+              category: 'own_production',
+              title: 'Mixing journey: ' + (song.title || song.code),
+              content: narrative +
+                '\n\nVersions: ' + mixVersions.length +
+                (lastV?.analysis?.loudness_lufs ? '\nFinal LUFS: ' + lastV.analysis.loudness_lufs : ''),
+              confidence: 'medium',
+              source_type: 'version_history',
+              entry_type_v2: 'knowledge',
+              active: true
+            })
+          }).catch(() => {})
+          setImmediate(() => brainToObsidian().catch(() => {}))
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, narrative }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── GET /crypto-signal ────────────────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/crypto-signal') {
+    try {
+      const signal = await buildCryptoSignal()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, ...signal }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   res.writeHead(404); res.end()
 })
 
@@ -7083,6 +7337,30 @@ Max 150 words. Be specific and actionable.` }]
   }, 60000)
   setInterval(() => {
     brainToObsidian().catch(e => console.error('auto obsidian sync error:', e.message))
+  }, 3600000)
+  // BTC price alert — check hourly, alert on 3%+ move
+  setInterval(async () => {
+    try {
+      const btc = await fetchBTCData()
+      const currentPrice = btc?.bitcoin?.eur
+      if (!currentPrice) return
+      if (!global.lastBTCPrice) { global.lastBTCPrice = currentPrice; return }
+      const change = ((currentPrice - global.lastBTCPrice) / global.lastBTCPrice) * 100
+      if (Math.abs(change) >= 3) {
+        const dir = change > 0 ? '📈 UP' : '📉 DOWN'
+        const binanceDeepLink = 'https://www.binance.com/en/trade/BTC_EUR'
+        const extra = change < -3 ? '→ Potential buying opportunity\n' + binanceDeepLink :
+                      change > 5  ? '→ Taking profits? Check your targets.' : ''
+        if (TELEGRAM_TOKEN) {
+          await sendTelegram(TELEGRAM_OWNER_ID,
+            '⚡ BTC ALERT: ' + dir + ' ' + change.toFixed(1) + '% in last hour\n' +
+            'Now: €' + Math.round(currentPrice).toLocaleString() +
+            (extra ? '\n' + extra : '')
+          ).catch(() => {})
+        }
+        global.lastBTCPrice = currentPrice
+      }
+    } catch(e) {}
   }, 3600000)
   exec('/opt/homebrew/bin/python3.11 -c "import essentia"', (err) => {
     if (err) console.warn('⚠ Essentia not available — BPM/key analysis disabled')

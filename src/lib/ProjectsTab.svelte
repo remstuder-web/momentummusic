@@ -681,6 +681,15 @@
   let newProjArtist = $state('')
   let newProjColor = $state('#9b6fd4')
 
+  function getPublicFilename(internalFilename, artist) {
+    if (!internalFilename) return internalFilename
+    const withoutCode = internalFilename.replace(/^\d{8}_/, '')
+    const artistClean = (artist || '').toUpperCase()
+      .replace(/[^A-Z0-9 ]/g, '').trim().replace(/\s+/g, '_')
+    if (!artistClean || withoutCode.toUpperCase().includes(artistClean)) return withoutCode
+    return artistClean + '_' + withoutCode
+  }
+
   const STAGES = [
     { id: 'demo',         label: 'DEMO' },
     { id: 'production',   label: 'PRODUCTION', hasSent: true, hasVersions: true, versionType: 'production' },
@@ -1599,6 +1608,7 @@
           code: song.code,
           title: v.audio_path || song.title || song.code,
           filename: v.audio_path,
+          public_filename: getPublicFilename(v.audio_path || '', selectedProject?.artist || ''),
           shareUrl: shareLink || null,
           mp3ShareUrl: mp3ShareLink || null,
           previewUrl: null

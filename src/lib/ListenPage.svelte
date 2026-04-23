@@ -84,6 +84,9 @@
     production: 'PRODUCTION', mixing: 'MIX', demo: 'DEMO',
     instrumental: 'INSTRUMENTAL', stems: 'STEMS'
   }[session?.session_type] || '')
+  // Public filename — strips internal code prefix for download button label
+  const publicWavName  = $derived(song?.public_filename || (song?.filename || '').replace(/^\d{8}_/, '') || null)
+  const publicMp3Name  = $derived(publicWavName ? publicWavName.replace(/\.wav$/i, '.mp3') : null)
 </script>
 
 <div class="lp-wrap" class:stars-bg={hasBg}>
@@ -179,10 +182,13 @@
       {#if wavSrc}
         <div class="lp-download-row">
           {#if mp3Src}
-            <a class="lp-dl-link" href={mp3Src} download>↓ Download MP3</a>
+            <a class="lp-dl-link" href={mp3Src} download={publicMp3Name || true}>↓ Download MP3</a>
           {/if}
-          <a class="lp-dl-link" href={wavSrc} download>↓ Download WAV</a>
+          <a class="lp-dl-link" href={wavSrc} download={publicWavName || true}>↓ Download WAV</a>
         </div>
+        {#if publicWavName}
+          <div class="lp-dl-filename">{publicWavName}</div>
+        {/if}
       {/if}
 
       <div class="lp-footer">Momentum Music</div>
@@ -385,6 +391,7 @@
     transition: color .15s;
   }
   .lp-dl-link:hover { color: #9e9690; }
+  .lp-dl-filename { font-family: 'Space Mono', monospace; font-size: 8px; color: #333; margin-top: 4px; letter-spacing: .04em; word-break: break-all; }
 
   /* ── Footer ──────────────────────────────────────────────────────────── */
   .lp-footer {

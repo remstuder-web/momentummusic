@@ -1391,6 +1391,21 @@ async function getSpotifyToken() {
   return d.access_token
 }
 
+// ── Public filename — strips internal code prefix for artist-facing downloads ──
+function getPublicFilename(internalFilename, artist, songTitle) {
+  if (!internalFilename) return internalFilename
+  // Remove leading 8-digit code like "26040604_"
+  const withoutCode = internalFilename.replace(/^\d{8}_/, '')
+  const artistClean = (artist || '').toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+  if (!artistClean || withoutCode.toUpperCase().includes(artistClean)) {
+    return withoutCode
+  }
+  return artistClean + '_' + withoutCode
+}
+
 // ── Error log — writes to Supabase watcher_logs, survives restarts ───────────
 function logError(endpoint, message, level = 'error') {
   const row = { endpoint, message: String(message).slice(0, 500), level }
@@ -4420,12 +4435,13 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
 
         const copied = [], missing = []
         ;(audioFiles || []).forEach(filename => {
-          const src  = path.join(DEMOS_DIR, filename)
-          const dest = path.join(submissionDir, filename)
+          const src        = path.join(DEMOS_DIR, filename)
+          const publicName = getPublicFilename(filename, artist, null)
+          const dest       = path.join(submissionDir, publicName)
           if (fs.existsSync(src)) {
             fs.copyFileSync(src, dest)
-            copied.push(filename)
-            console.log(`  ✓ Copied: ${filename}`)
+            copied.push(publicName)
+            console.log(`  ✓ Copied: ${filename} → ${publicName}`)
           } else {
             missing.push(filename)
             console.log(`  ⚠ Missing: ${filename}`)
@@ -4638,11 +4654,15 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     const mime  = MIME[path.extname(filename).toLowerCase()] || 'audio/mpeg'
     const total = stat.size
     const range = req.headers.range
+    // Strip internal code prefix for download — only for production/mixing, not demos/instrumentals
+    const isArtistFile = matchedPrefix === '/production/' || matchedPrefix === '/mixing/'
+    const publicName = isArtistFile ? getPublicFilename(filename, null, null) : filename
     const baseHeaders = {
       'Cache-Control': 'no-cache',
       'Accept-Ranges': 'bytes',
       'Content-Type': mime,
-      'Access-Control-Allow-Origin': '*'
+      'Access-Control-Allow-Origin': '*',
+      'Content-Disposition': `inline; filename="${publicName}"`
     }
     if (range) {
       const [s, e] = range.replace(/bytes=/, '').split('-')

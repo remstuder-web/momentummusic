@@ -596,7 +596,8 @@ async function runAgentChartAnalysis(apiKey) {
       popularity: track.popularity || null,
       album_art: track.album?.images?.[0]?.url || null,
       collection_name: 'daily_chart',
-      source: 'agent',
+      source: 'checkout',
+      checkout_date: new Date().toISOString(),
       approved: true
     }
     await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
@@ -1294,7 +1295,7 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
             body: JSON.stringify({
               spotify_id: spTrack.id, title: spTrack.name,
               artist: spTrack.artists.map(a => a.name).join(', '),
-              collection_name: 'tiktok_trending', source: 'agent', approved: true,
+              collection_name: 'tiktok_trending', source: 'checkout', checkout_date: new Date().toISOString(), approved: true,
               tempo: feat.bpm || null, key: feat.key || null, scale: feat.scale || null,
               energy: feat.energy || null, danceability: feat.danceability || null
             })
@@ -7469,6 +7470,9 @@ Max 150 words. Be specific and actionable.` }]
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=source,promoted&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing source/promoted columns — run SQL in Supabase:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS source text DEFAULT \'agent\', ADD COLUMN IF NOT EXISTS promoted boolean DEFAULT false;\nUPDATE reference_tracks SET source = \'agent\' WHERE collection_name = \'daily_chart\';') })
+    .catch(() => {})
+  fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=checkout_date&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing checkout_date column — run SQL in Supabase:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;') })
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/notes?select=apple_note_id,source&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ notes table missing Apple Notes columns — run SQL in Supabase:\nALTER TABLE notes ADD COLUMN IF NOT EXISTS apple_note_id text;\nALTER TABLE notes ADD COLUMN IF NOT EXISTS source text DEFAULT \'momentum\';\nALTER TABLE notes ADD COLUMN IF NOT EXISTS updated_at timestamptz;\nCREATE UNIQUE INDEX IF NOT EXISTS notes_apple_note_id_idx ON notes(apple_note_id) WHERE apple_note_id IS NOT NULL;') })

@@ -47,9 +47,9 @@
   let entries = $state([])
   let lastExtracted = $state(null)
   let entriesOpen = $state(false)
-  let tracksOpen = $state(false)
   let libraryExpanded = $state(false)
-  let curatedExpanded = $state(true)
+  let myRefsExpanded = $state(true)
+  let checkoutExpanded = $state(true)
   let librarySearch = $state('')
   let expandedEntries = $state({})
   let watchedArtists = $state([])
@@ -108,15 +108,19 @@
     return acc
   })
 
-  // Curated = user-added, mozart-added, or promoted; Library = agent-added and not promoted
-  const curatedRefs = $derived(
+  const checkoutRefs = $derived(
+    referenceTrackEntries
+      .filter(t => t.source === 'checkout')
+      .sort((a, b) => (a.artist || '').localeCompare(b.artist || ''))
+  )
+  const myRefs = $derived(
     referenceTrackEntries
       .filter(t => t.source === 'user' || t.source === 'mozart' || t.promoted === true)
       .sort((a, b) => (a.artist || '').localeCompare(b.artist || ''))
   )
   const libraryRefs = $derived(
     referenceTrackEntries
-      .filter(t => t.source !== 'user' && t.source !== 'mozart' && !t.promoted)
+      .filter(t => t.source === 'agent' && !t.promoted)
       .sort((a, b) => (a.artist || '').localeCompare(b.artist || ''))
   )
   const filteredLibraryRefs = $derived(
@@ -188,6 +192,21 @@
   async function promoteTrack(id) {
     await supabase.from('reference_tracks').update({ source: 'user', promoted: true }).eq('id', id)
     referenceTrackEntries = referenceTrackEntries.map(t => t.id === id ? { ...t, source: 'user', promoted: true } : t)
+  }
+
+  async function promoteToMyRefs(id) {
+    await supabase.from('reference_tracks').update({ source: 'user', checkout_date: null }).eq('id', id)
+    referenceTrackEntries = referenceTrackEntries.map(t => t.id === id ? { ...t, source: 'user', checkout_date: null } : t)
+  }
+
+  async function promoteToLibrary(id) {
+    await supabase.from('reference_tracks').update({ source: 'agent', checkout_date: null }).eq('id', id)
+    referenceTrackEntries = referenceTrackEntries.map(t => t.id === id ? { ...t, source: 'agent', checkout_date: null } : t)
+  }
+
+  async function deleteRef(id) {
+    await supabase.from('reference_tracks').delete().eq('id', id)
+    referenceTrackEntries = referenceTrackEntries.filter(t => t.id !== id)
   }
 
   async function unwatchArtist(id) {
@@ -1626,63 +1645,85 @@ Return ONLY JSON (single item array):
     {/if}
   </div>
 
-  <!-- Reference Tracks — curated vs library -->
+  <!-- Reference Tracks — checkout / my refs / library -->
   <div class="brain-entries-col" style="margin-top: 12px;">
-    <button class="brain-entries-toggle" onclick={() => tracksOpen = !tracksOpen}>
-      <span>REFERENCE TRACKS</span>
-      <span class="brain-cat-count">{referenceTrackEntries.length}</span>
-      <span class="brain-cat-arrow {tracksOpen ? 'open' : ''}">▶</span>
-    </button>
 
-    {#if tracksOpen}
-      <!-- MY REFERENCES (user + promoted) -->
-      <div class="refs-section-header refs-curated" onclick={() => curatedExpanded = !curatedExpanded}>
-        <span>● MY REFERENCES</span>
-        <span class="refs-count">{curatedRefs.length}</span>
-        <span style="margin-left:auto">{curatedExpanded ? '▲' : '▼'}</span>
+    <!-- CHECKOUT — always open -->
+    <div class="refs-section">
+      <div class="refs-section-header refs-checkout">
+        <span>⬇ CHECKOUT</span>
+        <span class="refs-count">{checkoutRefs.length}</span>
+        <span style="font-size:9px;color:#555;margin-left:4px">listen & decide</span>
       </div>
-      {#if curatedExpanded}
-      {#if curatedRefs.length}
-        {#each curatedRefs as track}
-          <div class="brain-track-row">
-            {#if track.spotify_id}
-              <button class="track-play-btn"
-                onclick={() => window.open('https://open.spotify.com/track/' + track.spotify_id, 'spotify_preview', 'width=400,height=600,left=100,top=100,toolbar=no,menubar=no')}
-                title="Play in Spotify">▶</button>
-            {:else}
-              <button class="track-play-btn"
-                onclick={() => window.open('http://localhost:4242/production/' + encodeURIComponent(track.title + '.wav'), '_blank')}
-                title="Open production">▶</button>
-            {/if}
-            <div class="track-info">
-              <span class="brain-reftrack-dot user" title={track.promoted ? 'Promoted' : 'Your reference'}>{track.promoted ? '◑' : '●'}</span>
-              <span class="track-artist-title">{track.artist ? track.artist + ' — ' : ''}{track.title}</span>
-              <span class="track-stats">
-                {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
-                {track.key ? ' · ' + track.key + (track.scale ? ' ' + track.scale : '') : ''}
-                {track.energy != null ? ' · nrg ' + Number(track.energy).toFixed(2) : ''}
-                {track.danceability != null ? ' · dnc ' + Number(track.danceability).toFixed(2) : ''}
-                {track.loudness != null ? ' · ' + track.loudness + 'LUFS' : ''}
-              </span>
-              <textarea class="brain-reftrack-notes"
-                placeholder="Why saved? (drums, energy, mix, arrangement...)"
-                value={track.notes || ''}
-                onblur={e => { if (e.target.value !== (track.notes || '')) updateTrackNotes(track.id, e.target.value) }}
-                rows="1"></textarea>
+      {#if checkoutRefs.length === 0}
+        <div class="refs-empty">Scout will place tracks here for review</div>
+      {:else}
+        {#each checkoutRefs as track}
+          <div class="ref-track-row checkout-row">
+            <span class="ref-source-dot checkout">⬇</span>
+            <span class="ref-title">{track.artist ? track.artist + ' — ' : ''}{track.title}</span>
+            <span class="ref-stats">
+              {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
+              {track.camelot ? ' · ' + track.camelot : ''}
+            </span>
+            <div class="ref-checkout-btns">
+              {#if track.spotify_id}
+                <button class="track-play-btn"
+                  onclick={() => window.open('https://open.spotify.com/track/' + track.spotify_id, '_blank')}
+                >▶</button>
+              {/if}
+              <button class="promote-btn gold"
+                onclick={() => promoteToMyRefs(track.id)}
+                title="Add to My References">★</button>
+              <button class="promote-btn"
+                onclick={() => promoteToLibrary(track.id)}
+                title="Move to Library">→ lib</button>
+              <button class="track-del-btn"
+                onclick={() => deleteRef(track.id)}>×</button>
             </div>
-            <button class="track-del-btn" onclick={async () => {
-              await supabase.from('reference_tracks').delete().eq('id', track.id)
-              referenceTrackEntries = referenceTrackEntries.filter(t => t.id !== track.id)
-            }}>×</button>
           </div>
         {/each}
-      {:else}
-        <p class="brain-empty" style="font-size:11px;padding:8px 0">No curated refs yet — import a Spotify track or promote from library.</p>
       {/if}
-      {/if}
+    </div>
 
-      <!-- LIBRARY (agent-added, not promoted) -->
-      <div class="refs-section-header refs-library" onclick={() => libraryExpanded = !libraryExpanded}>
+    <!-- MY REFERENCES -->
+    <div class="refs-section">
+      <div class="refs-section-header refs-curated"
+           onclick={() => myRefsExpanded = !myRefsExpanded}>
+        <span>● MY REFERENCES</span>
+        <span class="refs-count">{myRefs.length}</span>
+        <span style="margin-left:auto">{myRefsExpanded ? '▲' : '▼'}</span>
+      </div>
+      {#if myRefsExpanded}
+        {#if !myRefs.length}
+          <p class="brain-empty" style="font-size:11px;padding:8px 0">No curated refs yet — import a Spotify track or promote from checkout.</p>
+        {/if}
+        {#each myRefs as track}
+          <div class="ref-track-row">
+            <span class="ref-source-dot user">●</span>
+            <span class="ref-title">{track.artist ? track.artist + ' — ' : ''}{track.title}</span>
+            <span class="ref-stats">
+              {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
+              {track.camelot ? ' · ' + track.camelot : (track.key ? ' · ' + track.key : '')}
+              {track.loudness != null ? ' · ' + track.loudness + 'LUFS' : ''}
+            </span>
+            <div class="ref-checkout-btns">
+              {#if track.spotify_id}
+                <button class="track-play-btn"
+                  onclick={() => window.open('https://open.spotify.com/track/' + track.spotify_id, '_blank')}
+                >▶</button>
+              {/if}
+              <button class="track-del-btn" onclick={() => deleteRef(track.id)}>×</button>
+            </div>
+          </div>
+        {/each}
+      {/if}
+    </div>
+
+    <!-- LIBRARY -->
+    <div class="refs-section">
+      <div class="refs-section-header refs-library"
+           onclick={() => libraryExpanded = !libraryExpanded}>
         <span>○ LIBRARY</span>
         <span class="refs-count">{libraryRefs.length}</span>
         <span style="margin-left:auto">{libraryExpanded ? '▲' : '▼'}</span>
@@ -1690,32 +1731,32 @@ Return ONLY JSON (single item array):
       {#if libraryExpanded}
         <input class="library-search" placeholder="Search library..." bind:value={librarySearch} />
         {#each filteredLibraryRefs as track}
-          <div class="brain-track-row ref-track-row-library">
-            <span class="brain-reftrack-dot agent">○</span>
-            <div class="track-info">
-              <span class="track-artist-title">{track.artist ? track.artist + ' — ' : ''}{track.title}</span>
-              <span class="track-stats">
-                {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
-                {track.camelot ? ' · ' + track.camelot : (track.key ? ' · ' + track.key : '')}
-                {track.energy != null ? ' · nrg ' + Number(track.energy).toFixed(2) : ''}
-              </span>
+          <div class="ref-track-row library">
+            <span class="ref-source-dot">○</span>
+            <span class="ref-title">{track.artist ? track.artist + ' — ' : ''}{track.title}</span>
+            <span class="ref-stats">
+              {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
+              {track.camelot ? ' · ' + track.camelot : (track.key ? ' · ' + track.key : '')}
+            </span>
+            <div class="ref-checkout-btns">
+              {#if track.spotify_id}
+                <button class="track-play-btn"
+                  onclick={() => window.open('https://open.spotify.com/track/' + track.spotify_id, '_blank')}
+                >▶</button>
+              {/if}
+              <button class="promote-btn gold"
+                onclick={() => promoteToMyRefs(track.id)}
+                title="Move to My References">★</button>
+              <button class="track-del-btn" onclick={() => deleteRef(track.id)}>×</button>
             </div>
-            <button class="promote-btn" onclick={() => promoteTrack(track.id)} title="Add to My References">+</button>
-            <button class="track-del-btn" onclick={async () => {
-              await supabase.from('reference_tracks').delete().eq('id', track.id)
-              referenceTrackEntries = referenceTrackEntries.filter(t => t.id !== track.id)
-            }}>×</button>
           </div>
         {/each}
         {#if !filteredLibraryRefs.length}
           <p class="brain-empty" style="font-size:11px;padding:6px 0">{librarySearch ? 'No matches.' : 'Library empty.'}</p>
         {/if}
       {/if}
+    </div>
 
-      {#if !referenceTrackEntries.length}
-        <p class="brain-empty">No reference tracks yet. Import a Spotify track URL above.</p>
-      {/if}
-    {/if}
   </div>
 
 </div>
@@ -2639,16 +2680,29 @@ Return ONLY JSON (single item array):
   .chat-inp { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; border-radius: 3px; }
   .chat-inp:focus { border-color: rgba(201,168,76,.4); }
   .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 7px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
-  .refs-section-header { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; padding: 8px 0 4px; border-bottom: 1px solid #1c1c1c; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
-  .refs-section-header.refs-curated { color: rgba(201,168,76,.75); cursor: pointer; }
+  .refs-section { margin-bottom: 4px; }
+  .refs-section-header { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; padding: 8px 0 4px; border-bottom: 1px solid #1c1c1c; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .refs-section-header.refs-curated { color: rgba(201,168,76,.75); }
   .refs-section-header.refs-curated:hover { color: rgba(201,168,76,1); }
+  .refs-section-header.refs-checkout { color: #9e9690; cursor: default; }
   .refs-section-header.refs-library { color: #444; }
   .refs-section-header.refs-library:hover { color: #666; }
   .refs-count { font-family: 'Space Mono', monospace; font-size: 8px; background: #1c1c1c; padding: 1px 5px; border-radius: 8px; color: #555; }
+  .refs-empty { font-size: 11px; color: #444; padding: 6px 0 8px; font-style: italic; }
+  .ref-track-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #161616; font-size: 12px; }
+  .ref-track-row.checkout-row { background: rgba(158,150,144,.03); }
+  .ref-track-row.library { opacity: 0.65; }
+  .ref-track-row.library:hover { opacity: 1; }
+  .ref-source-dot { font-size: 9px; flex-shrink: 0; color: #555; }
+  .ref-source-dot.user { color: #c9a84c; }
+  .ref-source-dot.checkout { color: #9e9690; font-size: 8px; }
+  .ref-title { color: #cec9c1; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .ref-stats { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; white-space: nowrap; flex-shrink: 0; }
+  .ref-checkout-btns { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
   .library-search { background: #1c1c1c; border: 1px solid #252525; color: #9e9690; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 4px 8px; border-radius: 3px; width: 100%; margin-bottom: 6px; outline: none; box-sizing: border-box; }
   .library-search:focus { border-color: #303030; }
-  .ref-track-row-library { opacity: 0.65; }
-  .ref-track-row-library:hover { opacity: 1; }
-  .promote-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #c9a84c; padding: 1px 5px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
-  .promote-btn:hover { background: rgba(201,168,76,.1); }
+  .promote-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #666; padding: 1px 5px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .promote-btn:hover { background: rgba(201,168,76,.1); color: #c9a84c; }
+  .promote-btn.gold { color: #c9a84c; border-color: rgba(201,168,76,.3); }
+  .promote-btn.gold:hover { background: rgba(201,168,76,.15); }
 </style>

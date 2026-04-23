@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + BrainTab.svelte — DONE
+TASK: reference-tracks-checkout
+WHAT: Add checkout source to reference_tracks; chart/tiktok agents now save source='checkout' + checkout_date; BrainTab restructured into three always-visible sections: CHECKOUT / MY REFERENCES / LIBRARY with promote/delete actions
+RESULT: 0 svelte errors, watcher healthy
+BLOCKERS: Run SQL manually: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;
+
 ## [2026-04-23] momentum-watcher.cjs + ConnectionsTab.svelte — DONE
 TASK: enrich-contacts-fixes
 WHAT: Auto-promote instagram_guess to instagram in /enrich-contact; add /enrich-all-contacts bulk endpoint; Telegram /enrich command; "Enrich All" button in ConnectionsTab

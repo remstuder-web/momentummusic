@@ -1,16 +1,19 @@
 {
-  "updated": "2026-04-23T12:01:30.000Z",
-  "last_task": "enrich-contacts-fixes",
+  "updated": "2026-04-23T12:20:00.000Z",
+  "last_task": "reference-tracks-checkout",
   "status": "done",
   "working": [
-    "/enrich-contact now auto-promotes instagram_guess to instagram",
-    "/enrich-all-contacts bulk endpoint — tested on 24 contacts, multiple enriched",
-    "Telegram /enrich command — triggers bulk enrich, sends summary",
-    "Telegram /help updated with /enrich",
-    "ConnectionsTab Enrich All button — fires endpoint, reloads connections, alerts count"
+    "chart analysis saves source='checkout' + checkout_date to reference_tracks",
+    "tiktok trending agent saves source='checkout' + checkout_date",
+    "BrainTab: CHECKOUT section (always open, source=checkout tracks)",
+    "BrainTab: MY REFERENCES (collapsible, source=user/mozart/promoted)",
+    "BrainTab: LIBRARY (collapsible, source=agent not promoted)",
+    "promoteToMyRefs, promoteToLibrary, deleteRef functions",
+    "★ promote button + → lib button in checkout row",
+    "0 svelte-check errors"
   ],
   "broken": [],
   "partial": [],
-  "next": "add new tasks or test enrichment results in ConnectionsTab UI",
-  "notes": "Watcher uses raw fetch+SUPABASE_URL/sbHeaders, not a supabase client object — important for future watcher edits"
+  "next": "Run SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz; — then run /agent-chart-analysis to test checkout flow",
+  "notes": "checkout_date column must be added manually in Supabase dashboard before checkout source saves will work correctly. Watcher logs a startup warning if column is missing."
 }

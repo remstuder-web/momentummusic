@@ -1,29 +1,26 @@
 {
-  "updated": "2026-04-23T14:52:00.000Z",
-  "last_task": "releases-tab-full-rebuild",
+  "updated": "2026-04-23T15:08:00.000Z",
+  "last_task": "crypto-derivatives-signal",
   "status": "done",
   "working": [
-    "buildReleaseSummary() defined in watcher — no longer crashes on /create-release-entry",
-    "POST /create-release-entry creates RELEASES_DIR/CODE_ARTIST_TITLE folder + SUMMARY.txt + Supabase insert",
-    "POST /open-folder opens folder in Finder",
-    "ReleaseTab: DISTRIBUTION section (label, distributor, ISRC, UPC, publishing PRO + registered checkbox)",
-    "ReleaseTab: STREAMS single value field (spotify_streams) with formatted display",
-    "ReleaseTab: PLAYLIST PLACEMENTS grid (name, followers, date, notes per row)",
-    "ReleaseTab: SPLIT SHEET (name, role, pct per row)",
-    "ReleaseTab: REVENUE section (revenue_eur EUR field)",
-    "ReleaseTab: label chip shown in card header",
-    "ReleaseTab: Open folder + regenerate SUMMARY.txt buttons in footer",
-    "ReleaseTab: + Add from scratch form at top",
-    "ProjectsTab RELEASE button → calls POST /create-release-entry (no direct Supabase insert)",
-    "mozartContext.js: releases query included (streams, revenue, invoice status)",
-    "0 svelte-check errors; watcher restarted OK"
+    "fetchDerivativesData(coin): long/short ratio, OI + hist, taker ratio, smart money, funding trend (3 periods)",
+    "buildCryptoSignal(): BTC+ETH derivatives fetched in parallel with existing data",
+    "L/S ratio scoring: >72% longs = -2pts, >65% = -1pt, <45% = +2pts",
+    "OI+price combo scoring: rising OI + rising price = +1pt, rising OI + falling = +1pt (squeeze), falling OI + falling = +1pt (capitulation)",
+    "Taker ratio scoring: >1.2 = +1pt (buyers aggressive), <0.8 = -1pt (sellers)",
+    "Smart money scoring: >65% long = +1pt, <45% = -1pt",
+    "personalAdvice: fetches holdings from Supabase, calculates PnL, generates context-aware text",
+    "/crypto Telegram: shows Derivatives block (longs %, OI trend, taker, smart money) + personal advice",
+    "Morning briefing: shows compact Derivatives block + personal advice",
+    "btc_derivatives, eth_derivatives, personal_advice in signal response",
+    "Live test: BULLISH signal, longs 40%, OI rising 2.1%, taker 0.78, smart money 45% long"
   ],
   "broken": [],
   "partial": [
-    "Supabase releases table needs new columns (ALTER TABLE required — see CHANGES.md for column list)",
     "Binance live balances require BINANCE_API_KEY + BINANCE_SECRET_KEY in .env",
-    "crypto_trades table must exist in Supabase for sell logging"
+    "crypto_trades table must exist in Supabase for sell logging",
+    "Supabase releases table needs new columns (ALTER TABLE)"
   ],
-  "next": "Run ALTER TABLE releases ADD COLUMN IF NOT EXISTS for: label, distributor, isrc, upc, spotify_streams bigint, playlist_placements jsonb, revenue_eur float, split_sheet jsonb, publishing_pro text, publishing_registered boolean, folder_path text, song_id text, status text. Then add BINANCE keys to .env.",
-  "notes": "Releases tab full rebuild complete. buildReleaseSummary() was the critical missing piece. All PARTS A–E done."
+  "next": "Run ALTER TABLE releases ADD COLUMN IF NOT EXISTS for new fields. Add BINANCE API keys to .env. Create crypto_trades table in Supabase.",
+  "notes": "All 5 Binance Futures endpoints working (no auth required for public endpoints). Scoring adds up to 5 new signal points from derivatives data."
 }

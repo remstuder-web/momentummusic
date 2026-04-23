@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs — DONE
+TASK: crypto-derivatives-signal
+WHAT: fetchDerivativesData(coin) fetches long/short ratio, open interest + hist trend, taker buy/sell ratio, top trader positions, funding trend (3 periods). buildCryptoSignal() calls BTC+ETH derivatives in parallel; scores L/S ratio (±1-2pts), OI+price combo (±1pt), taker ratio (±1pt), smart money (±1pt). Portfolio-aware personalAdvice fetches holdings from Supabase and generates context-specific text. /crypto and morning briefing both show Derivatives block + personal advice. btc_derivatives, eth_derivatives, personal_advice in signal response.
+RESULT: watcher restarted OK; /crypto-signal live — longs 40%, OI rising 2.1% 6h, taker 0.78 (sellers), smart money 45% long; signal BULLISH
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs + ReleaseTab.svelte + ProjectsTab.svelte + mozartContext.js — DONE
 TASK: releases-tab-full-rebuild
 WHAT: buildReleaseSummary() added to watcher (CRITICAL fix — was called but undefined). ReleaseTab rebuilt with label/distributor/ISRC/UPC, publishing PRO, spotify_streams, playlist placements (name/followers/date/notes grid), split sheet (name/role/pct per row), revenue_eur, open folder button, regenerate SUMMARY.txt button, + Add from scratch form. RELEASE button in ProjectsTab updated to call POST /create-release-entry (creates folder + SUMMARY.txt + Supabase insert). mozartContext.js adds releases query with stream/revenue/invoice status per release.

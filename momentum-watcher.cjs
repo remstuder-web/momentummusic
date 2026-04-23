@@ -2071,6 +2071,7 @@ async function handleOwnerCommand(chatId, text) {
     await sendTelegram(chatId, '⏳ Fetching crypto signal...')
     try {
       const crypto = await buildCryptoSignal()
+      const d = crypto.btc_derivatives || {}
       let msg = '📊 CRYPTO SIGNAL: ' + crypto.emoji + ' ' + crypto.signal
       msg += '\n\nBTC: €' + Math.round(crypto.btcPrice).toLocaleString() +
         ' (' + (crypto.btcChange24h > 0 ? '+' : '') + crypto.btcChange24h?.toFixed(1) + '% 24h)'
@@ -2080,8 +2081,17 @@ async function handleOwnerCommand(chatId, text) {
       if (crypto.funding !== null) msg += '\nFunding: ' + crypto.funding.toFixed(3) + '%'
       msg += '\nBTC Dominance: ' + crypto.dominance + '%'
       msg += '\nAltseason: ' + crypto.altseasonSignal
+      // Derivatives block
+      if (d.long_pct != null || d.oi_trend || d.taker_buy_ratio != null || d.top_trader_long_pct != null) {
+        msg += '\n\n📊 Derivatives:'
+        if (d.long_pct != null) msg += '\nLongs: ' + d.long_pct.toFixed(0) + '% ' + (d.long_trend === 'increasing' ? '↑' : '↓')
+        if (d.oi_trend) msg += '\nOpen Interest: ' + (d.oi_trend === 'rising' ? '↑ rising' : '↓ falling') + (d.oi_change_pct != null ? ' (' + d.oi_change_pct + '% 6h)' : '')
+        if (d.taker_buy_ratio != null) msg += '\nTaker ratio: ' + d.taker_buy_ratio.toFixed(2) + (d.taker_buy_ratio > 1 ? ' (buyers aggressive)' : ' (sellers aggressive)')
+        if (d.top_trader_long_pct != null) msg += '\nSmart money: ' + d.top_trader_long_pct.toFixed(0) + '% long'
+      }
       msg += '\n\n' + crypto.suggestion
       if (crypto.reasons.length) msg += '\n\nReasons:\n' + crypto.reasons.map(r => '· ' + r).join('\n')
+      if (crypto.personal_advice) msg += '\n\n' + crypto.personal_advice.trim()
       if (crypto.binanceAction === 'buy') msg += '\n\n→ Open Binance: ' + crypto.binanceDeepLink
       if (crypto.binanceAction === 'sell') {
         try {
@@ -2640,6 +2650,67 @@ function buildReleaseSummary({ title, artist, code, release_date }, work_data) {
   return lines.join('\n')
 }
 
+async function fetchDerivativesData(coin = 'BTC') {
+  const symbol = coin + 'USDT'
+  const results = {}
+
+  try {
+    const fundingRes = await fetch('https://fapi.binance.com/fapi/v1/fundingRate?symbol=' + symbol + '&limit=3')
+    const fundingData = await fundingRes.json()
+    if (Array.isArray(fundingData)) {
+      results.funding_current = parseFloat(fundingData[0]?.fundingRate || 0) * 100
+      results.funding_prev = parseFloat(fundingData[1]?.fundingRate || 0) * 100
+      results.funding_trend = results.funding_current > results.funding_prev ? 'rising' : 'falling'
+    }
+  } catch(e) {}
+
+  try {
+    const lsRes = await fetch('https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=' + symbol + '&period=1h&limit=3')
+    const lsData = await lsRes.json()
+    if (Array.isArray(lsData) && lsData.length) {
+      results.long_pct = parseFloat(lsData[0].longAccount) * 100
+      results.short_pct = parseFloat(lsData[0].shortAccount) * 100
+      results.ls_ratio = parseFloat(lsData[0].longShortRatio)
+      if (lsData.length > 1) {
+        const prevLong = parseFloat(lsData[1].longAccount) * 100
+        results.long_trend = results.long_pct > prevLong ? 'increasing' : 'decreasing'
+      }
+    }
+  } catch(e) {}
+
+  try {
+    const oiRes = await fetch('https://fapi.binance.com/fapi/v1/openInterest?symbol=' + symbol)
+    const oiData = await oiRes.json()
+    results.open_interest = parseFloat(oiData.openInterest || 0)
+    const oiHistRes = await fetch('https://fapi.binance.com/futures/data/openInterestHist?symbol=' + symbol + '&period=1h&limit=6')
+    const oiHist = await oiHistRes.json()
+    if (Array.isArray(oiHist) && oiHist.length > 1) {
+      const latest = parseFloat(oiHist[0].sumOpenInterest)
+      const prev = parseFloat(oiHist[oiHist.length - 1].sumOpenInterest)
+      results.oi_change_pct = ((latest - prev) / prev * 100).toFixed(2)
+      results.oi_trend = latest > prev ? 'rising' : 'falling'
+    }
+  } catch(e) {}
+
+  try {
+    const takerRes = await fetch('https://fapi.binance.com/futures/data/takerlongshortRatio?symbol=' + symbol + '&period=1h&limit=3')
+    const takerData = await takerRes.json()
+    if (Array.isArray(takerData) && takerData.length) {
+      results.taker_buy_ratio = parseFloat(takerData[0].buySellRatio)
+    }
+  } catch(e) {}
+
+  try {
+    const topRes = await fetch('https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=' + symbol + '&period=1h&limit=1')
+    const topData = await topRes.json()
+    if (Array.isArray(topData) && topData.length) {
+      results.top_trader_long_pct = parseFloat(topData[0].longAccount) * 100
+    }
+  } catch(e) {}
+
+  return results
+}
+
 async function fetchExchangeNetflow() {
   try {
     const r = await fetch(
@@ -2678,13 +2749,15 @@ async function fetchBinancePortfolio() {
 }
 
 async function buildCryptoSignal() {
-  const [fearGreed, btcData, dominance, funding, netflow] =
+  const [fearGreed, btcData, dominance, funding, netflow, btcDeriv, ethDeriv] =
     await Promise.all([
       fetchFearGreed(),
       fetchBTCData(),
       fetchBTCDominance(),
       fetchFundingRate(),
-      fetchExchangeNetflow()
+      fetchExchangeNetflow(),
+      fetchDerivativesData('BTC'),
+      fetchDerivativesData('ETH')
     ])
 
   const btcPrice = btcData?.bitcoin?.eur
@@ -2696,14 +2769,14 @@ async function buildCryptoSignal() {
   let bearPoints = 0
   const reasons = []
 
-  // Bull signals
+  // Fear & Greed
   if (fearGreed.value < 20) { bullPoints += 2; reasons.push('Extreme fear = buying opportunity') }
   else if (fearGreed.value < 35) { bullPoints += 1; reasons.push('Fear present = cautious bullish') }
 
-  // Sell signals
   if (fearGreed.value > 80) { bearPoints += 2; reasons.push('Extreme greed = take profits') }
   else if (fearGreed.value > 65) { bearPoints += 1; reasons.push('Greed building = caution') }
 
+  // Funding rate
   if (funding !== null) {
     if (funding < -0.05) { bullPoints += 2; reasons.push('Shorts paying = squeeze potential') }
     else if (funding < -0.01) { bullPoints += 1; reasons.push('Slightly negative funding') }
@@ -2716,10 +2789,50 @@ async function buildCryptoSignal() {
   if (dominance < 50) altseasonSignal = 'ACTIVE'
   else if (dominance < 54) altseasonSignal = 'STARTING'
 
+  // BTC 24h momentum
   if (btcChange24h > 3) { bullPoints += 1; reasons.push('Strong 24h momentum') }
-
   if (btcChange24h < -5) { bearPoints += 2; reasons.push('Strong selling pressure') }
   else if (btcChange24h < -3) { bearPoints += 1; reasons.push('Downward momentum') }
+
+  // Long/Short ratio
+  if (btcDeriv.long_pct != null) {
+    if (btcDeriv.long_pct > 72) {
+      bearPoints += 2; reasons.push('72%+ longs = market overextended, crowded trade')
+    } else if (btcDeriv.long_pct > 65) {
+      bearPoints += 1; reasons.push('Longs elevated at ' + btcDeriv.long_pct.toFixed(0) + '%')
+    } else if (btcDeriv.long_pct < 45) {
+      bullPoints += 2; reasons.push('Only ' + btcDeriv.long_pct.toFixed(0) + '% longs = potential squeeze up')
+    }
+  }
+
+  // Open Interest + price direction
+  if (btcDeriv.oi_trend) {
+    if (btcDeriv.oi_trend === 'rising' && btcChange24h > 0) {
+      bullPoints += 1; reasons.push('Rising OI + rising price = strong trend confirmation')
+    } else if (btcDeriv.oi_trend === 'rising' && btcChange24h < -2) {
+      bullPoints += 1; reasons.push('Rising OI + falling price = shorts building, squeeze potential')
+    } else if (btcDeriv.oi_trend === 'falling' && btcChange24h < -3) {
+      bullPoints += 1; reasons.push('Falling OI + falling price = capitulation, potential bottom')
+    }
+  }
+
+  // Taker buy/sell ratio
+  if (btcDeriv.taker_buy_ratio != null) {
+    if (btcDeriv.taker_buy_ratio > 1.2) {
+      bullPoints += 1; reasons.push('Aggressive buyers dominating = bullish flow')
+    } else if (btcDeriv.taker_buy_ratio < 0.8) {
+      bearPoints += 1; reasons.push('Aggressive sellers dominating = bearish flow')
+    }
+  }
+
+  // Top trader positions (smart money)
+  if (btcDeriv.top_trader_long_pct != null) {
+    if (btcDeriv.top_trader_long_pct > 65) {
+      bullPoints += 1; reasons.push('Smart money ' + btcDeriv.top_trader_long_pct.toFixed(0) + '% long')
+    } else if (btcDeriv.top_trader_long_pct < 45) {
+      bearPoints += 1; reasons.push('Smart money only ' + btcDeriv.top_trader_long_pct.toFixed(0) + '% long')
+    }
+  }
 
   let signal, emoji, suggestion, binanceAction
 
@@ -2745,6 +2858,44 @@ async function buildCryptoSignal() {
     binanceAction = null
   }
 
+  // Context-aware personal advice based on holdings
+  let personalAdvice = ''
+  try {
+    const portRes = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio&select=value`, { headers: sbHeaders })
+    const portData = await portRes.json()
+    const portfolio = portData[0]?.value ? JSON.parse(portData[0].value) : []
+    const holdsBTC = portfolio.some(p => p.coin === 'BTC')
+    const holdsETH = portfolio.some(p => p.coin === 'ETH')
+
+    if (holdsBTC) {
+      const btcEntry = portfolio.filter(p => p.coin === 'BTC')
+      const avgEntry = btcEntry.reduce((s, p) => s + p.entryPrice, 0) / btcEntry.length
+      const currentPnl = ((btcPrice - avgEntry) / avgEntry * 100).toFixed(1)
+      if (signal === 'STRONG SELL' && parseFloat(currentPnl) > 10) {
+        personalAdvice += '⚠️ You hold BTC at avg €' + Math.round(avgEntry).toLocaleString() +
+          ' (+' + currentPnl + '%). Signal says SELL — consider taking profits.\n'
+      } else if (signal === 'STRONG BUY' && btcDeriv.long_pct != null && btcDeriv.long_pct < 50) {
+        personalAdvice += '✅ You hold BTC. Signal STRONG BUY + low long ratio = good add opportunity.\n'
+      } else if (signal === 'BEARISH' && parseFloat(currentPnl) > 20) {
+        personalAdvice += '💡 You are +' + currentPnl + '% on BTC. Consider partial profit at these levels given bearish signal.\n'
+      }
+    }
+
+    if (!holdsBTC && (signal === 'STRONG BUY' || signal === 'BULLISH')) {
+      personalAdvice += '📌 You have no BTC position. Signal is ' + signal + ' — consider starting a position.\n'
+    }
+
+    if (holdsETH) {
+      const ethEntry = portfolio.filter(p => p.coin === 'ETH')
+      const avgEntryEth = ethEntry.reduce((s, p) => s + p.entryPrice, 0) / ethEntry.length
+      const ethPnl = ((ethPrice - avgEntryEth) / avgEntryEth * 100).toFixed(1)
+      if ((signal === 'STRONG SELL' || signal === 'BEARISH') && parseFloat(ethPnl) > 15) {
+        personalAdvice += '⚠️ ETH at avg €' + Math.round(avgEntryEth).toLocaleString() +
+          ' (+' + ethPnl + '%). Bearish signal — consider reducing.\n'
+      }
+    }
+  } catch(e) { console.warn('personalAdvice calc error:', e.message) }
+
   const binanceDeepLink = 'https://www.binance.com/en/trade/BTC_EUR'
 
   return {
@@ -2752,6 +2903,9 @@ async function buildCryptoSignal() {
     btcPrice, btcChange24h, ethPrice, ethChange24h,
     dominance, funding, netflow, altseasonSignal,
     binanceDeepLink, binanceAction,
+    btc_derivatives: btcDeriv,
+    eth_derivatives: ethDeriv,
+    personal_advice: personalAdvice,
     timestamp: new Date().toISOString()
   }
 }
@@ -3907,6 +4061,7 @@ ${context}` }]
           // Send crypto signal separately
           try {
             const crypto = await buildCryptoSignal()
+            const d = crypto.btc_derivatives || {}
             let cryptoMsg = '📊 CRYPTO SIGNAL: ' + crypto.emoji + ' ' + crypto.signal
             cryptoMsg += '\n\nBTC: €' + Math.round(crypto.btcPrice).toLocaleString() +
               ' (' + (crypto.btcChange24h > 0 ? '+' : '') + crypto.btcChange24h?.toFixed(1) + '% 24h)'
@@ -3916,8 +4071,16 @@ ${context}` }]
             if (crypto.funding !== null) cryptoMsg += '\nFunding: ' + crypto.funding.toFixed(3) + '%'
             cryptoMsg += '\nBTC Dominance: ' + crypto.dominance + '%'
             cryptoMsg += '\nAltseason: ' + crypto.altseasonSignal
+            if (d.long_pct != null || d.oi_trend || d.taker_buy_ratio != null || d.top_trader_long_pct != null) {
+              cryptoMsg += '\n\n📊 Derivatives:'
+              if (d.long_pct != null) cryptoMsg += '\nLongs: ' + d.long_pct.toFixed(0) + '% ' + (d.long_trend === 'increasing' ? '↑' : '↓')
+              if (d.oi_trend) cryptoMsg += '\nOI: ' + (d.oi_trend === 'rising' ? '↑' : '↓') + (d.oi_change_pct != null ? ' ' + d.oi_change_pct + '% 6h' : '')
+              if (d.taker_buy_ratio != null) cryptoMsg += '\nTaker: ' + d.taker_buy_ratio.toFixed(2) + (d.taker_buy_ratio > 1 ? ' buyers' : ' sellers')
+              if (d.top_trader_long_pct != null) cryptoMsg += '\nSmart $: ' + d.top_trader_long_pct.toFixed(0) + '% long'
+            }
             cryptoMsg += '\n\n' + crypto.suggestion
             if (crypto.reasons.length) cryptoMsg += '\n\nReasons:\n' + crypto.reasons.map(r => '· ' + r).join('\n')
+            if (crypto.personal_advice) cryptoMsg += '\n\n' + crypto.personal_advice.trim()
             if (crypto.binanceAction === 'buy') cryptoMsg += '\n\n→ Open Binance: ' + crypto.binanceDeepLink
             sendTelegram(TELEGRAM_OWNER_ID, cryptoMsg).catch(() => {})
           } catch(e) { console.warn('crypto signal in briefing failed:', e.message) }

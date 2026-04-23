@@ -2167,6 +2167,242 @@ async function pollInboxNotifications() {
   }, 30000)
 }
 
+// ── Export brain_knowledge entries as Obsidian .md files ─────────────────
+async function brainToObsidian() {
+  if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) fs.mkdirSync(OBSIDIAN_VAULT_PATH, { recursive: true })
+  const brainRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=id,title,category,content,confidence,entry_type_v2,source_type,source_url,created_at,metadata,priority,collection_name_display&order=created_at.desc&limit=500`,
+    { headers: sbHeaders }
+  )
+  const brainRaw = await brainRes.json()
+  const safeEntries = Array.isArray(brainRaw) ? brainRaw : []
+
+  const allTitles = safeEntries
+    .map(e => (e.title || '').trim())
+    .filter(t => t.length > 4)
+    .sort((a, b) => b.length - a.length)
+
+  const CATEGORY_LINKS = {
+    'goal':              ['[[Active Goals]]', '[[Hit Benchmark]]', '[[Daft Punk Model]]'],
+    'mixing_technique':  ['[[Hit Benchmark]]', '[[Reference Tracks]]', '[[Music Tips]]'],
+    'reference_current': ['[[Hit Benchmark]]', '[[Mixing Technique]]', '[[Reference Tracks]]'],
+    'artist_strategy':   ['[[Release Strategy]]', '[[Social Media]]', '[[Networking]]'],
+    'market_knowledge':  ['[[Artist Strategy]]', '[[Hit Benchmark]]', '[[Market Intelligence]]'],
+    'own_production':    ['[[Hit Benchmark]]', '[[My Productions]]', '[[Mixing Technique]]'],
+    'contact_profile':   ['[[Networking]]', '[[Artist Strategy]]', '[[Contact Directory]]'],
+    'production_style':  ['[[Music Tips]]', '[[Mixing Technique]]', '[[Creative Process]]'],
+    'creative_process':  ['[[Music Tips]]', '[[Production Style]]', '[[Active Goals]]'],
+    'business':          ['[[Active Goals]]', '[[Release Strategy]]'],
+    'business_finance':  ['[[Active Goals]]', '[[Business]]'],
+    'collaboration':     ['[[Artist Strategy]]', '[[Networking]]', '[[Contact Directory]]'],
+    'industry_insight':  ['[[Market Intelligence]]', '[[Artist Strategy]]'],
+    'networking':        ['[[Contact Directory]]', '[[Artist Strategy]]'],
+    'release_strategy':  ['[[Active Goals]]', '[[Artist Strategy]]'],
+    'social_media':      ['[[Artist Strategy]]', '[[Release Strategy]]'],
+    'sound_design':      ['[[Music Tips]]', '[[Production Style]]', '[[Mixing Technique]]'],
+    'observation':       ['[[NOW]]'],
+    'question':          ['[[NOW]]', '[[Active Goals]]']
+  }
+
+  const titleKeywords = allTitles.map(t => ({
+    full: t,
+    key: t.split(/\s+/).slice(0, 3).join(' ')
+  })).filter(t => t.key.length > 4)
+
+  function findContentLinks(content, ownTitle) {
+    const found = new Set()
+    for (const { full, key } of titleKeywords) {
+      if (full === ownTitle) continue
+      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      if (new RegExp(`\\b${escaped}\\b`, 'i').test(content)) found.add(`[[${full}]]`)
+    }
+    return [...found].slice(0, 8)
+  }
+
+  let written = 0
+  for (const e of safeEntries) {
+    const safeName = (e.title || 'untitled').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)
+    const filePath = path.join(OBSIDIAN_VAULT_PATH, safeName + '.md')
+    const createdDate = e.created_at ? new Date(e.created_at).toLocaleDateString() : ''
+    const tags = [e.category || 'knowledge', e.entry_type_v2 || 'knowledge']
+    if (e.priority) tags.push('priority')
+    const fm = [
+      '---',
+      `category: ${e.category || 'knowledge'}`,
+      `confidence: ${e.confidence || 'medium'}`,
+      `type: ${e.entry_type_v2 || 'knowledge'}`,
+      `source: ${e.source_type || 'manual'}`,
+      `created: ${e.created_at || ''}`,
+      e.collection_name_display ? `collection: ${e.collection_name_display}` : null,
+      `tags: [${tags.join(', ')}]`,
+      '---'
+    ].filter(l => l !== null).join('\n')
+    const catLinks = CATEGORY_LINKS[e.category] || []
+    const contentLinks = findContentLinks(e.content || '', e.title || '')
+    const allLinks = [...new Set([...catLinks, ...contentLinks])]
+    const relatedSection = allLinks.length ? `\n\n## Related\n${allLinks.join(' ')}` : ''
+    const footer = [
+      '',
+      '---',
+      e.source_url ? `*Source: ${e.source_url}*` : null,
+      createdDate ? `*Added: ${createdDate}*` : null
+    ].filter(l => l !== null).join('\n')
+    let outPath = filePath
+    if (e.collection_name_display) {
+      const colDir = path.join(OBSIDIAN_VAULT_PATH, 'Collections', e.collection_name_display.replace(/[\/\\:*?"<>|]/g, '-'))
+      if (!fs.existsSync(colDir)) fs.mkdirSync(colDir, { recursive: true })
+      outPath = path.join(colDir, safeName + '.md')
+    }
+    fs.writeFileSync(outPath, `${fm}\n\n# ${e.title || 'Untitled'}\n\n${e.content || ''}${relatedSection}${footer}`, 'utf8')
+    written++
+  }
+
+  let curatedRefTracks = []
+  try {
+    const refRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/reference_tracks?or=(source.eq.user,promoted.eq.true)&select=title,artist&order=created_at.desc&limit=100`,
+      { headers: sbHeaders }
+    )
+    curatedRefTracks = await refRes.json().catch(() => [])
+    if (!Array.isArray(curatedRefTracks)) curatedRefTracks = []
+  } catch(e) { console.warn('reference_tracks fetch failed:', e.message) }
+
+  const safeTitle = t => (t || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)
+  const hitBenchmarkRefList = curatedRefTracks.length
+    ? curatedRefTracks.map(t => `- [[${safeTitle(t.title)} — ${t.artist || ''}]]`).join('\n')
+    : '*(no curated reference tracks yet)*'
+
+  const indexFiles = [
+    {
+      file: 'Hit Benchmark.md',
+      content: [
+        '# Hit Benchmark', '',
+        'Central reference point for all production decisions.', '',
+        '## Reference Tracks', hitBenchmarkRefList, '',
+        '## Brain Entries',
+        safeEntries.filter(e => e.category?.includes('reference')).map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
+        '', '## Related', '[[My Productions]] [[Mixing Technique]] [[Active Goals]]'
+      ].join('\n')
+    },
+    {
+      file: 'My Productions.md',
+      content: [
+        '# My Productions', '',
+        safeEntries.filter(e => e.category === 'own_production').map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
+        '', '## Related', '[[Hit Benchmark]] [[Mixing Technique]] [[Release Strategy]]'
+      ].join('\n')
+    },
+    {
+      file: 'Active Goals.md',
+      content: [
+        '# Active Goals', '',
+        safeEntries.filter(e => e.category === 'goal').map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
+        '', '## Related', '[[Hit Benchmark]] [[Artist Strategy]] [[NOW]]'
+      ].join('\n')
+    },
+    {
+      file: 'Contact Directory.md',
+      content: [
+        '# Contact Directory', '',
+        safeEntries.filter(e => e.category === 'contact_profile').map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
+        '', '## Related', '[[Artist Strategy]] [[Networking]] [[Collaboration]]'
+      ].join('\n')
+    },
+    {
+      file: 'Market Intelligence.md',
+      content: [
+        '# Market Intelligence', '',
+        safeEntries.filter(e => e.category === 'market_knowledge' || e.category === 'industry_insight').slice(0, 10).map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
+        '', '## Related', '[[Artist Strategy]] [[Hit Benchmark]] [[Scout]]'
+      ].join('\n')
+    },
+    {
+      file: 'NOW.md',
+      content: ['# NOW', '', 'See: [[Notes/NOW]]', '', '## Related', '[[Active Goals]] [[Hit Benchmark]] [[My Productions]]'].join('\n')
+    },
+    {
+      file: 'Daft Punk Model.md',
+      content: [
+        '# Daft Punk Model', '',
+        'Commercial success with artistic integrity.',
+        'Mass appeal without compromising vision.',
+        'The intersection of hits and respect.',
+        '', '## Related', '[[Active Goals]] [[Artist Strategy]] [[Production Style]]'
+      ].join('\n')
+    }
+  ]
+
+  for (const idx of indexFiles) {
+    fs.writeFileSync(path.join(OBSIDIAN_VAULT_PATH, idx.file), idx.content, 'utf8')
+  }
+  pushVaultToGit()
+  console.log(`✓ brainToObsidian: ${written} entries, ${indexFiles.length} index notes`)
+  return { written, index_notes: indexFiles.length }
+}
+
+// ── Seed production rules into brain_knowledge ────────────────────────────
+async function seedProductionRules() {
+  const rules = [
+    // CORE PHILOSOPHY
+    { category: 'goal', title: 'Core philosophy: Daft Punk not Taylor Swift', content: 'Make millions with music that has artistic integrity. Commercial success AND critical respect. Mysterious, forward-thinking. The intersection: sounds like a hit but has something real in it. Every decision measured against this.', confidence: 'locked' },
+    { category: 'goal', title: 'Output rule: 2x per week, 30 songs, 3 make it', content: 'Make 2 new songs per week. Listen on 3rd day to decide. Do 30 songs — 3 will make it. Out of 30 tracks, 3 make it (Ian). Volume negates luck. Consistency is the glue.', confidence: 'locked' },
+    { category: 'creative_process', title: 'Session start: no referencing first 90 minutes', content: 'No A/B referencing in first 90 minutes. Only 1 reference track. Define the finish line for this song. Write one thing the song still needs. Always check if you can play it loud in front of people.', confidence: 'locked' },
+    { category: 'creative_process', title: 'Mindset: flow state and presence', content: 'Be present. Invite magic. Flow state. Move fast — go from A to B — create now to have opinion and perfect later. Follow the feeling, emotions and sound in your head. Imagine end version, hear artist on it, playing the song and where it will play.', confidence: 'strong' },
+    { category: 'creative_process', title: 'Song structure: triangle in all dimensions', content: 'Song like a triangle in all dimensions — each chorus bigger. Mono verse, stereo chorus. Change every 4 bars / 8 seconds — transition, surprise, introduce. Never introduce more than one new element at a time. Every part of the song has to be a hook.', confidence: 'locked' },
+    { category: 'creative_process', title: 'Macro thinking: Zeitgeist and authenticity', content: "Read the culture. Don't chase trends — chase authenticity. Sound new not good — your lane is never saturated because it's you. Do things that are interesting but also understandable — elegantly simple. Making pop is a push-pull: excite the audience and subvert expectations.", confidence: 'locked' },
+    { category: 'creative_process', title: 'Production action: source over tools', content: "Source over tools. Decisions over choice. Feel don't think. Listen don't look. Overproduce first without thinking — then take out what you don't need. Complexity is the enemy of intention. Keep it simple — make tunes playable with one or two fingers. The idea has to fit on a postage stamp.", confidence: 'locked' },
+    // MIXING
+    { category: 'mixing_technique', title: 'Mix levels: drums and bass targets', content: 'Kick: -6 to -3dB. Snare/clap: -6 to -3dB. Drum loops: -12dB. Perc: -16dB. HH/cymbals: -16 to -12dB. Bass sub: -12 to -10dB. Drums and bass -10 LUFS with music at -8. Minimum 2dB moves, 5dB on aux.', confidence: 'locked' },
+    { category: 'mixing_technique', title: 'Mix levels: vocals targets', content: 'Lead vocal hook: -10 to -7dB. Lead vocal verse: -10 to -7dB. BGV: -15dB. FX: -15dB. Reverb send: -27dB. Delay: -24dB. Vocal level: just behind the snare.', confidence: 'locked' },
+    { category: 'mixing_technique', title: 'Mix levels: music/synths targets', content: 'Synth melody: -12 to -9dB. Synth lead layer: -15dB. Synth chords/pads: -15dB. Synth rhythmic: -18 to -15dB. Synth surprise: -12dB. All music halfway.', confidence: 'locked' },
+    { category: 'mixing_technique', title: 'Mix approach: mono first, top down', content: 'Mix in mono first, 900Hz-3kHz. Mix quiet — vocals slightly too loud, hear kick and snare. Top down mixing — do as little as possible to vox. Mix around vocals. No solo button. Transients. EQ critical at 150-450Hz and 2-5kHz.', confidence: 'locked' },
+    { category: 'mixing_technique', title: 'Mix check: 48-hour test and reference', content: "Fix only what survived the 48-hour test. Does it hold up against reference at 70%? Write the ONE thing this song still needs. Does it have a focal point? Can you hear every note and lyric? Finished doesn't mean perfect — emotional not perfect.", confidence: 'locked' },
+    { category: 'mixing_technique', title: 'Automation rules', content: '1.5dB on first master insert or volume and width. Check 160-300Hz. USE AUTOMATION — fill gaps, transitions. Automation on master 1.1 after limiter or before. 2 seconds of silence at end.', confidence: 'strong' },
+    { category: 'mixing_technique', title: 'Club key centres', content: 'Club key centres: D, E, F#min, G. Priority: melody/lead → kick/snare/HH → bass.', confidence: 'strong' },
+    // VOCALS
+    { category: 'production_style', title: 'Vocal recording: chain and setup', content: "U47 or C800 into 1073 into CL1B: 4dB constant, spiked 8-10dB, maybe 300Hz cut. 5cm from popshield, 2 handbreiten, angle from above. Check headphone mix for artist. Let them say let's do it again — then chime in. Don't be silent after a take.", confidence: 'locked' },
+    { category: 'production_style', title: 'Vocal prep: comp and pitch', content: '3 comps to 1 with autotune. Clean breaths and cuts. Time align. Melodyne: center 90%, drift 70. Mix hook 5-12, verse 15-25, humanize 15-40. Mumble BVs — no esses.', confidence: 'locked' },
+    // SONGWRITING
+    { category: 'creative_process', title: 'Melody first, lyrics serve melody', content: 'Melody and sound first — then content (Bad Bunny). Make the hook right first. Do gibberish verses. Hook: two-finger piano test, humming test. Write melody first — lyrics serve the melody. Simple lyrics in chorus. Balance between familiarity and something new.', confidence: 'locked' },
+    { category: 'creative_process', title: 'Song analysis checklist', content: "Is it great? Don't polish a turd. Is it flowing? Do I stop listening? What is the trademark sound? Is there 1 edgy sound? Is every sound intentional? Song is finished when I can no longer remove anything. What are top 5 things bothering you — fix them.", confidence: 'locked' },
+    // BUSINESS
+    { category: 'business', title: 'Pricing: production and mixing rates', content: 'Production: 3500 + 800 studio fee + 1% royalty. Production range: 1800-2200. Day 1 mix, day 2 check and send. Always ask for double so you get half.', confidence: 'locked' },
+    { category: 'collaboration', title: 'Collab rules: first 5 minutes count', content: "First 5 minutes count — control emotions, copy emotional state. Don't answer quickly. Musikalisch always present but distance on serious issues — don't chase. 1st give them what they want — then do what you think. Artist needs to leave happy. Take the blame for the team.", confidence: 'locked' },
+    { category: 'collaboration', title: 'Collab: understanding the artist', content: "Either artist believes too much in themselves or too little — which one is it? What made them famous? What's current? What does artist think their best song has been? Where do they want to go next? Be a fan, have artist's highest goals in mind. Let artist be best version of themselves.", confidence: 'strong' },
+    { category: 'production_style', title: 'Session prep: 15 samples rule', content: 'For sessions: 15 samples max. Build vibe for the artist. Come with a few chorus chord changes. Find tempo and key for artist. Demos: just send melodies, don\'t limit what the song can be (Charli XCX rule).', confidence: 'locked' },
+    { category: 'production_style', title: 'OTT settings', content: 'OTT: 3-8 = glue sheen. 8-15 = pop sheen thickness. 15-22 = risky. Varispeed: timestretch off, -18% BPM. Synths in 100% reverb and use as texture.', confidence: 'strong' }
+  ]
+
+  let seeded = 0, skipped = 0
+  for (const rule of rules) {
+    const checkR = await fetch(
+      `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(rule.title)}&select=id&limit=1`,
+      { headers: sbHeaders }
+    )
+    const existing = await checkR.json()
+    if (existing && existing.length > 0) { skipped++; continue }
+
+    await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        category: rule.category,
+        title: rule.title,
+        content: rule.content,
+        confidence: rule.confidence,
+        entry_type_v2: 'rule',
+        source_type: 'music_tips',
+        active: true,
+        priority: rule.confidence === 'locked'
+      })
+    })
+    console.log('Seeded:', rule.title)
+    seeded++
+  }
+  console.log(`Production rules seeding complete — seeded: ${seeded}, skipped: ${skipped}`)
+  return { seeded, skipped, total: rules.length }
+}
+
 // ── HTTP server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -3192,6 +3428,7 @@ ${context}` }]
         const result = await runAgentScout(apiKey, brainRows)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(result))
+        setImmediate(() => brainToObsidian().catch(() => {}))
       } catch(err) {
         logError('agent-scout', err.message)
         console.error('✗ Agent Scout error:', err.message)
@@ -3456,6 +3693,7 @@ ${context}` }]
         try { fs.unlinkSync(tmpAudio) } catch(e) {}
 
         console.log(`✓ analyze-spotify-track: ${track.name} — ${track.artists[0]?.name} | ${bpm || '?'}bpm ${key || '?'}`)
+        setImmediate(() => brainToObsidian().catch(() => {}))
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
           ok: true,
@@ -4487,6 +4725,7 @@ Respond ONLY in JSON:
         }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, ...result }))
+        setImmediate(() => brainToObsidian().catch(() => {}))
       } catch(err) {
         logError('suggest-category', err.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })
@@ -5043,6 +5282,7 @@ ${chatText.slice(0, 4000)}`
         console.log(`✓ analyze-chat: ${normalised.length} items from ${chatName || 'chat'}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, entries: normalised, items: normalised, count: normalised.length, chatName: chatName || 'chat' }))
+        setImmediate(() => brainToObsidian().catch(() => {}))
       } catch(e) {
         logError('analyze-chat', e.message)
         console.error('analyze-chat error:', e.message)
@@ -5923,221 +6163,9 @@ ${chatText.slice(0, 4000)}`
   // ── GET /brain-to-obsidian — export brain_knowledge entries as .md files ──
   if (req.method === 'GET' && req.url === '/brain-to-obsidian') {
     try {
-      if (!fs.existsSync(OBSIDIAN_VAULT_PATH)) fs.mkdirSync(OBSIDIAN_VAULT_PATH, { recursive: true })
-      const brainRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=id,title,category,content,confidence,entry_type_v2,source_type,source_url,created_at,metadata,priority,collection_name_display&order=created_at.desc&limit=500`,
-        { headers: sbHeaders }
-      )
-      const brainRaw = await brainRes.json()
-      const safeEntries = Array.isArray(brainRaw) ? brainRaw : []
-
-      // Build a set of all entry titles (safe names) for content-link scanning
-      const allTitles = safeEntries
-        .map(e => (e.title || '').trim())
-        .filter(t => t.length > 4)
-        .sort((a, b) => b.length - a.length) // longest first to avoid partial matches
-
-      const CATEGORY_LINKS = {
-        'goal':              ['[[Active Goals]]', '[[Hit Benchmark]]', '[[Daft Punk Model]]'],
-        'mixing_technique':  ['[[Hit Benchmark]]', '[[Reference Tracks]]', '[[Music Tips]]'],
-        'reference_current': ['[[Hit Benchmark]]', '[[Mixing Technique]]', '[[Reference Tracks]]'],
-        'artist_strategy':   ['[[Release Strategy]]', '[[Social Media]]', '[[Networking]]'],
-        'market_knowledge':  ['[[Artist Strategy]]', '[[Hit Benchmark]]', '[[Market Intelligence]]'],
-        'own_production':    ['[[Hit Benchmark]]', '[[My Productions]]', '[[Mixing Technique]]'],
-        'contact_profile':   ['[[Networking]]', '[[Artist Strategy]]', '[[Contact Directory]]'],
-        'production_style':  ['[[Music Tips]]', '[[Mixing Technique]]', '[[Creative Process]]'],
-        'creative_process':  ['[[Music Tips]]', '[[Production Style]]', '[[Active Goals]]'],
-        'business':          ['[[Active Goals]]', '[[Release Strategy]]'],
-        'business_finance':  ['[[Active Goals]]', '[[Business]]'],
-        'collaboration':     ['[[Artist Strategy]]', '[[Networking]]', '[[Contact Directory]]'],
-        'industry_insight':  ['[[Market Intelligence]]', '[[Artist Strategy]]'],
-        'networking':        ['[[Contact Directory]]', '[[Artist Strategy]]'],
-        'release_strategy':  ['[[Active Goals]]', '[[Artist Strategy]]'],
-        'social_media':      ['[[Artist Strategy]]', '[[Release Strategy]]'],
-        'sound_design':      ['[[Music Tips]]', '[[Production Style]]', '[[Mixing Technique]]'],
-        'observation':       ['[[NOW]]'],
-        'question':          ['[[NOW]]', '[[Active Goals]]']
-      }
-
-      // Scan content for first-3-words of other entry titles
-      const titleKeywords = allTitles.map(t => ({
-        full: t,
-        key: t.split(/\s+/).slice(0, 3).join(' ')
-      })).filter(t => t.key.length > 4)
-
-      function findContentLinks(content, ownTitle) {
-        const found = new Set()
-        for (const { full, key } of titleKeywords) {
-          if (full === ownTitle) continue
-          const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-          if (new RegExp(`\\b${escaped}\\b`, 'i').test(content)) {
-            found.add(`[[${full}]]`)
-          }
-        }
-        return [...found].slice(0, 8)
-      }
-
-      let written = 0
-      for (const e of safeEntries) {
-        const safeName = (e.title || 'untitled').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)
-        const filePath = path.join(OBSIDIAN_VAULT_PATH, safeName + '.md')
-        const createdDate = e.created_at ? new Date(e.created_at).toLocaleDateString() : ''
-
-        const tags = [e.category || 'knowledge', e.entry_type_v2 || 'knowledge']
-        if (e.priority) tags.push('priority')
-
-        const fm = [
-          '---',
-          `category: ${e.category || 'knowledge'}`,
-          `confidence: ${e.confidence || 'medium'}`,
-          `type: ${e.entry_type_v2 || 'knowledge'}`,
-          `source: ${e.source_type || 'manual'}`,
-          `created: ${e.created_at || ''}`,
-          e.collection_name_display ? `collection: ${e.collection_name_display}` : null,
-          `tags: [${tags.join(', ')}]`,
-          '---'
-        ].filter(l => l !== null).join('\n')
-
-        const catLinks = CATEGORY_LINKS[e.category] || []
-        const contentLinks = findContentLinks(e.content || '', e.title || '')
-        const allLinks = [...new Set([...catLinks, ...contentLinks])]
-        const relatedSection = allLinks.length
-          ? `\n\n## Related\n${allLinks.join(' ')}`
-          : ''
-
-        const footer = [
-          '',
-          '---',
-          e.source_url ? `*Source: ${e.source_url}*` : null,
-          createdDate ? `*Added: ${createdDate}*` : null
-        ].filter(l => l !== null).join('\n')
-
-        // Entries with a collection go in a Collections subfolder
-        let outPath = filePath
-        if (e.collection_name_display) {
-          const colDir = path.join(OBSIDIAN_VAULT_PATH, 'Collections', e.collection_name_display.replace(/[\/\\:*?"<>|]/g, '-'))
-          if (!fs.existsSync(colDir)) fs.mkdirSync(colDir, { recursive: true })
-          outPath = path.join(colDir, safeName + '.md')
-        }
-
-        const md = `${fm}\n\n# ${e.title || 'Untitled'}\n\n${e.content || ''}${relatedSection}${footer}`
-        fs.writeFileSync(outPath, md, 'utf8')
-        written++
-      }
-
-      // ── Fetch curated reference tracks for Hit Benchmark ──────────────────
-      let curatedRefTracks = []
-      try {
-        const refRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/reference_tracks?or=(source.eq.user,promoted.eq.true)&select=title,artist&order=created_at.desc&limit=100`,
-          { headers: sbHeaders }
-        )
-        curatedRefTracks = await refRes.json().catch(() => [])
-        if (!Array.isArray(curatedRefTracks)) curatedRefTracks = []
-      } catch(e) { console.warn('reference_tracks fetch failed:', e.message) }
-
-      const safeTitle = t => (t || '').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 100)
-
-      // ── Write index notes ──────────────────────────────────────────────────
-      const hitBenchmarkRefList = curatedRefTracks.length
-        ? curatedRefTracks.map(t => `- [[${safeTitle(t.title)} — ${t.artist || ''}]]`).join('\n')
-        : '*(no curated reference tracks yet)*'
-
-      const indexFiles = [
-        {
-          file: 'Hit Benchmark.md',
-          content: [
-            '# Hit Benchmark',
-            '',
-            'Central reference point for all production decisions.',
-            '',
-            '## Reference Tracks',
-            hitBenchmarkRefList,
-            '',
-            '## Brain Entries',
-            safeEntries.filter(e => e.category?.includes('reference')).map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
-            '',
-            '## Related',
-            '[[My Productions]] [[Mixing Technique]] [[Active Goals]]'
-          ].join('\n')
-        },
-        {
-          file: 'My Productions.md',
-          content: [
-            '# My Productions',
-            '',
-            safeEntries.filter(e => e.category === 'own_production').map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
-            '',
-            '## Related',
-            '[[Hit Benchmark]] [[Mixing Technique]] [[Release Strategy]]'
-          ].join('\n')
-        },
-        {
-          file: 'Active Goals.md',
-          content: [
-            '# Active Goals',
-            '',
-            safeEntries.filter(e => e.category === 'goal').map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
-            '',
-            '## Related',
-            '[[Hit Benchmark]] [[Artist Strategy]] [[NOW]]'
-          ].join('\n')
-        },
-        {
-          file: 'Contact Directory.md',
-          content: [
-            '# Contact Directory',
-            '',
-            safeEntries.filter(e => e.category === 'contact_profile').map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
-            '',
-            '## Related',
-            '[[Artist Strategy]] [[Networking]] [[Collaboration]]'
-          ].join('\n')
-        },
-        {
-          file: 'Market Intelligence.md',
-          content: [
-            '# Market Intelligence',
-            '',
-            safeEntries.filter(e => e.category === 'market_knowledge' || e.category === 'industry_insight').slice(0, 10).map(e => `- [[${safeTitle(e.title)}]]`).join('\n') || '*(none yet)*',
-            '',
-            '## Related',
-            '[[Artist Strategy]] [[Hit Benchmark]] [[Scout]]'
-          ].join('\n')
-        },
-        {
-          file: 'NOW.md',
-          content: [
-            '# NOW',
-            '',
-            'See: [[Notes/NOW]]',
-            '',
-            '## Related',
-            '[[Active Goals]] [[Hit Benchmark]] [[My Productions]]'
-          ].join('\n')
-        },
-        {
-          file: 'Daft Punk Model.md',
-          content: [
-            '# Daft Punk Model',
-            '',
-            'Commercial success with artistic integrity.',
-            'Mass appeal without compromising vision.',
-            'The intersection of hits and respect.',
-            '',
-            '## Related',
-            '[[Active Goals]] [[Artist Strategy]] [[Production Style]]'
-          ].join('\n')
-        }
-      ]
-
-      for (const idx of indexFiles) {
-        fs.writeFileSync(path.join(OBSIDIAN_VAULT_PATH, idx.file), idx.content, 'utf8')
-      }
-
+      const result = await brainToObsidian()
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, written, index_notes: indexFiles.length }))
-      pushVaultToGit()
+      res.end(JSON.stringify({ ok: true, ...result }))
     } catch(e) {
       res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
     }
@@ -6205,6 +6233,21 @@ ${chatText.slice(0, 4000)}`
         res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
       }
     })
+    return
+  }
+
+  // ── POST /seed-production-rules ───────────────────────────────────────────
+  if (req.method === 'POST' && req.url === '/seed-production-rules') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const result = await seedProductionRules()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, ...result }))
+      setImmediate(() => brainToObsidian().catch(() => {}))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
     return
   }
 
@@ -7017,6 +7060,9 @@ Max 150 words. Be specific and actionable.` }]
     const now = new Date()
     if (now.getDay() === 0 && now.getHours() === 8 && now.getMinutes() === 0) weeklyBrainReview()
   }, 60000)
+  setInterval(() => {
+    brainToObsidian().catch(e => console.error('auto obsidian sync error:', e.message))
+  }, 3600000)
   exec('/opt/homebrew/bin/python3.11 -c "import essentia"', (err) => {
     if (err) console.warn('⚠ Essentia not available — BPM/key analysis disabled')
     else console.log('✓ Essentia ready')

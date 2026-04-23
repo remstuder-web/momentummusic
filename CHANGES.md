@@ -1,5 +1,17 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs — DONE
+TASK: auto-obsidian-sync
+WHAT: Extracted brainToObsidian() as standalone async function. GET /brain-to-obsidian now delegates to it. Added setImmediate(() => brainToObsidian()) trigger after /agent-scout, /analyze-spotify-track, /suggest-category, /analyze-chat, /seed-production-rules. Added hourly setInterval for automatic background sync.
+RESULT: works — 235 entries + 7 index notes confirmed via curl
+BLOCKERS: none
+
+## [2026-04-21] BrainTab.svelte + momentum-watcher.cjs — DONE
+TASK: refs-sort-mozart
+WHAT: curatedRefs now includes source='mozart' tracks alongside source='user'. Both curatedRefs and libraryRefs sorted A-Z by artist. libraryRefs filter updated to also exclude mozart source. Watcher query-import saves source='user' so Mozart-added tracks land in My References panel immediately.
+RESULT: works — svelte-check 0 errors, watcher restarted OK
+BLOCKERS: none
+
 ## [2026-04-21] momentum-watcher.cjs — DONE
 TASK: gear-news-tech-section
 WHAT: Added GEAR_SOURCES (BPB + CDM RSS) and fetchGearNewsItems(). TECH section injected into /agent-scout and /morning-briefing prompts. Gear items saved to brain_knowledge category=sound_design source_type=gear_news (deduped). Gearspace web scraper dropped (403 blocked) — replaced with reliable RSS feeds. Test confirmed ## Tech section appears in briefing output with free plugin summaries.

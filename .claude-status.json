@@ -1,18 +1,16 @@
 {
-  "updated": "2026-04-21T13:05:00Z",
-  "last_task": "gear-news-tech-section",
+  "updated": "2026-04-23T10:01:00Z",
+  "last_task": "auto-obsidian-sync",
   "status": "done",
   "working": [
-    "GEAR_SOURCES array: Bedroom Producers Blog + CDM Create Digital Music (both RSS, both 200 OK)",
-    "fetchGearNewsItems() uses fetchRssWithBody on both sources, returns up to 6 items",
-    "/agent-scout: gearThreads fetched in parallel, injected as '## TECH — NEW GEAR & PLUGINS' block in prompt, ## Tech section instruction added",
-    "/morning-briefing: gearThreadsBriefing fetched, 'TECH — NEW GEAR & PLUGINS' added to context, ## Tech section added to sections list",
-    "Gear items saved to brain_knowledge: category=sound_design, source_type=gear_news, deduped by title",
-    "Gearspace web scraper removed (site returns 403)",
-    "Test confirmed: ## Tech section appears in morning briefing with real plugin summaries"
+    "brainToObsidian() extracted as standalone async function — callable from anywhere",
+    "GET /brain-to-obsidian delegates to brainToObsidian() — 235 entries + 7 index notes confirmed",
+    "setImmediate sync triggers added to: /agent-scout, /analyze-spotify-track, /suggest-category, /analyze-chat, /seed-production-rules",
+    "hourly setInterval(brainToObsidian, 3600000) added in server.listen callback",
+    "watcher restarted OK — pm2 status online"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test /agent-scout to confirm TECH section also appears there. All tasks done.",
-  "notes": "BPB and CDM both return free plugin + gear announcements. CDM (cdm.link) covers hardware + synthesis. BPB covers free VSTs and plugins."
+  "next": "All tasks done. Obsidian vault syncs automatically after every brain-modifying endpoint call and every hour.",
+  "notes": "brainToObsidian() is now the single source of truth for vault export. The GET /brain-to-obsidian endpoint is a thin HTTP wrapper around it."
 }

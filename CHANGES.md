@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] src/lib/DailyTab.svelte — DONE
+TASK: delete-btn-hover-only
+WHAT: .inbox-item .del-btn, .whatsapp-item .del-btn, .dl-notif .del-btn all start at opacity:0 and fade in (transition .15s) on parent row hover. Size from previous fix retained.
+RESULT: 0 svelte errors
+BLOCKERS: None
+
 ## [2026-04-23] momentum-watcher.cjs — DONE
 TASK: whatsapp-full-conversation-context
 WHAT: readWhatsAppMessages() removes ZISFROMME=0 filter — all messages fetched. pollWhatsApp() loop builds full conversation (Remo + contact) for analysis but guards on incomingMsgs — skips if no incoming messages, passes last incoming as newMessage. analyzeArtistMessage() now receives full back-and-forth context.

@@ -1,17 +1,14 @@
 {
-  "updated": "2026-04-23T13:27:30.000Z",
-  "last_task": "whatsapp-full-conversation-context",
+  "updated": "2026-04-23T13:55:00.000Z",
+  "last_task": "delete-btn-hover-only",
   "status": "done",
   "working": [
-    "readWhatsAppMessages() fetches all messages (both sides) — ZISFROMME filter removed",
-    "pollWhatsApp() builds full conversation with 'Remo: ...' / 'Contact: ...' labels",
-    "incomingMsgs guard: skip entry if no incoming messages (own-only chats ignored)",
-    "analyzeArtistMessage() receives full conversation context",
-    "lastMsg passed is last incoming message (not last message overall)",
-    "watcher restarted OK"
+    "inbox-item, whatsapp-item, dl-notif del-btn: opacity 0 by default, 1 on parent hover with .15s transition",
+    "28×28px min-size retained from previous fix",
+    "0 svelte-check errors"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run SQL for new reference_tracks columns. Test WhatsApp analysis with a real back-and-forth conversation.",
-  "notes": "Analysis quality improved — Claude now sees full conversation context including Remo's replies. Only triggers on contacts that sent incoming messages. No own-message notifications."
+  "next": "Run SQL for new reference_tracks columns.",
+  "notes": "Delete buttons on notifications now hidden until row is hovered — cleaner UI."
 }

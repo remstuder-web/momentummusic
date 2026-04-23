@@ -1228,10 +1228,6 @@ ${mozartContext}`
     brainReviewCount = (data || []).length
   })()
 
-  $effect(() => {
-    document.dispatchEvent(new CustomEvent('mm-checkout-count', { detail: checkOutItems.length }))
-  })
-
   onMount(() => {
     syncDownloadNotifications()
     const onFocus = () => reloadProjectData()
@@ -1268,46 +1264,6 @@ ${mozartContext}`
         <span style="flex:1;">⚠ Unsaved tasks found from your last session — restore them?</span>
         <button onclick={async () => { state.tasks = pendingBackupTasks; await save(); showRestoreBanner = false; localStorage.removeItem('mm_daily_backup_' + todayISO) }} style="background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.4);color:#c9a84c;font-family:'Space Mono',monospace;font-size:11px;padding:5px 10px;border-radius:3px;cursor:pointer;">Restore</button>
         <button onclick={() => { showRestoreBanner = false; localStorage.removeItem('mm_daily_backup_' + todayISO) }} style="background:transparent;border:1px solid #303030;color:#9e9690;font-family:'Space Mono',monospace;font-size:11px;padding:5px 10px;border-radius:3px;cursor:pointer;">Dismiss</button>
-      </div>
-    {/if}
-
-    <!-- CHECK OUT — surfaced brain entries + press articles (top of page) -->
-    {#if checkOutItems.length || pressItems.length}
-      <div class="checkout-section">
-        <div class="checkout-section-header">🎧 CHECK OUT TODAY</div>
-        {#each checkOutItems as item (item.id)}
-          {@const artUrl = item.metadata?.art_url || item.metadata?.image_url || null}
-          {@const artist = item.metadata?.artist || (item.title?.includes('—') ? item.title.split('—')[0].trim() : null)}
-          {@const isSpotify = item.source_url?.includes('spotify.com')}
-          <div class="checkout-row">
-            <input type="checkbox" class="checkout-cb" onchange={() => dismissCheckOut(item.id)} />
-            {#if artUrl}
-              <img src={artUrl} alt="" class="checkout-art" />
-            {/if}
-            <span class="checkout-title-txt">
-              {#if artist}
-                <button class="checkout-artist-btn" onclick={() => window.open('https://open.spotify.com/search/' + encodeURIComponent(artist), '_blank')}>{artist}</button>
-                <span style="color:#555"> — </span>
-                <span>{item.title?.includes('—') ? item.title.split('—').slice(1).join('—').trim() : item.title}</span>
-              {:else}
-                {item.title}
-              {/if}
-            </span>
-            <span class="checkout-cat-badge">{item.category?.replace('reference_', '')}</span>
-            {#if isSpotify}
-              <button class="checkout-spotify-btn" onclick={() => window.open(item.source_url, '_blank')}>▶ Spotify</button>
-            {/if}
-          </div>
-        {/each}
-        {#if pressItems.length}
-          <div class="press-divider">PRESS</div>
-          {#each pressItems as p (p.id)}
-            <button class="press-item" onclick={() => window.open(p.metadata?.url, '_blank')}>
-              <span class="press-source">{p.patch_name}</span>
-              <span class="press-title">{p.song_title} →</span>
-            </button>
-          {/each}
-        {/if}
       </div>
     {/if}
 
@@ -2102,21 +2058,11 @@ ${mozartContext}`
   .day-title { font-family: 'Space Mono', monospace; font-size: 13px; color: #555; letter-spacing: .06em; }
 
   .section-block { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #1c1c1c; padding-top: 16px; }
-  .checkout-section { background: rgba(201,168,76,.06); border: 1px solid rgba(201,168,76,.2); border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; }
-  .checkout-section-header { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .14em; color: #c9a84c; margin-bottom: 8px; }
   .press-divider { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: #444; text-transform: uppercase; margin: 8px 0 4px; border-top: 1px solid #252525; padding-top: 6px; }
   .press-item { display: flex; align-items: baseline; gap: 7px; background: none; border: none; cursor: pointer; padding: 3px 0; text-align: left; width: 100%; }
   .press-item:hover .press-title { color: #c9a84c; }
   .press-source { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; flex-shrink: 0; text-transform: uppercase; letter-spacing: .06em; min-width: 110px; }
   .press-title { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color .15s; }
-  .checkout-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; min-height: 36px; }
-  .checkout-cb { accent-color: #c9a84c; width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
-  .checkout-art { width: 36px; height: 36px; border-radius: 2px; object-fit: cover; flex-shrink: 0; }
-  .checkout-title-txt { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300; color: #cec9c1; flex: 1; min-width: 0; }
-  .checkout-artist-btn { background: none; border: none; padding: 0; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 300; color: #4a9fd4; cursor: pointer; }
-  .checkout-artist-btn:hover { text-decoration: underline; }
-  .checkout-spotify-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .05em; padding: 5px 10px; border-radius: 2px; background: rgba(29,185,84,.1); border: 1px solid rgba(29,185,84,.3); color: #1DB954; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
-  .checkout-cat-badge { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .06em; padding: 2px 7px; border-radius: 2px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.2); color: rgba(201,168,76,.6); white-space: nowrap; flex-shrink: 0; }
   .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); padding-bottom: 6px; border-bottom: 1px solid #303030; margin-bottom: 4px; }
 
   /* Upcoming */

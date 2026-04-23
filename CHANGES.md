@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] DailyTab.svelte + +page.svelte — DONE
+TASK: remove-checkout-banner
+WHAT: Removed CHECK OUT TODAY banner from top of DailyTab (the {#if checkOutItems.length||pressItems.length} block). Removed $effect that dispatched mm-checkout-count event. Removed all 8 banner-only CSS classes (checkout-section, -header, -row, -cb, -art, -title-txt, -artist-btn, -spotify-btn, -cat-badge). In +page.svelte: removed checkoutCount state, mm-checkout-count event listener, checkout-alert-dot span in tab nav, and pulse-dot CSS + keyframes.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs — DONE
 TASK: agent-tracks-checkout
 WHAT: Verified all agent reference_tracks inserts (agent-chart-analysis/daily_chart, agent-tiktok-trends/tiktok_trending, agent-scout/analyze-spotify-track) already use source:'checkout' + checkout_date. No code changes needed. DB: PATCH confirmed 0 rows with source='agent' in daily_chart or tiktok_trending — already clean. 3 rows in reference_current still have source='agent' (out of scope per task SQL).

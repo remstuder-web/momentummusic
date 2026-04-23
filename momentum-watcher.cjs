@@ -7579,6 +7579,33 @@ async function pollWhatsApp() {
       }
     }
 
+    // Check for new chat sessions that appeared since last poll
+    try {
+      if (Database && whatsappDbPath && fs.existsSync(whatsappDbPath)) {
+        const db2 = new Database(whatsappDbPath, { readonly: true, fileMustExist: true })
+        const newChats = db2.prepare(`
+          SELECT ZPARTNERNAME, ZCONTACTJID, ZLASTMESSAGEDATE
+          FROM ZWACHATSESSION
+          WHERE ZLASTMESSAGEDATE > ?
+          AND ZPARTNERNAME IS NOT NULL
+          ORDER BY ZLASTMESSAGEDATE DESC
+          LIMIT 5
+        `).all(lastWhatsAppCheck / 1000 - COREDATA_EPOCH_OFFSET)
+        db2.close()
+
+        for (const chat of newChats) {
+          const name = chat.ZPARTNERNAME
+          const monitored = getWaContacts().some(c => name?.toLowerCase().includes(c.toLowerCase()))
+          if (!monitored) {
+            await sendTelegram(TELEGRAM_OWNER_ID,
+              '📱 New WhatsApp chat: ' + name +
+              '\n/monitor ' + name + ' to start monitoring'
+            ).catch(() => {})
+          }
+        }
+      }
+    } catch(e) { console.warn('pollWhatsApp new-chat detection error:', e.message) }
+
     // Convert CoreData seconds back to Unix ms for next poll
     lastWhatsAppCheck = (newMsgs[0].date + COREDATA_EPOCH_OFFSET) * 1000
   } catch(e) { console.warn('pollWhatsApp error:', e.message) }

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] +page.svelte + momentum-watcher.cjs — DONE
+TASK: whatsapp-group-chats-and-new-chat-detection
+WHAT: FIX 1 — /whatsapp-contacts already returns groups; removed @g.us filter from Settings UI so groups appear with GROUP badge (blue). FIX 2 — pollWhatsApp() now checks for new ZWACHATSESSION entries since last poll and sends Telegram notification for unmonitored chats. /monitor and /unmonitor already call setWaContacts() via /whatsapp-add-contact — confirmed correct.
+RESULT: 0 svelte errors; watcher restarted OK
+BLOCKERS: None
+
 ## [2026-04-23] momentum-watcher.cjs + BrainTab.svelte + DailyTab.svelte — DONE
 TASK: checkout-source-fixes
 WHAT: FIX 1 — /agent-import-spotify query mode and single-track mode now save source='checkout' + checkout_date. FIX 2 — BrainTab ★ button shows "★ Mine" with gold CSS (font-weight 700, bg tint, border). FIX 3 — addTrackToBrain() in DailyTab also inserts to reference_tracks with source='checkout' + checkout_date alongside existing brain_knowledge save.

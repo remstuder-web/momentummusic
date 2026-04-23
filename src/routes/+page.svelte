@@ -499,7 +499,7 @@
             <p class="settings-hint">No contacts found — make sure WhatsApp Desktop is installed.</p>
           {:else}
             <div class="wa-contacts-list">
-              {#each waContacts.filter(c => !c.jid.includes('@g.us') && !c.jid.includes('@status')) as c (c.jid)}
+              {#each waContacts.filter(c => !c.jid.includes('@status')) as c (c.jid)}
                 <div class="wa-contact-row">
                   <button
                     class="wa-toggle {c.monitored ? 'on' : ''}"
@@ -509,6 +509,9 @@
                     {c.monitored ? '●' : '○'}
                   </button>
                   <span class="wa-contact-name">{c.name}</span>
+                  {#if c.is_group}
+                    <span class="group-badge">GROUP</span>
+                  {/if}
                 </div>
               {/each}
             </div>
@@ -619,6 +622,7 @@
   .wa-toggle.on { color: #c9a84c; }
   .wa-toggle:hover { color: rgba(201,168,76,.6); }
   .wa-contact-name { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; }
+  .group-badge { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .08em; color: #4a9fd4; border: 1px solid rgba(74,159,212,.3); padding: 1px 4px; border-radius: 2px; }
 
   .usage-header-row { display: flex; align-items: center; justify-content: space-between; }
   .usage-header-row label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; color: #9e9690; }

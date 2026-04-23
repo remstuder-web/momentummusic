@@ -1134,6 +1134,39 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     body: JSON.stringify({ type: 'briefing', song_code: null, song_title: 'Artist Scout', artist: null, message: scoutText + tracksJson, patch_name: `Scout ${today}`, read: false })
   })
   console.log('✓ Agent Scout report saved to inbox + brain_knowledge')
+
+  // Auto-save kworb tracks to reference_tracks as checkout (fire-and-forget)
+  setImmediate(async () => {
+    const now = new Date().toISOString()
+    for (const track of allTracks) {
+      if (!track.title || !track.artist) continue
+      try {
+        const titleEnc = encodeURIComponent(track.title)
+        const artistEnc = encodeURIComponent(track.artist)
+        const existCheck = await fetch(
+          `${SUPABASE_URL}/rest/v1/reference_tracks?title=eq.${titleEnc}&artist=eq.${artistEnc}&select=id&limit=1`,
+          { headers: sbHeaders }
+        ).then(r => r.json()).catch(() => [])
+        if (Array.isArray(existCheck) && existCheck.length > 0) continue
+        const collectionName = track.source === 'youtube_trending' ? 'tiktok_trending' : 'daily_chart'
+        await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
+          method: 'POST',
+          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            title: track.title,
+            artist: track.artist,
+            spotify_id: track.spotify_id || null,
+            collection_name: collectionName,
+            source: 'checkout',
+            checkout_date: now,
+            approved: true
+          })
+        })
+        console.log('✓ Scout track → checkout:', track.artist, '—', track.title)
+      } catch(e) { console.warn('scout track save failed:', e.message) }
+    }
+  })
+
   return { ok: true, suggestions: scoutText, tracks: allTracks }
 }
 

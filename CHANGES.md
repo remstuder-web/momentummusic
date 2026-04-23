@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs — DONE
+TASK: scout-tracks-checkout
+WHAT: runAgentScout now auto-saves all kworb tracks (allTracks = kworbSP + kworbYT, up to 15) to reference_tracks as source:'checkout' via setImmediate fire-and-forget. Deduplicates by title+artist before inserting. Maps source:'youtube_trending' → collection_name:'tiktok_trending', all others → 'daily_chart'. DailyTab inline + button confirmed already uses source:'checkout'. Watcher restarted OK.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-23] ProjectsTab.svelte — DONE
 TASK: fix-vocal-eq-header-click
 WHAT: Vocal EQ section CSS fix. vocal-eq-section: added position:relative; z-index:1; margin-top:16px; padding-top:10px. vocal-eq-header: added position:relative; z-index:2; pointer-events:all; text-align:left; padding changed from 9px 14px to 6px 0. Structural position confirmed correct — vocal-eq-section is already outside versions-block, a direct flex child of song-body.

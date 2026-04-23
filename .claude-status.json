@@ -1,19 +1,21 @@
 {
-  "updated": "2026-04-23T18:45:00.000Z",
-  "last_task": "fix-vocal-eq-header-click",
-  "status": "partial",
+  "updated": "2026-04-23T19:30:00.000Z",
+  "last_task": "scout-tracks-checkout",
+  "status": "done",
   "working": [
+    "scout-tracks-checkout: runAgentScout auto-saves allTracks (kworb SP+YT) to reference_tracks as source:'checkout' via setImmediate fire-and-forget with dedup check",
     "fix-vocal-eq-header-click: vocal-eq-section position:relative z-index:1, vocal-eq-header position:relative z-index:2 pointer-events:all",
-    "vocalEqStatus per-song + reset button when stuck",
+    "vocalEqStatus per-song + reset button when stuck at 'separating'",
     "remove-checkout-banner: CHECK OUT TODAY banner + pulse dot fully removed",
     "agent-tracks-checkout: all agent reference_tracks inserts use source:'checkout'",
     "per-stem save in analyzeVocalEqUrl + /analyze-vocal-eq mix branch",
-    "VocalEqChart simplified: single refCurve prop, stem selector in ProjectsTab"
+    "VocalEqChart simplified: single refCurve prop, stem selector in ProjectsTab",
+    "DailyTab inline + button already uses source:'checkout' (confirmed)"
   ],
   "broken": [],
   "partial": [
     "vocal-eq-stems: SQL migration not yet run — vocal_eq_curves missing stem_type and source_type columns"
   ],
   "next": "Run in Supabase SQL editor: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; — then test Analyze My Stems button on a song with mixing version",
-  "notes": "vocal-eq-section is a direct flex child of song-body, correctly outside versions-block. The z-index fix counters stacking context from versions-block overflow:hidden neighbour."
+  "notes": "Scout tracks: allTracks array (up to 15: 10 Spotify kworb + 5 YouTube kworb) saved per scout run. collection_name mapped: youtube_trending→tiktok_trending, else→daily_chart. Dedup by title+artist before insert."
 }

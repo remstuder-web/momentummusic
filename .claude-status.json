@@ -1,17 +1,16 @@
 {
-  "updated": "2026-04-23T21:00:00.000Z",
-  "last_task": "brain-loadentries-onmount",
+  "updated": "2026-04-23T21:05:00.000Z",
+  "last_task": "scout-extract-mentions",
   "status": "done",
   "working": [
+    "scout-extract-mentions: extractTracksFromText() extracts all track mentions from scout text via Haiku, saves to reference_tracks as checkout with ilike dedup",
     "brain-loadentries-onmount: onMount is async, awaits loadEntries(), debug console.logs removed",
     "fix-reference-tracks-order: reference_tracks query orders by created_at DESC — null tempo tracks load correctly",
-    "scout-tracks-checkout: /agent-scout endpoint saves result.tracks to reference_tracks (ilike dedup, collection_name scout_YYYY-MM-DD, source checkout)",
+    "scout-tracks-checkout: /agent-scout endpoint saves result.tracks (kworb) to reference_tracks (ilike dedup, collection_name scout_YYYY-MM-DD, source checkout)",
     "sync-project-refs: POST /sync-project-refs reads project_meta.reference_links, Essentia-analyzes each Spotify URL, saves with source:'agent'",
     "fix-vocal-eq-header-click: vocal-eq-section position:relative z-index:1, vocal-eq-header position:relative z-index:2 pointer-events:all",
     "vocalEqStatus per-song + reset button when stuck at 'separating'",
-    "remove-checkout-banner: CHECK OUT TODAY banner + pulse dot fully removed",
-    "per-stem save in analyzeVocalEqUrl + /analyze-vocal-eq mix branch",
-    "VocalEqChart simplified: single refCurve prop, stem selector in ProjectsTab"
+    "remove-checkout-banner: CHECK OUT TODAY banner + pulse dot fully removed"
   ],
   "broken": [],
   "partial": [
@@ -19,5 +18,5 @@
     "checkout_date column: may not exist in reference_tracks — run SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;"
   ],
   "next": "Run both SQL migrations in Supabase dashboard: (1) ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; (2) ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;",
-  "notes": "BrainTab now reliably loads reference_tracks on mount including checkout tracks with null tempo. Scout tracks saved with collection_name scout_YYYY-MM-DD."
+  "notes": "Scout now saves tracks two ways: kworb chart tracks (with audio metadata) + all text-mentioned tracks (via Haiku extraction). Both use ilike dedup and collection_name scout_YYYY-MM-DD."
 }

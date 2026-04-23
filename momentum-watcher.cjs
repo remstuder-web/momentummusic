@@ -903,6 +903,24 @@ async function fetchKworbSpotify() {
   }
 }
 
+async function extractTracksFromText(text, apiKey) {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        system: 'Extract all song/track mentions from text. Return JSON array only: [{"artist":"","title":""}]. Include every track mentioned.',
+        messages: [{ role: 'user', content: text }]
+      })
+    })
+    const d = await res.json()
+    const raw = (d.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
+    return JSON.parse(raw)
+  } catch(e) { return [] }
+}
+
 async function runAgentScout(apiKey, sharedBrainRows) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today = new Date().toISOString().slice(0, 10)
@@ -4541,6 +4559,37 @@ ${context}` }]
             console.log('✓ Scout → checkout:', track.artist, '—', track.title)
           } catch(e) {
             console.error('scout track save error:', e.message)
+          }
+        }
+
+        // Extract ALL track/song mentions from the generated scout text and save to checkout
+        const mentionedTracks = await extractTracksFromText(result.suggestions || '', apiKey)
+        const nowMentioned = new Date().toISOString()
+        const dateMentioned = nowMentioned.slice(0, 10)
+        for (const track of mentionedTracks) {
+          if (!track.title || !track.artist) continue
+          try {
+            const titleEnc = encodeURIComponent(track.title)
+            const existCheck = await fetch(
+              `${SUPABASE_URL}/rest/v1/reference_tracks?title=ilike.${titleEnc}&select=id&limit=1`,
+              { headers: sbHeaders }
+            ).then(r => r.json()).catch(() => [])
+            if (Array.isArray(existCheck) && existCheck.length > 0) continue
+            await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
+              method: 'POST',
+              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({
+                title: track.title,
+                artist: track.artist,
+                collection_name: 'scout_' + dateMentioned,
+                source: 'checkout',
+                checkout_date: nowMentioned,
+                approved: true
+              })
+            })
+            console.log('✓ Scout mention → checkout:', track.artist, '—', track.title)
+          } catch(e) {
+            console.error('scout mention save error:', e.message)
           }
         }
 

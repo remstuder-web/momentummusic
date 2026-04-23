@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs — DONE
+TASK: scout-extract-mentions
+WHAT: Added extractTracksFromText() helper (calls Haiku to parse track mentions as JSON array). /agent-scout endpoint now calls it after kworb tracks loop, saves all text-mentioned tracks to reference_tracks as source:'checkout' with ilike dedup.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-23] BrainTab.svelte — DONE
 TASK: brain-loadentries-onmount
 WHAT: onMount made async + await loadEntries(); removed debug console.log lines. loadEntries already moved to onMount in prior commit. checkout_date column needs SQL migration in Supabase (timestamptz).

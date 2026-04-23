@@ -1,14 +1,27 @@
 {
-  "updated": "2026-04-23T13:55:00.000Z",
-  "last_task": "delete-btn-hover-only",
+  "updated": "2026-04-23T14:19:00.000Z",
+  "last_task": "crypto-strong-sell-binance-portfolio",
   "status": "done",
   "working": [
-    "inbox-item, whatsapp-item, dl-notif del-btn: opacity 0 by default, 1 on parent hover with .15s transition",
-    "28×28px min-size retained from previous fix",
-    "0 svelte-check errors"
+    "STRONG SELL signal when bearPoints>=4, BEARISH when bearPoints>=2; binanceAction='sell' for both",
+    "Fear/greed, funding, btcChange24h scoring split into independent bull/bear blocks",
+    "/crypto Telegram command shows P&L profit breakdown when sell signal active",
+    "/sell and /selleth commands: calculate profit, set pendingConfirmations, log to crypto_trades on YES",
+    "/portfolio command: logged holdings P&L + live Binance balances",
+    "/confirm and /cancel aliases for YES/NO confirmation system",
+    "fetchBinancePortfolio() with HMAC SHA256 signature",
+    "/crypto-signal endpoint returns binance_portfolio (null if key missing)",
+    "FinancesTab LIVE BINANCE section with per-coin EUR values + total",
+    "FinancesTab auto-refresh every 5 minutes via setInterval in onMount",
+    "Red 'Sell on Binance' button shown on bearish signals",
+    "0 svelte-check errors",
+    "watcher restarted OK"
   ],
   "broken": [],
-  "partial": [],
-  "next": "Run SQL for new reference_tracks columns.",
-  "notes": "Delete buttons on notifications now hidden until row is hovered — cleaner UI."
+  "partial": [
+    "Binance live balances require BINANCE_API_KEY + BINANCE_SECRET_KEY in .env (read-only key)",
+    "crypto_trades table must exist in Supabase for sell logging (insert will fail silently if missing)"
+  ],
+  "next": "Add BINANCE_API_KEY and BINANCE_SECRET_KEY to .env (read-only key from Binance API Management). Create crypto_trades table in Supabase if needed.",
+  "notes": "Sell flow: /sell calculates P&L → shows Binance URL → YES confirms → clears portfolio holdings + inserts to crypto_trades. /confirm and /cancel work as aliases for YES/NO."
 }

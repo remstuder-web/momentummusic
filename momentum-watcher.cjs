@@ -1822,7 +1822,7 @@ async function handleOwnerCommand(chatId, text) {
   const apiKey = process.env.ANTHROPIC_API_KEY
 
   // YES/NO confirmation handling
-  if (cmd === 'yes' || cmd === 'ja') {
+  if (cmd === 'yes' || cmd === 'ja' || cmd === '/confirm') {
     const pending = pendingConfirmations[chatId]
     if (pending) {
       delete pendingConfirmations[chatId]
@@ -1832,7 +1832,7 @@ async function handleOwnerCommand(chatId, text) {
     }
     return
   }
-  if (cmd === 'no' || cmd === 'nein') {
+  if (cmd === 'no' || cmd === 'nein' || cmd === '/cancel') {
     if (pendingConfirmations[chatId]) {
       delete pendingConfirmations[chatId]
       await sendTelegram(chatId, '❌ Cancelled.')
@@ -2083,8 +2083,122 @@ async function handleOwnerCommand(chatId, text) {
       msg += '\n\n' + crypto.suggestion
       if (crypto.reasons.length) msg += '\n\nReasons:\n' + crypto.reasons.map(r => '· ' + r).join('\n')
       if (crypto.binanceAction === 'buy') msg += '\n\n→ Open Binance: ' + crypto.binanceDeepLink
+      if (crypto.binanceAction === 'sell') {
+        try {
+          const portRes = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio&select=value`, { headers: sbHeaders })
+          const portData = await portRes.json()
+          const portfolio = portData[0]?.value ? JSON.parse(portData[0].value) : []
+          const btcHoldings = portfolio.filter(p => p.coin === 'BTC')
+          const ethHoldings = portfolio.filter(p => p.coin === 'ETH')
+          if (btcHoldings.length || ethHoldings.length) {
+            msg += '\n\n💰 If you sell now:'
+            for (const h of btcHoldings) {
+              const cur = h.amount * crypto.btcPrice
+              const profit = cur - h.amount * h.entryPrice
+              const pct = ((profit / (h.amount * h.entryPrice)) * 100).toFixed(1)
+              msg += '\nBTC ' + h.amount + ' → €' + Math.round(cur).toLocaleString() +
+                ' (' + (profit > 0 ? '+' : '') + '€' + Math.round(profit) + ' / ' + pct + '%)'
+            }
+            for (const h of ethHoldings) {
+              const cur = h.amount * crypto.ethPrice
+              const profit = cur - h.amount * h.entryPrice
+              const pct = ((profit / (h.amount * h.entryPrice)) * 100).toFixed(1)
+              msg += '\nETH ' + h.amount + ' → €' + Math.round(cur).toLocaleString() +
+                ' (' + (profit > 0 ? '+' : '') + '€' + Math.round(profit) + ' / ' + pct + '%)'
+            }
+            msg += '\n\n/sell to prepare BTC sell · /selleth for ETH'
+          }
+        } catch(e) { console.warn('Portfolio profit calc error:', e.message) }
+      }
       await sendTelegram(chatId, msg)
     } catch(e) { await sendTelegram(chatId, '❌ Crypto signal error: ' + e.message) }
+  }
+  else if (cmd.startsWith('/sell')) {
+    const coin = cmd.includes('eth') ? 'ETH' : 'BTC'
+    try {
+      const [btcData, portRes] = await Promise.all([
+        fetchBTCData(),
+        fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio&select=value`, { headers: sbHeaders })
+      ])
+      const portData = await portRes.json()
+      const portfolio = portData[0]?.value ? JSON.parse(portData[0].value) : []
+      const holdings = portfolio.filter(p => p.coin === coin)
+      if (!holdings.length) { await sendTelegram(chatId, 'No ' + coin + ' holdings to sell'); return }
+      const price = coin === 'BTC' ? btcData.bitcoin.eur : btcData.ethereum.eur
+      const totalAmount = holdings.reduce((s, h) => s + h.amount, 0)
+      const totalCost = holdings.reduce((s, h) => s + h.amount * h.entryPrice, 0)
+      const currentValue = totalAmount * price
+      const profit = currentValue - totalCost
+      const pct = ((profit / totalCost) * 100).toFixed(1)
+      const binanceUrl = 'https://www.binance.com/en/trade/' + coin + '_EUR'
+      pendingConfirmations[chatId] = {
+        action: async () => {
+          const p2 = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio&select=value`, { headers: sbHeaders })
+          const pd2 = await p2.json()
+          const port2 = pd2[0]?.value ? JSON.parse(pd2[0].value) : []
+          const remaining = port2.filter(p => p.coin !== coin)
+          await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio`, {
+            method: 'PATCH',
+            headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ value: JSON.stringify(remaining) })
+          })
+          await fetch(`${SUPABASE_URL}/rest/v1/crypto_trades`, {
+            method: 'POST',
+            headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({
+              coin, amount_coin: totalAmount, amount_eur: Math.round(currentValue),
+              price_eur: Math.round(price), type: 'sell',
+              traded_at: new Date().toISOString(),
+              source: 'telegram_signal',
+              notes: 'Profit: €' + Math.round(profit)
+            })
+          }).catch(() => {})
+          await sendTelegram(chatId, '✅ Sell logged. ' + coin + ' holdings cleared.\nProfit recorded: ' + (profit > 0 ? '+' : '') + '€' + Math.round(profit))
+        }
+      }
+      await sendTelegram(chatId,
+        '⚡ Sell prepared:\n\n' +
+        'Sell: ' + totalAmount.toFixed(8) + ' ' + coin + '\n' +
+        'Value now: €' + Math.round(currentValue).toLocaleString() + '\n' +
+        'Cost basis: €' + Math.round(totalCost).toLocaleString() + '\n' +
+        'Profit: ' + (profit > 0 ? '+' : '') + '€' + Math.round(profit) + ' (' + pct + '%)\n\n' +
+        '→ Open Binance: ' + binanceUrl + '\n\n' +
+        'Reply YES to log · NO to cancel'
+      )
+    } catch(e) { await sendTelegram(chatId, '❌ Sell error: ' + e.message) }
+  }
+  else if (cmd === '/portfolio') {
+    try {
+      const [portRes, btcData, binance] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio&select=value`, { headers: sbHeaders }),
+        fetchBTCData(),
+        fetchBinancePortfolio()
+      ])
+      const portData = await portRes.json()
+      const portfolio = portData[0]?.value ? JSON.parse(portData[0].value) : []
+      let msg = '📊 Portfolio\n'
+      if (portfolio.length) {
+        for (const h of portfolio) {
+          const price = h.coin === 'BTC' ? btcData?.bitcoin?.eur : btcData?.ethereum?.eur
+          if (!price) { msg += '\n' + h.coin + ': ' + h.amount; continue }
+          const cur = h.amount * price
+          const profit = cur - h.amount * h.entryPrice
+          const pct = ((profit / (h.amount * h.entryPrice)) * 100).toFixed(1)
+          msg += '\n' + h.coin + ' ' + h.amount + ' @ €' + h.entryPrice.toLocaleString() +
+            ' → €' + Math.round(cur).toLocaleString() +
+            ' (' + (profit > 0 ? '+' : '') + '€' + Math.round(profit) + ' / ' + pct + '%)'
+        }
+      } else { msg += 'No holdings tracked.' }
+      if (binance?.length) {
+        msg += '\n\n🔴 Live Binance:'
+        for (const b of binance.filter(b => ['BTC','ETH','EUR','USDT','BNB'].includes(b.coin))) {
+          if (b.coin === 'BTC') msg += '\nBTC: ' + b.total.toFixed(6) + ' = €' + Math.round(b.total * btcData.bitcoin.eur).toLocaleString()
+          else if (b.coin === 'ETH') msg += '\nETH: ' + b.total.toFixed(4) + ' = €' + Math.round(b.total * btcData.ethereum.eur).toLocaleString()
+          else msg += '\n' + b.coin + ': ' + b.total.toFixed(2)
+        }
+      }
+      await sendTelegram(chatId, msg)
+    } catch(e) { await sendTelegram(chatId, '❌ Portfolio error: ' + e.message) }
   }
   else if (cmd === '/enrich') {
     await sendTelegram(chatId, '⏳ Enriching all contacts...')
@@ -2115,6 +2229,9 @@ async function handleOwnerCommand(chatId, text) {
       '/ask [question] — Ask Mozart\n' +
       '/morning — Full morning agent run\n' +
       '/crypto — Live BTC/ETH signal + Fear & Greed\n' +
+      '/sell — Prepare BTC sell (full position)\n' +
+      '/selleth — Prepare ETH sell (full position)\n' +
+      '/portfolio — Live P&L + Binance balances\n' +
       '/obsidian [title] — Create Obsidian note\n' +
       '/demo [artist] — Check demo status\n' +
       '/mix [song] — Get mix gap analysis\n' +
@@ -2499,6 +2616,28 @@ async function fetchExchangeNetflow() {
   } catch(e) { return null }
 }
 
+async function fetchBinancePortfolio() {
+  if (!process.env.BINANCE_API_KEY || !process.env.BINANCE_SECRET_KEY) return null
+  try {
+    const nodeCrypto = require('crypto')
+    const timestamp = Date.now()
+    const queryString = 'timestamp=' + timestamp
+    const signature = nodeCrypto
+      .createHmac('sha256', process.env.BINANCE_SECRET_KEY)
+      .update(queryString)
+      .digest('hex')
+    const r = await fetch(
+      'https://api.binance.com/api/v3/account?' + queryString + '&signature=' + signature,
+      { headers: { 'X-MBX-APIKEY': process.env.BINANCE_API_KEY }, signal: AbortSignal.timeout(8000) }
+    )
+    const d = await r.json()
+    if (d.code) { console.warn('Binance API error:', d.msg); return null }
+    return (d.balances || [])
+      .map(b => ({ coin: b.asset, free: parseFloat(b.free), locked: parseFloat(b.locked), total: parseFloat(b.free) + parseFloat(b.locked) }))
+      .filter(b => b.total > 0.000001)
+  } catch(e) { console.warn('Binance portfolio error:', e.message); return null }
+}
+
 async function buildCryptoSignal() {
   const [fearGreed, btcData, dominance, funding, netflow] =
     await Promise.all([
@@ -2518,16 +2657,20 @@ async function buildCryptoSignal() {
   let bearPoints = 0
   const reasons = []
 
+  // Bull signals
   if (fearGreed.value < 20) { bullPoints += 2; reasons.push('Extreme fear = buying opportunity') }
   else if (fearGreed.value < 35) { bullPoints += 1; reasons.push('Fear present = cautious bullish') }
-  else if (fearGreed.value > 75) { bearPoints += 2; reasons.push('Greed = overheated') }
-  else if (fearGreed.value > 60) { bearPoints += 1; reasons.push('Greed building') }
+
+  // Sell signals
+  if (fearGreed.value > 80) { bearPoints += 2; reasons.push('Extreme greed = take profits') }
+  else if (fearGreed.value > 65) { bearPoints += 1; reasons.push('Greed building = caution') }
 
   if (funding !== null) {
     if (funding < -0.05) { bullPoints += 2; reasons.push('Shorts paying = squeeze potential') }
     else if (funding < -0.01) { bullPoints += 1; reasons.push('Slightly negative funding') }
-    else if (funding > 0.05) { bearPoints += 2; reasons.push('Longs overextended') }
-    else if (funding > 0.02) { bearPoints += 1; reasons.push('Funding elevated') }
+
+    if (funding > 0.08) { bearPoints += 2; reasons.push('Funding very high = longs overextended') }
+    else if (funding > 0.04) { bearPoints += 1; reasons.push('Funding elevated') }
   }
 
   let altseasonSignal = 'NO'
@@ -2535,29 +2678,31 @@ async function buildCryptoSignal() {
   else if (dominance < 54) altseasonSignal = 'STARTING'
 
   if (btcChange24h > 3) { bullPoints += 1; reasons.push('Strong 24h momentum') }
-  else if (btcChange24h < -5) { bearPoints += 1; reasons.push('Selling pressure') }
+
+  if (btcChange24h < -5) { bearPoints += 2; reasons.push('Strong selling pressure') }
+  else if (btcChange24h < -3) { bearPoints += 1; reasons.push('Downward momentum') }
 
   let signal, emoji, suggestion, binanceAction
 
   if (bullPoints >= 4) {
     signal = 'STRONG BUY'; emoji = '🟢🟢'
-    suggestion = 'Multiple bullish signals aligned. Consider adding to position.'
+    suggestion = 'Multiple bullish signals. Strong entry opportunity.'
     binanceAction = 'buy'
   } else if (bullPoints >= 2 && bullPoints > bearPoints) {
     signal = 'BULLISH'; emoji = '🟢'
     suggestion = 'Cautiously bullish. DCA opportunity.'
     binanceAction = 'buy'
   } else if (bearPoints >= 4) {
-    signal = 'STRONG CAUTION'; emoji = '🔴🔴'
-    suggestion = 'Multiple warning signs. Reduce or hold cash.'
-    binanceAction = null
+    signal = 'STRONG SELL'; emoji = '🔴🔴'
+    suggestion = 'Multiple warning signs. Consider taking profits.'
+    binanceAction = 'sell'
   } else if (bearPoints >= 2 && bearPoints > bullPoints) {
     signal = 'BEARISH'; emoji = '🔴'
-    suggestion = 'Caution warranted. Wait for better entry.'
-    binanceAction = null
+    suggestion = 'Caution. Wait for better entry or reduce position.'
+    binanceAction = 'sell'
   } else {
     signal = 'NEUTRAL'; emoji = '🟡'
-    suggestion = 'No clear setup. Do nothing — wait.'
+    suggestion = 'No clear setup. Hold current position.'
     binanceAction = null
   }
 
@@ -6732,9 +6877,9 @@ ${chatText.slice(0, 4000)}`
   // ── GET /crypto-signal ────────────────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/crypto-signal') {
     try {
-      const signal = await buildCryptoSignal()
+      const [signal, binancePortfolio] = await Promise.all([buildCryptoSignal(), fetchBinancePortfolio()])
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, ...signal }))
+      res.end(JSON.stringify({ ok: true, ...signal, binance_portfolio: binancePortfolio }))
     } catch(e) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))

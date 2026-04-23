@@ -108,7 +108,12 @@
     return 0
   }
 
-  onMount(() => { loadCryptoSignal(); loadPortfolio() })
+  onMount(() => {
+    loadCryptoSignal()
+    loadPortfolio()
+    const interval = setInterval(loadCryptoSignal, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  })
 
   load()
 
@@ -282,12 +287,45 @@
 
       {#if cryptoSignal.binanceAction === 'buy'}
         <a href={cryptoSignal.binanceDeepLink} target="_blank" class="binance-btn">Open Binance →</a>
+      {:else if cryptoSignal.binanceAction === 'sell'}
+        <a href={cryptoSignal.binanceDeepLink} target="_blank" class="binance-btn sell">Sell on Binance →</a>
       {/if}
 
       <button class="refresh-btn" onclick={loadCryptoSignal}>↻ Refresh</button>
     {:else if cryptoSignal}
       <div class="empty" style="padding:10px 0;font-size:11px;color:#444">Signal unavailable — check watcher</div>
       <button class="refresh-btn" onclick={loadCryptoSignal}>↻ Retry</button>
+    {/if}
+
+    <!-- Live Binance -->
+    {#if cryptoSignal?.binance_portfolio?.length}
+      <div class="sh" style="margin-top:20px">LIVE BINANCE</div>
+      {#each cryptoSignal.binance_portfolio.filter(b => ['BTC','ETH','BNB','EUR','USDT','USDC'].includes(b.coin)) as balance}
+        <div class="price-row">
+          <span class="coin-label">{balance.coin}</span>
+          <span class="coin-price">{balance.total.toFixed(6)}</span>
+          {#if balance.coin === 'BTC' && cryptoSignal.btcPrice}
+            <span class="coin-change up">€{Math.round(balance.total * cryptoSignal.btcPrice).toLocaleString()}</span>
+          {:else if balance.coin === 'ETH' && cryptoSignal.ethPrice}
+            <span class="coin-change up">€{Math.round(balance.total * cryptoSignal.ethPrice).toLocaleString()}</span>
+          {/if}
+          {#if balance.locked > 0}
+            <span style="font-size:9px;color:#444">({balance.locked.toFixed(6)} locked)</span>
+          {/if}
+        </div>
+      {/each}
+      {@const totalEur =
+        (cryptoSignal.binance_portfolio.find(b => b.coin === 'BTC')?.total || 0) * (cryptoSignal.btcPrice || 0) +
+        (cryptoSignal.binance_portfolio.find(b => b.coin === 'ETH')?.total || 0) * (cryptoSignal.ethPrice || 0) +
+        (cryptoSignal.binance_portfolio.find(b => b.coin === 'EUR')?.total || 0) +
+        (cryptoSignal.binance_portfolio.find(b => b.coin === 'USDT')?.total || 0)}
+      <div class="price-row" style="border-top:1px solid #1c1c1c;margin-top:6px;padding-top:6px">
+        <span class="coin-label" style="color:#c9a84c">TOTAL</span>
+        <span class="coin-price" style="color:#c9a84c">€{Math.round(totalEur).toLocaleString()}</span>
+      </div>
+    {:else if cryptoSignal && cryptoSignal.binance_portfolio === null}
+      <div class="sh" style="margin-top:20px">LIVE BINANCE</div>
+      <div class="empty" style="font-size:11px;color:#333;padding:8px 0">Add BINANCE_API_KEY + BINANCE_SECRET_KEY to .env for live balance tracking</div>
     {/if}
 
     <!-- Portfolio tracker -->
@@ -432,6 +470,8 @@
   .reason-item { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #666; padding: 1px 0; }
   .binance-btn { display: inline-block; margin-top: 10px; font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: #c9a84c; color: #0a0a0a; padding: 6px 14px; border-radius: 3px; text-decoration: none; letter-spacing: .06em; }
   .binance-btn:hover { background: #d4b862; }
+  .binance-btn.sell { background: #e05a4a; }
+  .binance-btn.sell:hover { background: #e86f60; }
   .refresh-btn { display: block; margin-top: 8px; font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #252525; color: #444; padding: 3px 8px; border-radius: 2px; cursor: pointer; }
   .refresh-btn:hover { color: #9e9690; }
   .portfolio-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #111; font-family: 'Space Mono', monospace; font-size: 10px; flex-wrap: wrap; }

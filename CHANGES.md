@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + FinancesTab.svelte — DONE
+TASK: crypto-strong-sell-binance-portfolio
+WHAT: PART 1 — STRONG SELL signal (bearPoints >= 4); scoring split so bull/sell conditions independent; BEARISH binanceAction='sell'. PART 2 — /crypto shows P&L profit on sell signal; /sell and /selleth commands with pendingConfirmations; /portfolio command shows holdings + live Binance. PART 3 — fetchBinancePortfolio() using HMAC SHA256; /crypto-signal endpoint includes binance_portfolio. PART 4 — FinancesTab LIVE BINANCE section with total; onMount auto-refresh 5 min; red sell button on bearish signal.
+RESULT: 0 svelte errors; watcher restarted OK
+BLOCKERS: Add BINANCE_API_KEY + BINANCE_SECRET_KEY to .env for live balances. crypto_trades table must exist in Supabase.
+
 ## [2026-04-23] src/lib/DailyTab.svelte — DONE
 TASK: delete-btn-hover-only
 WHAT: .inbox-item .del-btn, .whatsapp-item .del-btn, .dl-notif .del-btn all start at opacity:0 and fade in (transition .15s) on parent row hover. Size from previous fix retained.

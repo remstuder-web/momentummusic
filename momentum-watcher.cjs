@@ -1135,38 +1135,6 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   })
   console.log('✓ Agent Scout report saved to inbox + brain_knowledge')
 
-  // Auto-save kworb tracks to reference_tracks as checkout (fire-and-forget)
-  setImmediate(async () => {
-    const now = new Date().toISOString()
-    for (const track of allTracks) {
-      if (!track.title || !track.artist) continue
-      try {
-        const titleEnc = encodeURIComponent(track.title)
-        const artistEnc = encodeURIComponent(track.artist)
-        const existCheck = await fetch(
-          `${SUPABASE_URL}/rest/v1/reference_tracks?title=eq.${titleEnc}&artist=eq.${artistEnc}&select=id&limit=1`,
-          { headers: sbHeaders }
-        ).then(r => r.json()).catch(() => [])
-        if (Array.isArray(existCheck) && existCheck.length > 0) continue
-        const collectionName = track.source === 'youtube_trending' ? 'tiktok_trending' : 'daily_chart'
-        await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
-          method: 'POST',
-          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({
-            title: track.title,
-            artist: track.artist,
-            spotify_id: track.spotify_id || null,
-            collection_name: collectionName,
-            source: 'checkout',
-            checkout_date: now,
-            approved: true
-          })
-        })
-        console.log('✓ Scout track → checkout:', track.artist, '—', track.title)
-      } catch(e) { console.warn('scout track save failed:', e.message) }
-    }
-  })
-
   return { ok: true, suggestions: scoutText, tracks: allTracks }
 }
 
@@ -4532,6 +4500,50 @@ ${context}` }]
         if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set' })); return }
         const brainRows = await fetchSharedBrainContext()
         const result = await runAgentScout(apiKey, brainRows)
+
+        // Save all scout tracks to reference_tracks as checkout
+        const tracksToSave = [
+          ...(result.tracks || []),
+          ...(result.tiktok_tracks || []),
+          ...(result.spotify_tracks || [])
+        ].filter(t => t.title && t.artist)
+        const now = new Date().toISOString()
+        const dateStr = now.slice(0, 10)
+        for (const track of tracksToSave) {
+          try {
+            const titleEnc = encodeURIComponent(track.title)
+            const existCheck = await fetch(
+              `${SUPABASE_URL}/rest/v1/reference_tracks?title=ilike.${titleEnc}&select=id&limit=1`,
+              { headers: sbHeaders }
+            ).then(r => r.json()).catch(() => [])
+            if (Array.isArray(existCheck) && existCheck.length > 0) continue
+            await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
+              method: 'POST',
+              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({
+                title: track.title,
+                artist: track.artist,
+                spotify_id: track.spotify_id || null,
+                collection_name: 'scout_' + dateStr,
+                source: 'checkout',
+                checkout_date: now,
+                approved: true,
+                tempo: track.bpm || null,
+                key: track.key || null,
+                camelot: track.camelot || null,
+                energy: track.energy || null,
+                danceability: track.danceability || null,
+                loudness: track.loudness_lufs || null,
+                valence: track.valence || null,
+                brightness: track.brightness || null
+              })
+            })
+            console.log('✓ Scout → checkout:', track.artist, '—', track.title)
+          } catch(e) {
+            console.error('scout track save error:', e.message)
+          }
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(result))
         setImmediate(() => brainToObsidian().catch(() => {}))
@@ -6413,6 +6425,132 @@ Respond ONLY in JSON:
       } catch(e) {
         logError('sync-all-refs', e.message)
         console.error('sync-all-refs error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /sync-project-refs — analyze project Spotify refs → reference_tracks ─
+  if (req.method === 'POST' && req.url === '/sync-project-refs') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      try {
+        const projectsRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/projects?select=id,artist,name,project_meta`,
+          { headers: sbHeaders }
+        )
+        const projects = await projectsRes.json().catch(() => [])
+
+        // Collect unique Spotify track IDs from project_meta.reference_links
+        const trackSources = {} // trackId -> collectionName
+        for (const project of (Array.isArray(projects) ? projects : [])) {
+          const refs = project.project_meta?.reference_links || []
+          for (const ref of refs) {
+            const url = typeof ref === 'string' ? ref : (ref.url || '')
+            const m = url.match(/spotify\.com\/track\/([a-zA-Z0-9]+)/)
+            if (m) trackSources[m[1]] = `project_${(project.name || String(project.id)).slice(0, 40)}`
+          }
+        }
+
+        const allIds = Object.keys(trackSources)
+        if (!allIds.length) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, found: 0, added: 0, skipped: 0 }))
+          return
+        }
+
+        // Skip IDs already in reference_tracks
+        const existingRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/reference_tracks?select=spotify_id&limit=10000`,
+          { headers: sbHeaders }
+        )
+        const existingRows = await existingRes.json().catch(() => [])
+        const existingIds = new Set((Array.isArray(existingRows) ? existingRows : []).map(r => r.spotify_id))
+        const newIds = allIds.filter(id => !existingIds.has(id))
+        console.log(`  sync-project-refs: ${allIds.length} found, ${newIds.length} new to analyze`)
+
+        if (!newIds.length) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, found: allIds.length, added: 0, skipped: allIds.length }))
+          return
+        }
+
+        const token = await getSpotifyToken()
+        const spH = { 'Authorization': `Bearer ${token}` }
+        let added = 0
+        const errors = []
+
+        for (const trackId of newIds) {
+          try {
+            const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: spH })
+            if (!trackRes.ok) throw new Error(`Spotify ${trackRes.status}`)
+            const track = await trackRes.json()
+
+            const artistId = track.artists?.[0]?.id
+            const artistRes = artistId ? await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: spH }) : null
+            const artist = artistRes?.ok ? await artistRes.json() : { genres: [] }
+
+            let bpm = null, keyStr = null, camelot = null
+            let energy = null, danceability = null, loudness = null, valence = null, brightness = null
+
+            const tmpAudio = `/tmp/projref_${Date.now()}.mp3`
+            let audioReady = false
+            if (track.preview_url) {
+              try { execSync(`curl -s -o "${tmpAudio}" "${track.preview_url}"`, { timeout: 15000 }); audioReady = true } catch(e) {}
+            }
+            if (audioReady) {
+              try {
+                const esOut = execSync(`"/opt/homebrew/bin/python3.11" "${path.join(__dirname, 'analyze_audio.py')}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+                const feat = JSON.parse(esOut)
+                bpm = feat.bpm; keyStr = feat.key ? `${feat.key} ${feat.scale || ''}`.trim() : null
+                camelot = feat.camelot || null; energy = feat.energy; danceability = feat.danceability
+                loudness = feat.loudness_lufs; valence = feat.valence; brightness = feat.brightness
+              } catch(e) { console.warn('  Essentia failed:', e.message.slice(0, 50)) }
+              try { fs.unlinkSync(tmpAudio) } catch(e) {}
+            }
+
+            await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
+              method: 'POST',
+              headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+              body: JSON.stringify({
+                spotify_id: trackId,
+                title: track.name,
+                artist: track.artists.map(a => a.name).join(', '),
+                album: track.album?.name,
+                release_date: track.album?.release_date,
+                genre_tags: (artist.genres || []).slice(0, 5),
+                collection_name: trackSources[trackId] || 'project_refs',
+                source: 'agent',
+                approved: true,
+                tempo: bpm ? Math.round(bpm) : null,
+                key: keyStr,
+                camelot,
+                energy,
+                danceability,
+                loudness,
+                valence,
+                brightness,
+                album_art: track.album?.images?.[0]?.url || null,
+                popularity: track.popularity
+              })
+            })
+            console.log(`  ✓ sync-project-refs: ${track.name} — ${track.artists[0]?.name}`)
+            added++
+          } catch(e) {
+            console.error('  ✗ sync-project-refs:', trackId, e.message)
+            errors.push({ trackId, error: e.message })
+          }
+        }
+
+        console.log(`  sync-project-refs: added ${added} tracks`)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, found: allIds.length, added, skipped: allIds.length - newIds.length, errors }))
+      } catch(e) {
+        logError('sync-project-refs', e.message)
+        console.error('sync-project-refs error:', e.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: e.message }))
       }

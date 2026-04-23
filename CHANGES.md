@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + ProjectsTab.svelte + ListenPage.svelte — DONE
+TASK: public-download-filenames
+WHAT: Strip internal 8-digit code prefix from artist-facing downloads. Content-Disposition on /production/ and /mixing/ routes. Submission folder copies use public name. Share sessions store public_filename. Listen page shows public name and passes it to download attribute.
+RESULT: works — svelte-check 0 errors, watcher restarted
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs + FinancesTab.svelte — DONE
 TASK: crypto-signal-dashboard
 WHAT: Crypto signal (Fear&Greed, funding, dominance, BTC/ETH prices) in Finances tab + Telegram /crypto command + morning briefing crypto block + hourly price alert

@@ -1,20 +1,20 @@
 {
-  "updated": "2026-04-23T11:35:00Z",
-  "last_task": "crypto-signal-dashboard",
+  "updated": "2026-04-23T11:45:00Z",
+  "last_task": "public-download-filenames",
   "status": "done",
   "working": [
-    "GET /crypto-signal — live test confirmed: signal, BTC price, Fear&Greed, dominance, funding",
-    "buildCryptoSignal() — rule-based scoring with 5 data sources",
-    "Morning briefing sends crypto as separate Telegram message",
-    "/crypto Telegram command",
-    "Hourly BTC price alert on 3%+ moves",
-    "FinancesTab CRYPTO SIGNAL section with signal block, prices, indicators, reasons, Binance link",
-    "Portfolio tracker persisted to user_settings.crypto_portfolio",
-    "svelte-check 0 errors",
-    "pm2 restarted and healthy"
+    "getPublicFilename() in watcher — strips 8-digit code prefix, optionally prepends full artist name",
+    "/production/ and /mixing/ serve with Content-Disposition: inline; filename=<public>",
+    "/create-submission copies files using public filename (no code prefix in submission folder)",
+    "ProjectsTab: getPublicFilename() available as frontend helper",
+    "ProjectsTab: sendToArtist adds public_filename to share session song entry",
+    "ListenPage: download buttons use public_filename for download attribute",
+    "ListenPage: filename shown in small text below download buttons",
+    "Files on disk unchanged — presentation only",
+    "svelte-check 0 errors, watcher healthy"
   ],
   "broken": [],
   "partial": [],
-  "next": "All crypto dashboard tasks done. Add portfolio entries in Finances tab to track positions.",
-  "notes": "CoinGecko free tier — no API key needed. Funding rate from Binance fapi. Fear&Greed from alternative.me. BTC dominance from CoinGecko global endpoint."
+  "next": "Test by sending a version to artist — check that listen page shows clean filename and download has correct name. Existing share sessions without public_filename will fall back to stripping code prefix from song.filename.",
+  "notes": "getPublicFilename handles the case where artist is already in filename (prevents double-prepend). Filenames like 26040604_PILAR_VEGA_MACHO_MIX_v01.wav -> PILAR_VEGA_MACHO_MIX_v01.wav correctly."
 }

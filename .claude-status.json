@@ -1,16 +1,19 @@
 {
-  "updated": "2026-04-23T10:01:00Z",
-  "last_task": "auto-obsidian-sync",
+  "updated": "2026-04-23T10:11:00Z",
+  "last_task": "whatsapp-daily-messages",
   "status": "done",
   "working": [
-    "brainToObsidian() extracted as standalone async function — callable from anywhere",
-    "GET /brain-to-obsidian delegates to brainToObsidian() — 235 entries + 7 index notes confirmed",
-    "setImmediate sync triggers added to: /agent-scout, /analyze-spotify-track, /suggest-category, /analyze-chat, /seed-production-rules",
-    "hourly setInterval(brainToObsidian, 3600000) added in server.listen callback",
-    "watcher restarted OK — pm2 status online"
+    "MESSAGES section in Daily inbox — dedicated WhatsApp block with green left border",
+    "whatsappItems derived state filters n.metadata.platform === 'whatsapp'",
+    "WhatsApp items excluded from general todayInbox/olderInbox stream (no duplication)",
+    "Group chat support in pollWhatsApp: @g.us JIDs saved to inbox as type='message' without AI analysis",
+    "/whatsapp-contacts returns is_group flag — 57 groups, 39 monitored contacts confirmed",
+    "RAPHAEL MARTIN, NidjoMusic, Pilar Vega added to WHATSAPP_CONTACTS in .env",
+    "olderInbox now shows 📱 badge for WhatsApp items",
+    "pm2 restarted with --update-env, watcher online"
   ],
   "broken": [],
   "partial": [],
-  "next": "All tasks done. Obsidian vault syncs automatically after every brain-modifying endpoint call and every hour.",
-  "notes": "brainToObsidian() is now the single source of truth for vault export. The GET /brain-to-obsidian endpoint is a thin HTTP wrapper around it."
+  "next": "All tasks done. WhatsApp notifications will appear in MESSAGES section when pollWhatsApp detects new messages from monitored contacts.",
+  "notes": "Group chats matching monitored list (e.g. '29 seconds x Remo', '3 WMS / Remo - Project Nidjo') are already being detected. Group messages save without AI analysis — just raw message + from metadata."
 }

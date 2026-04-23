@@ -5614,16 +5614,18 @@ ${chatText.slice(0, 4000)}`
 
       // Build contact list: push_name > address book > partner_name
       const contacts = rows.map(r => {
+        const isGroup = r.jid?.includes('@g.us') || false
         const phone = r.jid.includes('@s.whatsapp.net') ? r.jid.split('@')[0].replace(/\D/g, '') : null
         const last9 = phone?.slice(-9) || null
         const contacts_name = (last9 && abMap.get(last9)) || null
-        const name = r.push_name || contacts_name || r.partner_name
+        const name = isGroup ? (r.partner_name || r.jid) : (r.push_name || contacts_name || r.partner_name)
         return {
           name,
           partner_name: r.partner_name,
           push_name: r.push_name || null,
           contacts_name: contacts_name || null,
-          jid: r.jid
+          jid: r.jid,
+          is_group: isGroup
         }
       })
 
@@ -6857,7 +6859,7 @@ async function pollWhatsApp() {
       const history = msgs.map(m => (m.is_from_me ? 'Remo' : contact) + ': ' + m.text).join('\n')
       const lastMsg = msgs[msgs.length - 1]?.text || ''
 
-      // Deep psychological + business analysis via Sonnet
+      // Deep psychological + business analysis via Sonnet (personal chats only)
       if (!jid.includes('@g.us') && !jid.includes('@status') && history.length > 20) {
         try {
           const { analysis, usage } = await analyzeArtistMessage(contact, history, lastMsg)
@@ -6946,6 +6948,25 @@ async function pollWhatsApp() {
           }).catch(() => {})
 
         } catch(e) { console.warn('WhatsApp analysis error:', e.message) }
+      } else if (jid.includes('@g.us') && !jid.includes('@status') && history.length > 0) {
+        // Group chat — save to inbox without deep analysis
+        await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+          method: 'POST',
+          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            type: 'message',
+            song_title: `Group: ${contact}`,
+            message: lastMsg.slice(0, 500),
+            patch_name: 'Group Chat',
+            read: false,
+            metadata: {
+              from: contact,
+              platform: 'whatsapp',
+              is_group: true,
+              urgency: 'low'
+            }
+          })
+        }).catch(() => {})
       }
     }
 

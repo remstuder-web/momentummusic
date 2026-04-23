@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] DailyTab.svelte + momentum-watcher.cjs — DONE
+TASK: whatsapp-daily-messages
+WHAT: Added dedicated MESSAGES section in Daily inbox for WhatsApp notifications. WhatsApp items filtered out of general inbox stream. Added group chat support in pollWhatsApp (saves to inbox without deep analysis). /whatsapp-contacts now returns is_group flag and includes 57 group chats. Added RAPHAEL MARTIN, NidjoMusic, Pilar Vega to WHATSAPP_CONTACTS. Fixed olderInbox to show WhatsApp badge.
+RESULT: works — 57 groups detected, 39 monitored contacts, watcher online
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs — DONE
 TASK: auto-obsidian-sync
 WHAT: Extracted brainToObsidian() as standalone async function. GET /brain-to-obsidian now delegates to it. Added setImmediate(() => brainToObsidian()) trigger after /agent-scout, /analyze-spotify-track, /suggest-category, /analyze-chat, /seed-production-rules. Added hourly setInterval for automatic background sync.

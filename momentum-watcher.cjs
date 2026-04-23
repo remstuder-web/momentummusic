@@ -5780,6 +5780,185 @@ Respond ONLY in JSON:
     return
   }
 
+  // ── vocal EQ helpers ──────────────────────────────────────────────────────
+  function getFreqDescription(freq, action) {
+    if (freq <= 80)   return action === 'boost' ? 'sub/body' : 'reduce rumble/sub'
+    if (freq <= 200)  return action === 'boost' ? 'warmth/fullness' : 'reduce mud/boom'
+    if (freq <= 500)  return action === 'boost' ? 'low-mid body' : 'reduce boxiness/mud'
+    if (freq <= 1000) return action === 'boost' ? 'presence/nasal' : 'reduce honk'
+    if (freq <= 3150) return action === 'boost' ? 'presence/clarity/attack' : 'reduce harshness'
+    if (freq <= 8000) return action === 'boost' ? 'definition/detail' : 'reduce sibilance'
+    return action === 'boost' ? 'air/brilliance' : 'reduce harshness/hiss'
+  }
+
+  function interpretVocalComparison(mixCurve, refCurve) {
+    const diffs = {}
+    const boostNeeded = []
+    const cutNeeded = []
+    for (const [freq, refDb] of Object.entries(refCurve)) {
+      const mixDb = mixCurve[freq] || 0
+      const diff = parseFloat((refDb - mixDb).toFixed(1))
+      diffs[freq] = diff
+      if (diff > 1.5) boostNeeded.push({ freq: parseFloat(freq), diff })
+      if (diff < -1.5) cutNeeded.push({ freq: parseFloat(freq), diff })
+    }
+    boostNeeded.sort((a, b) => b.diff - a.diff)
+    cutNeeded.sort((a, b) => a.diff - b.diff)
+    const instructions = []
+    for (const b of boostNeeded.slice(0, 5)) {
+      const freqLabel = b.freq >= 1000 ? (b.freq/1000).toFixed(1) + 'kHz' : b.freq + 'Hz'
+      instructions.push({ action: 'BOOST', freq: b.freq, freqLabel, amount: b.diff.toFixed(1), reason: getFreqDescription(b.freq, 'boost') })
+    }
+    for (const c of cutNeeded.slice(0, 5)) {
+      const freqLabel = c.freq >= 1000 ? (c.freq/1000).toFixed(1) + 'kHz' : c.freq + 'Hz'
+      instructions.push({ action: 'CUT', freq: c.freq, freqLabel, amount: Math.abs(c.diff).toFixed(1), reason: getFreqDescription(c.freq, 'cut') })
+    }
+    const avgDiff = Object.values(diffs).map(d => Math.abs(d)).reduce((s, v) => s + v, 0) / Object.keys(diffs).length
+    const matchScore = Math.round(Math.max(0, 100 - avgDiff * 10))
+    return { diffs, instructions, matchScore, boostNeeded, cutNeeded }
+  }
+
+  // ── POST /analyze-vocal-eq — Demucs vocal separation + ISO 30-band EQ curve ──
+  if (req.method === 'POST' && req.url === '/analyze-vocal-eq') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString())
+        const { type, url, song_id, label, version_name } = body
+        const VOCAL_EQ_SCRIPT = path.join(__dirname, 'analyze_vocal_eq.py')
+        const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
+
+        let audioFilePath = null
+
+        if (type === 'reference') {
+          if (!url) throw new Error('url required for reference type')
+          const tmpAudio = `/tmp/vocal_ref_${Date.now()}.mp3`
+          let audioReady = false
+
+          // Try Spotify preview
+          if (url.includes('spotify.com/track/')) {
+            try {
+              const trackId = url.split('/track/')[1].split('?')[0].split('/')[0]
+              const token = await getSpotifyToken()
+              const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: { 'Authorization': 'Bearer ' + token } })
+              const track = await trackRes.json()
+              if (track.preview_url) {
+                execSync(`curl -s -o "${tmpAudio}" "${track.preview_url}"`, { timeout: 15000 })
+                audioReady = true
+                console.log('✓ Spotify preview for vocal EQ:', track.name)
+              }
+              if (!audioReady) {
+                const q = ((track.artists?.[0]?.name || '') + ' ' + track.name).replace(/"/g, '')
+                execSync(`yt-dlp -x --audio-format mp3 --download-sections "*0-90" -o "${tmpAudio}" "ytsearch1:${q}"`, { timeout: 90000 })
+                audioReady = true
+                console.log('✓ yt-dlp fallback for vocal EQ:', q)
+              }
+            } catch(e) { throw new Error('Audio download failed: ' + e.message.slice(0, 100)) }
+          } else {
+            // Direct yt-dlp for non-Spotify
+            try {
+              execSync(`yt-dlp -x --audio-format mp3 --download-sections "*0-90" -o "${tmpAudio}" "${url}"`, { timeout: 90000 })
+              audioReady = true
+            } catch(e) { throw new Error('yt-dlp failed: ' + e.message.slice(0, 100)) }
+          }
+          if (!audioReady) throw new Error('Could not download audio')
+          audioFilePath = tmpAudio
+
+        } else if (type === 'mix') {
+          if (!song_id) throw new Error('song_id required for mix type')
+          const songRes = await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song_id}&select=work_data,code`, { headers: sbHeaders })
+          const songRows = await songRes.json()
+          if (!songRows[0]) throw new Error('Song not found')
+          const wd = songRows[0].work_data || {}
+          const versions = (wd.versions || []).filter(v => v.version_type === 'mixing' && v.audio_path)
+          if (!versions.length) throw new Error('No mixing versions with audio found')
+          const latest = versions[versions.length - 1]
+          audioFilePath = path.join(MIXING_DIR, latest.audio_path)
+          if (!fs.existsSync(audioFilePath)) throw new Error('Audio file not found: ' + audioFilePath)
+        } else {
+          throw new Error('type must be reference or mix')
+        }
+
+        // Run vocal EQ analysis (slow — Demucs takes 1-5 min)
+        console.log('⏳ Running vocal EQ analysis on:', audioFilePath)
+        const raw = execSync(`"${ESSENTIA_PYTHON}" "${VOCAL_EQ_SCRIPT}" "${audioFilePath}" 2>/dev/null`, { encoding: 'utf8', timeout: 360000 }).trim()
+        const result = JSON.parse(raw)
+        if (!result.ok) throw new Error(result.error || 'Script failed')
+
+        // Clean up temp file for reference type
+        if (type === 'reference' && audioFilePath.startsWith('/tmp/')) {
+          try { fs.unlinkSync(audioFilePath) } catch(e) {}
+        }
+
+        // Save to vocal_eq_curves
+        const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves`, {
+          method: 'POST',
+          headers: { ...sbHeaders, 'Prefer': 'return=representation' },
+          body: JSON.stringify({
+            label: label || (type === 'mix' ? 'My Mix' : 'Reference'),
+            type,
+            url: url || null,
+            song_id: song_id || null,
+            version_name: version_name || null,
+            curve: result.curve,
+            created_at: new Date().toISOString()
+          })
+        })
+        const inserted = await insertRes.json()
+        const savedId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, id: savedId, curve: result.curve, bands: result.bands }))
+      } catch(err) {
+        console.error('✗ analyze-vocal-eq:', err.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: err.message }))
+      }
+    })
+    return
+  }
+
+  // ── GET /vocal-eq-curves?song_id=xxx — all curves for a song + global refs ──
+  if (req.method === 'GET' && req.url.startsWith('/vocal-eq-curves')) {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const songId = new URL('http://x' + req.url).searchParams.get('song_id')
+      const [mixRes, refRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?type=eq.mix&song_id=eq.${songId}&order=created_at.desc&limit=5`, { headers: sbHeaders }),
+        fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?type=eq.reference&order=created_at.desc&limit=10`, { headers: sbHeaders })
+      ])
+      const mixCurves = await mixRes.json()
+      const refCurves = await refRes.json()
+      const curves = [...(Array.isArray(mixCurves) ? mixCurves : []), ...(Array.isArray(refCurves) ? refCurves : [])]
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, curves }))
+    } catch(err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: err.message }))
+    }
+    return
+  }
+
+  // ── POST /compare-vocal-eq — compute diffs + EQ instructions ─────────────
+  if (req.method === 'POST' && req.url === '/compare-vocal-eq') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', () => {
+      try {
+        const { mix_curve, reference_curve } = JSON.parse(Buffer.concat(chunks).toString())
+        if (!mix_curve || !reference_curve) throw new Error('mix_curve and reference_curve required')
+        const comparison = interpretVocalComparison(mix_curve, reference_curve)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, ...comparison }))
+      } catch(err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: err.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /analyze-audio-features — run Essentia analysis on local audio file ──
   if (req.method === 'POST' && req.url === '/analyze-audio-features') {
     const chunks = []; req.on('data', c => chunks.push(c))
@@ -6723,10 +6902,28 @@ ${chatText.slice(0, 4000)}`
 
         const processed = []
         for (const { contact, jid, msgs } of entries) {
-          if (jid.includes('@g.us') || jid.includes('@status')) continue
+          if (jid.includes('@status')) continue
           const history = msgs.map(m => (m.is_from_me ? 'Remo' : contact) + ': ' + m.text).join('\n')
           const lastMsg = msgs[msgs.length - 1]?.text || ''
           if (history.length <= 20) continue
+
+          // Group chats — save to inbox without AI analysis
+          if (jid.includes('@g.us')) {
+            await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+              method: 'POST',
+              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({
+                type: 'message',
+                song_title: `Group: ${contact}`,
+                message: lastMsg.slice(0, 500),
+                patch_name: 'Backfill',
+                read: false,
+                metadata: { from: contact, platform: 'whatsapp', is_group: true, urgency: 'low' }
+              })
+            }).catch(() => {})
+            processed.push({ contact, messages: msgs.length, urgency: 'low', boundary: false, is_group: true })
+            continue
+          }
 
           try {
             const { analysis, usage } = await analyzeArtistMessage(contact, history, lastMsg)
@@ -7956,6 +8153,9 @@ function readWhatsAppMessages(dbPath, since) {
   const db = new Database(dbPath, { readonly: true, fileMustExist: true })
   // since = Unix ms → convert to CoreData seconds for the WHERE clause
   const waSince = (since / 1000) - COREDATA_EPOCH_OFFSET
+  console.log('readWhatsApp since (CoreData):', waSince)
+  console.log('Latest Invictus msg (CoreData):', 798648620)
+  console.log('Will catch Invictus:', waSince < 798648620)
   try {
     const msgs = db.prepare(`
       SELECT
@@ -8158,7 +8358,7 @@ async function pollWhatsApp() {
           }).catch(() => {})
 
         } catch(e) { console.warn('WhatsApp analysis error:', e.message) }
-      } else if (jid.includes('@g.us') && !jid.includes('@status') && history.length > 0) {
+      } else if (jid.includes('@g.us') && !jid.includes('@status') && conversation.length > 0) {
         // Group chat — save to inbox without deep analysis
         await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
           method: 'POST',

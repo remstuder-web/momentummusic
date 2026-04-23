@@ -1,22 +1,18 @@
 {
-  "updated": "2026-04-23T15:34:00.000Z",
-  "last_task": "vocal-eq-analysis",
+  "updated": "2026-04-23T15:40:00.000Z",
+  "last_task": "whatsapp-group-fix",
   "status": "done",
   "working": [
-    "PART A: analyze_vocal_eq.py — Demucs vocal separation + 30-band ISO third-octave EQ (25%-75% of audio, mean-normalized)",
-    "PART B: POST /analyze-vocal-eq (type=reference or type=mix), GET /vocal-eq-curves?song_id=, POST /compare-vocal-eq",
-    "PART B: getFreqDescription() + interpretVocalComparison() helpers in watcher",
-    "PART C: VocalEqChart.svelte — SVG chart log-frequency x-axis, ±20dB y-axis, gold ref + blue mix lines",
-    "PART C: ProjectsTab vocal EQ collapsible section — chart + analyze button + reference URL input + BOOST/CUT instructions + match score",
-    "0 svelte errors; watcher restarted; ping OK"
+    "COREDATA_EPOCH_OFFSET=978307200 correct — waSince < Invictus CoreData ts = true",
+    "Debug logging added to readWhatsAppMessages() (temporary)",
+    "/whatsapp-backfill: group chats no longer skipped — Invictus Records (25 msgs) confirmed in processed list",
+    "pollWhatsApp(): `history` → `conversation` bug fixed — ReferenceError no longer thrown for group chats",
+    "Backfill response: ok=true, 4 contacts processed including Invictus Records (is_group:true)"
   ],
   "broken": [],
   "partial": [
-    "vocal_eq_curves table must be created in Supabase: CREATE TABLE vocal_eq_curves (id uuid primary key default gen_random_uuid(), song_id text, curve_type text, source_url text, label text, curve jsonb, created_at timestamptz default now())",
-    "active_trades table must be created in Supabase (from previous task)",
-    "releases table needs ALTER TABLE for new columns (from previous task)",
-    "Binance API keys needed in .env for live portfolio"
+    "Debug console.log lines in readWhatsAppMessages() are temporary — remove after confirmed stable"
   ],
-  "next": "Run CREATE TABLE vocal_eq_curves in Supabase. Test vocal EQ analysis on a real song. Create active_trades table if not done.",
-  "notes": "Reference curves are global (no song_id filter) so any analyzed reference can compare with any song. yt-dlp fetches 90s from 00:30 for reference tracks. Mix analysis uses latest file in MIXING_DIR by song_id prefix."
+  "next": "Remove temporary debug logging from readWhatsAppMessages() once WhatsApp group monitoring is confirmed stable over several poll cycles.",
+  "notes": "Poll handler group branch was silently crashing (ReferenceError: history is not defined) which caused the outer try/catch to abort the entire poll. Fix: conversation is the correct variable name. Backfill was filtering @g.us entirely — now passes through to inbox save without AI analysis."
 }

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs — DONE
+TASK: whatsapp-group-fix
+WHAT: Three fixes: (1) readWhatsAppMessages() — confirmed COREDATA_EPOCH_OFFSET=978307200 correct; added debug logging (waSince, Invictus CoreData ts 798648620, Will catch bool). (2) /whatsapp-backfill — removed hard `@g.us` skip at line 6905; group chats now processed without AI analysis (inbox save + push to processed with is_group=true). (3) pollWhatsApp() — fixed ReferenceError: `history` was undefined, renamed to `conversation` to match the variable defined in that scope.
+RESULT: Backfill confirmed — Invictus Records (25 msgs, is_group: true) appears in processed list alongside personal contacts. Debug log: waSince < 798648620 = true.
+BLOCKERS: none
+
 ## [2026-04-23] analyze_vocal_eq.py + momentum-watcher.cjs + ProjectsTab.svelte + VocalEqChart.svelte — DONE
 TASK: vocal-eq-analysis
 WHAT: PART A — analyze_vocal_eq.py: Demucs vocal separation + 30-band ISO third-octave spectrum (8192 FFT, Hann, mean-normalized). PART B — watcher: getFreqDescription(), interpretVocalComparison(), POST /analyze-vocal-eq (type=reference via yt-dlp/Spotify preview, type=mix via latest MIXING_DIR file), GET /vocal-eq-curves?song_id=, POST /compare-vocal-eq; saves curves to vocal_eq_curves table. PART C — VocalEqChart.svelte: SVG 580×200 chart, log-frequency x-axis, ±20dB y-axis, gold reference line + blue mix line with fill areas, grid lines, legend, frequency labels. ProjectsTab: VOCAL EQ collapsible section per song with chart, Analyze My Vocal button, + Add Reference URL input, comparison match score + BOOST/CUT instructions grid, curve history list.

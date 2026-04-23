@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + BrainTab.svelte + DailyTab.svelte — DONE
+TASK: checkout-source-fixes
+WHAT: FIX 1 — /agent-import-spotify query mode and single-track mode now save source='checkout' + checkout_date. FIX 2 — BrainTab ★ button shows "★ Mine" with gold CSS (font-weight 700, bg tint, border). FIX 3 — addTrackToBrain() in DailyTab also inserts to reference_tracks with source='checkout' + checkout_date alongside existing brain_knowledge save.
+RESULT: 0 svelte errors; watcher restarted OK
+BLOCKERS: Run SQL to fix existing Romantic Homicide track — see notes
+
 ## [2026-04-23] momentum-watcher.cjs + ProjectsTab.svelte + mozartContext.js — DONE
 TASK: analyze-audio-part2-part3
 WHAT: PART 2 — tikcharts.com added as primary TikTok chart source in fetchTikTokRealData() (tokboard demoted to fallback, kworb keeps as gap-fill). PART 3 — third analysis line in ProjectsTab version-analysis-row showing LRA/dyn/warm/groove/harm/vocal; formatVersion() in mozartContext.js updated with same 6 new fields.

@@ -1,23 +1,20 @@
 {
-  "updated": "2026-04-23T13:05:30.000Z",
-  "last_task": "analyze-audio-part2-part3",
+  "updated": "2026-04-23T13:11:00.000Z",
+  "last_task": "checkout-source-fixes",
   "status": "done",
   "working": [
-    "analyze_audio.py: windowed LRA (P10-P95), multi-factor valence, spectral flatness speechiness, liveness field — all confirmed",
-    "fetchTikTokRealData(): tikcharts.com as primary source, tokboard as fallback, kworb as gap-fill",
-    "ProjectsTab version-analysis-row: 3rd line with LRA/dyn/warm/groove/harm/vocal (shown only when data present)",
-    "mozartContext formatVersion(): 6 new fields added (LRA, dyn, warmth, groove, harm, vocal)",
-    "mozartContext formatTrack(): warmth, groove, harm, dyn, vocal note already present",
+    "/agent-import-spotify query mode: source='checkout' + checkout_date",
+    "/agent-import-spotify single-track mode: source='checkout' + checkout_date",
+    "BrainTab ★ button: shows '★ Mine', gold CSS with font-weight 700 and bg tint",
+    "promoteToMyRefs() confirmed correct: sets source='user', clears checkout_date",
+    "addTrackToBrain() in DailyTab: now also saves to reference_tracks with source='checkout'",
     "0 svelte-check errors",
     "watcher restarted OK"
   ],
   "broken": [],
   "partial": [
-    "vocal_pitch_mean/vibrato_presence null on short 30s previews — PredominantPitchMelodia needs high-confidence pitch",
-    "rhythm_regularity null — BeatLoudness needs beat positions",
-    "Google Trends empty when Google blocks pytrends scraping (anti-bot)",
-    "tikcharts.com table scraping may miss tracks if site structure changes"
+    "Romantic Homicide DB fix: needs manual SQL in Supabase — UPDATE reference_tracks SET source='checkout', checkout_date=NOW() WHERE title ILIKE '%romantic%homicide%'"
   ],
-  "next": "Run SQL for new reference_tracks columns (watcher logs full SQL on startup). Test tikcharts via /agent-tiktok-trends. Test analyze_audio.py on a full WAV for all new fields.",
-  "notes": "All 3 parts of the audio analysis build are done. tikcharts.com replaces tokboard as primary TikTok source. New Essentia fields (LRA, dyn, warmth, etc.) now display in ProjectsTab and are included in Mozart context."
+  "next": "Run SQL for Romantic Homicide fix. Run SQL for new reference_tracks columns (watcher logs them on startup). Test Mozart add_reference flow end-to-end.",
+  "notes": "All checkout source fixes done. DailyTab + button now saves to both brain_knowledge and reference_tracks. Watcher /agent-import-spotify (query mode used by Mozart and single-track mode) now saves as checkout."
 }

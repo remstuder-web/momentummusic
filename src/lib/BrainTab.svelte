@@ -1674,7 +1674,7 @@ Return ONLY JSON (single item array):
               {/if}
               <button class="promote-btn gold"
                 onclick={() => promoteToMyRefs(track.id)}
-                title="Add to My References">★</button>
+                title="Move to My References">★ Mine</button>
               <button class="promote-btn"
                 onclick={() => promoteToLibrary(track.id)}
                 title="Move to Library">→ lib</button>
@@ -2703,6 +2703,6 @@ Return ONLY JSON (single item array):
   .library-search:focus { border-color: #303030; }
   .promote-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #666; padding: 1px 5px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .promote-btn:hover { background: rgba(201,168,76,.1); color: #c9a84c; }
-  .promote-btn.gold { color: #c9a84c; border-color: rgba(201,168,76,.3); }
-  .promote-btn.gold:hover { background: rgba(201,168,76,.15); }
+  .promote-btn.gold { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: #c9a84c; border: 1px solid rgba(201,168,76,.4); background: rgba(201,168,76,.06); padding: 2px 6px; border-radius: 2px; cursor: pointer; }
+  .promote-btn.gold:hover { background: rgba(201,168,76,.15); border-color: #c9a84c; }
 </style>

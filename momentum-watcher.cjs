@@ -4167,7 +4167,8 @@ ${context}` }]
               preview_url: track.preview_url,
               album_art: track.album?.images?.[0]?.url,
               collection_name: collectionName,
-              source: 'user',
+              source: 'checkout',
+              checkout_date: new Date().toISOString(),
               approved: true
             })
           })
@@ -4276,6 +4277,8 @@ ${context}` }]
               artist_followers: artist.followers?.total,
               preview_url: track.preview_url,
               album_art: albumArt,
+              source: 'checkout',
+              checkout_date: new Date().toISOString(),
               approved: true
             })
           })

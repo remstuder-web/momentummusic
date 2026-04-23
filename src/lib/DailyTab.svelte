@@ -1032,6 +1032,16 @@ ${mozartContext}`
       active: true,
       metadata: { source_type: track.source, spotify_id: track.spotify_id }
     })
+    await supabase.from('reference_tracks').insert({
+      title: track.title,
+      artist: track.artist,
+      spotify_id: track.spotify_id || null,
+      preview_url: track.spotify_url || null,
+      source: 'checkout',
+      checkout_date: new Date().toISOString(),
+      collection_name: 'reference_current',
+      approved: true
+    })
     if (!error) alert(`Saved to Brain: ${track.artist} — ${track.title}`)
     else alert('Error saving: ' + error.message)
   }

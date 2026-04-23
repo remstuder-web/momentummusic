@@ -7370,6 +7370,7 @@ function readWhatsAppMessages(dbPath, since) {
       WHERE m.ZMESSAGEDATE > ?
         AND m.ZTEXT IS NOT NULL
         AND m.ZTEXT != ''
+        AND m.ZISFROMME = 0
       ORDER BY m.ZMESSAGEDATE DESC
       LIMIT 100
     `).all(waSince)
@@ -7465,8 +7466,10 @@ async function pollWhatsApp() {
     }
 
     for (const { contact, jid, msgs } of entries) {
-      const history = msgs.map(m => (m.is_from_me ? 'Remo' : contact) + ': ' + m.text).join('\n')
-      const lastMsg = msgs[msgs.length - 1]?.text || ''
+      const incomingMsgs = msgs.filter(m => !m.is_from_me)
+      if (!incomingMsgs.length) continue
+      const history = incomingMsgs.map(m => contact + ': ' + m.text).join('\n')
+      const lastMsg = incomingMsgs[incomingMsgs.length - 1]?.text || ''
 
       // Deep psychological + business analysis via Sonnet (personal chats only)
       if (!jid.includes('@g.us') && !jid.includes('@status') && history.length > 20) {

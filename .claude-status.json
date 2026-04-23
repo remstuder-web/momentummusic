@@ -1,17 +1,17 @@
 {
-  "updated": "2026-04-23T13:18:00.000Z",
-  "last_task": "whatsapp-contacts-ux",
+  "updated": "2026-04-23T13:26:00.000Z",
+  "last_task": "whatsapp-filter-own-messages-delete-btn",
   "status": "done",
   "working": [
-    "contactSearch $state + contact-search-inp filters by partner_name/name case-insensitive",
-    "sortedContacts $derived: monitored first, then alphabetical by partner_name",
-    "PERSONAL section: non-group contacts only",
-    "GROUPS section: group contacts with GROUP badge, hidden when no groups match search",
-    "CSS: contact-search-inp, wa-section-label",
-    "0 svelte-check errors"
+    "readWhatsAppMessages() SQL: AND ZISFROMME=0 filters own messages at DB level",
+    "pollWhatsApp() per-contact: incomingMsgs filter + continue if empty",
+    "history built from incomingMsgs only (no more 'Remo: ...' prefix needed)",
+    ".inbox-item .del-btn / .whatsapp-item .del-btn: 28×28px min-size, flex-centered",
+    "0 svelte-check errors",
+    "watcher restarted OK"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run SQL for new reference_tracks columns. Test WhatsApp contacts UI — search, sorting, group section.",
-  "notes": "WhatsApp contacts list now searchable and split into PERSONAL / GROUPS sections. Monitored contacts always float to top of each section via $derived sort."
+  "next": "Run SQL for new reference_tracks columns. Test WhatsApp analysis — own replies should no longer trigger analysis.",
+  "notes": "Own messages filtered at two levels: SQL (ZISFROMME=0) and per-contact guard. Analysis only fires on contacts that actually sent new incoming messages."
 }

@@ -2162,6 +2162,8 @@ ${mozartContext}`
   .task-item.done .ckb { background: rgba(76,175,130,.15); border-color: #4caf82; }
   .del-btn { background: transparent; border: none; color: #333; font-size: 16px; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
   .del-btn:hover { color: #e05a4a; }
+  .inbox-item .del-btn, .whatsapp-item .del-btn { font-size: 16px; padding: 2px 8px; min-width: 28px; min-height: 28px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #444; background: transparent; border: none; cursor: pointer; }
+  .inbox-item .del-btn:hover, .whatsapp-item .del-btn:hover { color: #e05a4a; }
 
   /* Upcoming panel */
   .upcoming-panel { border: 1px solid #1c1c1c; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }

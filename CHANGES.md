@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + DailyTab.svelte — DONE
+TASK: whatsapp-filter-own-messages-delete-btn
+WHAT: FIX 1 — readWhatsAppMessages() SQL adds ZISFROMME=0 so own replies excluded at DB level. pollWhatsApp() per-contact loop also filters incomingMsgs and skips if empty; history built from incoming only. FIX 2 — .inbox-item .del-btn and .whatsapp-item .del-btn get 28×28px min-size with flex centering.
+RESULT: 0 svelte errors; watcher restarted OK
+BLOCKERS: None
+
 ## [2026-04-23] src/routes/+page.svelte — DONE
 TASK: whatsapp-contacts-ux
 WHAT: FIX 1 — contact search input filters by partner_name/name (case-insensitive). FIX 2 — sortedContacts $derived sorts monitored first, then alphabetical. FIX 3 — PERSONAL and GROUPS sections rendered separately with section labels.

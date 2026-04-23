@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-23] +page.svelte — DONE
+TASK: popup-window-dimensions
+WHAT: Both window.open override and linkHandler now use originalOpen with name 'momentum_popup' + fixed 900x700 dimensions. Same named window is reused for every link so only one popup window stays open. POPUP_FEATURES constant defined once in onMount.
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-23] +page.svelte — DONE
 TASK: popup-window-open-override
 WHAT: Override window.open so JS-triggered popups also use iframe popup. Switched link interceptor from mousedown capture to click capture (true). ↗ and fallback link temporarily restore originalOpen so real new-tab still works. iframeBlocked state replaces popupBlocked.
 RESULT: works

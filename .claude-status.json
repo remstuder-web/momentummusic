@@ -1,15 +1,16 @@
 {
-  "updated": "2026-04-23T21:35:00.000Z",
-  "last_task": "popup-window-open-override",
+  "updated": "2026-04-23T21:50:00.000Z",
+  "last_task": "popup-window-dimensions",
   "status": "done",
   "working": [
-    "popup-window-open-override: window.open overridden to intercept JS-triggered popups; click capture interceptor; ↗/fallback links restore originalOpen for real new-tab; iframeBlocked state",
-    "floating-link-popup: global link popup with iframe, cross-origin fallback, dark palette CSS",
+    "popup-window-dimensions: both override and linkHandler use originalOpen('momentum_popup', 900x700) — same window reused each time",
+    "popup-window-open-override: window.open overridden; click capture interceptor; ↗/fallback restore originalOpen",
+    "floating-link-popup: in-app iframe popup template still present but not triggered (real browser popup used instead)",
     "scout-extract-mentions: extractTracksFromText() saves all text-mentioned tracks to checkout",
     "brain-loadentries-onmount: onMount async, awaits loadEntries()",
     "fix-reference-tracks-order: reference_tracks ordered by created_at DESC",
     "scout-tracks-checkout: /agent-scout saves kworb tracks to checkout",
-    "sync-project-refs: POST /sync-project-refs → Essentia-analyzes project refs → reference_tracks",
+    "sync-project-refs: POST /sync-project-refs → project_meta.reference_links → reference_tracks",
     "fix-vocal-eq-header-click: z-index fix on vocal-eq-section/header",
     "vocalEqStatus per-song + reset button",
     "remove-checkout-banner: CHECK OUT TODAY banner + pulse dot removed"
@@ -20,5 +21,5 @@
     "checkout_date column: run SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;"
   ],
   "next": "Run SQL migrations: (1) ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; (2) ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;",
-  "notes": "window.open override stored in originalOpen (module-level let). ↗ button and fallback link temporarily restore it before navigating so the browser can actually open a new tab."
+  "notes": "Link popup now uses real browser popup window (900x700) named 'momentum_popup' — clicking multiple links reuses same window. In-app iframe popup template still in page.svelte but unused."
 }

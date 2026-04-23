@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs — DONE
+TASK: whatsapp-full-conversation-context
+WHAT: readWhatsAppMessages() removes ZISFROMME=0 filter — all messages fetched. pollWhatsApp() loop builds full conversation (Remo + contact) for analysis but guards on incomingMsgs — skips if no incoming messages, passes last incoming as newMessage. analyzeArtistMessage() now receives full back-and-forth context.
+RESULT: watcher restarted OK
+BLOCKERS: None
+
 ## [2026-04-23] momentum-watcher.cjs + DailyTab.svelte — DONE
 TASK: whatsapp-filter-own-messages-delete-btn
 WHAT: FIX 1 — readWhatsAppMessages() SQL adds ZISFROMME=0 so own replies excluded at DB level. pollWhatsApp() per-contact loop also filters incomingMsgs and skips if empty; history built from incoming only. FIX 2 — .inbox-item .del-btn and .whatsapp-item .del-btn get 28×28px min-size with flex centering.

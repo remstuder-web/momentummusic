@@ -1,17 +1,17 @@
 {
-  "updated": "2026-04-23T13:26:00.000Z",
-  "last_task": "whatsapp-filter-own-messages-delete-btn",
+  "updated": "2026-04-23T13:27:30.000Z",
+  "last_task": "whatsapp-full-conversation-context",
   "status": "done",
   "working": [
-    "readWhatsAppMessages() SQL: AND ZISFROMME=0 filters own messages at DB level",
-    "pollWhatsApp() per-contact: incomingMsgs filter + continue if empty",
-    "history built from incomingMsgs only (no more 'Remo: ...' prefix needed)",
-    ".inbox-item .del-btn / .whatsapp-item .del-btn: 28×28px min-size, flex-centered",
-    "0 svelte-check errors",
+    "readWhatsAppMessages() fetches all messages (both sides) — ZISFROMME filter removed",
+    "pollWhatsApp() builds full conversation with 'Remo: ...' / 'Contact: ...' labels",
+    "incomingMsgs guard: skip entry if no incoming messages (own-only chats ignored)",
+    "analyzeArtistMessage() receives full conversation context",
+    "lastMsg passed is last incoming message (not last message overall)",
     "watcher restarted OK"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run SQL for new reference_tracks columns. Test WhatsApp analysis — own replies should no longer trigger analysis.",
-  "notes": "Own messages filtered at two levels: SQL (ZISFROMME=0) and per-contact guard. Analysis only fires on contacts that actually sent new incoming messages."
+  "next": "Run SQL for new reference_tracks columns. Test WhatsApp analysis with a real back-and-forth conversation.",
+  "notes": "Analysis quality improved — Claude now sees full conversation context including Remo's replies. Only triggers on contacts that sent incoming messages. No own-message notifications."
 }

@@ -3796,8 +3796,8 @@
   .daw-capture-btn:hover { opacity: 1; }
 
   /* Vocal EQ */
-  .vocal-eq-section { border-top: 1px solid #1a1a1a; margin-top: 4px; }
-  .vocal-eq-header { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; background: transparent; border: none; cursor: pointer; }
+  .vocal-eq-section { border-top: 1px solid #1a1a1a; margin-top: 16px; position: relative; z-index: 1; padding-top: 10px; }
+  .vocal-eq-header { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 6px 0; background: transparent; border: none; cursor: pointer; text-align: left; position: relative; z-index: 2; pointer-events: all; }
   .vocal-eq-header:hover { background: rgba(255,255,255,.02); }
   .vocal-eq-title { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; }
   .vocal-eq-arr { font-size: 9px; color: #555; transition: transform .2s; font-family: 'Space Mono', monospace; }

@@ -1,14 +1,11 @@
 {
-  "updated": "2026-04-23T18:30:00.000Z",
-  "last_task": "remove-checkout-banner",
+  "updated": "2026-04-23T18:45:00.000Z",
+  "last_task": "fix-vocal-eq-header-click",
   "status": "partial",
   "working": [
-    "remove-checkout-banner: CHECK OUT TODAY banner removed from top of DailyTab",
-    "remove-checkout-banner: mm-checkout-count $effect dispatch removed from DailyTab",
-    "remove-checkout-banner: all 8 banner CSS classes removed from DailyTab",
-    "remove-checkout-banner: checkoutCount state + event listener removed from +page.svelte",
-    "remove-checkout-banner: checkout-alert-dot span removed from tab nav",
-    "remove-checkout-banner: pulse-dot CSS + keyframes removed from +page.svelte",
+    "fix-vocal-eq-header-click: vocal-eq-section position:relative z-index:1, vocal-eq-header position:relative z-index:2 pointer-events:all",
+    "vocalEqStatus per-song + reset button when stuck",
+    "remove-checkout-banner: CHECK OUT TODAY banner + pulse dot fully removed",
     "agent-tracks-checkout: all agent reference_tracks inserts use source:'checkout'",
     "per-stem save in analyzeVocalEqUrl + /analyze-vocal-eq mix branch",
     "VocalEqChart simplified: single refCurve prop, stem selector in ProjectsTab"
@@ -17,6 +14,6 @@
   "partial": [
     "vocal-eq-stems: SQL migration not yet run — vocal_eq_curves missing stem_type and source_type columns"
   ],
-  "next": "Run in Supabase SQL editor: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; — then test Analyze My Stems button",
-  "notes": "checkOutItems state + dismissCheckOut function kept in DailyTab (not removed) in case needed for future lower checkout section. press-related CSS kept (press-divider, press-item etc)."
+  "next": "Run in Supabase SQL editor: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; — then test Analyze My Stems button on a song with mixing version",
+  "notes": "vocal-eq-section is a direct flex child of song-body, correctly outside versions-block. The z-index fix counters stacking context from versions-block overflow:hidden neighbour."
 }

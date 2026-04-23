@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] ProjectsTab.svelte — DONE
+TASK: fix-vocal-eq-header-click
+WHAT: Vocal EQ section CSS fix. vocal-eq-section: added position:relative; z-index:1; margin-top:16px; padding-top:10px. vocal-eq-header: added position:relative; z-index:2; pointer-events:all; text-align:left; padding changed from 9px 14px to 6px 0. Structural position confirmed correct — vocal-eq-section is already outside versions-block, a direct flex child of song-body.
+RESULT: z-index fix lifts header button above stacking contexts created by overflow:hidden on versions-block sibling
+BLOCKERS: none
+
 ## [2026-04-23] DailyTab.svelte + +page.svelte — DONE
 TASK: remove-checkout-banner
 WHAT: Removed CHECK OUT TODAY banner from top of DailyTab (the {#if checkOutItems.length||pressItems.length} block). Removed $effect that dispatched mm-checkout-count event. Removed all 8 banner-only CSS classes (checkout-section, -header, -row, -cb, -art, -title-txt, -artist-btn, -spotify-btn, -cat-badge). In +page.svelte: removed checkoutCount state, mm-checkout-count event listener, checkout-alert-dot span in tab nav, and pulse-dot CSS + keyframes.

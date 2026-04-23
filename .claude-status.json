@@ -1,21 +1,22 @@
 {
-  "updated": "2026-04-23T19:30:00.000Z",
-  "last_task": "scout-tracks-checkout",
+  "updated": "2026-04-23T20:45:00.000Z",
+  "last_task": "fix-reference-tracks-order",
   "status": "done",
   "working": [
-    "scout-tracks-checkout: runAgentScout auto-saves allTracks (kworb SP+YT) to reference_tracks as source:'checkout' via setImmediate fire-and-forget with dedup check",
+    "fix-reference-tracks-order: BrainTab reference_tracks query now orders by created_at DESC — checkout tracks with null tempo load correctly",
+    "scout-tracks-checkout: /agent-scout endpoint saves result.tracks to reference_tracks (ilike dedup, collection_name scout_YYYY-MM-DD, source checkout)",
+    "sync-project-refs: POST /sync-project-refs reads project_meta.reference_links, Essentia-analyzes each Spotify URL, saves with source:'agent'",
     "fix-vocal-eq-header-click: vocal-eq-section position:relative z-index:1, vocal-eq-header position:relative z-index:2 pointer-events:all",
     "vocalEqStatus per-song + reset button when stuck at 'separating'",
     "remove-checkout-banner: CHECK OUT TODAY banner + pulse dot fully removed",
-    "agent-tracks-checkout: all agent reference_tracks inserts use source:'checkout'",
     "per-stem save in analyzeVocalEqUrl + /analyze-vocal-eq mix branch",
-    "VocalEqChart simplified: single refCurve prop, stem selector in ProjectsTab",
-    "DailyTab inline + button already uses source:'checkout' (confirmed)"
+    "VocalEqChart simplified: single refCurve prop, stem selector in ProjectsTab"
   ],
   "broken": [],
   "partial": [
-    "vocal-eq-stems: SQL migration not yet run — vocal_eq_curves missing stem_type and source_type columns"
+    "vocal-eq-stems: SQL migration not yet run — vocal_eq_curves missing stem_type and source_type columns",
+    "fix-reference-tracks-order: console.log debug lines still in BrainTab — remove after confirming checkout tracks appear"
   ],
-  "next": "Run in Supabase SQL editor: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; — then test Analyze My Stems button on a song with mixing version",
-  "notes": "Scout tracks: allTracks array (up to 15: 10 Spotify kworb + 5 YouTube kworb) saved per scout run. collection_name mapped: youtube_trending→tiktok_trending, else→daily_chart. Dedup by title+artist before insert."
+  "next": "1. Check browser console after opening BrainTab — confirm checkout count > 0, then remove the two console.log lines from BrainTab.svelte. 2. Run Supabase SQL: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix';",
+  "notes": "reference_tracks with null tempo were being excluded by .order('tempo') — now fixed with created_at DESC order."
 }

@@ -181,8 +181,10 @@
     const { data: tracks, error: tErr } = await supabase
       .from('reference_tracks')
       .select('*')
-      .order('tempo')
+      .order('created_at', { ascending: false })
     if (tErr) console.error('reference_tracks load error:', tErr.message)
+    console.log('reference tracks loaded:', tracks?.length)
+    console.log('checkout count:', tracks?.filter(t => t.source === 'checkout').length)
     referenceTrackEntries = tracks || []
     await loadCategories()
   }

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] BrainTab.svelte — DONE
+TASK: fix-reference-tracks-order
+WHAT: Changed reference_tracks query from .order('tempo') to .order('created_at', { ascending: false }) so checkout tracks with null tempo load correctly. Added temporary console.log for debug confirmation.
+RESULT: works — remove console.log after confirming checkout tracks appear
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs — DONE
 TASK: scout-tracks-checkout
 WHAT: runAgentScout now auto-saves all kworb tracks (allTracks = kworbSP + kworbYT, up to 15) to reference_tracks as source:'checkout' via setImmediate fire-and-forget. Deduplicates by title+artist before inserting. Maps source:'youtube_trending' → collection_name:'tiktok_trending', all others → 'daily_chart'. DailyTab inline + button confirmed already uses source:'checkout'. Watcher restarted OK.

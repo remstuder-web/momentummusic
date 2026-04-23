@@ -2059,6 +2059,23 @@ async function handleOwnerCommand(chatId, text) {
       await sendTelegram(chatId, msg)
     } catch(e) { await sendTelegram(chatId, '❌ Crypto signal error: ' + e.message) }
   }
+  else if (cmd === '/enrich') {
+    await sendTelegram(chatId, '⏳ Enriching all contacts...')
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/enrich-all-contacts`, { method: 'POST' })
+      const d = await r.json()
+      const enriched = d.results?.filter(x => x.status === 'enriched') || []
+      const tiktokFound = enriched.filter(x => x.found?.includes('tiktok')).length
+      const spotifyFound = enriched.filter(x => x.found?.includes('spotify_id')).length
+      const igFound = enriched.filter(x => x.found?.includes('instagram')).length
+      await sendTelegram(chatId,
+        `✓ Enriched ${enriched.length} contacts\n` +
+        `Found TikTok: ${tiktokFound}\n` +
+        `Found Spotify: ${spotifyFound}\n` +
+        `Found Instagram: ${igFound}`
+      )
+    } catch(e) { await sendTelegram(chatId, '❌ Enrich error: ' + e.message) }
+  }
   else if (cmd === '/help') {
     await sendTelegram(chatId,
       '🎵 Momentum Commands:\n\n' +
@@ -2079,6 +2096,7 @@ async function handleOwnerCommand(chatId, text) {
       '/contacts — Show monitored WhatsApp contacts\n' +
       '/monitor [name] — Add contact to monitor list\n' +
       '/unmonitor [name] — Remove from monitor list\n' +
+      '/enrich — Bulk enrich all contacts\n' +
       '📷 Send photo — Extract WhatsApp screenshot\n' +
       '↩️ Forward message — Auto-analyze forwarded chat\n' +
       '/help — This message'
@@ -6391,12 +6409,66 @@ ${chatText.slice(0, 4000)}`
         const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
         if (!body.name) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'name required' })); return }
         const enriched = await enrichContact(body.name)
+        if (!enriched.instagram && enriched.instagram_guess) {
+          enriched.instagram = enriched.instagram_guess
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, ...enriched }))
       } catch(e) {
         res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
       }
     })
+    return
+  }
+
+  // ── POST /enrich-all-contacts — bulk enrich all connections ─────────────────
+  if (req.method === 'POST' && req.url === '/enrich-all-contacts') {
+    try {
+      const connRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/connections?select=id,name,instagram,tiktok,spotify_id&order=id`,
+        { headers: sbHeaders }
+      )
+      const connections = await connRes.json()
+
+      const results = []
+      for (const conn of connections || []) {
+        if (conn.instagram && conn.tiktok && conn.spotify_id) {
+          results.push({ name: conn.name, status: 'already complete' })
+          continue
+        }
+        try {
+          const enriched = await enrichContact(conn.name)
+          if (!enriched.instagram && enriched.instagram_guess) {
+            enriched.instagram = enriched.instagram_guess
+          }
+          const updates = {}
+          if (!conn.instagram && enriched.instagram) updates.instagram = enriched.instagram
+          if (!conn.tiktok && enriched.tiktok) updates.tiktok = enriched.tiktok
+          if (!conn.spotify_id && enriched.spotify_id) updates.spotify_id = enriched.spotify_id
+          if (enriched.ig_followers) updates.ig_followers = enriched.ig_followers
+          if (enriched.tiktok_followers) updates.tiktok_followers = enriched.tiktok_followers
+          if (enriched.spotify_followers) updates.spotify_followers = enriched.spotify_followers
+
+          if (Object.keys(updates).length > 0) {
+            await fetch(
+              `${SUPABASE_URL}/rest/v1/connections?id=eq.${conn.id}`,
+              { method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' }, body: JSON.stringify(updates) }
+            )
+            results.push({ name: conn.name, status: 'enriched', found: Object.keys(updates).join(', ') })
+          } else {
+            results.push({ name: conn.name, status: 'nothing found' })
+          }
+          await new Promise(r => setTimeout(r, 1000))
+        } catch(e) {
+          results.push({ name: conn.name, status: 'error: ' + e.message })
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, processed: results.length, results }))
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
     return
   }
 

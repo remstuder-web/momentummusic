@@ -119,6 +119,22 @@
     }
   }
 
+  let enrichingAll = $state(false)
+
+  async function enrichAll() {
+    enrichingAll = true
+    try {
+      const r = await fetch('http://localhost:4242/enrich-all-contacts', { method: 'POST' })
+      const d = await r.json()
+      await loadConnections()
+      alert(d.processed + ' contacts processed')
+    } catch(e) {
+      alert('Enrich failed: ' + e.message)
+    } finally {
+      enrichingAll = false
+    }
+  }
+
   async function updateField(conn, field, value) {
     conn[field] = value
     connections = [...connections]
@@ -218,6 +234,9 @@
     {/if}
   </div>
   <button class="add-btn" onclick={addConnection}>+ ADD</button>
+  <button class="enrich-all-btn" onclick={enrichAll} disabled={enrichingAll}>
+    {enrichingAll ? '...' : '↻ Enrich All'}
+  </button>
 </div>
 
 {#if loading}
@@ -558,6 +577,9 @@
   .add-inp:focus { border-color: rgba(201,168,76,.5); }
   .add-inp::placeholder { color: #555; }
   .add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .1em; padding: 7px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .enrich-all-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .05em; padding: 7px 12px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 3px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .enrich-all-btn:hover:not(:disabled) { border-color: rgba(201,168,76,.4); color: #c9a84c; }
+  .enrich-all-btn:disabled { opacity: .5; cursor: not-allowed; }
   .group-pick-wrap { position: relative; flex-shrink: 0; }
   .group-pick-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 6px 10px; background: #1c1c1c; border: 1px solid #303030; color: #9e9690; border-radius: 3px; cursor: pointer; white-space: nowrap; letter-spacing: .06em; }
   .group-pick-btn:hover { border-color: #c9a84c; color: #c9a84c; }

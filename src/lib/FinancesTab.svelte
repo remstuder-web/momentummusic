@@ -285,6 +285,20 @@
         </div>
       {/if}
 
+      {#if cryptoSignal.active_trades?.length}
+        <div class="section-title" style="margin-top:12px;margin-bottom:4px">ACTIVE TRADES</div>
+        {#each cryptoSignal.active_trades as trade}
+          <div class="active-trade-row {(trade.pnl_pct || 0) >= 0 ? 'profit' : 'loss'}">
+            <span class="coin-label">{trade.coin}</span>
+            <span class="coin-price" style="font-size:11px">entry €{Math.round(trade.entry_price).toLocaleString()}</span>
+            <span class="coin-change {(trade.pnl_pct || 0) >= 0 ? 'up' : 'down'}" style="margin-left:auto">
+              {(trade.pnl_pct || 0) >= 0 ? '+' : ''}{trade.pnl_pct?.toFixed(1)}%
+              (€{Math.round(trade.pnl_eur || 0)})
+            </span>
+          </div>
+        {/each}
+      {/if}
+
       {#if cryptoSignal.binanceAction === 'buy'}
         <a href={cryptoSignal.binanceDeepLink} target="_blank" class="binance-btn">Open Binance →</a>
       {:else if cryptoSignal.binanceAction === 'sell'}
@@ -448,13 +462,21 @@
   /* Crypto */
   .crypto-section { margin-top: 4px; }
   .signal-block { padding: 10px 12px; border-radius: 3px; margin-bottom: 10px; border-left: 3px solid #444; }
-  .signal-block.signal-strong-buy { border-left-color: #4caf82; background: rgba(76,175,130,.06); }
-  .signal-block.signal-bullish { border-left-color: #4caf82; background: rgba(76,175,130,.03); }
-  .signal-block.signal-bearish { border-left-color: #e05a4a; background: rgba(224,90,74,.04); }
-  .signal-block.signal-strong-caution { border-left-color: #e05a4a; background: rgba(224,90,74,.07); }
-  .signal-block.signal-neutral { border-left-color: #444; background: transparent; }
+  .signal-block.signal-strong-buy { border-left-color: #00c853; background: rgba(0,200,83,.08); }
+  .signal-block.signal-strong-buy .signal-label { color: #00c853; }
+  .signal-block.signal-bullish { border-left-color: #4caf82; background: rgba(76,175,130,.05); }
+  .signal-block.signal-bullish .signal-label { color: #4caf82; }
+  .signal-block.signal-neutral { border-left-color: #f5a623; background: rgba(245,166,35,.05); }
+  .signal-block.signal-neutral .signal-label { color: #f5a623; }
+  .signal-block.signal-bearish { border-left-color: #ff6b35; background: rgba(255,107,53,.05); }
+  .signal-block.signal-bearish .signal-label { color: #ff6b35; }
+  .signal-block.signal-strong-sell { border-left-color: #e05a4a; background: rgba(224,90,74,.08); }
+  .signal-block.signal-strong-sell .signal-label { color: #e05a4a; }
   .signal-label { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: #cec9c1; margin-bottom: 4px; }
   .signal-suggestion { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #9e9690; }
+  .active-trade-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-left: 2px solid #333; margin-bottom: 2px; }
+  .active-trade-row.profit { border-left-color: #4caf82; }
+  .active-trade-row.loss { border-left-color: #e05a4a; }
   .price-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid #111; }
   .coin-label { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; width: 30px; }
   .coin-price { font-family: 'Space Mono', monospace; font-size: 13px; color: #cec9c1; flex: 1; }

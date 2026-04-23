@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + FinancesTab.svelte — DONE
+TASK: buy-sell-cycle-4h-binance-portfolio
+WHAT: PART 1 — Portfolio uses Binance live balances as source of truth (fallback: user_settings); enriched with weighted average entry price from crypto_trades buy history. PART 2 — active_trades table loaded in buildCryptoSignal(); P&L computed per trade; EXIT ALERT sent via Telegram (3h cooldown) for take-profit ≥8%, stop-loss ≤-5%, or bearish signal. /buy [€] command logs buy to crypto_trades + upserts active_trades. /sell confirm closes active_trade. /hold snoozes exit alerts 3h. PART 3 — fetch4HCandles() fetches BTCEUR (fallback BTCUSDT) 4H candles; MA5/MA10 scoring (+/-1pt); strong candle body scoring (+/-1pt); trend_4h, ma5_4h, ma10_4h in signal response. PART 4 — FinancesTab: 5 distinct signal colors (strong-buy green #00c853, bullish green, neutral orange, bearish orange-red, strong-sell red); active trades block in UI with P&L per row, colored border by profit/loss.
+RESULT: 0 svelte errors; watcher restarted OK; crypto-signal returns trend_4h=uptrend, MA5=€66692, active_trades=[]
+BLOCKERS: Run CREATE TABLE active_trades SQL in Supabase (schema in task spec)
+
 ## [2026-04-23] momentum-watcher.cjs — DONE
 TASK: crypto-derivatives-signal
 WHAT: fetchDerivativesData(coin) fetches long/short ratio, open interest + hist trend, taker buy/sell ratio, top trader positions, funding trend (3 periods). buildCryptoSignal() calls BTC+ETH derivatives in parallel; scores L/S ratio (±1-2pts), OI+price combo (±1pt), taker ratio (±1pt), smart money (±1pt). Portfolio-aware personalAdvice fetches holdings from Supabase and generates context-specific text. /crypto and morning briefing both show Derivatives block + personal advice. btc_derivatives, eth_derivatives, personal_advice in signal response.

@@ -1616,6 +1616,8 @@ async function syncObsidianFile(filePath) {
 
 // ── Telegram bot ──────────────────────────────────────────────────────────
 const pendingConfirmations = {}
+const lastExitAlertSent = {} // coin → ms timestamp (3h cooldown)
+let lastSignalResult = null  // cached from last buildCryptoSignal() call
 
 async function sendTelegram(chatId, text) {
   await fetch(TELEGRAM_API + '/sendMessage', {
@@ -2089,9 +2091,18 @@ async function handleOwnerCommand(chatId, text) {
         if (d.taker_buy_ratio != null) msg += '\nTaker ratio: ' + d.taker_buy_ratio.toFixed(2) + (d.taker_buy_ratio > 1 ? ' (buyers aggressive)' : ' (sellers aggressive)')
         if (d.top_trader_long_pct != null) msg += '\nSmart money: ' + d.top_trader_long_pct.toFixed(0) + '% long'
       }
+      if (crypto.trend_4h) msg += '\n4H Trend: ' + (crypto.trend_4h === 'uptrend' ? '↑ uptrend' : '↓ downtrend') + (crypto.ma5_4h ? ' | MA5: €' + crypto.ma5_4h.toLocaleString() : '')
       msg += '\n\n' + crypto.suggestion
       if (crypto.reasons.length) msg += '\n\nReasons:\n' + crypto.reasons.map(r => '· ' + r).join('\n')
       if (crypto.personal_advice) msg += '\n\n' + crypto.personal_advice.trim()
+      if (crypto.active_trades?.length) {
+        msg += '\n\n🔵 Active Trades:'
+        for (const t of crypto.active_trades) {
+          msg += '\n' + t.coin + ' entry €' + Math.round(t.entry_price).toLocaleString() +
+            ' → ' + (t.pnl_pct > 0 ? '+' : '') + (t.pnl_pct?.toFixed(1) || '?') + '%' +
+            ' (€' + Math.round(t.pnl_eur || 0) + ')'
+        }
+      }
       if (crypto.binanceAction === 'buy') msg += '\n\n→ Open Binance: ' + crypto.binanceDeepLink
       if (crypto.binanceAction === 'sell') {
         try {
@@ -2122,6 +2133,57 @@ async function handleOwnerCommand(chatId, text) {
       }
       await sendTelegram(chatId, msg)
     } catch(e) { await sendTelegram(chatId, '❌ Crypto signal error: ' + e.message) }
+  }
+  else if (cmd.startsWith('/buy')) {
+    const isEth = cmd.toLowerCase().includes('eth')
+    const coin = isEth ? 'ETH' : 'BTC'
+    const parts = text.trim().split(/\s+/)
+    const amountEur = parseFloat(parts[1]) || 500
+    try {
+      const btcData = await fetchBTCData()
+      const price = coin === 'BTC' ? btcData?.bitcoin?.eur : btcData?.ethereum?.eur
+      if (!price) { await sendTelegram(chatId, '❌ Could not fetch ' + coin + ' price'); return }
+      const coinAmount = amountEur / price
+      const currentSignalStr = lastSignalResult?.signal || 'unknown'
+      pendingConfirmations[chatId] = {
+        action: async () => {
+          await fetch(`${SUPABASE_URL}/rest/v1/crypto_trades`, {
+            method: 'POST',
+            headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({
+              coin, amount_coin: coinAmount, amount_eur: amountEur,
+              price_eur: Math.round(price), type: 'buy',
+              traded_at: new Date().toISOString(),
+              source: 'telegram_signal', notes: 'Signal: ' + currentSignalStr
+            })
+          })
+          await fetch(`${SUPABASE_URL}/rest/v1/active_trades?on_conflict=coin`, {
+            method: 'POST',
+            headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+            body: JSON.stringify({
+              coin, entry_price: price, amount: coinAmount, amount_eur: amountEur,
+              entry_signal: currentSignalStr, entry_time: new Date().toISOString(), status: 'open'
+            })
+          })
+          await sendTelegram(chatId,
+            '✅ Buy logged!\n' +
+            coin + ' ' + coinAmount.toFixed(8) + '\n' +
+            'Invested: €' + amountEur + ' at €' + Math.round(price).toLocaleString() + '\n' +
+            'Signal: ' + currentSignalStr + '\n\n' +
+            '→ Binance: https://www.binance.com/en/trade/' + coin + '_EUR'
+          )
+        }
+      }
+      await sendTelegram(chatId,
+        '⚡ Buy prepared:\n\n' +
+        'Buy €' + amountEur + ' of ' + coin + '\n' +
+        '≈ ' + coinAmount.toFixed(8) + ' ' + coin + '\n' +
+        'Price: €' + Math.round(price).toLocaleString() + '\n' +
+        'Signal: ' + currentSignalStr + '\n\n' +
+        '→ Open Binance first: https://www.binance.com/en/trade/' + coin + '_EUR\n' +
+        'Reply YES to log · NO to cancel'
+      )
+    } catch(e) { await sendTelegram(chatId, '❌ Buy error: ' + e.message) }
   }
   else if (cmd.startsWith('/sell')) {
     const coin = cmd.includes('eth') ? 'ETH' : 'BTC'
@@ -2162,6 +2224,11 @@ async function handleOwnerCommand(chatId, text) {
               source: 'telegram_signal',
               notes: 'Profit: €' + Math.round(profit)
             })
+          }).catch(() => {})
+          await fetch(`${SUPABASE_URL}/rest/v1/active_trades?coin=eq.${coin}`, {
+            method: 'PATCH',
+            headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ status: 'closed' })
           }).catch(() => {})
           await sendTelegram(chatId, '✅ Sell logged. ' + coin + ' holdings cleared.\nProfit recorded: ' + (profit > 0 ? '+' : '') + '€' + Math.round(profit))
         }
@@ -2210,6 +2277,11 @@ async function handleOwnerCommand(chatId, text) {
       await sendTelegram(chatId, msg)
     } catch(e) { await sendTelegram(chatId, '❌ Portfolio error: ' + e.message) }
   }
+  else if (cmd === '/hold') {
+    lastExitAlertSent['BTC'] = Date.now()
+    lastExitAlertSent['ETH'] = Date.now()
+    await sendTelegram(chatId, '👍 Holding position — exit alerts snoozed for 3 hours')
+  }
   else if (cmd === '/enrich') {
     await sendTelegram(chatId, '⏳ Enriching all contacts...')
     try {
@@ -2239,8 +2311,11 @@ async function handleOwnerCommand(chatId, text) {
       '/ask [question] — Ask Mozart\n' +
       '/morning — Full morning agent run\n' +
       '/crypto — Live BTC/ETH signal + Fear & Greed\n' +
+      '/buy [€] — Log BTC buy (default €500)\n' +
+      '/buyeth [€] — Log ETH buy\n' +
       '/sell — Prepare BTC sell (full position)\n' +
       '/selleth — Prepare ETH sell (full position)\n' +
+      '/hold — Snooze exit alerts 3h\n' +
       '/portfolio — Live P&L + Binance balances\n' +
       '/obsidian [title] — Create Obsidian note\n' +
       '/demo [artist] — Check demo status\n' +
@@ -2748,8 +2823,23 @@ async function fetchBinancePortfolio() {
   } catch(e) { console.warn('Binance portfolio error:', e.message); return null }
 }
 
+async function fetch4HCandles(coin = 'BTC', limit = 10) {
+  try {
+    const r = await fetch('https://api.binance.com/api/v3/klines?symbol=' + coin + 'EUR&interval=4h&limit=' + limit)
+    const data = await r.json()
+    if (!Array.isArray(data)) throw new Error('bad response')
+    return data.map(c => ({ time: c[0], open: parseFloat(c[1]), high: parseFloat(c[2]), low: parseFloat(c[3]), close: parseFloat(c[4]), volume: parseFloat(c[5]) }))
+  } catch(e) {
+    try {
+      const r = await fetch('https://api.binance.com/api/v3/klines?symbol=' + coin + 'USDT&interval=4h&limit=' + limit)
+      const data = await r.json()
+      return data.map(c => ({ time: c[0], open: parseFloat(c[1]), high: parseFloat(c[2]), low: parseFloat(c[3]), close: parseFloat(c[4]), volume: parseFloat(c[5]) }))
+    } catch(e2) { return [] }
+  }
+}
+
 async function buildCryptoSignal() {
-  const [fearGreed, btcData, dominance, funding, netflow, btcDeriv, ethDeriv] =
+  const [fearGreed, btcData, dominance, funding, netflow, btcDeriv, ethDeriv, binancePf, candles4h] =
     await Promise.all([
       fetchFearGreed(),
       fetchBTCData(),
@@ -2757,7 +2847,9 @@ async function buildCryptoSignal() {
       fetchFundingRate(),
       fetchExchangeNetflow(),
       fetchDerivativesData('BTC'),
-      fetchDerivativesData('ETH')
+      fetchDerivativesData('ETH'),
+      fetchBinancePortfolio(),
+      fetch4HCandles('BTC')
     ])
 
   const btcPrice = btcData?.bitcoin?.eur
@@ -2834,6 +2926,32 @@ async function buildCryptoSignal() {
     }
   }
 
+  // 4H candle trend
+  let ma5_4h = null, ma10_4h = null, trend_4h = null
+  if (candles4h.length >= 5) {
+    const closes = candles4h.map(c => c.close)
+    ma5_4h = Math.round(closes.slice(-5).reduce((s, v) => s + v, 0) / 5)
+    ma10_4h = Math.round(closes.slice(-10).reduce((s, v) => s + v, 0) / Math.min(10, closes.length))
+    const currentClose = closes[closes.length - 1]
+    trend_4h = currentClose > ma5_4h ? 'uptrend' : 'downtrend'
+    if (currentClose > ma5_4h && ma5_4h > ma10_4h) {
+      bullPoints += 1; reasons.push('4H trend: price above MAs, uptrend intact')
+    } else if (currentClose < ma5_4h && ma5_4h < ma10_4h) {
+      bearPoints += 1; reasons.push('4H trend: price below MAs, downtrend')
+    }
+    const lastCandle = candles4h[candles4h.length - 1]
+    const candleBody = Math.abs(lastCandle.close - lastCandle.open)
+    const candleRange = lastCandle.high - lastCandle.low
+    if (candleRange > 0) {
+      const isBullish = lastCandle.close > lastCandle.open
+      if (isBullish && candleBody > candleRange * 0.6) {
+        bullPoints += 1; reasons.push('Strong bullish 4H candle')
+      } else if (!isBullish && candleBody > candleRange * 0.6) {
+        bearPoints += 1; reasons.push('Strong bearish 4H candle')
+      }
+    }
+  }
+
   let signal, emoji, suggestion, binanceAction
 
   if (bullPoints >= 4) {
@@ -2858,56 +2976,120 @@ async function buildCryptoSignal() {
     binanceAction = null
   }
 
-  // Context-aware personal advice based on holdings
+  // PART 1 — Portfolio: Binance live data first, fallback to user_settings; enrich from crypto_trades
+  let portfolio = []
+  try {
+    if (binancePf?.length) {
+      portfolio = binancePf
+        .filter(b => ['BTC', 'ETH', 'BNB'].includes(b.coin) && b.total > 0.000001)
+        .map(b => ({ coin: b.coin, amount: b.total, entryPrice: null, totalInvested: null }))
+    } else {
+      const portRes = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio&select=value`, { headers: sbHeaders })
+      const portData = await portRes.json()
+      const raw = portData[0]?.value ? JSON.parse(portData[0].value) : []
+      portfolio = raw.map(p => ({ coin: p.coin, amount: p.amount, entryPrice: p.entryPrice, totalInvested: p.amount * (p.entryPrice || 0) }))
+    }
+    // Enrich with weighted average entry from buy trades
+    const tradesRes = await fetch(`${SUPABASE_URL}/rest/v1/crypto_trades?type=eq.buy&order=traded_at.desc`, { headers: sbHeaders })
+    const trades = await tradesRes.json()
+    for (const p of portfolio) {
+      const coinTrades = (Array.isArray(trades) ? trades : []).filter(t => t.coin === p.coin)
+      if (coinTrades.length) {
+        const totalCost = coinTrades.reduce((s, t) => s + (t.amount_eur || 0), 0)
+        const totalAmt = coinTrades.reduce((s, t) => s + (t.amount_coin || 0), 0)
+        if (totalAmt > 0) { p.entryPrice = totalCost / totalAmt; p.totalInvested = totalCost }
+      }
+    }
+  } catch(e) { console.warn('portfolio load error:', e.message) }
+
+  // PART 2 — Active trades: load, compute P&L, send exit alerts (3h cooldown)
+  let activeTrades = []
+  try {
+    const atRes = await fetch(`${SUPABASE_URL}/rest/v1/active_trades?status=eq.open`, { headers: sbHeaders })
+    const atData = await atRes.json()
+    activeTrades = Array.isArray(atData) ? atData : []
+    const ALERT_COOLDOWN_MS = 3 * 60 * 60 * 1000
+    const now = Date.now()
+    for (const trade of activeTrades) {
+      const currentPrice = trade.coin === 'BTC' ? btcPrice : ethPrice
+      if (!currentPrice || !trade.entry_price) continue
+      const pnlPct = (currentPrice - trade.entry_price) / trade.entry_price * 100
+      const pnlEur = (currentPrice - trade.entry_price) * (trade.amount || 0)
+      trade.current_price = currentPrice
+      trade.pnl_pct = pnlPct
+      trade.pnl_eur = pnlEur
+      const takeProfit = pnlPct >= 8
+      const stopLoss = pnlPct <= -5
+      const signalExit = signal === 'STRONG SELL' || signal === 'BEARISH'
+      if (takeProfit || stopLoss || signalExit) {
+        const lastAlert = lastExitAlertSent[trade.coin] || 0
+        if (now - lastAlert > ALERT_COOLDOWN_MS) {
+          lastExitAlertSent[trade.coin] = now
+          const reason = takeProfit ? 'Take profit target hit (+' + pnlPct.toFixed(1) + '%)' :
+                        stopLoss ? 'Stop loss triggered (' + pnlPct.toFixed(1) + '%)' :
+                        'Exit signal: ' + signal
+          sendTelegram(TELEGRAM_OWNER_ID,
+            '🚨 EXIT ALERT: ' + trade.coin + '\n\n' +
+            'Entry: €' + Math.round(trade.entry_price).toLocaleString() +
+              ' (' + new Date(trade.entry_time).toLocaleDateString() + ')\n' +
+            'Now: €' + Math.round(currentPrice).toLocaleString() + '\n' +
+            'P&L: ' + (pnlPct > 0 ? '+' : '') + pnlPct.toFixed(1) + '% ' +
+              '(€' + Math.round(pnlEur) + ')\n\n' +
+            '⚡ Reason: ' + reason + '\n\n' +
+            'Reply /sell' + trade.coin.toLowerCase() + ' to prepare exit\n' +
+            'Reply /hold to dismiss this alert'
+          ).catch(() => {})
+        }
+      }
+    }
+  } catch(e) { console.warn('active_trades error:', e.message) }
+
+  // Personal advice based on enriched portfolio
   let personalAdvice = ''
   try {
-    const portRes = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio&select=value`, { headers: sbHeaders })
-    const portData = await portRes.json()
-    const portfolio = portData[0]?.value ? JSON.parse(portData[0].value) : []
-    const holdsBTC = portfolio.some(p => p.coin === 'BTC')
-    const holdsETH = portfolio.some(p => p.coin === 'ETH')
+    const holdsBTC = portfolio.some(p => p.coin === 'BTC' && p.amount > 0.000001)
+    const holdsETH = portfolio.some(p => p.coin === 'ETH' && p.amount > 0.000001)
 
     if (holdsBTC) {
-      const btcEntry = portfolio.filter(p => p.coin === 'BTC')
-      const avgEntry = btcEntry.reduce((s, p) => s + p.entryPrice, 0) / btcEntry.length
-      const currentPnl = ((btcPrice - avgEntry) / avgEntry * 100).toFixed(1)
-      if (signal === 'STRONG SELL' && parseFloat(currentPnl) > 10) {
-        personalAdvice += '⚠️ You hold BTC at avg €' + Math.round(avgEntry).toLocaleString() +
-          ' (+' + currentPnl + '%). Signal says SELL — consider taking profits.\n'
-      } else if (signal === 'STRONG BUY' && btcDeriv.long_pct != null && btcDeriv.long_pct < 50) {
-        personalAdvice += '✅ You hold BTC. Signal STRONG BUY + low long ratio = good add opportunity.\n'
-      } else if (signal === 'BEARISH' && parseFloat(currentPnl) > 20) {
-        personalAdvice += '💡 You are +' + currentPnl + '% on BTC. Consider partial profit at these levels given bearish signal.\n'
+      const btcH = portfolio.find(p => p.coin === 'BTC')
+      if (btcH?.entryPrice) {
+        const pnl = ((btcPrice - btcH.entryPrice) / btcH.entryPrice * 100).toFixed(1)
+        if (signal === 'STRONG SELL' && parseFloat(pnl) > 10)
+          personalAdvice += '⚠️ You hold BTC at avg €' + Math.round(btcH.entryPrice).toLocaleString() + ' (+' + pnl + '%). Signal says SELL — consider taking profits.\n'
+        else if (signal === 'STRONG BUY' && btcDeriv.long_pct != null && btcDeriv.long_pct < 50)
+          personalAdvice += '✅ You hold BTC. Signal STRONG BUY + low long ratio = good add opportunity.\n'
+        else if (signal === 'BEARISH' && parseFloat(pnl) > 20)
+          personalAdvice += '💡 You are +' + pnl + '% on BTC. Consider partial profit given bearish signal.\n'
       }
     }
 
-    if (!holdsBTC && (signal === 'STRONG BUY' || signal === 'BULLISH')) {
+    if (!holdsBTC && (signal === 'STRONG BUY' || signal === 'BULLISH'))
       personalAdvice += '📌 You have no BTC position. Signal is ' + signal + ' — consider starting a position.\n'
-    }
 
     if (holdsETH) {
-      const ethEntry = portfolio.filter(p => p.coin === 'ETH')
-      const avgEntryEth = ethEntry.reduce((s, p) => s + p.entryPrice, 0) / ethEntry.length
-      const ethPnl = ((ethPrice - avgEntryEth) / avgEntryEth * 100).toFixed(1)
-      if ((signal === 'STRONG SELL' || signal === 'BEARISH') && parseFloat(ethPnl) > 15) {
-        personalAdvice += '⚠️ ETH at avg €' + Math.round(avgEntryEth).toLocaleString() +
-          ' (+' + ethPnl + '%). Bearish signal — consider reducing.\n'
+      const ethH = portfolio.find(p => p.coin === 'ETH')
+      if (ethH?.entryPrice) {
+        const pnl = ((ethPrice - ethH.entryPrice) / ethH.entryPrice * 100).toFixed(1)
+        if ((signal === 'STRONG SELL' || signal === 'BEARISH') && parseFloat(pnl) > 15)
+          personalAdvice += '⚠️ ETH at avg €' + Math.round(ethH.entryPrice).toLocaleString() + ' (+' + pnl + '%). Bearish — consider reducing.\n'
       }
     }
   } catch(e) { console.warn('personalAdvice calc error:', e.message) }
 
-  const binanceDeepLink = 'https://www.binance.com/en/trade/BTC_EUR'
-
-  return {
+  const result = {
     signal, emoji, suggestion, reasons, fearGreed,
     btcPrice, btcChange24h, ethPrice, ethChange24h,
     dominance, funding, netflow, altseasonSignal,
-    binanceDeepLink, binanceAction,
+    binanceDeepLink: 'https://www.binance.com/en/trade/BTC_EUR', binanceAction,
     btc_derivatives: btcDeriv,
     eth_derivatives: ethDeriv,
     personal_advice: personalAdvice,
+    active_trades: activeTrades,
+    ma5_4h, ma10_4h, trend_4h,
     timestamp: new Date().toISOString()
   }
+  lastSignalResult = result
+  return result
 }
 
 // ── Seed production rules into brain_knowledge ────────────────────────────

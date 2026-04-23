@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] +page.svelte — DONE
+TASK: floating-link-popup
+WHAT: Global click interceptor on all a[target="_blank"] links opens 85vw/85vh iframe popup instead of new tab. Header shows hostname + ↗ new-tab button + × close. onload detects cross-origin block and shows fallback message. ESC/overlay click closes. CSS matches dark palette.
+RESULT: works — sites blocking iframes (Spotify, Instagram) show fallback message with ↗ button
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs — DONE
 TASK: scout-extract-mentions
 WHAT: Added extractTracksFromText() helper (calls Haiku to parse track mentions as JSON array). /agent-scout endpoint now calls it after kworb tracks loop, saves all text-mentioned tracks to reference_tracks as source:'checkout' with ilike dedup.

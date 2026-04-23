@@ -1,16 +1,17 @@
 {
-  "updated": "2026-04-23T21:05:00.000Z",
-  "last_task": "scout-extract-mentions",
+  "updated": "2026-04-23T21:20:00.000Z",
+  "last_task": "floating-link-popup",
   "status": "done",
   "working": [
-    "scout-extract-mentions: extractTracksFromText() extracts all track mentions from scout text via Haiku, saves to reference_tracks as checkout with ilike dedup",
-    "brain-loadentries-onmount: onMount is async, awaits loadEntries(), debug console.logs removed",
-    "fix-reference-tracks-order: reference_tracks query orders by created_at DESC — null tempo tracks load correctly",
-    "scout-tracks-checkout: /agent-scout endpoint saves result.tracks (kworb) to reference_tracks (ilike dedup, collection_name scout_YYYY-MM-DD, source checkout)",
-    "sync-project-refs: POST /sync-project-refs reads project_meta.reference_links, Essentia-analyzes each Spotify URL, saves with source:'agent'",
-    "fix-vocal-eq-header-click: vocal-eq-section position:relative z-index:1, vocal-eq-header position:relative z-index:2 pointer-events:all",
-    "vocalEqStatus per-song + reset button when stuck at 'separating'",
-    "remove-checkout-banner: CHECK OUT TODAY banner + pulse dot fully removed"
+    "floating-link-popup: global a[target=_blank] interceptor opens iframe popup (85vw/85vh), cross-origin fallback message, ↗ opens real new tab",
+    "scout-extract-mentions: extractTracksFromText() saves all text-mentioned tracks to checkout via Haiku",
+    "brain-loadentries-onmount: onMount async, awaits loadEntries()",
+    "fix-reference-tracks-order: reference_tracks ordered by created_at DESC",
+    "scout-tracks-checkout: /agent-scout saves kworb tracks to checkout",
+    "sync-project-refs: POST /sync-project-refs → project_meta.reference_links → reference_tracks",
+    "fix-vocal-eq-header-click: z-index fix on vocal-eq-section/header",
+    "vocalEqStatus per-song + reset button",
+    "remove-checkout-banner: CHECK OUT TODAY banner + pulse dot removed"
   ],
   "broken": [],
   "partial": [
@@ -18,5 +19,5 @@
     "checkout_date column: may not exist in reference_tracks — run SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;"
   ],
   "next": "Run both SQL migrations in Supabase dashboard: (1) ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; (2) ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;",
-  "notes": "Scout now saves tracks two ways: kworb chart tracks (with audio metadata) + all text-mentioned tracks (via Haiku extraction). Both use ilike dedup and collection_name scout_YYYY-MM-DD."
+  "notes": "Link popup: cross-origin detection via contentDocument access throws — caught in onload, sets popupBlocked=true to show fallback. Cleanup removes both event listeners on destroy."
 }

@@ -20,10 +20,45 @@
 
     const handler = e => { activeTab = e.detail }
     document.addEventListener('mm-switch-tab', handler)
+
+    const linkHandler = e => {
+      const link = e.target.closest('a[target="_blank"]')
+      if (!link) return
+      const url = link.href
+      if (!url || url.startsWith('javascript')) return
+      e.preventDefault()
+      e.stopPropagation()
+      openPopup(url)
+    }
+    document.addEventListener('click', linkHandler)
+
     return () => {
       document.removeEventListener('mm-switch-tab', handler)
+      document.removeEventListener('click', linkHandler)
     }
   })
+  // Link popup
+  let popupUrl = $state('')
+  let popupVisible = $state(false)
+  let popupTitle = $state('')
+  let popupBlocked = $state(false)
+
+  function openPopup(url) {
+    popupUrl = url
+    popupVisible = true
+    popupBlocked = false
+    try {
+      const u = new URL(url)
+      popupTitle = u.hostname.replace('www.', '')
+    } catch(e) { popupTitle = 'Link' }
+  }
+
+  function closePopup() {
+    popupVisible = false
+    popupUrl = ''
+    popupBlocked = false
+  }
+
   let showSettings = $state(false)
   let showCosts = $state(false)
   let watcherStatus = $state(null) // null=checking, true=running, false=stopped
@@ -569,6 +604,37 @@
     {/if}
   </main>
 </div>
+
+{#if popupVisible}
+  <div class="link-popup-overlay" onclick={closePopup}>
+    <div class="link-popup" onclick={e => e.stopPropagation()}>
+      <div class="link-popup-header">
+        <span class="link-popup-title">{popupTitle}</span>
+        <div class="link-popup-btns">
+          <a href={popupUrl} target="_blank" rel="noopener"
+             class="link-popup-external"
+             title="Open in new tab"
+             onclick={e => e.stopPropagation()}>↗</a>
+          <button class="link-popup-close" onclick={closePopup}>×</button>
+        </div>
+      </div>
+      {#if popupBlocked}
+        <div class="link-popup-blocked">
+          This site doesn't allow embedding. Click ↗ to open in new tab.
+        </div>
+      {:else}
+        <iframe
+          src={popupUrl}
+          class="link-popup-frame"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          title={popupTitle}
+          onload={e => { try { e.target.contentDocument; popupBlocked = false } catch(_) { popupBlocked = true } }}
+          onerror={() => { popupBlocked = true }}
+        ></iframe>
+      {/if}
+    </div>
+  </div>
+{/if}
 {/if}
 
 <style>
@@ -676,4 +742,73 @@
   .usage-cost { font-family: 'Space Mono', monospace; font-size: 11px; color: #cec9c1; }
   .cost-footer { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
   .cost-footer .settings-hint { flex: 1; }
+
+  .link-popup-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.7);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .link-popup {
+    width: 85vw;
+    height: 85vh;
+    background: #0d0d0d;
+    border: 1px solid #303030;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,.8);
+  }
+  .link-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid #252525;
+    background: #111;
+    flex-shrink: 0;
+  }
+  .link-popup-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: #9e9690;
+    letter-spacing: .06em;
+  }
+  .link-popup-btns { display: flex; gap: 8px; align-items: center; }
+  .link-popup-external {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: #555;
+    text-decoration: none;
+    padding: 2px 6px;
+    border: 1px solid #252525;
+    border-radius: 2px;
+  }
+  .link-popup-external:hover { color: #c9a84c; border-color: #c9a84c; }
+  .link-popup-close {
+    background: transparent;
+    border: none;
+    color: #555;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+  }
+  .link-popup-close:hover { color: #e05a4a; }
+  .link-popup-frame { flex: 1; border: none; width: 100%; background: #fff; }
+  .link-popup-blocked {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #9e9690;
+    text-align: center;
+    padding: 40px;
+  }
 </style>

@@ -969,10 +969,10 @@ Return ONLY JSON (single item array):
     return out
   }
 
-  loadEntries()
-  loadDueReview().then(items => dueReviewItems = items)
-
   onMount(() => {
+    loadEntries()
+    loadDueReview().then(items => dueReviewItems = items)
+
     const interval = setInterval(() => {
       placeholderIndex = (placeholderIndex + 1) % DUMP_HINTS.length
     }, 4000)

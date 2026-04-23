@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs + FinancesTab.svelte — DONE
+TASK: crypto-signal-dashboard
+WHAT: Crypto signal (Fear&Greed, funding, dominance, BTC/ETH prices) in Finances tab + Telegram /crypto command + morning briefing crypto block + hourly price alert
+RESULT: works — live test: NEUTRAL 🟡, BTC €66,299, Fear 46, Dominance 58.1%
+BLOCKERS: none
+
 ## [2026-04-22] mozartContext.js + ProjectsTab.svelte — DONE
 TASK: four-improvements
 WHAT: Version narrative, release checklist, brain milestone logging, Mozart sort fix

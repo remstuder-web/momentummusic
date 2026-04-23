@@ -1,21 +1,20 @@
 {
-  "updated": "2026-04-22T12:00:00Z",
-  "last_task": "four-improvements",
+  "updated": "2026-04-23T11:35:00Z",
+  "last_task": "crypto-signal-dashboard",
   "status": "done",
   "working": [
-    "mozartContext: versionsWithAnalysis sorted by created_at desc, max 3 shown",
-    "mozartContext: MIXING HISTORY section added from own_production/version_history brain entries",
-    "ProjectsTab: latestWithAnalysis now sorts desc (was slice(-1)[0])",
-    "ProjectsTab: generateNarrative() calls /generate-version-narrative watcher endpoint",
-    "ProjectsTab: 'Learn from versions' button in Mozart title (2+ mix versions only)",
-    "ProjectsTab: RELEASE button logs brain milestone + triggers narrative",
-    "ProjectsTab: RELEASE_CHECKLIST (8 items) with toggleReleaseCheck()",
-    "ProjectsTab: release checklist UI shown at mastering/stems/released stages",
-    "ProjectsTab: CSS for .release-checklist, .rl-title, .rl-progress, .rl-item",
-    "svelte-check: 0 errors"
+    "GET /crypto-signal — live test confirmed: signal, BTC price, Fear&Greed, dominance, funding",
+    "buildCryptoSignal() — rule-based scoring with 5 data sources",
+    "Morning briefing sends crypto as separate Telegram message",
+    "/crypto Telegram command",
+    "Hourly BTC price alert on 3%+ moves",
+    "FinancesTab CRYPTO SIGNAL section with signal block, prices, indicators, reasons, Binance link",
+    "Portfolio tracker persisted to user_settings.crypto_portfolio",
+    "svelte-check 0 errors",
+    "pm2 restarted and healthy"
   ],
   "broken": [],
   "partial": [],
-  "next": "All four improvements done. Next: test release checklist + narrative flow in browser, or add new tasks.",
-  "notes": "Release checklist shows when song is at mastering or stems stage, or has been released. Checklist state persisted in work_data.release_checklist JSONB."
+  "next": "All crypto dashboard tasks done. Add portfolio entries in Finances tab to track positions.",
+  "notes": "CoinGecko free tier — no API key needed. Funding rate from Binance fapi. Fear&Greed from alternative.me. BTC dominance from CoinGecko global endpoint."
 }

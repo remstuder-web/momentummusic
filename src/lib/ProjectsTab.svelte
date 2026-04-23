@@ -46,7 +46,7 @@
   // Vocal EQ
   let vocalEqCurves = $state({}) // song.id -> curves[] (flat array from API)
   const vocalEqCache = new Map() // persistent cache across expand/collapse
-  let vocalEqStatus = $state('idle') // 'idle' | 'separating' | 'done' | 'error'
+  let vocalEqStatus = $state({}) // song.id -> 'separating' | 'done' | 'error'
   let vocalEqLoading = $state({}) // song.id -> 'ref' | null
   let vocalRefUrl = $state({}) // song.id -> url input string
   let showVocalEq = $state({}) // song.id -> bool
@@ -2085,8 +2085,8 @@
   }
 
   async function analyzeMyVocal(song) {
-    const sid = song.id
-    vocalEqStatus = 'separating'
+    const sid = String(song.id)
+    vocalEqStatus = { ...vocalEqStatus, [sid]: 'separating' }
     try {
       const r = await fetch('http://localhost:4242/analyze-vocal-eq', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2097,9 +2097,9 @@
       await loadVocalEq(sid)
       showVocalEq[sid] = true
       showVocalEq = { ...showVocalEq }
-      vocalEqStatus = 'done'
+      vocalEqStatus = { ...vocalEqStatus, [sid]: 'done' }
     } catch(e) {
-      vocalEqStatus = 'error'
+      vocalEqStatus = { ...vocalEqStatus, [sid]: 'error' }
       alert('Vocal EQ analysis failed: ' + e.message)
     }
   }
@@ -2950,20 +2950,26 @@
                       />
 
                       <!-- Status -->
-                      {#if vocalEqStatus === 'separating'}
-                        <div class="vocal-status">⏳ Separating stems with Demucs… (30–60s)</div>
-                      {:else if vocalEqStatus === 'done'}
-                        <div class="vocal-status done">✓ Analysis complete</div>
-                      {:else if vocalEqStatus === 'error'}
-                        <div class="vocal-status err">✗ Analysis failed</div>
+                      {#if vocalEqStatus[song.id] === 'separating'}
+                        <div class="vocal-status">⏳ Separating stems… (60–90s)</div>
+                      {:else if vocalEqStatus[song.id] === 'error'}
+                        <div class="vocal-status err">✗ Analysis failed — try again</div>
                       {/if}
 
                       <!-- Action row -->
                       <div class="vocal-eq-actions">
-                        <button class="vocal-btn" disabled={vocalEqStatus === 'separating'}
-                          onclick={() => { vocalEqStatus = 'idle'; analyzeMyVocal(song) }}>
-                          {vocalEqStatus === 'separating' ? 'Analyzing…' : 'Analyze My Stems'}
-                        </button>
+                        <div style="display:flex;gap:6px;align-items:center">
+                          <button class="vocal-btn" disabled={vocalEqStatus[song.id] === 'separating'}
+                            onclick={() => analyzeMyVocal(song)}>
+                            {vocalEqStatus[song.id] === 'separating' ? 'Analyzing…' : 'Analyze My Stems'}
+                          </button>
+                          {#if vocalEqStatus[song.id] === 'separating'}
+                            <button class="vocal-btn" style="font-size:9px;color:#555;border-color:#252525"
+                              onclick={() => { vocalEqStatus = { ...vocalEqStatus, [song.id]: null } }}>
+                              Reset
+                            </button>
+                          {/if}
+                        </div>
                         <div class="vocal-ref-row">
                           <input class="vocal-ref-inp" type="text"
                             placeholder="Spotify / YouTube URL…"

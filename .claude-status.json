@@ -1,9 +1,10 @@
 {
-  "updated": "2026-04-23T18:11:00.000Z",
-  "last_task": "vocal-eq-stems",
+  "updated": "2026-04-23T18:20:00.000Z",
+  "last_task": "agent-tracks-checkout",
   "status": "partial",
   "working": [
-    "watcher restarted OK",
+    "agent-tracks-checkout: all agent reference_tracks inserts already use source:'checkout' — code was correct from prior session",
+    "DB: 0 rows with source='agent' in daily_chart or tiktok_trending — already clean",
     "per-stem save in analyzeVocalEqUrl (reference): 4 rows per analysis with stem_type + source_type",
     "per-stem save in /analyze-vocal-eq mix branch: 4 rows per analysis with stem_type + source_type",
     "GET /vocal-eq-curves limits raised to 20 mix + 40 ref",
@@ -11,13 +12,12 @@
     "ProjectsTab: activeStem $state({}) added",
     "ProjectsTab: stem selector tabs in vocal-eq-body UI",
     "ProjectsTab: loadVocalEq filters by (source_type||type) + stem_type",
-    "ProjectsTab: analyzeMyVocal sets showVocalEq[sid]=true + force-shows panel after analysis",
-    "Startup probe warns with exact SQL if vocal_eq_curves columns missing"
+    "ProjectsTab: analyzeMyVocal sets showVocalEq[sid]=true + force-shows panel after analysis"
   ],
   "broken": [],
   "partial": [
     "vocal-eq-stems: SQL migration not yet run — vocal_eq_curves missing stem_type and source_type columns"
   ],
   "next": "Run in Supabase SQL editor: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; — then test Analyze My Stems button on a song with mixing version",
-  "notes": "VocalEqChart.svelte now takes refCurve (singular, flat curve) instead of refCurves (array). Stem selector tabs moved to ProjectsTab vocal-eq-body. GET /vocal-eq-curves queries by type= (existing column, backward compat). Frontend filters client-side by (source_type||type) and (stem_type||'vocals'). Also: active_trades and releases tables still need their own ALTER TABLE (from previous session)."
+  "notes": "3 rows in reference_tracks still have source='agent' (collection_name='reference_current') — out of scope per task. vocal_eq_curves columns still need ALTER TABLE before stems analysis works."
 }

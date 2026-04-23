@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs — DONE
+TASK: agent-tracks-checkout
+WHAT: Verified all agent reference_tracks inserts (agent-chart-analysis/daily_chart, agent-tiktok-trends/tiktok_trending, agent-scout/analyze-spotify-track) already use source:'checkout' + checkout_date. No code changes needed. DB: PATCH confirmed 0 rows with source='agent' in daily_chart or tiktok_trending — already clean. 3 rows in reference_current still have source='agent' (out of scope per task SQL).
+RESULT: works — code was already correct from prior session
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs + ProjectsTab.svelte + VocalEqChart.svelte — PARTIAL
 TASK: vocal-eq-stems
 WHAT: Save each stem (vocals/drums/bass/other) as a separate vocal_eq_curves row with stem_type + source_type columns. Both analyzeVocalEqUrl (reference) and /analyze-vocal-eq mix branch now insert 4 rows per analysis. GET /vocal-eq-curves limits raised to 20+40. ProjectsTab: added activeStem state, stem selector tabs UI, loadVocalEq filters by source_type+stem_type, analyzeMyVocal sets showVocalEq[sid]=true after load. VocalEqChart simplified to single refCurve prop + refLabel, stem selector removed (now in ProjectsTab).

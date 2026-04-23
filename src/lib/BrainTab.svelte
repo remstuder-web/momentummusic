@@ -54,6 +54,32 @@
   let myRefsExpanded = $state(true)
   let checkoutExpanded = $state(true)
   let librarySearch = $state('')
+
+  // Preview audio player
+  let previewAudio = null
+  let playingId = $state(null)
+
+  function playPreview(track) {
+    if (!track.preview_url) {
+      window.open(
+        'https://open.spotify.com/track/' + track.spotify_id,
+        'momentum_popup',
+        'width=900,height=700,left=200,top=100,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=yes'
+      )
+      return
+    }
+    if (playingId === track.id) {
+      previewAudio?.pause()
+      playingId = null
+      return
+    }
+    previewAudio?.pause()
+    previewAudio = new Audio(track.preview_url)
+    previewAudio.volume = 0.8
+    previewAudio.play()
+    playingId = track.id
+    previewAudio.onended = () => { playingId = null }
+  }
   let expandedEntries = $state({})
   let watchedArtists = $state([])
   let referenceTrackEntries = $state([])
@@ -1702,10 +1728,10 @@ Return ONLY JSON (single item array):
               {track.camelot ? ' · ' + track.camelot : ''}
             </span>
             <div class="ref-checkout-btns">
-              {#if track.spotify_id}
+              {#if track.preview_url || track.spotify_id}
                 <button class="track-play-btn"
-                  onclick={() => window.open('https://open.spotify.com/track/' + track.spotify_id, '_blank')}
-                >▶</button>
+                  onclick={() => playPreview(track)}
+                >{playingId === track.id ? '■' : '▶'}</button>
               {/if}
               <button class="promote-btn gold"
                 onclick={() => promoteToMyRefs(track.id)}
@@ -1743,10 +1769,10 @@ Return ONLY JSON (single item array):
               {track.loudness != null ? ' · ' + track.loudness + 'LUFS' : ''}
             </span>
             <div class="ref-checkout-btns">
-              {#if track.spotify_id}
+              {#if track.preview_url || track.spotify_id}
                 <button class="track-play-btn"
-                  onclick={() => window.open('https://open.spotify.com/track/' + track.spotify_id, '_blank')}
-                >▶</button>
+                  onclick={() => playPreview(track)}
+                >{playingId === track.id ? '■' : '▶'}</button>
               {/if}
               <button class="track-del-btn" onclick={() => deleteRef(track.id)}>×</button>
             </div>
@@ -1774,10 +1800,10 @@ Return ONLY JSON (single item array):
               {track.camelot ? ' · ' + track.camelot : (track.key ? ' · ' + track.key : '')}
             </span>
             <div class="ref-checkout-btns">
-              {#if track.spotify_id}
+              {#if track.preview_url || track.spotify_id}
                 <button class="track-play-btn"
-                  onclick={() => window.open('https://open.spotify.com/track/' + track.spotify_id, '_blank')}
-                >▶</button>
+                  onclick={() => playPreview(track)}
+                >{playingId === track.id ? '■' : '▶'}</button>
               {/if}
               <button class="promote-btn gold"
                 onclick={() => promoteToMyRefs(track.id)}

@@ -1002,8 +1002,41 @@
     refsOpen = {...refsOpen}
   }
 
+  // Preview audio player for reference links
+  let refPreviewAudio = null
+  let refPlayingUrl = $state('')
+
+  async function playRefUrl(url) {
+    if (!url) return
+    const spotifyId = url.match(/track\/([A-Za-z0-9]+)/)?.[1]
+    if (!spotifyId) { window.open(url, 'momentum_popup', 'width=900,height=700,left=200,top=100,resizable=yes,scrollbars=yes'); return }
+
+    // Toggle off if already playing
+    if (refPlayingUrl === url) {
+      refPreviewAudio?.pause()
+      refPlayingUrl = ''
+      return
+    }
+
+    // Look up preview_url from reference_tracks
+    const { data } = await supabase.from('reference_tracks').select('preview_url').eq('spotify_id', spotifyId).maybeSingle()
+    const previewUrl = data?.preview_url
+
+    if (!previewUrl) {
+      window.open(url, 'momentum_popup', 'width=900,height=700,left=200,top=100,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=yes')
+      return
+    }
+
+    refPreviewAudio?.pause()
+    refPreviewAudio = new Audio(previewUrl)
+    refPreviewAudio.volume = 0.8
+    refPreviewAudio.play()
+    refPlayingUrl = url
+    refPreviewAudio.onended = () => { refPlayingUrl = '' }
+  }
+
   function openSpotifyPopupProj(url) {
-    window.open(url, 'spotify_preview', 'width=400,height=600,left=100,top=100,toolbar=no,menubar=no')
+    window.open(url, 'momentum_popup', 'width=900,height=700,left=200,top=100,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=yes')
   }
 
   async function removeRefLink(p, id) {
@@ -1073,7 +1106,7 @@
   }
 
   function normSongRef(r) { return typeof r === 'string' ? { url: r, name: '' } : r }
-  function openSpotifySong(url) { window.open(url, 'spotify_preview', 'width=400,height=600,left=100,top=100,toolbar=no,menubar=no') }
+  function openSpotifySong(url) { playRefUrl(url) }
 
   async function analyzeVocalStyle(spotifyUrl) {
     const r = await fetch('http://localhost:4242/analyze-vocal-style', {
@@ -2336,7 +2369,7 @@
                   <span class="ref-chip">
                     {#if isSpotify}
                       <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(ref.url); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
-                      <button class="spotify-play-btn-sm" onclick={() => openSpotifyPopupProj(ref.url)}>▶</button>
+                      <button class="spotify-play-btn-sm" onclick={() => playRefUrl(ref.url)}>{refPlayingUrl === ref.url ? '■' : '▶'}</button>
                     {:else}
                       <a href={ref.url} target="_blank" class="ref-link-btn">{linkLabel(ref.url)}</a>
                     {/if}
@@ -2593,7 +2626,7 @@
                           <span class="ref-chip">
                             {#if isSpotify}
                               <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(r.url); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
-                              <button class="spotify-play-btn-sm" onclick={() => openSpotifySong(r.url)}>▶</button>
+                              <button class="spotify-play-btn-sm" onclick={() => playRefUrl(r.url)}>{refPlayingUrl === r.url ? '■' : '▶'}</button>
                               <button class="vocal-btn" onclick={() => analyzeVocalStyle(r.url)} title="Analyze vocal style">🎤</button>
                             {:else}
                               <a href={r.url} target="_blank" class="ref-link-btn">↗</a>

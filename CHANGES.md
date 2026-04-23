@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] BrainTab + DailyTab + ProjectsTab — DONE
+TASK: ref-track-preview-audio
+WHAT: ▶ buttons play 30s preview_url audio in-app instead of opening Spotify popup. BrainTab: playPreview() toggles Audio object, falls back to momentum_popup if no preview_url. DailyTab: inline-play-btn embeds data-preview, onInlineClick plays audio + toggles ■/▶, falls back to momentum_popup. ProjectsTab: playRefUrl() fetches preview_url from reference_tracks by spotify_id, plays audio or falls back to popup. ■/▶ toggle on all buttons.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-23] +page.svelte — DONE
 TASK: popup-window-dimensions
 WHAT: Both window.open override and linkHandler now use originalOpen with name 'momentum_popup' + fixed 900x700 dimensions. Same named window is reused for every link so only one popup window stays open. POPUP_FEATURES constant defined once in onMount.

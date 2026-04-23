@@ -30,6 +30,10 @@
   let demoSongs_ = $state([])
   let loading = $state(true)
   let calDate = $state(new Date())
+
+  // Inline preview audio
+  let inlineAudio = null
+  let inlinePlayingUrl = $state('')
   let selectedDay = $state(todayISO)
   let activeSection = $state('routine')
 
@@ -1061,8 +1065,9 @@ ${mozartContext}`
         const url = (track?.spotify_url ||
           'https://open.spotify.com/search/' + encodeURIComponent(a + ' ' + t))
           .replace(/"/g, '&quot;')
+        const previewUrl = (track?.preview_url || '').replace(/"/g, '&quot;')
         return match +
-          ` <button class="inline-play-btn" data-url="${url}">▶</button>` +
+          ` <button class="inline-play-btn" data-url="${url}" data-preview="${previewUrl}">▶</button>` +
           ` <button class="inline-brain-btn" data-artist="${a.replace(/"/g,'&quot;')}" data-title="${t.replace(/"/g,'&quot;')}" data-url="${url}">+</button>`
       }
     )
@@ -1237,7 +1242,29 @@ ${mozartContext}`
 
     const onInlineClick = (e) => {
       const playBtn = e.target.closest('.inline-play-btn')
-      if (playBtn?.dataset.url) { window.open(playBtn.dataset.url, '_blank'); return }
+      if (playBtn) {
+        const previewUrl = playBtn.dataset.preview
+        const spotifyUrl = playBtn.dataset.url
+        if (previewUrl) {
+          if (inlinePlayingUrl === previewUrl) {
+            inlineAudio?.pause()
+            inlinePlayingUrl = ''
+            playBtn.textContent = '▶'
+            return
+          }
+          inlineAudio?.pause()
+          document.querySelectorAll('.inline-play-btn').forEach(b => { b.textContent = '▶' })
+          inlineAudio = new Audio(previewUrl)
+          inlineAudio.volume = 0.8
+          inlineAudio.play()
+          inlinePlayingUrl = previewUrl
+          playBtn.textContent = '■'
+          inlineAudio.onended = () => { inlinePlayingUrl = ''; playBtn.textContent = '▶' }
+        } else if (spotifyUrl) {
+          window.open(spotifyUrl, 'momentum_popup', 'width=900,height=700,left=200,top=100,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=yes')
+        }
+        return
+      }
       const brainBtn = e.target.closest('.inline-brain-btn')
       if (brainBtn) addTrackToBrain({ artist: brainBtn.dataset.artist, title: brainBtn.dataset.title, spotify_url: brainBtn.dataset.url })
     }

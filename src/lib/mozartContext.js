@@ -6,7 +6,8 @@ export async function buildMozartContext(supabase, options = {}) {
     { data: contactProfiles }, { data: recentMessages },
     { data: projectSongs }, { data: demoSongs },
     { data: pendingInbox }, { data: marketNews },
-    { data: watchedArtists }, { data: activeProjects }
+    { data: watchedArtists }, { data: activeProjects },
+    { data: mixingHistories }
   ] = await Promise.all([
     supabase.from('reference_tracks').select('*').eq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(5),
     supabase.from('reference_tracks').select('*').neq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(20),
@@ -19,7 +20,8 @@ export async function buildMozartContext(supabase, options = {}) {
     supabase.from('inbox_notifications').select('type,message,metadata,created_at').neq('metadata->>platform', 'whatsapp').eq('read', false).order('created_at', { ascending: false }).limit(5),
     supabase.from('brain_knowledge').select('title,content,created_at').eq('category', 'market_knowledge').order('created_at', { ascending: false }).limit(3),
     supabase.from('watched_artists').select('artist_name,genres').eq('active', true).limit(5),
-    supabase.from('projects').select('name,artist,status,deadlines').eq('status', 'active').limit(5)
+    supabase.from('projects').select('name,artist,status,deadlines').eq('status', 'active').limit(5),
+    supabase.from('brain_knowledge').select('title,content').eq('category', 'own_production').eq('source_type', 'version_history').order('created_at', { ascending: false }).limit(5)
   ])
 
   const userRefs = (allRefs || []).filter(t => t.source === 'user' || t.promoted)
@@ -114,9 +116,10 @@ FORMATTING RULES — always follow these:
 
   if (currentSong && songVersions?.length) {
     const versionsWithAnalysis = songVersions.filter(v => v.analysis)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     if (versionsWithAnalysis.length) {
       context += `## CURRENT SONG: ${currentSong}\n`
-      versionsWithAnalysis.forEach(v => {
+      versionsWithAnalysis.slice(0, 3).forEach(v => {
         context += formatVersion(v.name, v.analysis) + '\n'
       })
       context += '\n'
@@ -229,6 +232,11 @@ FORMATTING RULES — always follow these:
         (meta.real_intent || m.message?.slice(0, 80)) +
         (meta.urgency === 'high' ? ' [HIGH URGENCY]' : '')
     }).join('\n')
+  }
+
+  if (mixingHistories?.length) {
+    context += '\n\n## MIXING HISTORY (what I learned)\n'
+    context += mixingHistories.map(h => h.title + ': ' + h.content.slice(0, 120)).join('\n')
   }
 
   context += `\n\n## ACTION COMMANDS

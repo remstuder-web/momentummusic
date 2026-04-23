@@ -689,6 +689,17 @@
     { id: 'mastering',    label: 'MASTERING' },
   ]
 
+  const RELEASE_CHECKLIST = [
+    { id: 'stems',        label: 'Stems delivered' },
+    { id: 'master',       label: 'Master approved' },
+    { id: 'metadata',     label: 'Metadata complete' },
+    { id: 'distribution', label: 'Submitted to distribution' },
+    { id: 'playlist',     label: 'Playlist pitching done' },
+    { id: 'press',        label: 'Press/EPK sent' },
+    { id: 'social',       label: 'Social content scheduled' },
+    { id: 'date',         label: 'Release date confirmed' },
+  ]
+
   const STAGE_TIP_MAP = {
     demo: 1, production: 2, instrumental: 2, mix_prep: 5, mixing: 5, mastering: 5
   }
@@ -1974,6 +1985,33 @@
     songWorkLogs = data || []
   }
 
+  async function generateNarrative(song) {
+    const wd = workData(song)
+    const mixVersions = (wd.versions || []).filter(v => v.version_type === 'mixing')
+    if (mixVersions.length < 2) return
+    try {
+      const res = await fetch('http://localhost:4242/generate-version-narrative', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ song_id: song.id, versions: mixVersions })
+      })
+      const d = await res.json()
+      if (d.narrative) {
+        aiMessages = [...aiMessages, {
+          role: 'assistant',
+          content: '## Mixing Journey\n' + d.narrative
+        }]
+      }
+    } catch (e) { console.error('generateNarrative error', e) }
+  }
+
+  async function toggleReleaseCheck(song, itemId, checked) {
+    await saveWorkData(song, wd => {
+      if (!wd.release_checklist) wd.release_checklist = {}
+      wd.release_checklist[itemId] = checked
+    })
+  }
+
   onDestroy(() => stopWorkTimer(true))
 
   if (typeof document !== 'undefined') {
@@ -1995,7 +2033,8 @@
     expandedSongId = isExpanding ? song.id : null
     if (!isExpanding) return
     const wd = workData(song)
-    const latestWithAnalysis = (wd.versions || []).filter(v => v.analysis).slice(-1)[0]
+    const latestWithAnalysis = (wd.versions || []).filter(v => v.analysis)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
     if (!latestWithAnalysis) return
     const a = latestWithAnalysis.analysis
     const autoMsg =
@@ -2323,6 +2362,18 @@
                       const _wd = workData(song)
                       if (_wd.instr_audio) fetch(`http://localhost:4242/delete-audio?dir=instrumental&filename=${encodeURIComponent(_wd.instr_audio)}`, { method: 'POST' }).catch(() => {})
                       releasedSongIds = [...releasedSongIds, song.id, song.code]
+                      // Log release milestone to brain
+                      supabase.from('brain_knowledge').insert({
+                        category: 'own_production',
+                        title: 'Released: ' + (song.title || song.code),
+                        content: (selectedProject?.artist ? selectedProject.artist + ' — ' : '') + (song.title || song.code) + ' released on ' + new Date().toLocaleDateString() + '. Mix versions: ' + (_wd.versions?.filter(v=>v.version_type==='mixing').length || 0) + '. Production versions: ' + (_wd.versions?.filter(v=>v.version_type==='production').length || 0) + '.',
+                        entry_type_v2: 'milestone',
+                        confidence: 'high',
+                        source_type: 'release_event',
+                        active: true
+                      }).then(() => {})
+                      // Trigger version narrative generation
+                      generateNarrative(song)
                     }}>
                     {releasedSongIds.includes(song.id)||releasedSongIds.includes(song.code) ? 'RELEASED ✓' : 'RELEASE'}
                   </button>
@@ -2728,6 +2779,24 @@
                   </div>
                 {/if}
 
+                <!-- Release checklist -->
+                {#if releasedSongIds.includes(song.id) || releasedSongIds.includes(song.code) || wd.current_stage === 'mastering' || wd.current_stage === 'stems'}
+                  {@const checklist = wd.release_checklist || {}}
+                  {@const doneCount = RELEASE_CHECKLIST.filter(i => checklist[i.id]).length}
+                  <div class="release-checklist">
+                    <div class="rl-title">RELEASE CHECKLIST
+                      <span class="rl-progress">{doneCount}/{RELEASE_CHECKLIST.length}</span>
+                    </div>
+                    {#each RELEASE_CHECKLIST as item}
+                      <label class="rl-item {checklist[item.id] ? 'done' : ''}">
+                        <input type="checkbox" checked={!!checklist[item.id]}
+                          onchange={e => toggleReleaseCheck(song, item.id, e.currentTarget.checked)} />
+                        <span>{item.label}</span>
+                      </label>
+                    {/each}
+                  </div>
+                {/if}
+
                 <!-- Song footer: Move to Demos | Send to Artist (hidden on prod/mix) | Delete -->
                 <div class="song-footer-row">
                   <button class="sfooter-btn move" onclick={() => moveSongToDemo(song)}>← Move to Demos</button>
@@ -2940,6 +3009,9 @@
       <div class="mozart-title">ASK MOZART
         {#if aiMessages.length > 0}
           <button class="clear-chat" onclick={() => aiMessages = []}>Clear</button>
+        {/if}
+        {#if expandedSong && (workData(expandedSong).versions || []).filter(v => v.version_type === 'mixing').length >= 2}
+          <button class="clear-chat" onclick={() => generateNarrative(expandedSong)}>Learn from versions</button>
         {/if}
       </div>
       <div class="chat-input-row">
@@ -3308,6 +3380,12 @@
   .work-log-stage { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; text-transform: uppercase; letter-spacing: .06em; min-width: 80px; }
   .work-log-dur { font-family: 'Space Mono', monospace; font-size: 10px; color: #cec9c1; min-width: 40px; }
   .work-log-date { font-family: 'Space Mono', monospace; font-size: 10px; color: #666; }
+  .release-checklist { padding: 10px 14px 12px; border-top: 1px solid #1a1a1a; margin-top: 4px; }
+  .rl-title { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-bottom: 7px; display: flex; align-items: center; gap: 8px; }
+  .rl-progress { color: #4caf82; font-size: 10px; }
+  .rl-item { display: flex; align-items: center; gap: 7px; padding: 2px 0; cursor: pointer; font-size: 12px; color: #9e9690; }
+  .rl-item input[type="checkbox"] { accent-color: #4caf82; cursor: pointer; }
+  .rl-item.done span { color: #4caf82; text-decoration: line-through; }
   .song-footer-row { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid #1a1a1a; margin-top: 4px; }
   .sfooter-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 5px 12px; background: transparent; border-radius: 3px; cursor: pointer; }
   .sfooter-btn.move { border: 1px solid rgba(74,159,212,.3); color: #4a9fd4; margin-right: auto; }

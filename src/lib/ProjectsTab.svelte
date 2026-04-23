@@ -1064,6 +1064,29 @@
   function normSongRef(r) { return typeof r === 'string' ? { url: r, name: '' } : r }
   function openSpotifySong(url) { window.open(url, 'spotify_preview', 'width=400,height=600,left=100,top=100,toolbar=no,menubar=no') }
 
+  async function analyzeVocalStyle(spotifyUrl) {
+    const r = await fetch('http://localhost:4242/analyze-vocal-style', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: spotifyUrl })
+    })
+    const d = await r.json()
+    if (d.vocalProfile) {
+      aiMessages = [...aiMessages, {
+        role: 'assistant',
+        content: '🎤 Vocal Profile: ' + (d.artist || '') + '\n\n' +
+          'Range: ' + d.vocalProfile.vocal_range + '\n' +
+          'Timbre: ' + d.vocalProfile.timbre + '\n' +
+          'Expression: ' + d.vocalProfile.expressiveness + '\n' +
+          'Vibrato: ' + d.vocalProfile.vibrato + '\n\n' +
+          'Production recommendations:\n' +
+          d.vocalProfile.recommendations.map(rec => '· ' + rec).join('\n')
+      }]
+    } else {
+      aiMessages = [...aiMessages, { role: 'assistant', content: '🎤 Could not extract vocal profile — no pitch data in preview.' }]
+    }
+  }
+
   function handleSongAudioDrop(e, song) {
     e.preventDefault()
     const file = e.dataTransfer.files[0]; if (!file) return
@@ -2489,6 +2512,7 @@
                             {#if isSpotify}
                               <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(r.url); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
                               <button class="spotify-play-btn-sm" onclick={() => openSpotifySong(r.url)}>▶</button>
+                              <button class="vocal-btn" onclick={() => analyzeVocalStyle(r.url)} title="Analyze vocal style">🎤</button>
                             {:else}
                               <a href={r.url} target="_blank" class="ref-link-btn">↗</a>
                             {/if}
@@ -3148,6 +3172,8 @@
   .spotidown-btn:hover { border-color: #c9a84c; color: #c9a84c; }
   .spotify-play-btn-sm { font-family: 'Space Mono', monospace; font-size: 10px; padding: 3px 9px; background: rgba(30,215,96,.08); border: 1px solid rgba(30,215,96,.4); color: #1ed760; border-radius: 2px; cursor: pointer; flex-shrink: 0; font-weight: 700; }
   .spotify-play-btn-sm:hover { background: rgba(30,215,96,.15); }
+  .vocal-btn { font-size: 11px; padding: 2px 5px; background: transparent; border: 1px solid #303030; border-radius: 2px; cursor: pointer; flex-shrink: 0; line-height: 1; }
+  .vocal-btn:hover { border-color: rgba(201,168,76,.4); }
   .ref-del { background: transparent; border: none; color: #333; font-size: 16px; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
   .ref-del:hover { color: #e05a4a; }
   .ref-empty { font-family: 'Space Mono', monospace; font-size: 11px; color: #333; padding: 4px 0; }

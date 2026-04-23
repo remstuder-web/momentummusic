@@ -3474,8 +3474,11 @@ async function getBrainHealth() {
         const in7days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
         const ago30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
-        // Fetch data from Supabase in parallel + gear news
-        const gearThreadsBriefing = await fetchGearNewsItems()
+        // Fetch data from Supabase in parallel + gear news + cultural timing
+        const [gearThreadsBriefing, cultural] = await Promise.all([
+          fetchGearNewsItems(),
+          fetchCulturalTiming().catch(() => null)
+        ])
         const countHeaders = { ...sbHeaders, 'Prefer': 'count=exact' }
         const [songsRes, inboxRes, connectionsRes, brainKnowRes, goalsRes, demoCountRes, projectSongCountRes] = await Promise.all([
           fetch(`${SUPABASE_URL}/rest/v1/songs?select=title,code,work_data,project_id&not.project_id=is.null`, { headers: sbHeaders }),
@@ -3532,6 +3535,19 @@ async function getBrainHealth() {
           ? gearThreadsBriefing.map((t, i) => `${i+1}. ${t.title}`).join('\n')
           : ''
 
+        let culturalBlock = ''
+        if (cultural) {
+          if (cultural.google_trends?.length) {
+            culturalBlock += '\nCULTURAL TIMING — Genre trends (Google, last 3 months):\n'
+            cultural.google_trends.slice(0, 3).forEach(t => { culturalBlock += `· ${t.term}: ${t.value}/100\n` })
+          }
+          if (cultural.reddit_sounds?.length) {
+            culturalBlock += 'Reddit music discourse:\n'
+            cultural.reddit_sounds.slice(0, 3).forEach(p => { culturalBlock += `· [${p.subreddit}] ${p.title.slice(0, 60)}\n` })
+          }
+          if (cultural.release_timing?.tip) culturalBlock += `Release timing: ${cultural.release_timing.tip}`
+        }
+
         const context = [
           `Today: ${todayISO}`,
           `Songs by stage: ${Object.entries(stageCounts).map(([k,v]) => `${k}(${v})`).join(', ') || 'none'}`,
@@ -3541,6 +3557,7 @@ async function getBrainHealth() {
           `Artists to follow up (30+ days no contact): ${overdueArtists.slice(0,5).join('; ') || 'none'}`,
           activeGoals ? `\nACTIVE GOALS:\n${activeGoals}` : '',
           gearBriefingBlock ? `\nTECH — NEW GEAR & PLUGINS:\n${gearBriefingBlock}` : '',
+          culturalBlock ? `\n${culturalBlock}` : '',
           brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]` : ''
         ].filter(Boolean).join('\n')
 
@@ -3898,15 +3915,28 @@ ${context}` }]
             acousticness = feat.acousticness; duration_seconds = feat.duration_seconds
             camelot = feat.camelot || null
             Object.assign(esExtended, {
-              spectral_centroid: feat.spectral_centroid || null,
-              spectral_contrast: feat.spectral_contrast || null,
-              spectral_flux: feat.spectral_flux || null,
-              mfcc_mean: feat.mfcc_mean || null,
-              bpm_confidence: feat.bpm_confidence || null,
-              brightness: feat.brightness || null,
-              bass_energy: feat.bass_energy || null,
-              rms: feat.rms != null ? feat.rms : null,
-              loudness_lufs: feat.loudness_lufs != null ? feat.loudness_lufs : null,
+              spectral_centroid: feat.spectral_centroid ?? null,
+              spectral_contrast: feat.spectral_contrast ?? null,
+              spectral_flux: feat.spectral_flux ?? null,
+              mfcc_mean: feat.mfcc_mean ?? null,
+              bpm_confidence: feat.bpm_confidence ?? null,
+              brightness: feat.brightness ?? null,
+              bass_energy: feat.bass_energy ?? null,
+              rms: feat.rms ?? null,
+              loudness_lufs: feat.loudness_lufs ?? null,
+              // new extended fields
+              speechiness: feat.speechiness ?? null,
+              instrumentalness: feat.instrumentalness ?? null,
+              onset_rate: feat.onset_rate ?? null,
+              rhythm_regularity: feat.rhythm_regularity ?? null,
+              dynamic_complexity: feat.dynamic_complexity ?? null,
+              loudness_range: feat.loudness_range ?? null,
+              vocal_pitch_mean: feat.vocal_pitch_mean ?? null,
+              vocal_pitch_range: feat.vocal_pitch_range ?? null,
+              vocal_root_note: feat.vocal_root_note ?? null,
+              vibrato_presence: feat.vibrato_presence ?? null,
+              harmonic_complexity: feat.harmonic_complexity ?? null,
+              warmth: feat.warmth ?? null,
             })
             console.log(`  ✓ Essentia (${preview_source}): ${bpm}bpm ${key} ${scale} (${camelot}) nrg:${energy} dnc:${danceability} val:${valence} lufs:${loudness}`)
           } catch(e) {
@@ -3945,21 +3975,91 @@ ${context}` }]
           preview_url,
           preview_source,
           camelot,
-          bpm_confidence: esExtended.bpm_confidence || null,
-          brightness: esExtended.brightness || null,
-          bass_energy: esExtended.bass_energy || null,
-          spectral_centroid: esExtended.spectral_centroid || null,
-          spectral_contrast: esExtended.spectral_contrast || null,
-          spectral_flux: esExtended.spectral_flux || null,
-          mfcc_mean: esExtended.mfcc_mean || null,
-          rms: esExtended.rms != null ? esExtended.rms : null,
-          loudness_lufs: esExtended.loudness_lufs != null ? esExtended.loudness_lufs : null,
+          bpm_confidence: esExtended.bpm_confidence ?? null,
+          brightness: esExtended.brightness ?? null,
+          bass_energy: esExtended.bass_energy ?? null,
+          spectral_centroid: esExtended.spectral_centroid ?? null,
+          spectral_contrast: esExtended.spectral_contrast ?? null,
+          spectral_flux: esExtended.spectral_flux ?? null,
+          mfcc_mean: esExtended.mfcc_mean ?? null,
+          rms: esExtended.rms ?? null,
+          loudness_lufs: esExtended.loudness_lufs ?? null,
+          speechiness: esExtended.speechiness ?? null,
+          instrumentalness: esExtended.instrumentalness ?? null,
+          onset_rate: esExtended.onset_rate ?? null,
+          rhythm_regularity: esExtended.rhythm_regularity ?? null,
+          dynamic_complexity: esExtended.dynamic_complexity ?? null,
+          loudness_range: esExtended.loudness_range ?? null,
+          vocal_pitch_mean: esExtended.vocal_pitch_mean ?? null,
+          vocal_pitch_range: esExtended.vocal_pitch_range ?? null,
+          vocal_root_note: esExtended.vocal_root_note ?? null,
+          vibrato_presence: esExtended.vibrato_presence ?? null,
+          harmonic_complexity: esExtended.harmonic_complexity ?? null,
+          warmth: esExtended.warmth ?? null,
         }))
       } catch(err) {
         logError('analyze-spotify-track', err.message)
         console.error('✗ analyze-spotify-track:', err.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: err.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /analyze-vocal-style — vocal profile from Spotify preview ──────────
+  if (req.method === 'POST' && req.url === '/analyze-vocal-style') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', async () => {
+      try {
+        const { url } = JSON.parse(body)
+        if (!url) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'No URL' })); return }
+
+        const trackId = url.split('/track/')[1]?.split('?')[0]?.split('/')[0]
+        if (!trackId) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'Invalid Spotify URL' })); return }
+
+        const token = await getSpotifyToken()
+        const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        if (!trackRes.ok) throw new Error(`Spotify track error: ${trackRes.status}`)
+        const track = await trackRes.json()
+
+        const tmpAudio = `/tmp/vocal_${Date.now()}.mp3`
+        let audioReady = false
+
+        if (track.preview_url) {
+          try {
+            execSync(`curl -s -o "${tmpAudio}" "${track.preview_url}"`, { timeout: 15000 })
+            audioReady = true
+          } catch(e) {}
+        }
+
+        if (!audioReady) {
+          const ytQuery = `${track.artists[0]?.name || ''} ${track.name} official`
+          try {
+            execSync(`yt-dlp -x --audio-format mp3 --download-sections "*0-30" -o "${tmpAudio}" "ytsearch1:${ytQuery}"`, { timeout: 60000 })
+            audioReady = true
+          } catch(e) {}
+        }
+
+        if (!audioReady) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'Could not download audio' })); return }
+
+        let analysis = {}
+        try {
+          const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
+          const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
+          const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 90000 }).trim()
+          analysis = JSON.parse(esOut)
+        } finally {
+          try { fs.unlinkSync(tmpAudio) } catch(e) {}
+        }
+
+        const vocalProfile = buildVocalProfile(analysis)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, track: track.name, artist: track.artists[0]?.name, analysis, vocalProfile }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
       }
     })
     return
@@ -6094,6 +6194,19 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /cultural-timing — genre trends + reddit + release timing ────────
+  if (req.method === 'GET' && req.url === '/cultural-timing') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const data = await fetchCulturalTiming()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, ...data }))
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── GET /ping ─────────────────────────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/ping') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -6944,6 +7057,126 @@ async function syncAppleNotesToObsidian() {
 }
 
 // ── Contact enrichment — auto-find social profiles by artist name ────────────
+async function fetchCulturalTiming() {
+  const results = { google_trends: [], reddit_sounds: [], release_timing: {} }
+  const { execFile } = require('child_process')
+  const os = require('os')
+  const path_mod = require('path')
+  const fs_mod = require('fs')
+
+  // 1. Google Trends via pytrends
+  try {
+    const terms = ['dark pop', 'afrobeats', 'reggaeton', 'hyperpop', 'phonk', 'melodic techno', 'house music', 'emo rap']
+    const trendScript = `
+import json, sys
+try:
+    from pytrends.request import TrendReq
+    pt = TrendReq(hl='en-US', tz=360)
+    kw = ${JSON.stringify(terms.slice(0, 5))}
+    pt.build_payload(kw, timeframe='today 3-m')
+    df = pt.interest_over_time()
+    last = df.tail(1).to_dict('records')[0] if not df.empty else {}
+    clean = {k: int(v) for k, v in last.items() if k != 'isPartial'}
+    print(json.dumps(clean))
+except Exception as e:
+    print(json.dumps({'error': str(e)}))
+`
+    const tmpScript = path_mod.join(os.tmpdir(), `trends_${Date.now()}.py`)
+    fs_mod.writeFileSync(tmpScript, trendScript)
+    const trendsData = await new Promise(resolve => {
+      execFile('/opt/homebrew/bin/python3.11', [tmpScript], { timeout: 20000 }, (err, stdout) => {
+        try { fs_mod.unlinkSync(tmpScript) } catch(e) {}
+        try { resolve(JSON.parse(stdout || '{}')) } catch { resolve({}) }
+      })
+    })
+    const sorted = Object.entries(trendsData)
+      .filter(([k, v]) => typeof v === 'number')
+      .sort(([, a], [, b]) => b - a)
+    results.google_trends = sorted.map(([term, value]) => ({ term, value }))
+  } catch(e) {
+    console.error('trends error:', e.message)
+  }
+
+  // 2. Reddit music communities
+  try {
+    for (const sub of ['WeAreTheMusicMakers', 'hiphopheads']) {
+      const r = await fetch(`https://www.reddit.com/r/${sub}/hot.json?limit=10`, { headers: { 'User-Agent': 'Mozilla/5.0' } })
+      if (!r.ok) continue
+      const d = await r.json()
+      const posts = (d.data?.children || []).map(p => ({ title: p.data.title, score: p.data.score, subreddit: sub }))
+      results.reddit_sounds.push(...posts)
+    }
+    results.reddit_sounds.sort((a, b) => b.score - a.score)
+    results.reddit_sounds = results.reddit_sounds.slice(0, 10)
+  } catch(e) {
+    console.error('reddit error:', e.message)
+  }
+
+  // 3. Release timing guidance
+  const today = new Date()
+  const dayName = today.toLocaleDateString('en', { weekday: 'long' })
+  results.release_timing = {
+    best_day: 'Friday',
+    discovery_weekly_refresh: 'Monday',
+    release_radar_refresh: 'Friday',
+    editorial_pitch_deadline: '7 days before release',
+    current_day: dayName,
+    tip: today.getDay() === 5
+      ? 'Today is Friday — optimal release day'
+      : today.getDay() === 1
+      ? 'Today is Monday — Discover Weekly just refreshed, good for pitching'
+      : 'Next optimal release: this Friday'
+  }
+
+  return results
+}
+
+function buildVocalProfile(analysis) {
+  if (!analysis.vocal_pitch_mean) return null
+
+  const pitch = analysis.vocal_pitch_mean
+  const range = analysis.vocal_pitch_range || 0
+
+  let vocalRange
+  if (pitch < 165) vocalRange = 'deep bass/baritone'
+  else if (pitch < 220) vocalRange = 'baritone/low tenor'
+  else if (pitch < 294) vocalRange = 'tenor/low alto'
+  else if (pitch < 392) vocalRange = 'alto/mezzo-soprano'
+  else if (pitch < 523) vocalRange = 'soprano/high'
+  else vocalRange = 'very high soprano'
+
+  const warmth = analysis.warmth ?? 0.5
+  const timbre = warmth > 0.6 ? 'warm/dark' : warmth > 0.4 ? 'neutral' : 'bright/thin'
+  const expressiveness = range > 200 ? 'highly expressive' : range > 100 ? 'moderately expressive' : 'controlled/monotone'
+  const vibratoVal = analysis.vibrato_presence ?? 0
+  const vibrato = vibratoVal > 0.6 ? 'strong vibrato' : vibratoVal > 0.3 ? 'subtle vibrato' : 'straight tone'
+
+  return {
+    pitch_hz: pitch,
+    vocal_range: vocalRange,
+    timbre,
+    expressiveness,
+    vibrato,
+    recommendations: [
+      pitch < 250
+        ? 'Keep 150-400Hz clear — their fundamental sits here'
+        : 'Keep 250-600Hz clear — their fundamental sits here',
+      warmth > 0.5
+        ? 'Avoid overly bright pads — will clash with warm vocal'
+        : 'Can use warmer pads — will complement thin vocal',
+      range > 150
+        ? 'Leave dynamic room — they use full range, don\'t compress too hard'
+        : 'Can use denser production — their delivery is controlled',
+      vibratoVal > 0.4
+        ? 'Avoid slow LFO modulation on synths — will clash with natural vibrato'
+        : 'Slow vibrato on synths works well with straight delivery',
+      (analysis.energy ?? 0) > 0.7
+        ? 'High energy vocal — match with driving rhythm and clear attack'
+        : 'Softer delivery — support with space and reverb, not density'
+    ]
+  }
+}
+
 async function enrichContact(name) {
   const results = {
     instagram: null, tiktok: null, spotify_id: null,
@@ -7476,6 +7709,9 @@ Max 150 words. Be specific and actionable.` }]
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/connections?select=personal&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ connections table missing personal column — run SQL in Supabase:\nALTER TABLE connections ADD COLUMN IF NOT EXISTS personal boolean DEFAULT false;') })
+    .catch(() => {})
+  fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=warmth,rhythm_regularity,harmonic_complexity&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing extended analysis columns — run SQL in Supabase:\nALTER TABLE reference_tracks\n  ADD COLUMN IF NOT EXISTS speechiness float,\n  ADD COLUMN IF NOT EXISTS instrumentalness float,\n  ADD COLUMN IF NOT EXISTS onset_rate float,\n  ADD COLUMN IF NOT EXISTS rhythm_regularity float,\n  ADD COLUMN IF NOT EXISTS dynamic_complexity float,\n  ADD COLUMN IF NOT EXISTS loudness_range float,\n  ADD COLUMN IF NOT EXISTS vocal_pitch_mean float,\n  ADD COLUMN IF NOT EXISTS vocal_pitch_range float,\n  ADD COLUMN IF NOT EXISTS vocal_root_note text,\n  ADD COLUMN IF NOT EXISTS vibrato_presence float,\n  ADD COLUMN IF NOT EXISTS harmonic_complexity float,\n  ADD COLUMN IF NOT EXISTS warmth float;') })
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/notes?select=apple_note_id,source&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ notes table missing Apple Notes columns — run SQL in Supabase:\nALTER TABLE notes ADD COLUMN IF NOT EXISTS apple_note_id text;\nALTER TABLE notes ADD COLUMN IF NOT EXISTS source text DEFAULT \'momentum\';\nALTER TABLE notes ADD COLUMN IF NOT EXISTS updated_at timestamptz;\nCREATE UNIQUE INDEX IF NOT EXISTS notes_apple_note_id_idx ON notes(apple_note_id) WHERE apple_note_id IS NOT NULL;') })

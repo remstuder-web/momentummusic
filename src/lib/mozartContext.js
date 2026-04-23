@@ -57,8 +57,8 @@ export async function buildMozartContext(supabase, options = {}) {
 
   const formatTrack = t =>
     `${t.artist ? t.artist + ' — ' : ''}${t.title}: ` + [
-      t.tempo       ? Math.round(t.tempo) + 'bpm'                                             : null,
-      t.key         ? t.key + (t.scale ? ' ' + t.scale : '') + (t.camelot ? ' (' + t.camelot + ')' : '') : null,
+      t.tempo              ? Math.round(t.tempo) + 'bpm'                                             : null,
+      t.key                ? t.key + (t.scale ? ' ' + t.scale : '') + (t.camelot ? ' (' + t.camelot + ')' : '') : null,
       t.energy      != null ? 'nrg ' + Number(t.energy).toFixed(2)            : null,
       t.danceability!= null ? 'dnc ' + Number(t.danceability).toFixed(2)      : null,
       t.valence     != null ? 'val ' + Number(t.valence).toFixed(2)           : null,
@@ -66,9 +66,14 @@ export async function buildMozartContext(supabase, options = {}) {
       t.brightness  != null ? 'brt ' + Number(t.brightness).toFixed(2)       : null,
       t.bass_energy != null ? 'bas ' + Number(t.bass_energy).toFixed(2)      : null,
       t.acousticness!= null ? 'aco ' + Number(t.acousticness).toFixed(2)     : null,
-      t.duration_seconds    ? fmtDur(t.duration_seconds)                      : null,
-      t.genre_tags?.length  ? t.genre_tags.slice(0, 2).join(', ')             : null,
-      t.notes               ? '(' + t.notes.slice(0, 60) + ')'               : null
+      t.warmth      != null ? 'warmth ' + Number(t.warmth).toFixed(2)        : null,
+      t.rhythm_regularity != null ? 'groove ' + Number(t.rhythm_regularity).toFixed(2) : null,
+      t.harmonic_complexity != null ? 'harm ' + Number(t.harmonic_complexity).toFixed(2) : null,
+      t.dynamic_complexity != null ? 'dyn ' + Number(t.dynamic_complexity).toFixed(2)  : null,
+      t.vocal_root_note    ? 'vocal ' + t.vocal_root_note + (t.vocal_octave != null ? t.vocal_octave : '') : null,
+      t.duration_seconds   ? fmtDur(t.duration_seconds)                      : null,
+      t.genre_tags?.length ? t.genre_tags.slice(0, 2).join(', ')             : null,
+      t.notes              ? '(' + t.notes.slice(0, 60) + ')'               : null
     ].filter(Boolean).join(' · ')
 
   const formatVersion = (name, a) =>
@@ -249,6 +254,16 @@ FORMATTING RULES — always follow these:
     context += '\n\n## MIXING HISTORY (what I learned)\n'
     context += mixingHistories.map(h => h.title + ': ' + h.content.slice(0, 120)).join('\n')
   }
+
+  try {
+    const culturalRes = await fetch('http://localhost:4242/cultural-timing')
+    const cd = await culturalRes.json()
+    if (cd.google_trends?.length) {
+      context += '\n\n## CULTURAL MOMENTUM\n'
+      context += 'Genre trends right now:\n'
+      cd.google_trends.slice(0, 5).forEach(t => { context += t.term + ': ' + t.value + '/100\n' })
+    }
+  } catch(e) {}
 
   if (targetContacts.length) {
     context += '\n\n## TARGET CONTACTS (not yet reached)\n'

@@ -1,17 +1,28 @@
 {
-  "updated": "2026-04-23T12:40:00.000Z",
-  "last_task": "mozart-target-contacts",
+  "updated": "2026-04-23T12:58:00.000Z",
+  "last_task": "expanded-essentia-vocal-cultural",
   "status": "done",
   "working": [
-    "buildMozartContext fetches connections with personal=false and via_ids null/empty",
-    "TARGET CONTACTS section appended to Mozart context with name + group type",
-    "try/catch so query degrades gracefully if personal column not yet in DB",
+    "analyze_audio.py: 12 new fields — onset_rate, dynamic_complexity, loudness_range, speechiness, instrumentalness, harmonic_complexity, warmth confirmed in output",
+    "mozartContext formatTrack includes warmth, groove, harm, dyn, vocal note",
+    "/analyze-spotify-track passes all new fields through esExtended",
+    "buildVocalProfile() classifies vocal range, timbre, expressiveness, vibrato, gives 5 production recs",
+    "/analyze-vocal-style endpoint downloads preview, runs Essentia, returns vocalProfile",
+    "ProjectsTab: 🎤 Vocal Style button on Spotify ref chips — posts to Mozart chat",
+    "fetchCulturalTiming() — release_timing works, Google Trends degrades gracefully, Reddit attempted",
+    "GET /cultural-timing endpoint working",
+    "Morning briefing includes cultural block",
+    "mozartContext CULTURAL MOMENTUM section via fetch to /cultural-timing",
+    "pytrends installed successfully",
+    "Watcher startup logs SQL for new reference_tracks columns",
     "0 svelte-check errors"
   ],
   "broken": [],
   "partial": [
-    "Target contacts query returns nothing until personal column added to DB"
+    "vocal_pitch_mean/vibrato_presence null on short previews — PredominantPitchMelodia needs high-confidence pitch",
+    "rhythm_regularity null — BeatLoudness needs beat positions",
+    "Google Trends empty when Google blocks pytrends scraping (anti-bot)"
   ],
-  "next": "Run SQL: ALTER TABLE connections ADD COLUMN IF NOT EXISTS personal boolean DEFAULT false; — then target contacts will appear in Mozart context",
-  "notes": "Column name is via_ids (not via as in spec). PostgREST empty array syntax is {} not []. Both fixed in implementation."
+  "next": "Run SQL for new reference_tracks columns (watcher logs full SQL on startup)",
+  "notes": "All three builds done and tested. New analysis fields work on full WAV files. Cultural timing structure is solid — Google Trends is best-effort."
 }

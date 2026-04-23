@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] analyze_audio.py + mozartContext.js + momentum-watcher.cjs + ProjectsTab.svelte — DONE
+TASK: expanded-essentia-vocal-cultural
+WHAT: BUILD 1 — 12 new Essentia signals (onset_rate, rhythm_regularity, dynamic_complexity, loudness_range, speechiness, instrumentalness, vocal_pitch_mean, vocal_root_note, vibrato_presence, harmonic_complexity, warmth) + mozartContext formatTrack updated. BUILD 2 — /analyze-vocal-style endpoint + buildVocalProfile() + 🎤 button in ProjectsTab ref chips. BUILD 3 — fetchCulturalTiming() + GET /cultural-timing + morning briefing cultural block + mozartContext CULTURAL MOMENTUM section. pytrends installed.
+RESULT: new fields confirmed in analyze_audio.py output; /cultural-timing endpoint responds; 0 svelte errors
+BLOCKERS: Run SQL for new DB columns (watcher logs them on startup). vocal_pitch_mean/vibrato null on short previews (PredominantPitchMelodia needs higher confidence). Google Trends degrades gracefully when Google blocks scraping.
+
 ## [2026-04-23] src/lib/mozartContext.js — DONE
 TASK: mozart-target-contacts
 WHAT: buildMozartContext() fetches connections with personal=false and no via_ids, appends as TARGET CONTACTS section so Mozart flags networking opportunities

@@ -150,7 +150,108 @@ except Exception:
 results['duration_seconds'] = round(len(audio) / 44100.0, 1)
 results['key_source'] = 'essentia'
 
-# Loudness range (static placeholder — requires longer audio)
-results['loudness_range'] = 0.0
+# ── RHYTHM & GROOVE ──────────────────────
+try:
+    od = es.OnsetRate()(audio)
+    results['onset_rate'] = round(float(od[1]), 3)
+
+    novelty, _ = es.BeatTrackerMultiFeature()(audio)
+    results['beat_count'] = len(novelty)
+except Exception:
+    results['onset_rate'] = None
+
+try:
+    _, beats_loud, _ = es.BeatLoudness()(audio)
+    if len(beats_loud) > 1:
+        beat_var = float(np.std(beats_loud) / (np.mean(beats_loud) + 1e-6))
+        results['rhythm_regularity'] = round(max(0, min(1, 1 - beat_var)), 3)
+except Exception:
+    results['rhythm_regularity'] = None
+
+# ── DYNAMICS ─────────────────────────────
+try:
+    dc = es.DynamicComplexity()(audio)
+    results['dynamic_complexity'] = round(float(dc[0]), 3)
+    results['loudness_range'] = round(float(dc[1]), 3)
+except Exception:
+    results['dynamic_complexity'] = None
+    results['loudness_range'] = None
+
+# ── SPEECHINESS / INSTRUMENTALNESS ───────
+try:
+    zcr_vals = []
+    for i in range(0, len(audio) - 2048, 1024):
+        frame = audio[i:i+2048]
+        zcr_vals.append(float(es.ZeroCrossingRate()(frame)))
+    if zcr_vals:
+        zcr = float(np.mean(zcr_vals))
+        speechiness_proxy = min(1.0, zcr * 20)
+        results['speechiness'] = round(speechiness_proxy, 3)
+        results['instrumentalness'] = round(max(0, 1 - speechiness_proxy * 1.5), 3)
+except Exception:
+    results['speechiness'] = None
+    results['instrumentalness'] = None
+
+# ── VOCAL ANALYSIS (pitch statistics) ────
+try:
+    pitch_extractor = es.PredominantPitchMelodia(frameSize=2048, hopSize=128)
+    pitch_values, pitch_confidence = pitch_extractor(audio)
+
+    confident_pitches = [
+        float(p) for p, c in zip(pitch_values, pitch_confidence)
+        if c > 0.8 and float(p) > 80
+    ]
+
+    if confident_pitches:
+        results['vocal_pitch_mean'] = round(float(np.mean(confident_pitches)), 1)
+        results['vocal_pitch_range'] = round(float(np.max(confident_pitches) - np.min(confident_pitches)), 1)
+        results['vocal_pitch_std'] = round(float(np.std(confident_pitches)), 1)
+
+        midi = 12 * math.log2(results['vocal_pitch_mean'] / 440.0) + 69
+        notes = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+        results['vocal_root_note'] = notes[int(midi) % 12]
+        results['vocal_octave'] = int(midi) // 12 - 1
+
+        if len(confident_pitches) > 10:
+            pitch_var = float(np.std(confident_pitches))
+            results['vibrato_presence'] = round(min(1.0, pitch_var / 50), 3)
+    else:
+        results['vocal_pitch_mean'] = None
+        results['vocal_pitch_range'] = None
+        results['vocal_root_note'] = None
+        results['vibrato_presence'] = None
+except Exception:
+    results['vocal_pitch_mean'] = None
+    results['vocal_pitch_range'] = None
+    results['vocal_root_note'] = None
+    results['vibrato_presence'] = None
+
+# ── HARMONIC COMPLEXITY ───────────────────
+try:
+    hpcps = []
+    for i in range(0, len(audio) - 4096, 2048):
+        frame = audio[i:i+4096]
+        windowed = es.Windowing(type='blackmanharris62')(frame)
+        spectrum = es.Spectrum()(windowed)
+        peaks_freq, peaks_mag = es.SpectralPeaks()(spectrum)
+        if len(peaks_freq) > 0:
+            hpcp = es.HPCP()(peaks_freq, peaks_mag)
+            hpcps.append(hpcp)
+
+    if hpcps:
+        mean_hpcp = np.mean(hpcps, axis=0)
+        hpcp_norm = mean_hpcp / (np.sum(mean_hpcp) + 1e-6)
+        entropy = -np.sum(hpcp_norm * np.log2(hpcp_norm + 1e-6))
+        results['harmonic_complexity'] = round(float(entropy) / 4.0, 3)
+except Exception:
+    results['harmonic_complexity'] = None
+
+# ── TIMBRE WARMTH ─────────────────────────
+try:
+    if results.get('spectral_centroid'):
+        warmth = 1 - (results['spectral_centroid'] / 12000)
+        results['warmth'] = round(max(0, min(1, warmth)), 3)
+except Exception:
+    results['warmth'] = None
 
 print(json.dumps(results))

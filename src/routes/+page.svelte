@@ -23,12 +23,13 @@
     const handler = e => { activeTab = e.detail }
     document.addEventListener('mm-switch-tab', handler)
 
-    // Override window.open so JS-triggered popups also go through our popup
+    const POPUP_FEATURES = 'width=900,height=700,left=200,top=100,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=yes'
+
+    // Override window.open so JS-triggered popups reuse the named momentum_popup window
     originalOpen = window.open
     window.open = (url, target, features) => {
       if (url && url.startsWith('http')) {
-        openPopup(url)
-        return null
+        return originalOpen(url, 'momentum_popup', POPUP_FEATURES)
       }
       return originalOpen(url, target, features)
     }
@@ -41,7 +42,7 @@
       if (url.startsWith('http') || url.startsWith('//')) {
         e.preventDefault()
         e.stopImmediatePropagation()
-        openPopup(url)
+        originalOpen(url, 'momentum_popup', POPUP_FEATURES)
       }
     }
     document.addEventListener('click', linkHandler, true)

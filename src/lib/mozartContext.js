@@ -346,22 +346,35 @@ export async function executeAction(action, supabase, currentSong, currentProjec
       const d = await res.json()
       if (!d.ok) return '✗ Could not find track'
 
-      const projectId = action.params.project_id || currentProject?.id
-      if (projectId && d.spotify_id) {
-        const { data: proj } = await supabase.from('projects').select('project_meta').eq('id', projectId).maybeSingle()
-        const meta = proj?.project_meta || {}
-        const refs = Array.isArray(meta.reference_links) ? meta.reference_links : []
-        if (!refs.find(r => r.name === d.title)) {
-          refs.push({
-            id: 'r' + Date.now(),
-            url: 'https://open.spotify.com/track/' + d.spotify_id,
-            name: d.title,
-            artist: d.artist,
-            source: 'mozart'
-          })
-          meta.reference_links = refs
-          await supabase.from('projects').update({ project_meta: meta }).eq('id', projectId)
-          if (currentProject) currentProject.project_meta = meta
+      if (action.params.song_id) {
+        // Save to song's reference_links column
+        const { data: song } = await supabase.from('songs').select('reference_links').eq('id', action.params.song_id).maybeSingle()
+        const refs = Array.isArray(song?.reference_links) ? song.reference_links : []
+        const trackUrl = 'https://open.spotify.com/track/' + d.spotify_id
+        if (!refs.find(r => (typeof r === 'string' ? r : r.url) === trackUrl)) {
+          refs.push({ id: 'r' + Date.now(), url: trackUrl, name: d.title, artist: d.artist, source: 'mozart' })
+          await supabase.from('songs').update({ reference_links: refs }).eq('id', action.params.song_id)
+          if (currentSong?.id === action.params.song_id) currentSong.reference_links = refs
+        }
+      } else {
+        // Save to project's project_meta.reference_links
+        const projectId = action.params.project_id || currentProject?.id
+        if (projectId && d.spotify_id) {
+          const { data: proj } = await supabase.from('projects').select('project_meta').eq('id', projectId).maybeSingle()
+          const meta = proj?.project_meta || {}
+          const refs = Array.isArray(meta.reference_links) ? meta.reference_links : []
+          if (!refs.find(r => r.name === d.title)) {
+            refs.push({
+              id: 'r' + Date.now(),
+              url: 'https://open.spotify.com/track/' + d.spotify_id,
+              name: d.title,
+              artist: d.artist,
+              source: 'mozart'
+            })
+            meta.reference_links = refs
+            await supabase.from('projects').update({ project_meta: meta }).eq('id', projectId)
+            if (currentProject) currentProject.project_meta = meta
+          }
         }
       }
 

@@ -2199,14 +2199,16 @@
         songSpecificRefs
       })
       let system = brainContext + '\n\n' + buildProjectContext()
-      if (expandedSong?.id) {
-        system += '\n\nCurrent open song: ' + (expandedSong.title || expandedSong.code) +
-          ' (id: ' + expandedSong.id + ')'
-      }
-      if (selectedProject?.id) {
+      if (selectedProject && !expandedSongId) {
         system += '\nCurrent project: ' + selectedProject.artist + ' — ' + selectedProject.name +
-          ' (project_id: ' + selectedProject.id + ')\n' +
-          'When adding project references use project_id=' + selectedProject.id
+          ' (id: ' + selectedProject.id + ')\n' +
+          'No specific song open. References go to PROJECT level.\n' +
+          'Use: [ACTION: add_reference | track="Artist - Title" | project_id=' + selectedProject.id + ']'
+      } else if (expandedSong) {
+        system += '\nCurrent song open: ' + (expandedSong.title || expandedSong.code) +
+          ' (id: ' + expandedSong.id + ')\n' +
+          'References go to THIS SONG.\n' +
+          'Use: [ACTION: add_reference | track="Artist - Title" | song_id=' + expandedSong.id + ']'
       }
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',

@@ -1,15 +1,13 @@
 {
-  "updated": "2026-04-23T16:18:00.000Z",
-  "last_task": "housekeeping",
+  "updated": "2026-04-23T16:25:00.000Z",
+  "last_task": "mozart-ref-context",
   "status": "done",
   "working": [
-    "8/8 tests passing",
-    "65 brain duplicates cleaned (173 entries remain)",
-    "WhatsApp debug console.logs removed from readWhatsAppMessages()",
-    "All brain file storage hooks working",
-    "vocal_eq_curves table exists (needs ALTER TABLE for columns)",
-    "active_trades table exists (needs ALTER TABLE for columns)",
-    "releases table exists (needs ALTER TABLE for new columns)"
+    "Mozart add_reference routes to song refs (songs.reference_links) when song_id param present",
+    "Mozart add_reference routes to project refs (project_meta.reference_links) when project_id param or no song expanded",
+    "System prompt tells Mozart: project context when no song open, song context when song expanded",
+    "Action format includes correct id param (project_id= vs song_id=)",
+    "svelte-check 0 errors, 8/8 tests passing"
   ],
   "broken": [],
   "partial": [
@@ -17,6 +15,6 @@
     "active_trades: needs ALTER TABLE to add coin, amount_coin, amount_eur, entry_price, entry_signal, entry_time, status",
     "releases: needs ALTER TABLE to add code, label, distributor, isrc, upc, folder_path, status, spotify_streams"
   ],
-  "next": "Run ALTER TABLE SQL in Supabase dashboard for vocal_eq_curves, active_trades, releases. Then test /improve Telegram command and vocal EQ analysis end-to-end.",
-  "notes": "All three tables exist but were created with minimal columns. Full SQL block ready — run in Supabase SQL Editor at https://supabase.com/dashboard/project/ukqpnjgvjeduipmdaczn/sql"
+  "next": "Run ALTER TABLE SQL in Supabase dashboard for vocal_eq_curves, active_trades, releases.",
+  "notes": "Mozart ref routing fix: song context → songs.reference_links direct column (not work_data). Project context → project_meta.reference_links. Both update local state immediately after DB write."
 }

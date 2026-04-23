@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] mozartContext.js + ProjectsTab.svelte — DONE
+TASK: mozart-ref-context
+WHAT: Mozart add_reference now routes to correct level. song_id param → songs.reference_links column. project_id param (or no song expanded) → project_meta.reference_links. System prompt tells Mozart which context is active and which ACTION format to use (project_id= vs song_id=).
+RESULT: works, svelte-check 0 errors
+BLOCKERS: none
+
 ## [2026-04-23] momentum-watcher.cjs — DONE
 TASK: housekeeping
 WHAT: Removed 3 debug console.log lines from readWhatsAppMessages() (waSince, Invictus CoreData ts, Will catch flag). Ran /cleanup-brain-dupes (deleted 65 duplicates, 173 remaining). 8/8 tests passing.

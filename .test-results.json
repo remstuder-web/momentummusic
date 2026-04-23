@@ -1,5 +1,5 @@
 {
-  "run": "2026-04-17T23:34:01.699Z",
+  "run": "2026-04-23T16:14:11.846Z",
   "passed": 8,
   "total": 8,
   "results": [
@@ -7,13 +7,13 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: repair session audit + git init"
+      "detail": "last_task: brain-file-storage"
     },
     {
       "n": 2,
       "label": "Category suggestion",
       "ok": true,
-      "detail": "action=new suggestion=\"drum_compression_techniques\""
+      "detail": "action=new suggestion=\"drum_production_techniques\""
     },
     {
       "n": 3,
@@ -25,7 +25,7 @@
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok — no past pulse briefings (first run, or today returned NO_UPDATES)"
+      "detail": "endpoint ok + past briefing has real content (1380 chars)"
     },
     {
       "n": 5,
@@ -37,19 +37,19 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Increase kick punch and presence\""
+      "detail": "3 items: \"Increase kick attack and compression for more punch\""
     },
     {
       "n": 7,
       "label": "No brain duplicates",
       "ok": true,
-      "detail": "36 entries, 0 duplicates"
+      "detail": "173 entries, 0 duplicates"
     },
     {
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "3545fd6 baseline after repair session"
+      "detail": "2a60fad feat: brain file storage — saveBrainFile hooks + upload endpoint + BrainTab drop zone"
     }
   ]
 }

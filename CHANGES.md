@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] src/routes/+page.svelte — DONE
+TASK: whatsapp-contacts-ux
+WHAT: FIX 1 — contact search input filters by partner_name/name (case-insensitive). FIX 2 — sortedContacts $derived sorts monitored first, then alphabetical. FIX 3 — PERSONAL and GROUPS sections rendered separately with section labels.
+RESULT: 0 svelte errors
+BLOCKERS: None
+
 ## [2026-04-23] +page.svelte + momentum-watcher.cjs — DONE
 TASK: whatsapp-group-chats-and-new-chat-detection
 WHAT: FIX 1 — /whatsapp-contacts already returns groups; removed @g.us filter from Settings UI so groups appear with GROUP badge (blue). FIX 2 — pollWhatsApp() now checks for new ZWACHATSESSION entries since last poll and sends Telegram notification for unmonitored chats. /monitor and /unmonitor already call setWaContacts() via /whatsapp-add-contact — confirmed correct.

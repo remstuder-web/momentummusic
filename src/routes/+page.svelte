@@ -40,6 +40,16 @@
   // WhatsApp monitor
   let waContacts = $state([])
   let waContactsLoading = $state(false)
+  let contactSearch = $state('')
+
+  const sortedContacts = $derived([
+    ...waContacts.filter(c => c.monitored),
+    ...waContacts.filter(c => !c.monitored)
+      .sort((a, b) => (a.partner_name || a.name || '').localeCompare(b.partner_name || b.name || ''))
+  ].filter(c =>
+    !c.jid.includes('@status') &&
+    (!contactSearch || (c.partner_name || c.name || '').toLowerCase().includes(contactSearch.toLowerCase()))
+  ))
 
   async function loadWaContacts() {
     waContactsLoading = true
@@ -498,8 +508,14 @@
           {:else if waContacts.length === 0}
             <p class="settings-hint">No contacts found — make sure WhatsApp Desktop is installed.</p>
           {:else}
+            <input
+              class="contact-search-inp"
+              placeholder="Search contacts..."
+              bind:value={contactSearch}
+            />
             <div class="wa-contacts-list">
-              {#each waContacts.filter(c => !c.jid.includes('@status')) as c (c.jid)}
+              <div class="wa-section-label">PERSONAL</div>
+              {#each sortedContacts.filter(c => !c.is_group) as c (c.jid)}
                 <div class="wa-contact-row">
                   <button
                     class="wa-toggle {c.monitored ? 'on' : ''}"
@@ -509,11 +525,24 @@
                     {c.monitored ? '●' : '○'}
                   </button>
                   <span class="wa-contact-name">{c.name}</span>
-                  {#if c.is_group}
-                    <span class="group-badge">GROUP</span>
-                  {/if}
                 </div>
               {/each}
+              {#if sortedContacts.some(c => c.is_group)}
+                <div class="wa-section-label">GROUPS</div>
+                {#each sortedContacts.filter(c => c.is_group) as c (c.jid)}
+                  <div class="wa-contact-row">
+                    <button
+                      class="wa-toggle {c.monitored ? 'on' : ''}"
+                      onclick={() => toggleWaContact(c.name, c.monitored)}
+                      title={c.monitored ? 'Stop monitoring' : 'Start monitoring'}
+                    >
+                      {c.monitored ? '●' : '○'}
+                    </button>
+                    <span class="wa-contact-name">{c.name}</span>
+                    <span class="group-badge">GROUP</span>
+                  </div>
+                {/each}
+              {/if}
             </div>
             <p class="settings-hint">Monitored contacts are analyzed every 2 min and saved to Brain + Inbox.</p>
           {/if}
@@ -623,6 +652,9 @@
   .wa-toggle:hover { color: rgba(201,168,76,.6); }
   .wa-contact-name { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; }
   .group-badge { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .08em; color: #4a9fd4; border: 1px solid rgba(74,159,212,.3); padding: 1px 4px; border-radius: 2px; }
+  .contact-search-inp { width: 100%; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 5px 8px; border-radius: 3px; outline: none; margin-bottom: 8px; box-sizing: border-box; }
+  .contact-search-inp:focus { border-color: #3c3c3c; }
+  .wa-section-label { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: #333; letter-spacing: .1em; padding: 8px 0 4px; border-bottom: 1px solid #1a1a1a; margin-bottom: 4px; }
 
   .usage-header-row { display: flex; align-items: center; justify-content: space-between; }
   .usage-header-row label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; color: #9e9690; }

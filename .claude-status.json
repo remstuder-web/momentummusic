@@ -1,18 +1,17 @@
 {
-  "updated": "2026-04-23T13:15:00.000Z",
-  "last_task": "whatsapp-group-chats-and-new-chat-detection",
+  "updated": "2026-04-23T13:18:00.000Z",
+  "last_task": "whatsapp-contacts-ux",
   "status": "done",
   "working": [
-    "/whatsapp-contacts already included groups — SQL was already correct",
-    "Settings UI now shows group chats (removed @g.us filter, kept @status filter)",
-    "GROUP badge (blue) shown on group entries in Settings WhatsApp list",
-    "pollWhatsApp() new chat detection: queries ZWACHATSESSION for sessions newer than lastWhatsAppCheck, sends Telegram notification for unmonitored ones",
-    "/monitor and /unmonitor Telegram commands work via setWaContacts() — confirmed correct",
-    "0 svelte-check errors",
-    "watcher restarted OK"
+    "contactSearch $state + contact-search-inp filters by partner_name/name case-insensitive",
+    "sortedContacts $derived: monitored first, then alphabetical by partner_name",
+    "PERSONAL section: non-group contacts only",
+    "GROUPS section: group contacts with GROUP badge, hidden when no groups match search",
+    "CSS: contact-search-inp, wa-section-label",
+    "0 svelte-check errors"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run SQL for new reference_tracks columns (watcher logs them on startup). Test monitor/unmonitor Telegram commands. Test group contacts appear in Settings UI.",
-  "notes": "WhatsApp group chats now visible and monitorable in Settings. New chat detection fires on every pollWhatsApp cycle (every 2 min). /monitor and /unmonitor confirmed to use setWaContacts() via /whatsapp-add-contact endpoint."
+  "next": "Run SQL for new reference_tracks columns. Test WhatsApp contacts UI — search, sorting, group section.",
+  "notes": "WhatsApp contacts list now searchable and split into PERSONAL / GROUPS sections. Monitored contacts always float to top of each section via $derived sort."
 }

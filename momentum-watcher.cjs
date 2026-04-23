@@ -2299,6 +2299,10 @@ async function handleOwnerCommand(chatId, text) {
       )
     } catch(e) { await sendTelegram(chatId, '❌ Enrich error: ' + e.message) }
   }
+  else if (cmd === '/improve') {
+    await sendTelegram(chatId, '⏳ Analyzing system...')
+    await weeklySystemReview()
+  }
   else if (cmd === '/help') {
     await sendTelegram(chatId,
       '🎵 Momentum Commands:\n\n' +
@@ -2326,6 +2330,7 @@ async function handleOwnerCommand(chatId, text) {
       '/monitor [name] — Add contact to monitor list\n' +
       '/unmonitor [name] — Remove from monitor list\n' +
       '/enrich — Bulk enrich all contacts\n' +
+      '/improve — Weekly system improvement review\n' +
       '📷 Send photo — Extract WhatsApp screenshot\n' +
       '↩️ Forward message — Auto-analyze forwarded chat\n' +
       '/help — This message'
@@ -3153,6 +3158,95 @@ async function seedProductionRules() {
   }
   console.log(`Production rules seeding complete — seeded: ${seeded}, skipped: ${skipped}`)
   return { seeded, skipped, total: rules.length }
+}
+
+// ── Weekly system improvement review ─────────────────────────────────────
+async function weeklySystemReview() {
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) { console.warn('weeklySystemReview: no ANTHROPIC_API_KEY'); return }
+
+    const [brainRes, songsRes, tradesRes, releasesRes] = await Promise.allSettled([
+      fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=category,confidence,created_at,source_type`, { headers: sbHeaders }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/songs?select=id,work_data,updated_at&limit=20`, { headers: sbHeaders }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/crypto_trades?select=*&order=traded_at.desc&limit=10`, { headers: sbHeaders }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/releases?select=id,spotify_streams,updated_at&limit=10`, { headers: sbHeaders }).then(r => r.json())
+    ])
+
+    const brainEntries = brainRes.status === 'fulfilled' ? (brainRes.value || []) : []
+    const songs = songsRes.status === 'fulfilled' ? (songsRes.value || []) : []
+    const recentTrades = tradesRes.status === 'fulfilled' ? (tradesRes.value || []) : []
+    const releases = releasesRes.status === 'fulfilled' ? (releasesRes.value || []) : []
+
+    const weakEntries = brainEntries.filter(e => e.confidence === 'weak').length
+    const lockedEntries = brainEntries.filter(e => e.confidence === 'locked').length
+    const totalEntries = brainEntries.length
+    const songsWithAnalysis = songs.filter(s => s.work_data?.versions?.some(v => v.analysis)).length
+    const tradesThisWeek = recentTrades.filter(t => Date.now() - new Date(t.traded_at).getTime() < 7 * 24 * 3600000).length
+
+    const cr = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001', max_tokens: 800,
+        system: `You are the Momentum system advisor for Remo, a music producer.
+Every week you review the system and suggest concrete improvements.
+Be specific, actionable, and prioritized. Max 5 suggestions.
+Focus on what would have the most impact on his music career.
+No bold text, no markdown, plain text only.`,
+        messages: [{ role: 'user', content: `Weekly system review for Momentum Music Framework.
+
+SYSTEM STATS:
+Brain entries: ${totalEntries} total, ${weakEntries} weak, ${lockedEntries} locked
+Songs in system: ${songs.length} (${songsWithAnalysis} analyzed, ${songs.length - songsWithAnalysis} missing analysis)
+Releases tracked: ${releases.length}
+Crypto trades this week: ${tradesThisWeek}
+
+WHAT TO REVIEW:
+1. What data is missing that would make Mozart smarter?
+2. What workflows could be more automated?
+3. What manual steps could be eliminated?
+4. What new intelligence sources would help?
+5. What in the brain should be promoted from weak to strong?
+
+Give 3-5 specific, prioritized improvement suggestions for this week.
+Each suggestion max 2 sentences. Be concrete not general.` }]
+      })
+    })
+    const d = await cr.json()
+    const review = d.content?.[0]?.text || ''
+
+    if (TELEGRAM_TOKEN) {
+      await sendTelegram(TELEGRAM_OWNER_ID,
+        '🔧 Weekly System Improvements\n\n' + review + '\n\n→ Reply with what you want to build'
+      )
+    }
+
+    await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        category: 'observation',
+        title: 'System Review ' + new Date().toLocaleDateString('de-CH'),
+        content: review,
+        entry_type_v2: 'observation',
+        confidence: 'weak',
+        source_type: 'system_review',
+        active: true
+      })
+    }).catch(() => {})
+
+    fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        endpoint: 'weekly-system-review', model: 'claude-haiku-4-5-20251001',
+        input_tokens: d.usage?.input_tokens || 0, output_tokens: d.usage?.output_tokens || 0,
+        cost_usd: ((d.usage?.input_tokens || 0) * 0.0000008) + ((d.usage?.output_tokens || 0) * 0.000001)
+      })
+    }).catch(() => {})
+    console.log('✓ Weekly system review sent')
+  } catch(e) { console.warn('weeklySystemReview error:', e.message) }
 }
 
 // ── Vocal EQ — standalone reference analysis function ────────────────────
@@ -8553,7 +8647,10 @@ Max 150 words. Be specific and actionable.` }]
   }
   setInterval(() => {
     const now = new Date()
-    if (now.getDay() === 0 && now.getHours() === 8 && now.getMinutes() === 0) weeklyBrainReview()
+    if (now.getDay() === 0 && now.getHours() === 8 && now.getMinutes() === 0) {
+      weeklyBrainReview()
+      weeklySystemReview()
+    }
   }, 60000)
   setInterval(() => {
     brainToObsidian().catch(e => console.error('auto obsidian sync error:', e.message))

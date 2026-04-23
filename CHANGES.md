@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-23] momentum-watcher.cjs — DONE
+TASK: weekly-system-review
+WHAT: weeklySystemReview() added as module-level function (so /improve Telegram command can call it). Pulls brain stats (total/weak/locked), song analysis coverage, releases count, crypto trades this week via Promise.allSettled. Sends to Haiku for 3-5 concrete improvement suggestions. Saves result to brain_knowledge (category=observation, source_type=system_review). Tracks cost. Fires Sunday 8am alongside weeklyBrainReview() via setInterval. /improve Telegram command triggers on demand. Added to /help list.
+RESULT: watcher restarted OK, no errors
+BLOCKERS: none
+
 ## [2026-04-23] analyze_vocal_eq.py + momentum-watcher.cjs + ProjectsTab.svelte + VocalEqChart.svelte — DONE
 TASK: vocal-eq-four-fixes
 WHAT: FIX 1 — analyze_vocal_eq.py: Demucs now uses --name htdemucs (4 stems: vocals/drums/bass/other); returns { ok, stems: { vocals:{...}, drums:{...}, ... }, stem_count }. FIX 2 — watcher: analyzeVocalEqUrl() extracted as module-level standalone function; /analyze-vocal-eq saves stems dict; type=mix auto-queues song's reference_links via setImmediate for background analysis. FIX 3 — ProjectsTab: vocalEqCache Map for persistence across expand/collapse; loadVocalEq correctly reads d.curves (was d.mix_curves/d.ref_curves — bug); vocalEqStatus state ('idle'|'separating'|'done'|'error') with pulsing status line; auto-compare extracts vocals stem for comparison. FIX 4 — VocalEqChart: stem tabs (VOCALS/DRUMS/BASS/OTHER); getStemCurve() handles both new {vocals:{}} and old flat format; multiple ref curves (gold/green/blue); mix curve is light/white; legend uses REF 1/2/3 + MY MIX labels.

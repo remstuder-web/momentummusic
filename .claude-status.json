@@ -1,20 +1,23 @@
 {
-  "updated": "2026-04-23T15:58:00.000Z",
-  "last_task": "vocal-eq-four-fixes",
+  "updated": "2026-04-23T16:02:00.000Z",
+  "last_task": "weekly-system-review",
   "status": "done",
   "working": [
-    "FIX 1: analyze_vocal_eq.py uses --name htdemucs; returns all 4 stems (vocals/drums/bass/other); find_stem_file() per stem",
-    "FIX 2: analyzeVocalEqUrl() is module-level function reusable from setImmediate; /analyze-vocal-eq saves result.stems; auto-queues song reference_links in background",
-    "FIX 3: vocalEqCache Map persists curves across song expand/collapse; loadVocalEq uses d.curves (not d.mix_curves bug); vocalEqStatus shows Demucs progress; auto-compare uses vocals stem",
-    "FIX 4: VocalEqChart has VOCALS/DRUMS/BASS/OTHER stem tabs; getStemCurve() handles new+old formats; up to 3 ref curves (gold/green/blue); mix is light/white; legend REF 1/2/3 + MY MIX",
-    "0 svelte errors; watcher restarted OK"
+    "weeklySystemReview() is module-level (callable from pollTelegram /improve command)",
+    "Fires Sunday 8am via setInterval alongside weeklyBrainReview()",
+    "/improve Telegram command triggers on demand, sends ⏳ ack first",
+    "Saves review to brain_knowledge (observation, system_review)",
+    "Tracks cost to api_usage table",
+    "Added to /help list",
+    "Watcher restarted OK, no startup errors"
   ],
   "broken": [],
   "partial": [
-    "vocal_eq_curves table must exist in Supabase with curve column as jsonb",
-    "htdemucs model auto-downloads first run (~200MB) — first analysis will take longer",
-    "Debug logging in readWhatsAppMessages() still present — remove when stable"
+    "Debug console.log lines in readWhatsAppMessages() still present — remove when WhatsApp monitoring confirmed stable",
+    "vocal_eq_curves table must exist in Supabase",
+    "active_trades table must exist in Supabase",
+    "releases table needs ALTER TABLE for new columns"
   ],
-  "next": "Test vocal EQ flow on a real song with a mix file. First Demucs run downloads htdemucs model (~200MB). Remove debug WhatsApp logging when confirmed stable.",
-  "notes": "Curve storage format: curve column stores { vocals:{30-band}, drums:{30-band}, bass:{30-band}, other:{30-band} } directly (no wrapper). Chart getStemCurve() handles both this and old flat format via duck-typing (checks for stem key vs freq key)."
+  "next": "Test /improve Telegram command. Clean up WhatsApp debug logging. Create Supabase tables (vocal_eq_curves, active_trades) and run ALTER TABLE releases.",
+  "notes": "weeklySystemReview was initially placed inside server.listen callback (not module-level), which would have caused ReferenceError when called from pollTelegram. Fixed by moving to module scope before server.listen."
 }

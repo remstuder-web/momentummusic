@@ -1,20 +1,24 @@
 {
   "updated": "2026-04-25T00:00:00.000Z",
-  "last_task": "brain-dump-image-extraction",
-  "status": "done",
+  "last_task": "analyzer-project-refs-merge-my-refs",
+  "status": "partial",
   "working": [
-    "extractImageText(file): base64 encode → claude-haiku-4-5-20251001 vision → plain text → dumpText",
-    "textarea onpaste: intercepts clipboard images, calls extractImageText, prevents default",
-    "drop handler: image drops now use extractImageText (not processImageDump) → text in field → suggest-category flow",
-    "imageExtracting $state: shows ⏳ indicator during extraction",
-    "cost tracking via /track-cost for browser/image-extract",
-    "processImageDump kept intact (still used by screen capture flow if needed)",
+    "CHANGE 1: refTrackOptions includes popularity + collection_name",
+    "CHANGE 1: ref dropdown optgroups: PROJECT REFS (work_data.reference_links) / HIT SONGS (popularity>70 or daily_chart/tiktok_trending) / LIBRARY",
+    "CHANGE 1: buildSuccessPattern(refsOverride) — accepts optional refs array",
+    "CHANGE 1: /analyze-success-match uses project refs first when work_data.reference_links set",
+    "CHANGE 2: POST /migrate-my-refs-to-library — ran, 2 tracks migrated source=user→agent",
+    "CHANGE 2: MY REFERENCES section removed from BrainTab",
+    "CHANGE 2: libraryRefs includes source=user/mozart/promoted=true",
+    "CHANGE 2: CHECKOUT ★ Mine removed, only → lib (saves agent)",
+    "CHANGE 2: brain-reftrack-promote saves source=agent",
     "8/8 tests passing, clean vite build"
   ],
   "broken": [],
   "partial": [
-    "BUILD 2/3: feedback_patterns and chart_history tables need SQL in Supabase"
+    "CHANGE 3 (Brain Speicherbox) — spec was cut off mid-sentence, needs user to resend",
+    "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
-  "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables (see previous status for full SQL)",
-  "notes": "extractImageText is lighter than processImageDump (Haiku vs Sonnet, plain text vs structured JSON). Both paste and drop now go through the same lightweight extract→dumpText→suggest-category pipeline."
+  "next": "User needs to resend CHANGE 3 (Brain Speicherbox: files stored by date) — message was cut off at '/Users/remo/Dropbox/!MOMENTUM'",
+  "notes": "work_data.reference_links is not yet populated by any UI — PROJECT REFS optgroup will be empty until a UI is added to link refs to songs."
 }

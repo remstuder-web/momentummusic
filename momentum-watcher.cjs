@@ -1496,8 +1496,8 @@ async function getCrossChartTopics() {
 }
 
 // ── BUILD 1: Success Pattern ───────────────────────────────────────────────
-async function buildSuccessPattern() {
-  const { data: refs } = await supabaseAdmin.from('reference_tracks').select('*').in('source', ['user', 'agent']).not('tempo', 'is', null)
+async function buildSuccessPattern(refsOverride) {
+  const refs = refsOverride || (await supabaseAdmin.from('reference_tracks').select('*').in('source', ['user', 'agent']).not('tempo', 'is', null)).data
   if (!refs?.length) return null
   const vals = (field) => refs.map(r => r[field]).filter(v => v != null)
   const avg = (field) => { const v = vals(field); return v.length ? v.reduce((s,x) => s+x, 0) / v.length : null }
@@ -6577,8 +6577,18 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         const versions = song?.work_data?.versions || []
         const analysis = versions.filter(v => v.analysis).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0]?.analysis
         if (!analysis) { res.writeHead(200); res.end(JSON.stringify({ ok: false, error: 'no analysis found' })); return }
-        const { data: patternRow } = await supabaseAdmin.from('user_settings').select('value').eq('key', 'success_pattern').maybeSingle()
-        let pattern = patternRow?.value ? JSON.parse(patternRow.value) : null
+
+        // Build pattern: project refs first, then user refs, then fall back to stored pattern
+        const refLinks = song?.work_data?.reference_links || []
+        let pattern = null
+        if (refLinks.length) {
+          const { data: projRefs } = await supabaseAdmin.from('reference_tracks').select('*').in('id', refLinks).limit(10)
+          if (projRefs?.length) pattern = await buildSuccessPattern(projRefs)
+        }
+        if (!pattern) {
+          const { data: patternRow } = await supabaseAdmin.from('user_settings').select('value').eq('key', 'success_pattern').maybeSingle()
+          pattern = patternRow?.value ? JSON.parse(patternRow.value) : null
+        }
         if (!pattern) pattern = await buildSuccessPattern()
         const result = await compareToSuccessPattern(analysis, pattern)
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -9148,6 +9158,25 @@ ${chatText.slice(0, 4000)}`
         res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
       }
     })
+    return
+  }
+
+  // ── POST /migrate-my-refs-to-library — one-time: source='user' → 'agent' ──
+  if (req.method === 'POST' && req.url === '/migrate-my-refs-to-library') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('reference_tracks')
+        .update({ source: 'agent' })
+        .eq('source', 'user')
+        .select('id')
+      if (error) throw new Error(error.message)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, migrated: data?.length || 0 }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
     return
   }
 

@@ -2123,7 +2123,7 @@
     if (refIds.length) {
       const { data: rts } = await supabase
         .from('reference_tracks')
-        .select('id, title, artist, source, credits')
+        .select('id, title, artist, source, credits, popularity, collection_name')
         .in('id', refIds)
         .order('artist', { ascending: true })
       refTrackOptions = rts || []
@@ -3063,15 +3063,37 @@
                       </div>
                       <!-- Ref dropdown (only when global ref curves exist) -->
                       {#if refTrackOptions.length > 0}
+                        {@const refLinks = new Set(wd.reference_links || [])}
+                        {@const projectRefs = refTrackOptions.filter(r => refLinks.has(String(r.id)))}
+                        {@const hitRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && ((r.popularity || 0) > 70 || r.collection_name === 'daily_chart' || r.collection_name === 'tiktok_trending'))}
+                        {@const libraryRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && (r.popularity || 0) <= 70 && r.collection_name !== 'daily_chart' && r.collection_name !== 'tiktok_trending')}
                         <div class="ref-select-row">
                           <span class="ref-select-label">Compare:</span>
                           <select class="ref-select"
                             value={selectedRef}
                             onchange={e => { selectedRefId[song.id] = e.currentTarget.value; selectedRefId = { ...selectedRefId }; loadVocalEq(song.id) }}>
                             <option value="">— URL ref —</option>
-                            {#each refTrackOptions as ref}
-                              <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
-                            {/each}
+                            {#if projectRefs.length}
+                              <optgroup label="── PROJECT REFS ──">
+                                {#each projectRefs as ref}
+                                  <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                                {/each}
+                              </optgroup>
+                            {/if}
+                            {#if hitRefs.length}
+                              <optgroup label="── HIT SONGS ──">
+                                {#each hitRefs as ref}
+                                  <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                                {/each}
+                              </optgroup>
+                            {/if}
+                            {#if libraryRefs.length}
+                              <optgroup label="── LIBRARY ──">
+                                {#each libraryRefs as ref}
+                                  <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                                {/each}
+                              </optgroup>
+                            {/if}
                           </select>
                         </div>
                       {/if}

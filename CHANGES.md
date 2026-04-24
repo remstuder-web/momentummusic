@@ -1308,3 +1308,9 @@ TASK: brain dump image extraction via Claude vision
 WHAT: added extractImageText(file) — reads image as base64, calls claude-haiku-4-5-20251001 vision to extract plain text, sets dumpText with result; onpaste handler on textarea intercepts clipboard images and routes to extractImageText; drop handler updated to use extractImageText instead of processImageDump (lighter: extract→dumpText→suggest-category vs old: extract→JSON→approval panel); imageExtracting state shows ⏳ indicator while processing; tracks cost via /track-cost
 RESULT: works — clean build, 8/8 tests passing
 BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs + ProjectsTab.svelte + BrainTab.svelte — STATUS: DONE
+TASK: change1+2 of three — analyzer project refs first + merge my-refs into library
+WHAT: CHANGE 1 — refTrackOptions select now includes popularity/collection_name; ref dropdown shows optgroups PROJECT REFS/HIT SONGS/LIBRARY based on work_data.reference_links + popularity/collection_name; buildSuccessPattern(refsOverride) accepts optional refs; /analyze-success-match checks work_data.reference_links and passes project refs to buildSuccessPattern first. CHANGE 2 — POST /migrate-my-refs-to-library (ran: 2 migrated); MY REFERENCES section removed from BrainTab; libraryRefs now includes source=user/mozart/promoted; CHECKOUT: ★ Mine removed, only → lib (source=agent); brain-reftrack-promote saves agent not user
+RESULT: works — clean build, 8/8 tests, migration confirmed 2 tracks moved
+BLOCKERS: CHANGE 3 was cut off mid-spec — needs completion from user

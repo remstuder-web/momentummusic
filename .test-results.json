@@ -1,5 +1,5 @@
 {
-  "run": "2026-04-24T23:05:53.510Z",
+  "run": "2026-04-24T23:12:51.227Z",
   "passed": 8,
   "total": 8,
   "results": [
@@ -7,7 +7,7 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: coingecko-trending-crowd-sentiment"
+      "detail": "last_task: brain-dump-image-extraction"
     },
     {
       "n": 2,
@@ -25,7 +25,7 @@
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok + past briefing has real content (1440 chars)"
+      "detail": "endpoint ok + past briefing has real content (1515 chars)"
     },
     {
       "n": 5,
@@ -37,19 +37,19 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Increase kick punch/impact\""
+      "detail": "3 items: \"Increase kick punch and impact\""
     },
     {
       "n": 7,
       "label": "No brain duplicates",
       "ok": true,
-      "detail": "860 entries, 0 duplicates"
+      "detail": "862 entries, 0 duplicates"
     },
     {
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "a6c73c9 coingecko trending as crowd sentiment signal in crypto assessment"
+      "detail": "507b067 brain dump: extract text from images via Claude vision before saving"
     }
   ]
 }

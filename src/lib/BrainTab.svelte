@@ -52,7 +52,7 @@
   let lastExtracted = $state(null)
   let entriesOpen = $state(false)
   let libraryExpanded = $state(false)
-  let myRefsExpanded = $state(true)
+  // myRefsExpanded removed — MY REFERENCES merged into LIBRARY
   let checkoutExpanded = $state(true)
   let librarySearch = $state('')
   let librarySort = $state('date')
@@ -150,7 +150,7 @@
       .sort((a, b) => (a.artist || '').localeCompare(b.artist || ''))
   )
   const libraryRefs = $derived(
-    referenceTrackEntries.filter(t => t.source === 'agent' && !t.promoted)
+    referenceTrackEntries.filter(t => t.source === 'agent' || t.source === 'user' || t.source === 'mozart' || t.promoted === true)
   )
   const filteredLibraryRefs = $derived(
     libraryRefs
@@ -1768,9 +1768,9 @@ Return ONLY JSON (single item array):
                   </span>
                 {:else}
                   <span class="brain-reftrack-dot agent" title="Auto-added chart track">○</span>
-                  <button class="brain-reftrack-promote" title="Promote to personal reference" onclick={async () => {
-                    await supabase.from('reference_tracks').update({ promoted: true, source: 'user' }).eq('id', track.id)
-                    referenceTrackEntries = referenceTrackEntries.map(t => t.id === track.id ? { ...t, promoted: true, source: 'user' } : t)
+                  <button class="brain-reftrack-promote" title="Add to Library" onclick={async () => {
+                    await supabase.from('reference_tracks').update({ promoted: true, source: 'agent' }).eq('id', track.id)
+                    referenceTrackEntries = referenceTrackEntries.map(t => t.id === track.id ? { ...t, promoted: true, source: 'agent' } : t)
                   }}>+</button>
                 {/if}
                 <span class="brain-reftrack-info">
@@ -1829,45 +1829,10 @@ Return ONLY JSON (single item array):
                 onclick={() => playPreview(track)}
               >{playingId === track.id ? '■' : '▶'}</button>
               <button class="promote-btn gold"
-                onclick={() => promoteToMyRefs(track.id)}
-                title="Move to My References">★ Mine</button>
-              <button class="promote-btn"
                 onclick={() => promoteToLibrary(track.id)}
                 title="Move to Library">→ lib</button>
               <button class="track-del-btn"
                 onclick={() => deleteRef(track.id)}>×</button>
-            </div>
-          </div>
-        {/each}
-      {/if}
-    </div>
-
-    <!-- MY REFERENCES -->
-    <div class="refs-section">
-      <div class="refs-section-header refs-curated"
-           onclick={() => myRefsExpanded = !myRefsExpanded}>
-        <span>● MY REFERENCES</span>
-        <span class="refs-count">{myRefs.length}</span>
-        <span style="margin-left:auto">{myRefsExpanded ? '▲' : '▼'}</span>
-      </div>
-      {#if myRefsExpanded}
-        {#if !myRefs.length}
-          <p class="brain-empty" style="font-size:11px;padding:8px 0">No curated refs yet — import a Spotify track or promote from checkout.</p>
-        {/if}
-        {#each myRefs as track}
-          <div class="ref-track-row">
-            <span class="ref-source-dot user">●</span>
-            <span class="ref-title">{track.artist || 'Unknown'} — {track.title}</span>
-            <span class="ref-stats">
-              {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
-              {track.camelot ? ' · ' + track.camelot : (track.key ? ' · ' + track.key : '')}
-              {track.loudness != null ? ' · ' + track.loudness + 'LUFS' : ''}
-            </span>
-            <div class="ref-checkout-btns">
-              <button class="track-play-btn"
-                onclick={() => playPreview(track)}
-              >{playingId === track.id ? '■' : '▶'}</button>
-              <button class="track-del-btn" onclick={() => deleteRef(track.id)}>×</button>
             </div>
           </div>
         {/each}
@@ -1900,9 +1865,6 @@ Return ONLY JSON (single item array):
               <button class="track-play-btn"
                 onclick={() => playPreview(track)}
               >{playingId === track.id ? '■' : '▶'}</button>
-              <button class="promote-btn gold"
-                onclick={() => promoteToMyRefs(track.id)}
-                title="Move to My References">★</button>
               <button class="track-del-btn" onclick={() => deleteRef(track.id)}>×</button>
             </div>
           </div>

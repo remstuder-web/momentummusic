@@ -1,20 +1,24 @@
 {
   "updated": "2026-04-25T00:00:00.000Z",
-  "last_task": "polymarket-prediction-signals",
+  "last_task": "coingecko-trending-crowd-sentiment",
   "status": "done",
   "working": [
+    "getCoinGeckoTrending() — 7 trending coins, flags monitored ones, is_bullish signal",
+    "getCoinGeckoGlobal() — BTC dominance, market cap 24h change, ETH dominance",
+    "buildCryptoSignal() scores: +1 bull if monitored coin trending, +1/−1 for ±3% market move, dominance note",
+    "cg_trending + cg_global in result object",
+    "GET /coingecko-trending — live endpoint confirmed working (BTC rank 6, is_bullish:true)",
+    "Morning briefing: 🔍 CRYPTO TRENDING Telegram block with top 5 + BTC dom + market 24h",
+    "FinancesTab: collapsible TRENDING NOW with ⚡ for monitored coins, global stats row",
     "getPolymarketSignals() — Polymarket CLOB (3s) → Manifold Markets fallback; 5-min cache",
-    "buildCryptoSignal() includes polymarkets array + scoring (+1 bull if 2+ markets >65%, +1 bear if 2+ <35%)",
-    "GET /polymarket-signals endpoint returning 8 live crypto markets",
-    "Morning briefing Telegram: 🎯 POLYMARKET block with top 4 markets",
-    "FinancesTab: collapsible POLYMARKET section, green/yellow/red per market",
+    "GET /polymarket-signals endpoint live",
     "8/8 tests passing, clean vite build"
   ],
   "broken": [],
   "partial": [
-    "BUILD 2/3: feedback_patterns and chart_history tables need SQL in Supabase (endpoints handle missing table gracefully)",
-    "Polymarket CLOB geo-blocked from CH — Manifold used as working fallback"
+    "BUILD 2/3: feedback_patterns and chart_history tables need SQL in Supabase",
+    "CoinGecko global may return empty on rapid successive calls (rate limit) — non-critical"
   ],
-  "next": "Run SQL in Supabase dashboard:\n\nCREATE TABLE IF NOT EXISTS feedback_patterns (\n  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n  song_id text, version_name text, feedback_text text,\n  feedback_type text, analysis jsonb, created_at timestamptz DEFAULT now()\n);\nALTER TABLE feedback_patterns ENABLE ROW LEVEL SECURITY;\nCREATE POLICY \"anon all\" ON feedback_patterns FOR ALL TO anon USING (true) WITH CHECK (true);\n\nCREATE TABLE IF NOT EXISTS chart_history (\n  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n  title text, artist text, spotify_id text, position integer,\n  chart_date date DEFAULT CURRENT_DATE, source text DEFAULT 'kworb', created_at timestamptz DEFAULT now()\n);\nCREATE INDEX IF NOT EXISTS chart_history_date ON chart_history(chart_date);\nALTER TABLE chart_history ENABLE ROW LEVEL SECURITY;\nCREATE POLICY \"anon all\" ON chart_history FOR ALL TO anon USING (true) WITH CHECK (true);\n\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text;\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;",
-  "notes": "Polymarket CLOB API (212.35.39.96) connection refused from Swiss network. Manifold Markets (https://api.manifold.markets) works fine as fallback with real binary prediction markets."
+  "next": "Run SQL in Supabase dashboard:\n\nCREATE TABLE IF NOT EXISTS feedback_patterns (...);\nCREATE TABLE IF NOT EXISTS chart_history (...);\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text;\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;",
+  "notes": "CoinGecko free tier — trending endpoint works reliably; global may 429 if both fetched simultaneously. Both called in same Promise.all so global may occasionally be empty; signal scoring handles null gracefully."
 }

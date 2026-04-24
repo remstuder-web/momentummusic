@@ -63,6 +63,8 @@
   let cryptoSignal = $state(null)
   let cryptoLoading = $state(false)
   let showPolymarket = $state(false)
+  let showTrending = $state(false)
+  const MONITORED_SYMS = new Set(['BTC','ETH','DOGE','XRP','FLOKI'])
   let allCoinPrices = $state({})
   let portfolio = $state([])
   let newCoin = $state('BTC')
@@ -304,6 +306,40 @@
                 <span class="poly-prob" style="color:{m.yes_prob > 65 ? '#4caf82' : m.yes_prob > 45 ? '#e8a838' : '#e05a4a'}">{m.yes_prob}%</span>
                 <span class="poly-icon">{icon}</span>
                 <span class="poly-q">{m.question}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+
+      {#if cryptoSignal.cg_trending?.trending?.length}
+        {@const cgt = cryptoSignal.cg_trending}
+        {@const cgg = cryptoSignal.cg_global || {}}
+        <button class="poly-toggle" onclick={() => showTrending = !showTrending}>
+          🔍 TRENDING NOW <span class="poly-arr {showTrending ? 'open' : ''}">▶</span>
+          {#if cgt.monitored_trending?.length}
+            <span class="trend-alert">⚡ {cgt.monitored_trending.map(t => t.symbol).join(' ')}</span>
+          {/if}
+        </button>
+        {#if showTrending}
+          <div class="poly-body">
+            {#if cgg.btc_dominance != null}
+              <div class="trend-global">
+                <span class="trend-dom">BTC dom: <b style="color:{cgg.btc_dominance > 55 ? '#e8a838' : cgg.btc_dominance < 45 ? '#4caf82' : '#cec9c1'}">{cgg.btc_dominance.toFixed(1)}%</b></span>
+                {#if cgg.market_cap_change_24h != null}
+                  <span class="trend-mktcap" style="color:{cgg.market_cap_change_24h > 0 ? '#4caf82' : '#e05a4a'}">
+                    Market {cgg.market_cap_change_24h > 0 ? '+' : ''}{cgg.market_cap_change_24h.toFixed(2)}%
+                  </span>
+                {/if}
+              </div>
+            {/if}
+            {#each cgt.trending as t}
+              {@const isMonitored = MONITORED_SYMS.has(t.symbol)}
+              <div class="trend-row {isMonitored ? 'monitored' : ''}">
+                <span class="trend-rank">{isMonitored ? '⚡' : t.rank + '.'}</span>
+                <span class="trend-sym" style="color:{isMonitored ? '#c9a84c' : '#cec9c1'}">{t.symbol}</span>
+                <span class="trend-name">{t.name}</span>
+                {#if t.market_cap_rank}<span class="trend-mcr">#{t.market_cap_rank}</span>{/if}
               </div>
             {/each}
           </div>
@@ -555,6 +591,15 @@
   .poly-prob { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; min-width: 32px; }
   .poly-icon { font-size: 10px; }
   .poly-q { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; line-height: 1.3; }
+  .trend-alert { font-size: 9px; color: #c9a84c; margin-left: auto; }
+  .trend-global { display: flex; gap: 12px; padding: 4px 0 6px; border-bottom: 1px solid #252525; margin-bottom: 4px; }
+  .trend-dom, .trend-mktcap { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #666; }
+  .trend-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+  .trend-row.monitored { background: rgba(201,168,76,.04); border-radius: 2px; padding: 2px 4px; }
+  .trend-rank { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; min-width: 16px; }
+  .trend-sym { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; min-width: 44px; }
+  .trend-name { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #666; flex: 1; }
+  .trend-mcr { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; }
   .portfolio-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #111; font-family: 'Space Mono', monospace; font-size: 10px; flex-wrap: wrap; }
   .p-coin { color: #c9a84c; width: 30px; }
   .p-amount { color: #cec9c1; }

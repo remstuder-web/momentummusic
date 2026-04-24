@@ -1,5 +1,5 @@
 {
-  "run": "2026-04-24T22:53:05.754Z",
+  "run": "2026-04-24T23:01:25.157Z",
   "passed": 8,
   "total": 8,
   "results": [
@@ -7,7 +7,7 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: fix-split-undefined-svelte-const-placement"
+      "detail": "last_task: polymarket-prediction-signals"
     },
     {
       "n": 2,
@@ -25,7 +25,7 @@
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok + past briefing has real content (1325 chars)"
+      "detail": "endpoint ok + past briefing has real content (1449 chars)"
     },
     {
       "n": 5,
@@ -49,7 +49,7 @@
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "3a27083 fix split undefined in analyze-spotify-track + svelte const placement errors"
+      "detail": "384f358 polymarket prediction signals in crypto assessment"
     }
   ]
 }

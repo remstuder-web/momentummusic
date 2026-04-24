@@ -3547,8 +3547,52 @@ async function getPolymarketSignals() {
   }
 }
 
+const MONITORED_COINS_SET = new Set(['BTC', 'ETH', 'DOGE', 'XRP', 'FLOKI'])
+
+async function getCoinGeckoTrending() {
+  try {
+    const r = await fetch('https://api.coingecko.com/api/v3/search/trending',
+      { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(8000) })
+    if (!r.ok) return { trending: [], monitored_trending: [], nfts: [], is_bullish: false }
+    const data = await r.json()
+    const trending = (data.coins || []).map((c, i) => ({
+      rank: i + 1,
+      name: c.item?.name,
+      symbol: c.item?.symbol?.toUpperCase(),
+      market_cap_rank: c.item?.market_cap_rank,
+      score: c.item?.score
+    }))
+    const monitored_trending = trending.filter(t => MONITORED_COINS_SET.has(t.symbol))
+    const nfts = (data.nfts || []).slice(0, 3).map(n => ({ name: n.name, symbol: n.symbol }))
+    return { trending, monitored_trending, nfts, is_bullish: monitored_trending.length > 0 }
+  } catch(e) {
+    console.warn('coingecko trending error:', e.message?.slice(0, 60))
+    return { trending: [], monitored_trending: [], nfts: [], is_bullish: false }
+  }
+}
+
+async function getCoinGeckoGlobal() {
+  try {
+    const r = await fetch('https://api.coingecko.com/api/v3/global',
+      { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(8000) })
+    if (!r.ok) return {}
+    const data = await r.json()
+    const d = data.data || {}
+    return {
+      market_cap_change_24h: d.market_cap_change_percentage_24h_usd,
+      btc_dominance: d.market_cap_percentage?.btc,
+      eth_dominance: d.market_cap_percentage?.eth,
+      total_market_cap: d.total_market_cap?.usd,
+      active_coins: d.active_cryptocurrencies
+    }
+  } catch(e) {
+    console.warn('coingecko global error:', e.message?.slice(0, 60))
+    return {}
+  }
+}
+
 async function buildCryptoSignal() {
-  const [fearGreed, btcData, dominance, funding, netflow, btcDeriv, ethDeriv, binancePf, candles4h, polymarkets] =
+  const [fearGreed, btcData, dominance, funding, netflow, btcDeriv, ethDeriv, binancePf, candles4h, polymarkets, cgTrending, cgGlobal] =
     await Promise.all([
       fetchFearGreed(),
       fetchBTCData(),
@@ -3559,7 +3603,9 @@ async function buildCryptoSignal() {
       fetchDerivativesData('ETH'),
       fetchBinancePortfolio(),
       fetch4HCandles('BTC'),
-      getPolymarketSignals()
+      getPolymarketSignals(),
+      getCoinGeckoTrending(),
+      getCoinGeckoGlobal()
     ])
 
   const btcPrice = btcData?.bitcoin?.eur
@@ -3679,6 +3725,20 @@ async function buildCryptoSignal() {
     const hasStrongBearMarkets = bearishMarkets.some(m => m.yes_prob < 25)
     if (hasBullDerivatives && hasStrongBearMarkets)
       reasons.push('⚠️ Conflict: derivatives bullish but Polymarket strongly bearish')
+  }
+
+  // CoinGecko crowd sentiment scoring
+  if (cgTrending?.monitored_trending?.length) {
+    bullPoints += 1
+    reasons.push('CoinGecko trending: ' + cgTrending.monitored_trending.map(t => t.symbol).join(', ') + ' in top searches')
+  }
+  if (cgGlobal?.market_cap_change_24h != null) {
+    if (cgGlobal.market_cap_change_24h > 3) { bullPoints += 1; reasons.push('Total market cap +' + cgGlobal.market_cap_change_24h.toFixed(1) + '% 24h = broad rally') }
+    else if (cgGlobal.market_cap_change_24h < -3) { bearPoints += 1; reasons.push('Total market cap ' + cgGlobal.market_cap_change_24h.toFixed(1) + '% 24h = broad selloff') }
+  }
+  if (cgGlobal?.btc_dominance != null) {
+    if (cgGlobal.btc_dominance > 58) reasons.push('BTC dom ' + cgGlobal.btc_dominance.toFixed(1) + '% — alts underperforming')
+    else if (cgGlobal.btc_dominance < 45) { bullPoints += 1; reasons.push('BTC dom ' + cgGlobal.btc_dominance.toFixed(1) + '% = alt season conditions') }
   }
 
   let signal, emoji, suggestion, binanceAction
@@ -3816,6 +3876,8 @@ async function buildCryptoSignal() {
     active_trades: activeTrades,
     ma5_4h, ma10_4h, trend_4h,
     polymarkets: polymarkets || [],
+    cg_trending: cgTrending || { trending: [], monitored_trending: [], nfts: [], is_bullish: false },
+    cg_global: cgGlobal || {},
     timestamp: new Date().toISOString()
   }
   lastSignalResult = result
@@ -5327,6 +5389,23 @@ ${context}` }]
                 polyMsg += bar + ' ' + m.yes_prob + '% — ' + m.question + '\n'
               })
               sendTelegram(TELEGRAM_OWNER_ID, polyMsg).catch(() => {})
+            }
+            const cgt = crypto.cg_trending
+            const cgg = crypto.cg_global
+            if (cgt?.trending?.length) {
+              let trendMsg = '🔍 CRYPTO TRENDING\n'
+              cgt.trending.slice(0, 5).forEach((t, i) => {
+                const isM = MONITORED_COINS_SET.has(t.symbol)
+                trendMsg += (isM ? '⚡' : (i + 1) + '.') + ' ' + t.symbol + ' — ' + t.name + '\n'
+              })
+              if (cgg?.btc_dominance != null) {
+                trendMsg += 'BTC dom: ' + cgg.btc_dominance.toFixed(1) + '%'
+                trendMsg += cgg.btc_dominance > 55 ? ' (alts weak)' : cgg.btc_dominance < 45 ? ' (alt season)' : ' (neutral)'
+                trendMsg += '\n'
+              }
+              if (cgg?.market_cap_change_24h != null)
+                trendMsg += 'Market 24h: ' + (cgg.market_cap_change_24h > 0 ? '+' : '') + cgg.market_cap_change_24h.toFixed(2) + '%\n'
+              sendTelegram(TELEGRAM_OWNER_ID, trendMsg).catch(() => {})
             }
           } catch(e) { console.warn('crypto signal in briefing failed:', e.message) }
           // Chart Pulse — cross-chart correlation + TikTok top 5 + Spotify top 5
@@ -9145,6 +9224,20 @@ ${chatText.slice(0, 4000)}`
       const [signal, binancePortfolio] = await Promise.all([buildCryptoSignal(), fetchBinancePortfolio()])
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, ...signal, binance_portfolio: binancePortfolio }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── GET /coingecko-trending ───────────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/coingecko-trending') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const [trending, global] = await Promise.all([getCoinGeckoTrending(), getCoinGeckoGlobal()])
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, ...trending, global }))
     } catch(e) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))

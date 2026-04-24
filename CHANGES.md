@@ -1296,3 +1296,9 @@ TASK: polymarket prediction signals in crypto assessment
 WHAT: getPolymarketSignals() — tries Polymarket CLOB (3s timeout), falls back to Manifold Markets; adds bull/bear scoring (+1 if 2+ markets >65%, +1 bear if 2+ <35%); polymarkets array returned from buildCryptoSignal; GET /polymarket-signals endpoint; Telegram morning briefing sends 🎯 POLYMARKET block; FinancesTab collapsible POLYMARKET section with green/yellow/red per market
 RESULT: works — Manifold returning 8 live crypto markets (Polymarket geo-blocked from CH)
 BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs + FinancesTab.svelte — STATUS: DONE
+TASK: coingecko trending as crowd sentiment signal
+WHAT: getCoinGeckoTrending() fetches top 7 trending coins, flags monitored ones (BTC/ETH/DOGE/XRP/FLOKI); getCoinGeckoGlobal() fetches BTC dominance + market cap 24h change; both added to buildCryptoSignal() Promise.all; scoring: +1 bull if monitored coin trending, +1 bull if market +3%, +1 bear if market -3%, dominance note; result includes cg_trending/cg_global; GET /coingecko-trending endpoint; morning briefing sends 🔍 CRYPTO TRENDING Telegram block; FinancesTab collapsible TRENDING NOW section with global stats row + ranked list (⚡ for monitored coins)
+RESULT: works — BTC currently rank 6 in trending, is_bullish:true; 8/8 tests passing
+BLOCKERS: none

@@ -1,10 +1,10 @@
 {
-  "updated": "2026-04-24T07:25:00.000Z",
-  "last_task": "fix-scout-checkout-exist-check",
+  "updated": "2026-04-24T07:30:00.000Z",
+  "last_task": "fix-scout-checkout-not-null",
   "status": "done",
   "working": [
-    "fix-scout-checkout-exist-check: existCheck uses title+artist ilike, return=representation, full error logging — verified working in pm2 logs",
-    "fix-scout-checkout-save: removed approved:true, proper error logging",
+    "fix-scout-checkout-not-null: placeholder spotify_id ('txt_'+timestamp36+random6) bypasses NOT NULL constraint — text-extracted tracks now insert",
+    "fix-scout-checkout-exist-check: existCheck uses title+artist ilike, full error logging",
     "brain-refs-auto-refresh: refsInterval polls reference_tracks every 2min",
     "ref-track-preview-audio: BrainTab playPreview() + DailyTab inline data-preview + ProjectsTab playRefUrl()",
     "popup-window-dimensions: 900x700 momentum_popup window reused for all external links",
@@ -14,9 +14,10 @@
   ],
   "broken": [],
   "partial": [
+    "scout-checkout-spotify-id: placeholder 'txt_*' spotify_ids in use — run SQL to fix properly: ALTER TABLE reference_tracks ALTER COLUMN spotify_id DROP NOT NULL; then remove placeholder logic from watcher",
     "vocal-eq-stems: SQL migration not yet run — vocal_eq_curves missing stem_type and source_type columns",
     "checkout_date column: run SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;"
   ],
-  "next": "Run SQL migrations: (1) ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; (2) ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;",
-  "notes": "Scout checkout dedup now requires both title AND artist to match (ilike). pm2 logs confirmed: ✓ Scout → checkout: Tame Impala — Dracula (remix). No FAILED lines."
+  "next": "Run ALL pending SQL migrations in Supabase: (1) ALTER TABLE reference_tracks ALTER COLUMN spotify_id DROP NOT NULL; (2) ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz; (3) ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix';",
+  "notes": "checkout_date column confirmed present (returns null values). spotify_id NOT NULL was the silent killer — FAILED log was there but previous code used return=minimal so errors were swallowed."
 }

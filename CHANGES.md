@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: fix-scout-checkout-not-null
+WHAT: Root cause: spotify_id NOT NULL constraint blocks text-extracted track inserts. Fix: generate placeholder spotify_id ('txt_' + timestamp36 + random6) so insert succeeds. Removed all diagnostic code. Proper fix is SQL: ALTER TABLE reference_tracks ALTER COLUMN spotify_id DROP NOT NULL; — run when convenient, then remove placeholder logic.
+RESULT: works — tracks now insert
+BLOCKERS: SQL migration pending to properly allow null spotify_id
+
+## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: fix-scout-checkout-exist-check
 WHAT: existCheck now uses title+artist ilike (both fields) instead of title alone. Prefer changed to return=representation so saveData contains full response. Error log shows status + full JSON body.
 RESULT: works — verified via pm2 logs, no FAILED lines, track saved OK

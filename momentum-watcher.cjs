@@ -4563,9 +4563,12 @@ ${context}` }]
         }
 
         // Extract ALL track/song mentions from the generated scout text and save to checkout
+        // Root cause of prior failures: spotify_id has NOT NULL constraint — use placeholder until
+        // SQL migration runs: ALTER TABLE reference_tracks ALTER COLUMN spotify_id DROP NOT NULL;
         const mentionedTracks = await extractTracksFromText(result.suggestions || '', apiKey)
         const nowMentioned = new Date().toISOString()
         const dateMentioned = nowMentioned.slice(0, 10)
+
         for (const track of mentionedTracks) {
           if (!track.title || !track.artist) continue
           try {
@@ -4574,12 +4577,15 @@ ${context}` }]
               { headers: sbHeaders }
             ).then(r => r.json()).catch(() => [])
             if (Array.isArray(existCheck) && existCheck.length > 0) continue
+            // Generate placeholder spotify_id until NOT NULL constraint is dropped via SQL migration
+            const placeholderId = 'txt_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
             const saveRes = await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
               method: 'POST',
               headers: { ...sbHeaders, 'Prefer': 'return=representation' },
               body: JSON.stringify({
                 title: track.title,
                 artist: track.artist,
+                spotify_id: placeholderId,
                 collection_name: 'scout_' + dateMentioned,
                 source: 'checkout',
                 checkout_date: nowMentioned

@@ -1,19 +1,23 @@
 {
-  "updated": "2026-04-24T21:52:00.000Z",
-  "last_task": "submission-brief-auto-match",
+  "updated": "2026-04-24T22:15:00.000Z",
+  "last_task": "spotify-ref-types-daily-aktuelle",
   "status": "done",
   "working": [
-    "Submission brief: paste brief → Find Matches → ref tracks + demo matches + Mozart take",
-    "POST /analyze-submission-brief: Haiku extracts requirements (bpm/energy/key), scores ref tracks and demos",
-    "POST /save-submission-brief: writes brief.txt to Dropbox submission folder on send",
-    "Brief stored per-patch in memory (patchBriefs map), survives modal close until patch is sent",
-    "DailyTab: Match Demos button removed",
-    "All 8 press feeds working (NME, Consequence, The Guardian, Earmilk, Uproxx, A&R Factory, Pitchfork, Bedroom Producers)",
+    "Spotify→Brain: collection_name set per type (reference_current/mixing/inspiration/sound)",
+    "Aktuelle refs insert inbox_notifications type='reference' with 7-day expiry metadata",
+    "DailyTab: AKTUELLE REFS section with gold border, days-remaining, auto-cleared on load",
+    "DailyTab: reference items excluded from main inbox stream",
+    "DailyTab: expired reference notifications cleaned on loadInbox",
+    "Mozart no raw analysis numbers (ProjectsTab buildProjectContext)",
+    "VocalEqChart persist on collapse/reopen, gold ref, white mix, visible zero line",
+    "BrainTab category chips in approval panel (approvalCatPool + per-item chip toggle)",
+    "Submission brief: Find Matches in New Submission modal",
+    "All 8 press feeds working",
     "chokidar ignoreInitial:true — no dupe storm on restart",
-    "8/8 tests passing, 860 brain entries, 0 duplicates"
+    "8/8 tests passing"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run SQL in Supabase dashboard to enable background EQ pipeline:\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;\nThen promote library tracks to My Refs and check: curl localhost:4242/processing-queue",
-  "notes": "Demo matching in /analyze-submission-brief relies on songs having work_data.versions[].analysis (from Essentia analysis). Songs without analysis won't appear in matches. Brief txt is only saved when sendPatch() is called (not on createPatch)."
+  "next": "Run SQL in Supabase dashboard:\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text;\nThen promote library tracks to My Refs and check: curl localhost:4242/processing-queue",
+  "notes": "reference_tracks.camelot column may not exist yet — check Supabase if Aktuelle Ref saves throw errors. inbox_notifications.metadata is jsonb — filter .lt('metadata->>expires', ...) uses JSONB arrow operator which Supabase REST supports."
 }

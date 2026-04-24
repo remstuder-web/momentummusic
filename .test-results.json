@@ -1,5 +1,5 @@
 {
-  "run": "2026-04-24T21:58:44.862Z",
+  "run": "2026-04-24T22:07:15.934Z",
   "passed": 8,
   "total": 8,
   "results": [
@@ -7,7 +7,7 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: submission-brief-auto-match"
+      "detail": "last_task: spotify-ref-types-daily-aktuelle"
     },
     {
       "n": 2,
@@ -25,7 +25,7 @@
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok + past briefing has real content (1615 chars)"
+      "detail": "endpoint ok + past briefing has real content (1468 chars)"
     },
     {
       "n": 5,
@@ -37,7 +37,7 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Increase kick punch and presence\""
+      "detail": "3 items: \"Increase kick punch/presence\""
     },
     {
       "n": 7,
@@ -49,7 +49,7 @@
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "706e3ec submission brief: auto-match demos + reference tracks + Mozart analysis"
+      "detail": "b4d7450 spotify ref types, mozart no analysis, EQ chart persist, category chips"
     }
   ]
 }

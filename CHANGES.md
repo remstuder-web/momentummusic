@@ -1272,3 +1272,9 @@ TASK: submission brief intelligence + remove Match Demos from Daily
 WHAT: New Submission modal has brief textarea + Find Matches button; /analyze-submission-brief extracts requirements, scores ref tracks + demos by BPM/energy/key, Mozart gives 2-3 sentence take; brief.txt saved to Dropbox folder on send; Match Demos button removed from DailyTab
 RESULT: works — 8/8 tests passing
 BLOCKERS: none
+
+## [2026-04-24] [BrainTab.svelte, DailyTab.svelte] — DONE
+TASK: FIX 1 — Spotify ref types wired correctly
+WHAT: reference_tracks now saves collection_name per type; aktuelle refs create inbox_notifications with 7-day expiry; DailyTab shows AKTUELLE REFS section with gold border and days-remaining; expired refs auto-cleaned on loadInbox; FIX 2/3/4 confirmed already in place
+RESULT: works — 8/8 tests passing
+BLOCKERS: none

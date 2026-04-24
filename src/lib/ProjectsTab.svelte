@@ -54,6 +54,13 @@
   let activeStem = $state({}) // song.id -> 'vocals' | 'drums' | 'bass' | 'other'
   let selectedRefId = $state({}) // song.id -> reference_track_id (string)
   let refTrackOptions = $state([]) // ref tracks that have EQ curves available
+  let analyzerOpen = $state({}) // song.id -> { track, match, arc, feedback, trend }
+  let successMatch = $state({}) // song.id -> result from /analyze-success-match
+  let successMatchLoading = $state({}) // song.id -> bool
+  let feedbackInsights = $state({}) // song.id -> result from /feedback-insights
+  let feedbackLoading = $state({}) // song.id -> bool
+  let trendVelocity = $state(null)
+  let trendLoading = $state(false)
 
   function formatMinSec(sec) {
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60)
@@ -2144,6 +2151,49 @@
     }
   }
 
+  async function loadSuccessMatch(song) {
+    const sid = String(song.id)
+    successMatchLoading = { ...successMatchLoading, [sid]: true }
+    try {
+      const r = await fetch('http://localhost:4242/analyze-success-match', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ song_id: song.id })
+      })
+      successMatch = { ...successMatch, [sid]: await r.json() }
+    } catch(e) { successMatch = { ...successMatch, [sid]: { ok: false, error: e.message } } }
+    successMatchLoading = { ...successMatchLoading, [sid]: false }
+  }
+
+  async function loadFeedbackInsights(song) {
+    const sid = String(song.id)
+    feedbackLoading = { ...feedbackLoading, [sid]: true }
+    try {
+      const r = await fetch('http://localhost:4242/feedback-insights?song_id=' + song.id)
+      feedbackInsights = { ...feedbackInsights, [sid]: await r.json() }
+    } catch(e) { feedbackInsights = { ...feedbackInsights, [sid]: { ok: false } } }
+    feedbackLoading = { ...feedbackLoading, [sid]: false }
+  }
+
+  async function loadTrendVelocity() {
+    if (trendLoading || trendVelocity) return
+    trendLoading = true
+    try {
+      const r = await fetch('http://localhost:4242/trend-velocity')
+      trendVelocity = await r.json()
+    } catch(e) { trendVelocity = { ok: false } }
+    trendLoading = false
+  }
+
+  function toggleAnalyzerSection(songId, section) {
+    const sid = String(songId)
+    const cur = analyzerOpen[sid] || {}
+    const opening = !cur[section]
+    analyzerOpen = { ...analyzerOpen, [sid]: { ...cur, [section]: opening } }
+    if (opening && section === 'match') loadSuccessMatch({ id: songId })
+    if (opening && section === 'feedback') loadFeedbackInsights({ id: songId })
+    if (opening && section === 'trend') loadTrendVelocity()
+  }
+
   async function analyzeMyVocal(song) {
     const sid = String(song.id)
     vocalEqStatus = { ...vocalEqStatus, [sid]: 'separating' }
@@ -3115,6 +3165,154 @@
                           {/each}
                         </div>
                       {/if}
+
+                      {@const ao = analyzerOpen[String(song.id)] || {}}
+                      {@const latestA = (wd.versions||[]).filter(v=>v.analysis).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]?.analysis}
+
+                      <!-- TRACK ANALYSIS sub-section -->
+                      {#if latestA}
+                        <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'track')}>
+                          <span>TRACK ANALYSIS</span><span class="az-arr {ao.track?'open':''}">▶</span>
+                        </button>
+                        {#if ao.track}
+                          <div class="az-body">
+                            <div class="az-grid">
+                              {#each [['BPM', latestA.bpm ? Math.round(latestA.bpm) : null], ['Key', latestA.key ? latestA.key + ' ' + (latestA.scale||'') : null], ['Camelot', latestA.camelot], ['LUFS', latestA.loudness_lufs], ['LRA', latestA.loudness_range], ['Energy', latestA.energy != null ? Math.round(latestA.energy*100)+'%' : null], ['Dance', latestA.danceability != null ? Math.round(latestA.danceability*100)+'%' : null], ['Valence', latestA.valence != null ? Math.round(latestA.valence*100)+'%' : null], ['Brightness', latestA.brightness != null ? Math.round(latestA.brightness*100)+'%' : null], ['Bass', latestA.bass_energy != null ? Math.round(latestA.bass_energy*100)+'%' : null], ['Warmth', latestA.warmth != null ? Math.round(latestA.warmth*100)+'%' : null], ['Harmonic', latestA.harmonic_complexity != null ? latestA.harmonic_complexity.toFixed(2) : null], ['Dynamic', latestA.dynamic_complexity != null ? latestA.dynamic_complexity.toFixed(2) : null], ['Vocal Root', latestA.vocal_root_note ? latestA.vocal_root_note + (latestA.vocal_octave != null ? latestA.vocal_octave : '') : null]] as [label, val]}
+                                {#if val != null}
+                                  <div class="az-stat"><span class="az-label">{label}</span><span class="az-val">{val}</span></div>
+                                {/if}
+                              {/each}
+                            </div>
+                            {#if latestA.arc_contrast != null}
+                              <div class="az-arc-meta">arc peak: seg {latestA.arc_peak_segment} · contrast: {latestA.arc_contrast?.toFixed(2)} · buildup: {latestA.arc_buildup >= 0 ? '+' : ''}{latestA.arc_buildup?.toFixed(2)}</div>
+                            {/if}
+                          </div>
+                        {/if}
+                      {/if}
+
+                      <!-- SUCCESS MATCH sub-section -->
+                      <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'match')}>
+                        <span>SUCCESS MATCH</span><span class="az-arr {ao.match?'open':''}">▶</span>
+                      </button>
+                      {#if ao.match}
+                        <div class="az-body">
+                          {#if successMatchLoading[String(song.id)]}
+                            <div class="az-loading">Comparing to references…</div>
+                          {:else if successMatch[String(song.id)]?.matchScore != null}
+                            {@const sm = successMatch[String(song.id)]}
+                            <div class="az-score-row">
+                              <span class="az-score" style="color:{sm.matchScore>=70?'#4caf82':sm.matchScore>=45?'#e8a838':'#e05a4a'}">{sm.matchScore}%</span>
+                              <span class="az-score-label">match vs your {sm.pattern?.sample_count || '?'} reference tracks</span>
+                            </div>
+                            {#if sm.gaps?.length}
+                              <div class="az-gaps-title">TOP GAPS</div>
+                              {#each sm.gaps.slice(0,3) as gap}
+                                <div class="az-gap-row">
+                                  <span class="az-gap-label">{gap.label}</span>
+                                  <span class="az-gap-val">you: {gap.value != null ? (typeof gap.value === 'number' ? gap.value.toFixed(2) : gap.value) : '?'}</span>
+                                  <span class="az-gap-target">target: {gap.target}</span>
+                                  <span class="az-gap-pct" style="color:#e05a4a">{gap.match}%</span>
+                                </div>
+                              {/each}
+                            {/if}
+                            {#if sm.strengths?.length}
+                              <div class="az-gaps-title" style="color:#4caf82;margin-top:6px">STRENGTHS</div>
+                              {#each sm.strengths.slice(0,3) as s}
+                                <div class="az-gap-row"><span class="az-gap-label">{s.label}</span><span class="az-gap-pct" style="color:#4caf82">{s.match}% ✓</span></div>
+                              {/each}
+                            {/if}
+                          {:else if successMatch[String(song.id)]?.error}
+                            <div class="az-loading">{successMatch[String(song.id)].error}</div>
+                          {:else}
+                            <div class="az-loading">No analysis data — analyze this version first.</div>
+                          {/if}
+                        </div>
+                      {/if}
+
+                      <!-- EMOTIONAL ARC sub-section -->
+                      {#if latestA?.emotional_arc?.length}
+                        <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'arc')}>
+                          <span>EMOTIONAL ARC</span><span class="az-arr {ao.arc?'open':''}">▶</span>
+                        </button>
+                        {#if ao.arc}
+                          <div class="az-body">
+                            {@const arc = latestA.emotional_arc}
+                            <svg viewBox="0 0 520 80" class="arc-svg">
+                              {@const maxE = Math.max(...arc.map(s=>s.energy), 0.01)}
+                              {#each arc as seg, i}
+                                {@const x = i * (520/arc.length) + 2}
+                                {@const barW = (520/arc.length) - 4}
+                                {@const barH = Math.round((seg.energy/maxE)*60)}
+                                <rect x={x} y={76-barH} width={barW} height={barH}
+                                  fill="rgba(201,168,76,{0.3 + seg.energy*0.5})" rx="1" />
+                                <line x1={x} y1={76-Math.round(seg.brightness*60)} x2={x+barW} y2={76-Math.round(seg.brightness*60)}
+                                  stroke="#4caf82" stroke-width="1.5" opacity="0.7" />
+                              {/each}
+                              <text x="2" y="78" font-size="7" fill="#333" font-family="Space Mono, monospace">INTRO</text>
+                              <text x="500" y="78" font-size="7" fill="#333" font-family="Space Mono, monospace" text-anchor="end">OUTRO</text>
+                            </svg>
+                            <div class="az-arc-legend">
+                              <span style="color:rgba(201,168,76,.8)">■ energy</span>
+                              <span style="color:#4caf82">— brightness</span>
+                              {#if latestA.arc_peak_segment}<span>peak: seg {latestA.arc_peak_segment}</span>{/if}
+                              {#if latestA.arc_contrast != null}<span>contrast: {latestA.arc_contrast.toFixed(2)}</span>{/if}
+                            </div>
+                          </div>
+                        {/if}
+                      {/if}
+
+                      <!-- FEEDBACK HISTORY sub-section -->
+                      <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'feedback')}>
+                        <span>FEEDBACK HISTORY</span><span class="az-arr {ao.feedback?'open':''}">▶</span>
+                      </button>
+                      {#if ao.feedback}
+                        <div class="az-body">
+                          {#if feedbackLoading[String(song.id)]}
+                            <div class="az-loading">Loading feedback patterns…</div>
+                          {:else if feedbackInsights[String(song.id)]?.history?.length}
+                            {@const fi = feedbackInsights[String(song.id)]}
+                            <div class="az-history-total">{fi.total} feedback items logged</div>
+                            {#each fi.history as h}
+                              <div class="az-feedback-row">
+                                <span class="az-fb-type">{h.type.replace(/_/g,' ')}</span>
+                                <span class="az-fb-count">{h.count}×</span>
+                                <div class="az-fb-bar"><div class="az-fb-fill" style="width:{h.pct}%"></div></div>
+                                <span class="az-fb-pct">{h.pct}%</span>
+                              </div>
+                            {/each}
+                          {:else}
+                            <div class="az-loading">No feedback patterns yet — add feedback to versions.</div>
+                          {/if}
+                        </div>
+                      {/if}
+
+                      <!-- TREND CONTEXT sub-section -->
+                      <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'trend')}>
+                        <span>TREND CONTEXT</span><span class="az-arr {ao.trend?'open':''}">▶</span>
+                      </button>
+                      {#if ao.trend}
+                        <div class="az-body">
+                          {#if trendLoading}
+                            <div class="az-loading">Loading chart velocity…</div>
+                          {:else if trendVelocity?.rising?.length || trendVelocity?.falling?.length}
+                            {#if trendVelocity.rising?.length}
+                              <div class="az-gaps-title" style="color:#4caf82">RISING ↑</div>
+                              {#each trendVelocity.rising.slice(0,5) as t}
+                                <div class="az-trend-row"><span class="az-trend-name">{t.artist} — {t.title}</span><span class="az-trend-vel" style="color:#4caf82">+{Math.round(t.velocity)}/day</span></div>
+                              {/each}
+                            {/if}
+                            {#if trendVelocity.falling?.length}
+                              <div class="az-gaps-title" style="color:#e05a4a;margin-top:6px">FALLING ↓</div>
+                              {#each trendVelocity.falling.slice(0,3) as t}
+                                <div class="az-trend-row"><span class="az-trend-name">{t.artist} — {t.title}</span><span class="az-trend-vel" style="color:#e05a4a">{Math.round(t.velocity)}/day</span></div>
+                              {/each}
+                            {/if}
+                          {:else}
+                            <div class="az-loading">No chart history yet — runs automatically with morning briefing.</div>
+                          {/if}
+                        </div>
+                      {/if}
+
                     </div>
                   {/if}
                 </div>
@@ -3951,4 +4149,38 @@
   .credit-row { display: flex; gap: 8px; padding: 2px 0; font-family: 'DM Sans', sans-serif; font-size: 11px; }
   .credit-label { font-family: 'Space Mono', monospace; font-size: 8px; color: #555; width: 55px; flex-shrink: 0; padding-top: 2px; text-transform: uppercase; }
   .credit-val { color: #9e9690; }
+
+  /* ANALYZER sub-sections */
+  .az-section-hdr { display:flex; align-items:center; justify-content:space-between; width:100%; background:transparent; border:none; border-top:1px solid #1a1a1a; padding:7px 0 4px; cursor:pointer; font-family:'Space Mono',monospace; font-size:9px; font-weight:700; color:rgba(201,168,76,.5); letter-spacing:.1em; margin-top:4px; }
+  .az-section-hdr:hover { color:rgba(201,168,76,.8); }
+  .az-arr { font-size:8px; color:#333; transition:transform .15s; }
+  .az-arr.open { transform:rotate(90deg); color:#555; }
+  .az-body { padding:6px 0 8px; }
+  .az-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:4px 8px; }
+  .az-stat { display:flex; flex-direction:column; }
+  .az-label { font-family:'Space Mono',monospace; font-size:8px; color:#444; }
+  .az-val { font-family:'Space Mono',monospace; font-size:11px; color:#cec9c1; }
+  .az-arc-meta { font-family:'Space Mono',monospace; font-size:8px; color:#444; margin-top:6px; }
+  .az-score-row { display:flex; align-items:baseline; gap:8px; margin-bottom:8px; }
+  .az-score { font-family:'Space Mono',monospace; font-size:22px; font-weight:700; }
+  .az-score-label { font-family:'DM Sans',sans-serif; font-size:11px; color:#555; }
+  .az-gaps-title { font-family:'Space Mono',monospace; font-size:8px; color:rgba(201,168,76,.5); letter-spacing:.08em; margin-bottom:4px; }
+  .az-gap-row { display:flex; align-items:center; gap:8px; padding:3px 0; border-bottom:1px solid #111; font-family:'Space Mono',monospace; font-size:9px; }
+  .az-gap-label { color:#9e9690; flex:1; }
+  .az-gap-val { color:#555; font-size:8px; }
+  .az-gap-target { color:#444; font-size:8px; }
+  .az-gap-pct { font-weight:700; flex-shrink:0; }
+  .az-loading { font-family:'DM Sans',sans-serif; font-size:11px; color:#444; padding:4px 0; font-style:italic; }
+  .arc-svg { width:100%; height:auto; display:block; background:#0a0a0a; border-radius:3px; margin-bottom:4px; }
+  .az-arc-legend { display:flex; gap:12px; font-family:'Space Mono',monospace; font-size:8px; color:#444; }
+  .az-history-total { font-family:'DM Sans',sans-serif; font-size:10px; color:#555; margin-bottom:6px; }
+  .az-feedback-row { display:flex; align-items:center; gap:6px; padding:3px 0; }
+  .az-fb-type { font-family:'Space Mono',monospace; font-size:8px; color:#9e9690; width:90px; flex-shrink:0; }
+  .az-fb-count { font-family:'Space Mono',monospace; font-size:9px; color:#555; width:20px; text-align:right; flex-shrink:0; }
+  .az-fb-bar { flex:1; height:4px; background:#1a1a1a; border-radius:2px; overflow:hidden; }
+  .az-fb-fill { height:100%; background:rgba(201,168,76,.4); border-radius:2px; }
+  .az-fb-pct { font-family:'Space Mono',monospace; font-size:8px; color:#444; width:28px; text-align:right; flex-shrink:0; }
+  .az-trend-row { display:flex; align-items:center; gap:8px; padding:3px 0; border-bottom:1px solid #111; }
+  .az-trend-name { font-family:'DM Sans',sans-serif; font-size:11px; color:#9e9690; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .az-trend-vel { font-family:'Space Mono',monospace; font-size:9px; font-weight:700; flex-shrink:0; }
 </style>

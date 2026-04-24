@@ -1156,6 +1156,13 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     }
   }
 
+  // Save chart positions for trend velocity (BUILD 3) — silent, don't block briefing
+  if (Array.isArray(kworbSP) && kworbSP.length) {
+    const today = new Date().toISOString().slice(0,10)
+    const histRows = kworbSP.slice(0,50).map(t => ({ title: t.title, artist: t.artist, position: t.position, chart_date: today, source: 'kworb' }))
+    supabaseAdmin.from('chart_history').upsert(histRows, { onConflict: 'title,artist,chart_date', ignoreDuplicates: true }).catch(() => {})
+  }
+
   // Encode kworb tracks as structured data in inbox message
   const kworbTracks = (Array.isArray(kworbSP) ? kworbSP : []).slice(0, 10).map(t => ({
     title: t.title, artist: t.artist,
@@ -1486,6 +1493,134 @@ async function getCrossChartTopics() {
     console.warn('getCrossChartTopics error:', e.message)
     return { crossChart: [], tiktokOnly: [], spotifyOnly: [], tiktok: [], spotify: [] }
   }
+}
+
+// ── BUILD 1: Success Pattern ───────────────────────────────────────────────
+async function buildSuccessPattern() {
+  const { data: refs } = await supabaseAdmin.from('reference_tracks').select('*').in('source', ['user', 'agent']).not('tempo', 'is', null)
+  if (!refs?.length) return null
+  const vals = (field) => refs.map(r => r[field]).filter(v => v != null)
+  const avg = (field) => { const v = vals(field); return v.length ? v.reduce((s,x) => s+x, 0) / v.length : null }
+  const stddev = (field) => { const v = vals(field); if (!v.length) return null; const m = v.reduce((s,x)=>s+x,0)/v.length; return Math.sqrt(v.reduce((s,x)=>s+Math.pow(x-m,2),0)/v.length) }
+  const mode = (field) => { const v = vals(field); const f={}; v.forEach(x=>f[x]=(f[x]||0)+1); return Object.entries(f).sort((a,b)=>b[1]-a[1])[0]?.[0] }
+  const tempos = vals('tempo').filter(Boolean)
+  const pattern = {
+    bpm_avg: avg('tempo'), bpm_std: stddev('tempo'),
+    bpm_range: tempos.length ? [Math.min(...tempos), Math.max(...tempos)] : null,
+    energy_avg: avg('energy'), energy_std: stddev('energy'),
+    danceability_avg: avg('danceability'), valence_avg: avg('valence'),
+    loudness_avg: avg('loudness'),
+    loudness_range: (() => { const v = vals('loudness').filter(Boolean); return v.length ? [Math.min(...v), Math.max(...v)] : null })(),
+    key_mode: mode('key'), scale_mode: mode('scale'), camelot_mode: mode('camelot'),
+    brightness_avg: avg('brightness'), bass_energy_avg: avg('bass_energy'),
+    warmth_avg: avg('warmth'), harmonic_complexity_avg: avg('harmonic_complexity'), dynamic_complexity_avg: avg('dynamic_complexity'),
+    sample_count: refs.length, updated_at: new Date().toISOString()
+  }
+  await supabaseAdmin.from('user_settings').upsert({ key: 'success_pattern', value: JSON.stringify(pattern) }, { onConflict: 'key' })
+  return pattern
+}
+
+async function compareToSuccessPattern(analysis, pattern) {
+  if (!analysis || !pattern) return null
+  const score = { total: 0, max: 0, details: [] }
+  const check = (label, val, target, tolerance, weight=10) => {
+    score.max += weight
+    if (val == null || target == null) return
+    const diff = Math.abs(val - target)
+    const pts = Math.max(0, weight - (diff / tolerance) * weight)
+    score.total += pts
+    const pct = Math.round(pts / weight * 100)
+    score.details.push({ label, value: val, target: Math.round(target*100)/100, match: pct, diff: Math.round(diff*100)/100, ok: pct >= 70 })
+  }
+  check('BPM', analysis.bpm, pattern.bpm_avg, pattern.bpm_std || 10, 15)
+  check('Energy', analysis.energy, pattern.energy_avg, 0.15, 15)
+  check('Danceability', analysis.danceability, pattern.danceability_avg, 0.15, 10)
+  check('Loudness (LUFS)', analysis.loudness_lufs, pattern.loudness_avg, 2, 15)
+  check('Brightness', analysis.brightness, pattern.brightness_avg, 0.15, 10)
+  check('Bass Energy', analysis.bass_energy, pattern.bass_energy_avg, 0.15, 10)
+  check('Warmth', analysis.warmth, pattern.warmth_avg, 0.15, 8)
+  check('Harmonic Complexity', analysis.harmonic_complexity, pattern.harmonic_complexity_avg, 0.2, 8)
+  check('Dynamic Complexity', analysis.dynamic_complexity, pattern.dynamic_complexity_avg, 1, 9)
+  score.max += 10
+  if (analysis.scale === pattern.scale_mode) { score.total += 10; score.details.push({ label: 'Scale', value: analysis.scale, target: pattern.scale_mode, match: 100, ok: true }) }
+  else { score.details.push({ label: 'Scale', value: analysis.scale, target: pattern.scale_mode, match: 0, ok: false }) }
+  const matchScore = Math.round((score.total / score.max) * 100)
+  return { matchScore, details: score.details, gaps: score.details.filter(d=>!d.ok).sort((a,b)=>a.match-b.match), strengths: score.details.filter(d=>d.ok), pattern }
+}
+
+// ── BUILD 2: Feedback classification ───────────────────────────────────────
+function classifyFeedback(text) {
+  const l = text.toLowerCase()
+  if (l.includes('energy') && (l.includes('more')||l.includes('higher')||l.includes('lacking'))) return 'energy_low'
+  if (l.includes('energy') && (l.includes('less')||l.includes('lower')||l.includes('too much'))) return 'energy_high'
+  if (l.includes('bass') && (l.includes('heavy')||l.includes('too much')||l.includes('boom'))) return 'bass_heavy'
+  if (l.includes('bass') && (l.includes('more')||l.includes('thin')||l.includes('lacking'))) return 'bass_thin'
+  if (l.includes('vocal') && (l.includes('bright')||l.includes('harsh')||l.includes('sharp'))) return 'vocal_bright'
+  if (l.includes('vocal') && (l.includes('mud')||l.includes('dark')||l.includes('boomy'))) return 'vocal_muddy'
+  if ((l.includes('too quiet')||l.includes('louder')||l.includes('level up'))) return 'too_quiet'
+  if ((l.includes('perfect')||l.includes('love it')||l.includes('great')||l.includes('approved')||l.includes('yes'))) return 'approved'
+  return 'other'
+}
+
+// ── BUILD 5: Emotional arc comparison ──────────────────────────────────────
+function compareEmotionalArcs(myArc, refArc) {
+  if (!myArc?.length || !refArc?.length) return null
+  const segments = Math.min(myArc.length, refArc.length)
+  const diffs = []
+  for (let i = 0; i < segments; i++) {
+    diffs.push({
+      segment: i + 1, position_pct: myArc[i].position_pct,
+      energy_diff: Math.round((myArc[i].energy - (refArc[i]?.energy||0)) * 100) / 100,
+      brightness_diff: Math.round((myArc[i].brightness - (refArc[i]?.brightness||0)) * 100) / 100,
+      bass_diff: Math.round((myArc[i].bass - (refArc[i]?.bass||0)) * 100) / 100
+    })
+  }
+  return {
+    diffs,
+    weakPoints: diffs.filter(d => d.energy_diff < -0.1),
+    strongPoints: diffs.filter(d => d.energy_diff > 0.1),
+    myContrast: Math.max(...myArc.map(s=>s.energy)) - Math.min(...myArc.map(s=>s.energy)),
+    refContrast: Math.max(...refArc.map(s=>s.energy)) - Math.min(...refArc.map(s=>s.energy))
+  }
+}
+
+// ── BUILD 3: Trend velocity ────────────────────────────────────────────────
+async function calculateVelocity() {
+  const cutoff = new Date(Date.now() - 14*24*3600000).toISOString().slice(0,10)
+  const { data } = await supabaseAdmin.from('chart_history').select('*').gte('chart_date', cutoff).order('chart_date', { ascending: true })
+  if (!data?.length) return { rising: [], falling: [], stable: [] }
+  const byTrack = {}
+  for (const row of data) {
+    const key = row.spotify_id || (row.title + row.artist)
+    if (!byTrack[key]) byTrack[key] = { title: row.title, artist: row.artist, spotify_id: row.spotify_id, positions: [] }
+    byTrack[key].positions.push({ date: row.chart_date, pos: row.position })
+  }
+  const velocities = Object.values(byTrack).filter(t => t.positions.length >= 2).map(t => {
+    const first = t.positions[0].pos, last = t.positions[t.positions.length-1].pos
+    const velocity = (first - last) / t.positions.length
+    return { ...t, velocity, first_pos: first, last_pos: last, days_tracked: t.positions.length }
+  }).sort((a,b) => b.velocity - a.velocity)
+  return {
+    rising: velocities.filter(t => t.velocity > 10).slice(0,10),
+    falling: velocities.filter(t => t.velocity < -10).slice(0,5),
+    stable: velocities.filter(t => Math.abs(t.velocity) <= 10).slice(0,5)
+  }
+}
+
+// ── BUILD 4: Artist collaborators ──────────────────────────────────────────
+async function fetchArtistCollaborators(spotifyId) {
+  try {
+    const token = await getSpotifyToken()
+    const r = await fetch(`https://api.spotify.com/v1/artists/${spotifyId}/top-tracks?market=US`, { headers: { 'Authorization': 'Bearer ' + token } })
+    const d = await r.json()
+    const collaborators = new Set()
+    for (const track of d.tracks || []) {
+      for (const artist of track.artists || []) {
+        if (artist.id !== spotifyId) collaborators.add(JSON.stringify({ name: artist.name, id: artist.id }))
+      }
+    }
+    return [...collaborators].map(c => JSON.parse(c))
+  } catch(e) { return [] }
 }
 
 async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
@@ -2243,6 +2378,25 @@ async function handleOwnerCommand(chatId, text) {
       await sendTelegram(chatId, summary)
     } catch(e) { await sendTelegram(chatId, '❌ Ref error: ' + e.message) }
   }
+  else if (text.startsWith('/credits ')) {
+    const query = text.slice(9).trim()
+    await sendTelegram(chatId, '⏳ Looking up credits for ' + query + '...')
+    try {
+      const parts = query.split(' - ')
+      const [artistQ, titleQ] = parts.length >= 2 ? [parts[0].trim(), parts.slice(1).join(' - ').trim()] : [query, query]
+      const credits = await fetchGeniusCredits(artistQ, titleQ)
+      if (!credits || (!credits.producers?.length && !credits.writers?.length)) {
+        await sendTelegram(chatId, '❌ No credits found for: ' + query + '\nTry: /credits Artist - Title')
+        return
+      }
+      let msg = '🎵 Credits: ' + query
+      if (credits.producers?.length) msg += '\n\n🎛 Produced by: ' + credits.producers.join(', ')
+      if (credits.mixers?.length) msg += '\n🔊 Mixed by: ' + credits.mixers.join(', ')
+      if (credits.masterers?.length) msg += '\n💿 Mastered by: ' + credits.masterers.join(', ')
+      if (credits.writers?.length) msg += '\n✍️ Written by: ' + credits.writers.slice(0,4).join(', ')
+      await sendTelegram(chatId, msg)
+    } catch(e) { await sendTelegram(chatId, '❌ Credits error: ' + e.message) }
+  }
   else if (cmd === '/morning') {
     await sendTelegram(chatId, '⏳ Running full morning agents...')
     try {
@@ -2665,6 +2819,7 @@ async function handleOwnerCommand(chatId, text) {
       '/demo [artist] — Check demo status\n' +
       '/mix [song] — Get mix gap analysis\n' +
       '/ref [spotify url] — Analyze reference track\n' +
+      '/credits [Artist - Title] — Who produced/mixed/mastered it\n' +
       '/whatsapp [text] — Analyze pasted chat\n' +
       '/contacts — Show monitored WhatsApp contacts\n' +
       '/monitor [name] — Add contact to monitor list\n' +
@@ -6197,6 +6352,138 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         fs.writeFileSync(path.join(body.folder, 'brief.txt'), content)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── GET /success-pattern — returns cached pattern, rebuilds if older than 24h ──
+  if (req.method === 'GET' && req.url === '/success-pattern') {
+    try {
+      const { data } = await supabaseAdmin.from('user_settings').select('value, updated_at').eq('key', 'success_pattern').maybeSingle()
+      let pattern = data?.value ? JSON.parse(data.value) : null
+      if (!pattern || !data.updated_at || (Date.now() - new Date(pattern.updated_at).getTime()) > 24*3600000) {
+        pattern = await buildSuccessPattern()
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, pattern }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /analyze-success-match — compare song analysis to success pattern ──
+  if (req.method === 'POST' && req.url === '/analyze-success-match') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const { song_id } = JSON.parse(Buffer.concat(chunks).toString())
+        const { data: song } = await supabaseAdmin.from('songs').select('work_data').eq('id', song_id).single()
+        const versions = song?.work_data?.versions || []
+        const analysis = versions.filter(v => v.analysis).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0]?.analysis
+        if (!analysis) { res.writeHead(200); res.end(JSON.stringify({ ok: false, error: 'no analysis found' })); return }
+        const { data: patternRow } = await supabaseAdmin.from('user_settings').select('value').eq('key', 'success_pattern').maybeSingle()
+        let pattern = patternRow?.value ? JSON.parse(patternRow.value) : null
+        if (!pattern) pattern = await buildSuccessPattern()
+        const result = await compareToSuccessPattern(analysis, pattern)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, ...result }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /log-feedback-pattern — classify + store feedback with analysis ──
+  if (req.method === 'POST' && req.url === '/log-feedback-pattern') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const { song_id, version_name, feedback_items, analysis } = JSON.parse(Buffer.concat(chunks).toString())
+        const rows = (feedback_items || []).map(text => ({
+          song_id, version_name,
+          feedback_text: text,
+          feedback_type: classifyFeedback(text),
+          analysis: analysis || {}
+        }))
+        if (rows.length) await supabaseAdmin.from('feedback_patterns').insert(rows)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, logged: rows.length }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── GET /feedback-insights — aggregate feedback patterns by type ──
+  if (req.method === 'GET' && req.url.startsWith('/feedback-insights')) {
+    try {
+      const u = new URL(req.url, 'http://localhost')
+      const songId = u.searchParams.get('song_id')
+      let q = supabaseAdmin.from('feedback_patterns').select('*').order('created_at', { ascending: false }).limit(200)
+      if (songId) q = q.eq('song_id', songId)
+      const { data } = await q
+      if (!data?.length) { res.writeHead(200); res.end(JSON.stringify({ ok: true, insights: {}, history: [] })); return }
+      const byType = {}
+      for (const row of data) {
+        if (!byType[row.feedback_type]) byType[row.feedback_type] = { count: 0, rows: [] }
+        byType[row.feedback_type].count++
+        byType[row.feedback_type].rows.push(row)
+      }
+      const insights = {}
+      for (const [type, { count, rows }] of Object.entries(byType)) {
+        const avg = field => { const v = rows.map(r => r.analysis?.[field]).filter(x => x != null); return v.length ? Math.round((v.reduce((s,x)=>s+x,0)/v.length)*100)/100 : null }
+        insights[type] = { count, avg_energy: avg('energy'), avg_bpm: avg('bpm'), avg_loudness: avg('loudness_lufs'), avg_bass: avg('bass_energy') }
+      }
+      const total = data.length
+      const history = Object.entries(byType).map(([type, {count}]) => ({ type, count, pct: Math.round(count/total*100) })).sort((a,b)=>b.count-a.count)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, insights, history, total }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── GET /trend-velocity — chart position velocity over last 14 days ──
+  if (req.method === 'GET' && req.url === '/trend-velocity') {
+    try {
+      const velocity = await calculateVelocity()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, ...velocity }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /enrich-track-credits — fetch Genius + Spotify collaborators ──
+  if (req.method === 'POST' && req.url === '/enrich-track-credits') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const { title, artist, spotify_id, reference_track_id } = JSON.parse(Buffer.concat(chunks).toString())
+        const [geniusCredits, collaborators] = await Promise.all([
+          fetchGeniusCredits(artist, title),
+          spotify_id ? fetchArtistCollaborators(spotify_id) : Promise.resolve([])
+        ])
+        const credits = { ...geniusCredits, collaborators, enriched_at: new Date().toISOString() }
+        if (reference_track_id) {
+          await supabaseAdmin.from('reference_tracks').update({ credits }).eq('id', reference_track_id)
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, credits }))
       } catch(e) {
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: e.message }))

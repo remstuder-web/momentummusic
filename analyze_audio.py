@@ -278,4 +278,45 @@ try:
 except Exception:
     results['warmth'] = None
 
+# Emotional arc — 8 segments
+try:
+    segment_count = 8
+    segment_size = len(audio) // segment_count
+    arc = []
+    for i in range(segment_count):
+        start = i * segment_size
+        end = start + segment_size
+        segment = audio[start:end]
+        if len(segment) < 1024:
+            continue
+        seg_rms = float(es.RMS()(segment))
+        seg_energy = round(min(1.0, seg_rms * 10), 3)
+        seg_centroids = []
+        for j in range(0, len(segment) - 2048, 1024):
+            frame = segment[j:j+2048]
+            windowed = es.Windowing(type='hann')(frame)
+            spectrum = es.Spectrum()(windowed)
+            if len(spectrum) > 0 and np.max(spectrum) > 0:
+                seg_centroids.append(float(es.Centroid(range=22050)(spectrum)))
+        seg_brightness = round(min(1.0, float(np.mean(seg_centroids)) / 8000), 3) if seg_centroids else 0
+        seg_bass_rms = float(es.RMS()(segment[:max(1, len(segment)//4)]))
+        seg_bass = round(min(1.0, seg_bass_rms * 15), 3)
+        arc.append({
+            'segment': i + 1,
+            'position_pct': round((i / segment_count) * 100),
+            'energy': seg_energy,
+            'brightness': seg_brightness,
+            'bass': seg_bass
+        })
+    results['emotional_arc'] = arc
+    if arc:
+        energies = [s['energy'] for s in arc]
+        results['arc_peak_segment'] = max(range(len(energies)), key=lambda i: energies[i]) + 1
+        results['arc_contrast'] = round(max(energies) - min(energies), 3)
+        results['arc_buildup'] = round(energies[-1] - energies[0], 3)
+except Exception as e:
+    results['emotional_arc'] = None
+    results['arc_contrast'] = None
+    results['arc_peak_segment'] = None
+
 print(json.dumps(results))

@@ -1,24 +1,20 @@
 {
   "updated": "2026-04-25T00:00:00.000Z",
-  "last_task": "coingecko-trending-crowd-sentiment",
+  "last_task": "brain-dump-image-extraction",
   "status": "done",
   "working": [
-    "getCoinGeckoTrending() — 7 trending coins, flags monitored ones, is_bullish signal",
-    "getCoinGeckoGlobal() — BTC dominance, market cap 24h change, ETH dominance",
-    "buildCryptoSignal() scores: +1 bull if monitored coin trending, +1/−1 for ±3% market move, dominance note",
-    "cg_trending + cg_global in result object",
-    "GET /coingecko-trending — live endpoint confirmed working (BTC rank 6, is_bullish:true)",
-    "Morning briefing: 🔍 CRYPTO TRENDING Telegram block with top 5 + BTC dom + market 24h",
-    "FinancesTab: collapsible TRENDING NOW with ⚡ for monitored coins, global stats row",
-    "getPolymarketSignals() — Polymarket CLOB (3s) → Manifold Markets fallback; 5-min cache",
-    "GET /polymarket-signals endpoint live",
+    "extractImageText(file): base64 encode → claude-haiku-4-5-20251001 vision → plain text → dumpText",
+    "textarea onpaste: intercepts clipboard images, calls extractImageText, prevents default",
+    "drop handler: image drops now use extractImageText (not processImageDump) → text in field → suggest-category flow",
+    "imageExtracting $state: shows ⏳ indicator during extraction",
+    "cost tracking via /track-cost for browser/image-extract",
+    "processImageDump kept intact (still used by screen capture flow if needed)",
     "8/8 tests passing, clean vite build"
   ],
   "broken": [],
   "partial": [
-    "BUILD 2/3: feedback_patterns and chart_history tables need SQL in Supabase",
-    "CoinGecko global may return empty on rapid successive calls (rate limit) — non-critical"
+    "BUILD 2/3: feedback_patterns and chart_history tables need SQL in Supabase"
   ],
-  "next": "Run SQL in Supabase dashboard:\n\nCREATE TABLE IF NOT EXISTS feedback_patterns (...);\nCREATE TABLE IF NOT EXISTS chart_history (...);\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text;\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;",
-  "notes": "CoinGecko free tier — trending endpoint works reliably; global may 429 if both fetched simultaneously. Both called in same Promise.all so global may occasionally be empty; signal scoring handles null gracefully."
+  "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables (see previous status for full SQL)",
+  "notes": "extractImageText is lighter than processImageDump (Haiku vs Sonnet, plain text vs structured JSON). Both paste and drop now go through the same lightweight extract→dumpText→suggest-category pipeline."
 }

@@ -1302,3 +1302,9 @@ TASK: coingecko trending as crowd sentiment signal
 WHAT: getCoinGeckoTrending() fetches top 7 trending coins, flags monitored ones (BTC/ETH/DOGE/XRP/FLOKI); getCoinGeckoGlobal() fetches BTC dominance + market cap 24h change; both added to buildCryptoSignal() Promise.all; scoring: +1 bull if monitored coin trending, +1 bull if market +3%, +1 bear if market -3%, dominance note; result includes cg_trending/cg_global; GET /coingecko-trending endpoint; morning briefing sends 🔍 CRYPTO TRENDING Telegram block; FinancesTab collapsible TRENDING NOW section with global stats row + ranked list (⚡ for monitored coins)
 RESULT: works — BTC currently rank 6 in trending, is_bullish:true; 8/8 tests passing
 BLOCKERS: none
+
+## [2026-04-25] src/lib/BrainTab.svelte — STATUS: DONE
+TASK: brain dump image extraction via Claude vision
+WHAT: added extractImageText(file) — reads image as base64, calls claude-haiku-4-5-20251001 vision to extract plain text, sets dumpText with result; onpaste handler on textarea intercepts clipboard images and routes to extractImageText; drop handler updated to use extractImageText instead of processImageDump (lighter: extract→dumpText→suggest-category vs old: extract→JSON→approval panel); imageExtracting state shows ⏳ indicator while processing; tracks cost via /track-cost
+RESULT: works — clean build, 8/8 tests passing
+BLOCKERS: none

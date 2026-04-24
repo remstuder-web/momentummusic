@@ -41,6 +41,7 @@
   let uploadedFile = $state(null)
   let fileUploading = $state(false)
   let processing = $state(false)
+  let imageExtracting = $state(false)
   let capturing = $state(false)
   let captureResult = $state(null)
   let captureMixingSuggestions = $state([])
@@ -354,6 +355,45 @@ Return ONLY JSON:
       }
     } catch(e) { alert('Image processing error: ' + e.message) }
     processing = false
+  }
+
+  async function extractImageText(file) {
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    if (!apiKey) { alert('Add API key in Settings.'); return }
+    imageExtracting = true
+    try {
+      const base64data = await new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = () => res(r.result.split(',')[1])
+        r.onerror = rej
+        r.readAsDataURL(file)
+      })
+      const extractRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 500,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: file.type, data: base64data } },
+            { type: 'text', text: 'Extract all text and key information from this image. If it is a screenshot, describe what is shown and extract all readable text. Return as plain text.' }
+          ]}]
+        })
+      })
+      const extractData = await extractRes.json()
+      if (extractData.usage) fetch('http://localhost:4242/track-cost', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: 'browser/image-extract', model: 'claude-haiku-4-5-20251001', input_tokens: extractData.usage.input_tokens, output_tokens: extractData.usage.output_tokens, cost_usd: (extractData.usage.input_tokens * 0.000001) + (extractData.usage.output_tokens * 0.000005) })
+      }).catch(() => {})
+      const extractedText = extractData.content?.[0]?.text || ''
+      if (extractedText) dumpText = extractedText
+    } catch(e) { alert('Image text extraction failed: ' + e.message) }
+    imageExtracting = false
   }
 
   async function fetchCatSuggestion() {
@@ -1119,7 +1159,7 @@ Return ONLY JSON (single item array):
       dumpDragging = null; fileDragging = false
       const file = [...e.dataTransfer.files][0]
       if (!file) return
-      if (file.type.startsWith('image/')) { await processImageDump(file); return }
+      if (file.type.startsWith('image/')) { await extractImageText(file); return }
       if (file.type === 'text/plain') { dumpText = await file.text(); return }
       await handleFileDrop(file)
     }}>
@@ -1172,8 +1212,19 @@ Return ONLY JSON (single item array):
       class="brain-textarea {dumpDragging === 'image' ? 'drag-image' : ''}"
       bind:value={dumpText}
       placeholder={DUMP_HINTS[placeholderIndex]}
+      onpaste={async e => {
+        const items = [...(e.clipboardData?.items || [])]
+        const imageItem = items.find(item => item.type.startsWith('image/'))
+        if (imageItem) {
+          e.preventDefault()
+          const file = imageItem.getAsFile()
+          if (file) await extractImageText(file)
+        }
+      }}
     ></textarea>
-    {#if dumpDragging === 'image'}
+    {#if imageExtracting}
+      <p class="brain-image-drop-hint">⏳ Extracting text from image…</p>
+    {:else if dumpDragging === 'image'}
       <p class="brain-image-drop-hint">📷 Drop image — Claude will read and extract info</p>
     {/if}
     {#if fileDragging}

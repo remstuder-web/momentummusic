@@ -6367,11 +6367,18 @@ Respond ONLY in JSON:
           const songRows = await songRes.json()
           if (!songRows[0]) throw new Error('Song not found')
           const wd = songRows[0].work_data || {}
-          const versions = (wd.versions || []).filter(v => v.version_type === 'mixing' && v.audio_path)
-          if (!versions.length) throw new Error('No mixing versions with audio found')
-          const latest = versions[versions.length - 1]
-          const audioFilePath = path.join(MIXING_DIR, latest.audio_path)
-          if (!fs.existsSync(audioFilePath)) throw new Error('Audio file not found: ' + audioFilePath)
+          const mixVersions = (wd.versions || [])
+            .filter(v => (v.version_type === 'mixing' || v.version_type === 'production') && v.audio_path)
+          mixVersions.sort((a, b) => (b.name || '').localeCompare(a.name || ''))
+          if (!mixVersions.length) throw new Error('No mixing or production versions with audio found')
+          const latestVersion = mixVersions[0]
+          const filename = latestVersion.audio_path
+          const mixPath = path.join(MIXING_DIR, filename)
+          const prodPath = path.join(PRODUCTION_DIR, filename)
+          let audioFilePath = null
+          if (fs.existsSync(mixPath)) audioFilePath = mixPath
+          else if (fs.existsSync(prodPath)) audioFilePath = prodPath
+          if (!audioFilePath) throw new Error('Audio file not found: ' + filename)
 
           console.log('⏳ Running 4-stem EQ analysis on:', audioFilePath)
           const raw = execSync(`"${VOCAL_EQ_PYTHON}" "${VOCAL_EQ_SCRIPT}" "${audioFilePath}" 2>/dev/null`, { encoding: 'utf8', timeout: 400000 }).trim()

@@ -1,23 +1,16 @@
 {
-  "updated": "2026-04-24T08:00:00.000Z",
-  "last_task": "coin-rotation-monitor",
+  "updated": "2026-04-24T08:29:00.000Z",
+  "last_task": "vocal-eq-production-versions",
   "status": "done",
   "working": [
-    "fetchAllCoinPrices() — CoinGecko EUR prices for BTC/ETH/DOGE/XRP/FLOKI",
-    "scoreCoinForEntry() + recommendNextCoin() — contrarian scoring with dip/funding/volatility signals",
-    "monitorActiveTrades() — runs every 15min, updates pnl in DB, sends TP/SL Telegram alerts",
-    "GET /all-coin-prices — returns live prices, verified working",
-    "Telegram /next — ranked coin analysis with prices and reasons",
-    "Telegram /trade100 /tradeeth100 /tradedoge100 /tradexrp100 /tradefloki100 — buy prepare with pendingConfirmations",
-    "Telegram /sell generalized — reads from active_trades for ALL coins (BTC/ETH/DOGE/XRP/FLOKI)",
-    "FinancesTab MONITORED COINS section — live prices with 24h change and ACTIVE indicator",
-    "FinancesTab active trades with colored left border (green=5%+ / red=-5%+ / dim=in between)",
-    "BrainTab ▶ button always visible — Spotify search fallback for text-extracted tracks",
-    "BrainTab sticky dump column — background #0a0a0a + z-index:2 prevents scroll-through",
+    "vocal-eq-production-versions: /analyze-vocal-eq accepts mixing OR production versions, sorted by name desc, checks MIXING_DIR then PRODUCTION_DIR",
+    "coin-rotation-monitor: fetchAllCoinPrices, scoreCoinForEntry, recommendNextCoin, monitorActiveTrades every 15min, /next /trade* /sell* Telegram commands, GET /all-coin-prices, FinancesTab MONITORED COINS section",
+    "BrainTab ▶ always visible with Spotify search fallback for text-extracted tracks",
+    "BrainTab sticky dump col: background #0a0a0a + z-index:2",
     "8/8 tests passing"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run SQL migration in Supabase: ALTER TABLE active_trades ADD COLUMN IF NOT EXISTS current_price float, ADD COLUMN IF NOT EXISTS pnl_pct float, ADD COLUMN IF NOT EXISTS pnl_eur float; — then test monitorActiveTrades with a live trade",
-  "notes": "Sell handler now uses active_trades for all coins. Old portfolio-based sell still works for BTC/ETH if they have active_trades rows (which they will after using /trade or /buy). /trade and /buy are separate commands — /buy takes EUR amount as separate arg, /trade100 takes amount in command name."
+  "next": "Run SQL if not done: ALTER TABLE active_trades ADD COLUMN IF NOT EXISTS current_price float, ADD COLUMN IF NOT EXISTS pnl_pct float, ADD COLUMN IF NOT EXISTS pnl_eur float;",
+  "notes": "vocal-eq now finds production files when no mix version exists. Sort by name desc picks highest version number (v02 > v01)."
 }

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: vocal-eq-production-versions
+WHAT: /analyze-vocal-eq mix type now accepts both version_type='mixing' and version_type='production'. Versions sorted by name descending to get latest. File lookup checks MIXING_DIR first, then PRODUCTION_DIR.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-24] momentum-watcher.cjs + src/lib/FinancesTab.svelte — DONE
 TASK: coin-rotation-monitor
 WHAT: Added full 5-coin rotation trading monitor (BTC, ETH, DOGE, XRP, FLOKI). fetchAllCoinPrices() from CoinGecko EUR. scoreCoinForEntry() contrarian scoring (dip=+3, funding squeeze=+2, volatility bonus for meme coins). recommendNextCoin(excludeCoin) ranks remaining coins. monitorActiveTrades() runs every 15min: checks active_trades, updates pnl_pct/pnl_eur in DB, sends Telegram TAKE PROFIT (+5%) or STOP LOSS (-5%) alerts. New Telegram commands: /next (ranked coin analysis), /trade100 /tradeeth100 /tradedoge100 /tradexrp100 /tradefloki100 (buy prepare), /selldoge /sellxrp /sellfloki (sell via active_trades). Generalized /sell reads from active_trades for all coins. GET /all-coin-prices endpoint. FinancesTab: MONITORED COINS section with live prices + ACTIVE indicator, active trade rows with colored left border by P&L tier.

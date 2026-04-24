@@ -59,8 +59,10 @@
   }
 
   // ── Crypto signal ──────────────────────────────────────────────────────────
+  const MONITORED_COINS = ['BTC','ETH','DOGE','XRP','FLOKI']
   let cryptoSignal = $state(null)
   let cryptoLoading = $state(false)
+  let allCoinPrices = $state({})
   let portfolio = $state([])
   let newCoin = $state('BTC')
   let newAmount = $state('')
@@ -69,8 +71,12 @@
   async function loadCryptoSignal() {
     cryptoLoading = true
     try {
-      const r = await fetch('http://localhost:4242/crypto-signal')
-      cryptoSignal = await r.json()
+      const [sigRes, pricesRes] = await Promise.all([
+        fetch('http://localhost:4242/crypto-signal'),
+        fetch('http://localhost:4242/all-coin-prices')
+      ])
+      cryptoSignal = await sigRes.json()
+      allCoinPrices = await pricesRes.json()
     } catch(e) {}
     cryptoLoading = false
   }
@@ -285,14 +291,39 @@
         </div>
       {/if}
 
+      <!-- Monitored coins live prices -->
+      {#if Object.keys(allCoinPrices).length}
+        <div class="section-title" style="margin-top:12px;margin-bottom:4px">MONITORED COINS</div>
+        {#each MONITORED_COINS as coin}
+          {@const data = allCoinPrices[coin]}
+          {@const activeTrade = cryptoSignal?.active_trades?.find(t => t.coin === coin)}
+          {#if data}
+            <div class="price-row">
+              <span class="coin-label">{coin}</span>
+              <span class="coin-price">
+                {data.price < 0.01 ? '€' + data.price?.toFixed(6) : '€' + Math.round(data.price).toLocaleString()}
+              </span>
+              <span class="coin-change {data.change24h > 0 ? 'up' : 'down'}">
+                {data.change24h > 0 ? '+' : ''}{data.change24h?.toFixed(1)}%
+              </span>
+              {#if activeTrade}
+                <span style="font-size:9px;color:#c9a84c;font-family:'Space Mono',monospace;margin-left:6px">ACTIVE</span>
+              {/if}
+            </div>
+          {/if}
+        {/each}
+      {/if}
+
       {#if cryptoSignal.active_trades?.length}
         <div class="section-title" style="margin-top:12px;margin-bottom:4px">ACTIVE TRADES</div>
         {#each cryptoSignal.active_trades as trade}
-          <div class="active-trade-row {(trade.pnl_pct || 0) >= 0 ? 'profit' : 'loss'}">
+          {@const fmtEntry = trade.entry_price < 1 ? trade.entry_price?.toFixed(4) : Math.round(trade.entry_price).toLocaleString()}
+          <div class="active-trade-row {(trade.pnl_pct || 0) >= 0 ? 'profit' : 'loss'}"
+            style="border-left: 3px solid {(trade.pnl_pct || 0) >= 5 ? '#00c853' : (trade.pnl_pct || 0) <= -5 ? '#e05a4a' : (trade.pnl_pct || 0) > 0 ? '#4caf82' : '#ff6b35'};padding-left:8px">
             <span class="coin-label">{trade.coin}</span>
-            <span class="coin-price" style="font-size:11px">entry €{Math.round(trade.entry_price).toLocaleString()}</span>
+            <span class="coin-price" style="font-size:11px">entry €{fmtEntry}</span>
             <span class="coin-change {(trade.pnl_pct || 0) >= 0 ? 'up' : 'down'}" style="margin-left:auto">
-              {(trade.pnl_pct || 0) >= 0 ? '+' : ''}{trade.pnl_pct?.toFixed(1)}%
+              {(trade.pnl_pct || 0) >= 0 ? '+' : ''}{trade.pnl_pct?.toFixed(2)}%
               (€{Math.round(trade.pnl_eur || 0)})
             </span>
           </div>

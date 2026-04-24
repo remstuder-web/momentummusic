@@ -61,11 +61,10 @@
 
   function playPreview(track) {
     if (!track.preview_url) {
-      window.open(
-        'https://open.spotify.com/track/' + track.spotify_id,
-        'momentum_popup',
-        'width=900,height=700,left=200,top=100,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=yes'
-      )
+      const spotifyUrl = track.spotify_id
+        ? 'https://open.spotify.com/track/' + track.spotify_id
+        : 'https://open.spotify.com/search/' + encodeURIComponent((track.artist || '') + ' ' + (track.title || ''))
+      window.open(spotifyUrl, 'momentum_popup', 'width=900,height=700,left=200,top=100,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=yes')
       return
     }
     if (playingId === track.id) {
@@ -1740,11 +1739,9 @@ Return ONLY JSON (single item array):
               {track.camelot ? ' · ' + track.camelot : ''}
             </span>
             <div class="ref-checkout-btns">
-              {#if track.preview_url || track.spotify_id}
-                <button class="track-play-btn"
-                  onclick={() => playPreview(track)}
-                >{playingId === track.id ? '■' : '▶'}</button>
-              {/if}
+              <button class="track-play-btn"
+                onclick={() => playPreview(track)}
+              >{playingId === track.id ? '■' : '▶'}</button>
               <button class="promote-btn gold"
                 onclick={() => promoteToMyRefs(track.id)}
                 title="Move to My References">★ Mine</button>
@@ -1781,11 +1778,9 @@ Return ONLY JSON (single item array):
               {track.loudness != null ? ' · ' + track.loudness + 'LUFS' : ''}
             </span>
             <div class="ref-checkout-btns">
-              {#if track.preview_url || track.spotify_id}
-                <button class="track-play-btn"
-                  onclick={() => playPreview(track)}
-                >{playingId === track.id ? '■' : '▶'}</button>
-              {/if}
+              <button class="track-play-btn"
+                onclick={() => playPreview(track)}
+              >{playingId === track.id ? '■' : '▶'}</button>
               <button class="track-del-btn" onclick={() => deleteRef(track.id)}>×</button>
             </div>
           </div>
@@ -1812,11 +1807,9 @@ Return ONLY JSON (single item array):
               {track.camelot ? ' · ' + track.camelot : (track.key ? ' · ' + track.key : '')}
             </span>
             <div class="ref-checkout-btns">
-              {#if track.preview_url || track.spotify_id}
-                <button class="track-play-btn"
-                  onclick={() => playPreview(track)}
-                >{playingId === track.id ? '■' : '▶'}</button>
-              {/if}
+              <button class="track-play-btn"
+                onclick={() => playPreview(track)}
+              >{playingId === track.id ? '■' : '▶'}</button>
               <button class="promote-btn gold"
                 onclick={() => promoteToMyRefs(track.id)}
                 title="Move to My References">★</button>
@@ -1889,6 +1882,8 @@ Return ONLY JSON (single item array):
     gap: 10px;
     position: sticky;
     top: 24px;
+    background: #0a0a0a;
+    z-index: 2;
   }
 
   .brain-hint {

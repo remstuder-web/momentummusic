@@ -1,20 +1,23 @@
 {
-  "updated": "2026-04-24T07:45:00.000Z",
-  "last_task": "fix-scout-save-final",
+  "updated": "2026-04-24T08:00:00.000Z",
+  "last_task": "coin-rotation-monitor",
   "status": "done",
   "working": [
-    "fix-scout-save-final: supabase client used for all inserts, kworb loop fixed, extractTracksFromText returns 26 tracks with regex fallback — VERIFIED working",
-    "fix-scout-checkout-not-null: placeholder removed after SQL migration",
-    "brain-refs-auto-refresh: refsInterval polls reference_tracks every 2min",
-    "ref-track-preview-audio: BrainTab playPreview() + DailyTab inline data-preview + ProjectsTab playRefUrl()",
-    "popup-window-dimensions: 900x700 momentum_popup window reused for all external links",
-    "scout-extract-mentions: extractTracksFromText() saves text-mentioned tracks to checkout",
-    "fix-reference-tracks-order: reference_tracks ordered by created_at DESC"
+    "fetchAllCoinPrices() — CoinGecko EUR prices for BTC/ETH/DOGE/XRP/FLOKI",
+    "scoreCoinForEntry() + recommendNextCoin() — contrarian scoring with dip/funding/volatility signals",
+    "monitorActiveTrades() — runs every 15min, updates pnl in DB, sends TP/SL Telegram alerts",
+    "GET /all-coin-prices — returns live prices, verified working",
+    "Telegram /next — ranked coin analysis with prices and reasons",
+    "Telegram /trade100 /tradeeth100 /tradedoge100 /tradexrp100 /tradefloki100 — buy prepare with pendingConfirmations",
+    "Telegram /sell generalized — reads from active_trades for ALL coins (BTC/ETH/DOGE/XRP/FLOKI)",
+    "FinancesTab MONITORED COINS section — live prices with 24h change and ACTIVE indicator",
+    "FinancesTab active trades with colored left border (green=5%+ / red=-5%+ / dim=in between)",
+    "BrainTab ▶ button always visible — Spotify search fallback for text-extracted tracks",
+    "BrainTab sticky dump column — background #0a0a0a + z-index:2 prevents scroll-through",
+    "8/8 tests passing"
   ],
   "broken": [],
-  "partial": [
-    "extractTracksFromText raw log still in code — remove once confirmed stable over a few runs"
-  ],
-  "next": "After a few successful scout runs, remove the 'extractTracksFromText raw:' console.log line (it logs first 200 chars of response every run)",
-  "notes": "Root causes resolved: (1) old fetch code swallowed errors with return=minimal, (2) JSON.parse threw on non-array response and catch returned [], (3) spotify_id NOT NULL blocked inserts. All three fixed."
+  "partial": [],
+  "next": "Run SQL migration in Supabase: ALTER TABLE active_trades ADD COLUMN IF NOT EXISTS current_price float, ADD COLUMN IF NOT EXISTS pnl_pct float, ADD COLUMN IF NOT EXISTS pnl_eur float; — then test monitorActiveTrades with a live trade",
+  "notes": "Sell handler now uses active_trades for all coins. Old portfolio-based sell still works for BTC/ETH if they have active_trades rows (which they will after using /trade or /buy). /trade and /buy are separate commands — /buy takes EUR amount as separate arg, /trade100 takes amount in command name."
 }

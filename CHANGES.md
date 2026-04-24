@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-24] momentum-watcher.cjs + src/lib/FinancesTab.svelte — DONE
+TASK: coin-rotation-monitor
+WHAT: Added full 5-coin rotation trading monitor (BTC, ETH, DOGE, XRP, FLOKI). fetchAllCoinPrices() from CoinGecko EUR. scoreCoinForEntry() contrarian scoring (dip=+3, funding squeeze=+2, volatility bonus for meme coins). recommendNextCoin(excludeCoin) ranks remaining coins. monitorActiveTrades() runs every 15min: checks active_trades, updates pnl_pct/pnl_eur in DB, sends Telegram TAKE PROFIT (+5%) or STOP LOSS (-5%) alerts. New Telegram commands: /next (ranked coin analysis), /trade100 /tradeeth100 /tradedoge100 /tradexrp100 /tradefloki100 (buy prepare), /selldoge /sellxrp /sellfloki (sell via active_trades). Generalized /sell reads from active_trades for all coins. GET /all-coin-prices endpoint. FinancesTab: MONITORED COINS section with live prices + ACTIVE indicator, active trade rows with colored left border by P&L tier.
+RESULT: works — /all-coin-prices returns live data, 8/8 tests passing
+BLOCKERS: Run SQL: ALTER TABLE active_trades ADD COLUMN IF NOT EXISTS current_price float, ADD COLUMN IF NOT EXISTS pnl_pct float, ADD COLUMN IF NOT EXISTS pnl_eur float;
+
 ## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: fix-scout-save-final
 WHAT: Three fixes: (1) supabase client initialized (createClient) and used for all reference_tracks inserts instead of raw fetch. (2) kworb loop uses supabase client, only sets spotify_id if non-null. (3) extractTracksFromText regex extracts JSON array even if surrounded by extra text, logs raw response for debug, returns 26 tracks per run. Verified: ✓ INSERTED logs + skip (exists) working correctly.

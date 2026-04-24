@@ -2226,43 +2226,91 @@ async function handleOwnerCommand(chatId, text) {
       )
     } catch(e) { await sendTelegram(chatId, '❌ Buy error: ' + e.message) }
   }
+  else if (cmd.match(/^\/(trade|tradeeth|tradedoge|tradexrp|tradefloki)\d+$/i)) {
+    const COIN_MAP = { tradefloki: 'FLOKI', tradedoge: 'DOGE', tradexrp: 'XRP', tradeeth: 'ETH', trade: 'BTC' }
+    const BINANCE_PAIRS = { BTC: 'BTC_EUR', ETH: 'ETH_EUR', DOGE: 'DOGE_EUR', XRP: 'XRP_EUR', FLOKI: 'FLOKI_USDT' }
+    const prefix = Object.keys(COIN_MAP).find(p => cmd.toLowerCase().startsWith('/' + p))
+    if (prefix) {
+      const coin = COIN_MAP[prefix]
+      const amount = parseInt(cmd.slice(prefix.length + 1))
+      if (!amount || isNaN(amount)) { await sendTelegram(chatId, '❌ Usage: /trade100 /tradeeth100 /tradedoge100 /tradexrp100 /tradefloki100'); return }
+      try {
+        const prices = await fetchAllCoinPrices()
+        const price = prices[coin]?.price
+        if (!price) { await sendTelegram(chatId, '❌ Price unavailable for ' + coin); return }
+        const coinAmount = (amount / price).toFixed(coin === 'BTC' ? 8 : 4)
+        const pair = BINANCE_PAIRS[coin] || coin + '_EUR'
+        const binanceUrl = 'https://www.binance.com/en/trade/' + pair
+        pendingConfirmations[chatId] = {
+          action: async () => {
+            await fetch(`${SUPABASE_URL}/rest/v1/crypto_trades`, {
+              method: 'POST',
+              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({
+                coin, amount_coin: parseFloat(coinAmount), amount_eur: amount,
+                price_eur: price < 1 ? price : Math.round(price), type: 'buy',
+                traded_at: new Date().toISOString(), source: 'telegram_trade'
+              })
+            }).catch(() => {})
+            await fetch(`${SUPABASE_URL}/rest/v1/active_trades?on_conflict=coin`, {
+              method: 'POST',
+              headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+              body: JSON.stringify({
+                coin, entry_price: price, amount: parseFloat(coinAmount), amount_eur: amount,
+                entry_time: new Date().toISOString(), status: 'open'
+              })
+            }).catch(() => {})
+            await sendTelegram(chatId,
+              '✅ Buy logged!\n' +
+              coinAmount + ' ' + coin + '\n' +
+              'Invested: €' + amount + ' at €' + (price < 0.01 ? price.toFixed(6) : price < 1 ? price.toFixed(4) : Math.round(price).toLocaleString()) + '\n\n' +
+              '→ Binance: ' + binanceUrl
+            )
+          }
+        }
+        await sendTelegram(chatId,
+          '⚡ Trade prepared:\n\n' +
+          'Buy: ' + coinAmount + ' ' + coin + '\n' +
+          'Amount: €' + amount + '\n' +
+          'Price: €' + (price < 0.01 ? price.toFixed(6) : price < 1 ? price.toFixed(4) : Math.round(price).toLocaleString()) + '\n\n' +
+          '→ Open Binance: ' + binanceUrl + '\n\n' +
+          'Reply YES to log · NO to cancel'
+        )
+      } catch(e) { await sendTelegram(chatId, '❌ Trade error: ' + e.message) }
+    }
+  }
   else if (cmd.startsWith('/sell')) {
-    const coin = cmd.includes('eth') ? 'ETH' : 'BTC'
+    let coin = 'BTC'
+    if (cmd.includes('eth')) coin = 'ETH'
+    else if (cmd.includes('doge')) coin = 'DOGE'
+    else if (cmd.includes('xrp')) coin = 'XRP'
+    else if (cmd.includes('floki')) coin = 'FLOKI'
+    const BINANCE_PAIRS = { BTC: 'BTC_EUR', ETH: 'ETH_EUR', DOGE: 'DOGE_EUR', XRP: 'XRP_EUR', FLOKI: 'FLOKI_USDT' }
     try {
-      const [btcData, portRes] = await Promise.all([
-        fetchBTCData(),
-        fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio&select=value`, { headers: sbHeaders })
-      ])
-      const portData = await portRes.json()
-      const portfolio = portData[0]?.value ? JSON.parse(portData[0].value) : []
-      const holdings = portfolio.filter(p => p.coin === coin)
-      if (!holdings.length) { await sendTelegram(chatId, 'No ' + coin + ' holdings to sell'); return }
-      const price = coin === 'BTC' ? btcData.bitcoin.eur : btcData.ethereum.eur
-      const totalAmount = holdings.reduce((s, h) => s + h.amount, 0)
-      const totalCost = holdings.reduce((s, h) => s + h.amount * h.entryPrice, 0)
-      const currentValue = totalAmount * price
-      const profit = currentValue - totalCost
-      const pct = ((profit / totalCost) * 100).toFixed(1)
-      const binanceUrl = 'https://www.binance.com/en/trade/' + coin + '_EUR'
+      const prices = await fetchAllCoinPrices()
+      const price = prices[coin]?.price
+      if (!price) { await sendTelegram(chatId, '❌ Price unavailable for ' + coin); return }
+      const atRes = await fetch(`${SUPABASE_URL}/rest/v1/active_trades?coin=eq.${coin}&status=eq.open&select=*`, { headers: sbHeaders })
+      const atData = await atRes.json()
+      const trade = Array.isArray(atData) ? atData[0] : null
+      if (!trade) { await sendTelegram(chatId, 'No open ' + coin + ' position found'); return }
+      const amount = trade.amount || 0
+      const entryPrice = trade.entry_price || price
+      const currentValue = amount * price
+      const cost = amount * entryPrice
+      const profit = currentValue - cost
+      const pct = cost > 0 ? ((profit / cost) * 100).toFixed(1) : '0.0'
+      const binanceUrl = 'https://www.binance.com/en/trade/' + (BINANCE_PAIRS[coin] || coin + '_EUR')
+      const fmtPrice = p => p < 0.01 ? p.toFixed(6) : p < 1 ? p.toFixed(4) : Math.round(p).toLocaleString()
       pendingConfirmations[chatId] = {
         action: async () => {
-          const p2 = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio&select=value`, { headers: sbHeaders })
-          const pd2 = await p2.json()
-          const port2 = pd2[0]?.value ? JSON.parse(pd2[0].value) : []
-          const remaining = port2.filter(p => p.coin !== coin)
-          await fetch(`${SUPABASE_URL}/rest/v1/user_settings?key=eq.crypto_portfolio`, {
-            method: 'PATCH',
-            headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-            body: JSON.stringify({ value: JSON.stringify(remaining) })
-          })
           await fetch(`${SUPABASE_URL}/rest/v1/crypto_trades`, {
             method: 'POST',
             headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
             body: JSON.stringify({
-              coin, amount_coin: totalAmount, amount_eur: Math.round(currentValue),
-              price_eur: Math.round(price), type: 'sell',
-              traded_at: new Date().toISOString(),
-              source: 'telegram_signal',
+              coin, amount_coin: amount, amount_eur: Math.round(currentValue),
+              price_eur: price < 1 ? price : Math.round(price), type: 'sell',
+              traded_at: new Date().toISOString(), source: 'telegram_signal',
               notes: 'Profit: €' + Math.round(profit)
             })
           }).catch(() => {})
@@ -2271,14 +2319,14 @@ async function handleOwnerCommand(chatId, text) {
             headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
             body: JSON.stringify({ status: 'closed' })
           }).catch(() => {})
-          await sendTelegram(chatId, '✅ Sell logged. ' + coin + ' holdings cleared.\nProfit recorded: ' + (profit > 0 ? '+' : '') + '€' + Math.round(profit))
+          await sendTelegram(chatId, '✅ Sell logged. ' + coin + ' position closed.\nProfit: ' + (profit > 0 ? '+' : '') + '€' + Math.round(profit))
         }
       }
       await sendTelegram(chatId,
         '⚡ Sell prepared:\n\n' +
-        'Sell: ' + totalAmount.toFixed(8) + ' ' + coin + '\n' +
-        'Value now: €' + Math.round(currentValue).toLocaleString() + '\n' +
-        'Cost basis: €' + Math.round(totalCost).toLocaleString() + '\n' +
+        'Sell: ' + amount.toFixed(coin === 'BTC' ? 8 : 4) + ' ' + coin + '\n' +
+        'Value now: €' + fmtPrice(currentValue) + '\n' +
+        'Entry: €' + fmtPrice(entryPrice) + '\n' +
         'Profit: ' + (profit > 0 ? '+' : '') + '€' + Math.round(profit) + ' (' + pct + '%)\n\n' +
         '→ Open Binance: ' + binanceUrl + '\n\n' +
         'Reply YES to log · NO to cancel'
@@ -2344,6 +2392,30 @@ async function handleOwnerCommand(chatId, text) {
     await sendTelegram(chatId, '⏳ Analyzing system...')
     await weeklySystemReview()
   }
+  else if (cmd === '/next') {
+    await sendTelegram(chatId, '⏳ Analyzing all coins...')
+    try {
+      const { data: active } = await supabase
+        .from('active_trades').select('coin').eq('status','open').maybeSingle()
+      const exclude = active?.coin
+      const scores = await recommendNextCoin(exclude)
+      const prices = await fetchAllCoinPrices()
+      let msg = '🎯 NEXT COIN RANKING\n\n'
+      if (exclude) msg += '(Excluding current position: ' + exclude + ')\n\n'
+      for (const s of scores) {
+        const p = prices[s.coin]
+        const fmtP = v => v < 0.01 ? v?.toFixed(6) : v < 1 ? v?.toFixed(4) : v?.toLocaleString()
+        msg += s.coin + ' — Score: ' + s.score + '/10\n'
+        msg += 'Price: €' + fmtP(p?.price) + '\n'
+        msg += '24h: ' + (p?.change24h > 0 ? '+' : '') + p?.change24h?.toFixed(1) + '%\n'
+        msg += (s.reasons.slice(0,2).map(r => '· ' + r).join('\n') || '· No signal') + '\n\n'
+      }
+      msg += 'To buy:\n'
+      msg += '/trade100 (BTC) · /tradeeth100 (ETH)\n'
+      msg += '/tradedoge100 · /tradexrp100 · /tradefloki100'
+      await sendTelegram(chatId, msg)
+    } catch(e) { await sendTelegram(chatId, '❌ Next coin error: ' + e.message) }
+  }
   else if (cmd === '/help') {
     await sendTelegram(chatId,
       '🎵 Momentum Commands:\n\n' +
@@ -2356,10 +2428,19 @@ async function handleOwnerCommand(chatId, text) {
       '/ask [question] — Ask Mozart\n' +
       '/morning — Full morning agent run\n' +
       '/crypto — Live BTC/ETH signal + Fear & Greed\n' +
+      '/next — Best coin to buy next\n' +
       '/buy [€] — Log BTC buy (default €500)\n' +
       '/buyeth [€] — Log ETH buy\n' +
+      '/trade100 — Prepare €100 BTC buy\n' +
+      '/tradeeth100 — Prepare €100 ETH buy\n' +
+      '/tradedoge100 — Prepare €100 DOGE buy\n' +
+      '/tradexrp100 — Prepare €100 XRP buy\n' +
+      '/tradefloki100 — Prepare €100 FLOKI buy\n' +
       '/sell — Prepare BTC sell (full position)\n' +
-      '/selleth — Prepare ETH sell (full position)\n' +
+      '/selleth — Prepare ETH sell\n' +
+      '/selldoge — Prepare DOGE sell\n' +
+      '/sellxrp — Prepare XRP sell\n' +
+      '/sellfloki — Prepare FLOKI sell\n' +
       '/hold — Snooze exit alerts 3h\n' +
       '/portfolio — Live P&L + Binance balances\n' +
       '/obsidian [title] — Create Obsidian note\n' +
@@ -2717,6 +2798,132 @@ async function fetchBTCData() {
   )
   return await r.json()
 }
+
+// ── Coin rotation monitor ──────────────────────────────────────────────────
+
+async function fetchAllCoinPrices() {
+  try {
+    const r = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?' +
+      'ids=bitcoin,ethereum,dogecoin,ripple,floki&' +
+      'vs_currencies=eur&include_24hr_change=true&' +
+      'include_market_cap=true',
+      { headers: { 'Accept': 'application/json' } }
+    )
+    const d = await r.json()
+    return {
+      BTC: { price: d.bitcoin?.eur, change24h: d.bitcoin?.eur_24h_change, mcap: d.bitcoin?.eur_market_cap },
+      ETH: { price: d.ethereum?.eur, change24h: d.ethereum?.eur_24h_change, mcap: d.ethereum?.eur_market_cap },
+      DOGE: { price: d.dogecoin?.eur, change24h: d.dogecoin?.eur_24h_change, mcap: d.dogecoin?.eur_market_cap },
+      XRP: { price: d.ripple?.eur, change24h: d.ripple?.eur_24h_change, mcap: d.ripple?.eur_market_cap },
+      FLOKI: { price: d.floki?.eur, change24h: d.floki?.eur_24h_change, mcap: d.floki?.eur_market_cap }
+    }
+  } catch(e) {
+    console.error('fetchAllCoinPrices error:', e.message)
+    return {}
+  }
+}
+
+async function scoreCoinForEntry(coin, prices) {
+  let score = 0
+  const reasons = []
+  const data = prices[coin]
+  if (!data) return { score: 0, reasons: ['No data'] }
+
+  if (data.change24h < -5) { score += 3; reasons.push('Oversold -' + Math.abs(data.change24h).toFixed(1) + '% today') }
+  else if (data.change24h < -2) { score += 2; reasons.push('Dipped ' + data.change24h.toFixed(1) + '% today') }
+  else if (data.change24h > 5) { score += 1; reasons.push('Momentum +' + data.change24h.toFixed(1) + '%') }
+
+  if (['DOGE','FLOKI','XRP'].includes(coin)) {
+    score += 1
+    reasons.push('High volatility coin — faster 5% moves')
+  }
+
+  if (['BTC','ETH'].includes(coin)) {
+    try {
+      const symbol = coin + 'USDT'
+      const fr = await fetch('https://fapi.binance.com/fapi/v1/fundingRate?symbol=' + symbol + '&limit=1')
+      const fd = await fr.json()
+      const funding = parseFloat(fd[0]?.fundingRate || 0) * 100
+      if (funding < -0.03) { score += 2; reasons.push('Negative funding = squeeze potential') }
+      else if (funding > 0.05) { score -= 1; reasons.push('High funding = crowded longs') }
+    } catch(e) {}
+  }
+
+  return { score, reasons, price: data.price, change24h: data.change24h }
+}
+
+async function recommendNextCoin(excludeCoin) {
+  const prices = await fetchAllCoinPrices()
+  const coins = ['BTC','ETH','DOGE','XRP','FLOKI'].filter(c => c !== excludeCoin)
+  const scores = await Promise.all(
+    coins.map(async coin => ({
+      coin,
+      ...(await scoreCoinForEntry(coin, prices)),
+      price: prices[coin]?.price
+    }))
+  )
+  scores.sort((a,b) => b.score - a.score)
+  return scores
+}
+
+async function monitorActiveTrades() {
+  try {
+    const { data: activeTrades } = await supabase
+      .from('active_trades')
+      .select('*')
+      .eq('status', 'open')
+
+    if (!activeTrades?.length) return
+
+    const prices = await fetchAllCoinPrices()
+
+    for (const trade of activeTrades) {
+      const currentPrice = prices[trade.coin]?.price
+      if (!currentPrice || !trade.entry_price) continue
+
+      const pnlPct = ((currentPrice - trade.entry_price) / trade.entry_price) * 100
+      const pnlEur = (currentPrice - trade.entry_price) * (trade.amount || 0)
+      const duration = Math.round((Date.now() - new Date(trade.entry_time).getTime()) / 60000)
+
+      await supabase.from('active_trades')
+        .update({ current_price: currentPrice, pnl_pct: pnlPct, pnl_eur: pnlEur })
+        .eq('id', trade.id)
+
+      if (pnlPct >= 5) {
+        const nextCoins = await recommendNextCoin(trade.coin)
+        const best = nextCoins[0]
+        await sendTelegram(TELEGRAM_OWNER_ID,
+          '🟢 TAKE PROFIT — ' + trade.coin + '\n\n' +
+          'Entry: €' + (trade.entry_price < 1 ? trade.entry_price.toFixed(6) : Math.round(trade.entry_price).toLocaleString()) + '\n' +
+          'Now: €' + (currentPrice < 1 ? currentPrice.toFixed(6) : Math.round(currentPrice).toLocaleString()) + '\n' +
+          'Profit: +' + pnlPct.toFixed(2) + '% (+€' + Math.round(pnlEur) + ')\n' +
+          'Duration: ' + (duration > 60 ? Math.round(duration/60) + 'h' : duration + 'min') + '\n\n' +
+          '💰 SELL NOW → /sell' + trade.coin.toLowerCase() + '\n\n' +
+          '🔄 NEXT BEST ENTRY:\n' +
+          best.coin + ' (score ' + best.score + '/10)\n' +
+          best.reasons.slice(0,2).join('\n') + '\n\n' +
+          'Full ranking:\n' +
+          nextCoins.map((c,i) => (i+1) + '. ' + c.coin + ' — ' + c.score + '/10').join('\n')
+        ).catch(() => {})
+      } else if (pnlPct <= -5) {
+        await sendTelegram(TELEGRAM_OWNER_ID,
+          '🔴 STOP LOSS — ' + trade.coin + '\n\n' +
+          'Entry: €' + (trade.entry_price < 1 ? trade.entry_price.toFixed(6) : Math.round(trade.entry_price).toLocaleString()) + '\n' +
+          'Now: €' + (currentPrice < 1 ? currentPrice.toFixed(6) : Math.round(currentPrice).toLocaleString()) + '\n' +
+          'Loss: ' + pnlPct.toFixed(2) + '% (€' + Math.round(pnlEur) + ')\n' +
+          'Duration: ' + (duration > 60 ? Math.round(duration/60) + 'h' : duration + 'min') + '\n\n' +
+          '⚠️ EXIT NOW → /sell' + trade.coin.toLowerCase() + '\n\n' +
+          'Consider waiting for recovery or cut losses now.'
+        ).catch(() => {})
+      }
+    }
+  } catch(e) {
+    console.error('monitorActiveTrades error:', e.message)
+  }
+}
+setInterval(monitorActiveTrades, 15 * 60 * 1000)
+setImmediate(monitorActiveTrades)
 
 async function fetchBTCDominance() {
   const r = await fetch('https://api.coingecko.com/api/v3/global')
@@ -8029,6 +8236,19 @@ ${chatText.slice(0, 4000)}`
     } catch(e) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── GET /all-coin-prices ──────────────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/all-coin-prices') {
+    try {
+      const prices = await fetchAllCoinPrices()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(prices))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: e.message }))
     }
     return
   }

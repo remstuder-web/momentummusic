@@ -62,6 +62,7 @@
   const MONITORED_COINS = ['BTC','ETH','DOGE','XRP','FLOKI']
   let cryptoSignal = $state(null)
   let cryptoLoading = $state(false)
+  let showPolymarket = $state(false)
   let allCoinPrices = $state({})
   let portfolio = $state([])
   let newCoin = $state('BTC')
@@ -289,6 +290,24 @@
             <div class="reason-item">· {reason}</div>
           {/each}
         </div>
+      {/if}
+
+      {#if cryptoSignal.polymarkets?.length}
+        <button class="poly-toggle" onclick={() => showPolymarket = !showPolymarket}>
+          🎯 POLYMARKET <span class="poly-arr {showPolymarket ? 'open' : ''}">▶</span>
+        </button>
+        {#if showPolymarket}
+          <div class="poly-body">
+            {#each cryptoSignal.polymarkets as m}
+              {@const icon = m.yes_prob > 65 ? '🟢' : m.yes_prob > 45 ? '🟡' : '🔴'}
+              <div class="poly-row">
+                <span class="poly-prob" style="color:{m.yes_prob > 65 ? '#4caf82' : m.yes_prob > 45 ? '#e8a838' : '#e05a4a'}">{m.yes_prob}%</span>
+                <span class="poly-icon">{icon}</span>
+                <span class="poly-q">{m.question}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
       {/if}
 
       <!-- Monitored coins live prices -->
@@ -527,6 +546,15 @@
   .binance-btn.sell:hover { background: #e86f60; }
   .refresh-btn { display: block; margin-top: 8px; font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #252525; color: #444; padding: 3px 8px; border-radius: 2px; cursor: pointer; }
   .refresh-btn:hover { color: #9e9690; }
+  .poly-toggle { display: flex; align-items: center; gap: 6px; width: 100%; background: transparent; border: none; border-top: 1px solid #252525; color: rgba(201,168,76,.65); font-family: 'Space Mono', monospace; font-size: 10px; padding: 7px 0 4px; cursor: pointer; margin-top: 8px; }
+  .poly-toggle:hover { color: #c9a84c; }
+  .poly-arr { font-size: 8px; transition: transform .2s; }
+  .poly-arr.open { transform: rotate(90deg); }
+  .poly-body { margin: 4px 0 6px; display: flex; flex-direction: column; gap: 4px; }
+  .poly-row { display: flex; align-items: flex-start; gap: 6px; }
+  .poly-prob { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; min-width: 32px; }
+  .poly-icon { font-size: 10px; }
+  .poly-q { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; line-height: 1.3; }
   .portfolio-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #111; font-family: 'Space Mono', monospace; font-size: 10px; flex-wrap: wrap; }
   .p-coin { color: #c9a84c; width: 30px; }
   .p-amount { color: #cec9c1; }

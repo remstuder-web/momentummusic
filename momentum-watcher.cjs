@@ -3466,8 +3466,89 @@ async function fetch4HCandles(coin = 'BTC', limit = 10) {
   }
 }
 
+let _predictionMarketsCache = null
+let _predictionMarketsCacheTime = 0
+const PREDICTION_CACHE_MS = 5 * 60 * 1000
+
+async function getPolymarketSignals() {
+  if (_predictionMarketsCache && Date.now() - _predictionMarketsCacheTime < PREDICTION_CACHE_MS) {
+    return _predictionMarketsCache
+  }
+  // Try Polymarket CLOB first (may be geo-blocked)
+  try {
+    const r = await fetch(
+      'https://clob.polymarket.com/markets?tag=crypto&limit=20&closed=false',
+      { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(3000) }
+    )
+    if (r.ok) {
+      const data = await r.json()
+      const markets = (data?.data || data || [])
+        .filter(m => {
+          const q = (m.question || '').toLowerCase()
+          return q.includes('bitcoin') || q.includes('btc') || q.includes('ethereum') ||
+                 q.includes('eth') || q.includes('crypto') || q.includes('doge') ||
+                 q.includes('xrp') || q.includes('floki')
+        })
+        .slice(0, 8)
+        .map(m => ({
+          question: m.question,
+          yes_prob: Math.round((m.outcomePrices?.[0] || m.yes_price || 0) * 100),
+          volume: m.volume || 0,
+          end_date: m.end_date_iso || m.endDate,
+          source: 'polymarket'
+        }))
+        .filter(m => m.volume > 1000)
+      if (markets.length) {
+        _predictionMarketsCache = markets
+        _predictionMarketsCacheTime = Date.now()
+        return markets
+      }
+    }
+  } catch(e) { /* geo-blocked or timeout — fall through to Manifold */ }
+
+  // Fallback: Manifold Markets (prediction markets, fully accessible)
+  try {
+    const queries = ['bitcoin', 'ethereum', 'crypto']
+    const seen = new Set()
+    const markets = []
+    for (const q of queries) {
+      const r = await fetch(
+        `https://api.manifold.markets/v0/search-markets?term=${q}&limit=10&filter=open`,
+        { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(6000) }
+      )
+      if (!r.ok) continue
+      const data = await r.json()
+      const items = Array.isArray(data) ? data : (data.markets || [])
+      for (const m of items) {
+        if (m.outcomeType !== 'BINARY' || !m.probability || seen.has(m.id)) continue
+        const question = m.question || ''
+        const ql = question.toLowerCase()
+        if (!ql.includes('bitcoin') && !ql.includes('btc') && !ql.includes('ethereum') &&
+            !ql.includes('eth') && !ql.includes('crypto') && !ql.includes('doge') &&
+            !ql.includes('xrp') && !ql.includes('floki')) continue
+        seen.add(m.id)
+        markets.push({
+          question,
+          yes_prob: Math.round(m.probability * 100),
+          volume: m.volume || 0,
+          end_date: m.closeTime ? new Date(m.closeTime).toISOString().slice(0, 10) : null,
+          source: 'manifold'
+        })
+      }
+      if (markets.length >= 8) break
+    }
+    const result = markets.filter(m => m.volume > 50).slice(0, 8)
+    _predictionMarketsCache = result
+    _predictionMarketsCacheTime = Date.now()
+    return result
+  } catch(e) {
+    console.warn('prediction markets fetch failed:', e.message?.slice(0, 60))
+    return _predictionMarketsCache || []
+  }
+}
+
 async function buildCryptoSignal() {
-  const [fearGreed, btcData, dominance, funding, netflow, btcDeriv, ethDeriv, binancePf, candles4h] =
+  const [fearGreed, btcData, dominance, funding, netflow, btcDeriv, ethDeriv, binancePf, candles4h, polymarkets] =
     await Promise.all([
       fetchFearGreed(),
       fetchBTCData(),
@@ -3477,7 +3558,8 @@ async function buildCryptoSignal() {
       fetchDerivativesData('BTC'),
       fetchDerivativesData('ETH'),
       fetchBinancePortfolio(),
-      fetch4HCandles('BTC')
+      fetch4HCandles('BTC'),
+      getPolymarketSignals()
     ])
 
   const btcPrice = btcData?.bitcoin?.eur
@@ -3578,6 +3660,25 @@ async function buildCryptoSignal() {
         bearPoints += 1; reasons.push('Strong bearish 4H candle')
       }
     }
+  }
+
+  // Polymarket prediction market scoring
+  if (polymarkets?.length) {
+    const bullishMarkets = polymarkets.filter(m => m.yes_prob > 65)
+    const bearishMarkets = polymarkets.filter(m => m.yes_prob < 35)
+    if (bullishMarkets.length >= 2) {
+      bullPoints += 1; reasons.push('Polymarket: ' + bullishMarkets.length + ' bullish prediction markets (>' + 65 + '% yes)')
+    } else if (bullishMarkets.length === 1) {
+      reasons.push('Polymarket: 1 bullish market — ' + Math.round(bullishMarkets[0].yes_prob) + '% yes')
+    }
+    if (bearishMarkets.length >= 2) {
+      bearPoints += 1; reasons.push('Polymarket: ' + bearishMarkets.length + ' bearish prediction markets (<35% yes)')
+    }
+    // Strong contradiction warning
+    const hasBullDerivatives = btcDeriv.long_pct != null && btcDeriv.long_pct < 50
+    const hasStrongBearMarkets = bearishMarkets.some(m => m.yes_prob < 25)
+    if (hasBullDerivatives && hasStrongBearMarkets)
+      reasons.push('⚠️ Conflict: derivatives bullish but Polymarket strongly bearish')
   }
 
   let signal, emoji, suggestion, binanceAction
@@ -3714,6 +3815,7 @@ async function buildCryptoSignal() {
     personal_advice: personalAdvice,
     active_trades: activeTrades,
     ma5_4h, ma10_4h, trend_4h,
+    polymarkets: polymarkets || [],
     timestamp: new Date().toISOString()
   }
   lastSignalResult = result
@@ -5218,6 +5320,14 @@ ${context}` }]
             if (crypto.personal_advice) cryptoMsg += '\n\n' + crypto.personal_advice.trim()
             if (crypto.binanceAction === 'buy') cryptoMsg += '\n\n→ Open Binance: ' + crypto.binanceDeepLink
             sendTelegram(TELEGRAM_OWNER_ID, cryptoMsg).catch(() => {})
+            if (crypto.polymarkets?.length) {
+              let polyMsg = '🎯 POLYMARKET\n'
+              crypto.polymarkets.slice(0, 4).forEach(m => {
+                const bar = m.yes_prob > 65 ? '🟢' : m.yes_prob > 45 ? '🟡' : '🔴'
+                polyMsg += bar + ' ' + m.yes_prob + '% — ' + m.question + '\n'
+              })
+              sendTelegram(TELEGRAM_OWNER_ID, polyMsg).catch(() => {})
+            }
           } catch(e) { console.warn('crypto signal in briefing failed:', e.message) }
           // Chart Pulse — cross-chart correlation + TikTok top 5 + Spotify top 5
           try {
@@ -9035,6 +9145,20 @@ ${chatText.slice(0, 4000)}`
       const [signal, binancePortfolio] = await Promise.all([buildCryptoSignal(), fetchBinancePortfolio()])
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, ...signal, binance_portfolio: binancePortfolio }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── GET /polymarket-signals ───────────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/polymarket-signals') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const markets = await getPolymarketSignals()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, markets }))
     } catch(e) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))

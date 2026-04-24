@@ -1,5 +1,5 @@
 {
-  "run": "2026-04-24T22:19:01.224Z",
+  "run": "2026-04-24T22:53:05.754Z",
   "passed": 8,
   "total": 8,
   "results": [
@@ -7,7 +7,7 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: analyzer-success-pattern-feedback-trend-arc-credits"
+      "detail": "last_task: fix-split-undefined-svelte-const-placement"
     },
     {
       "n": 2,
@@ -25,7 +25,7 @@
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok + past briefing has real content (1483 chars)"
+      "detail": "endpoint ok + past briefing has real content (1325 chars)"
     },
     {
       "n": 5,
@@ -37,7 +37,7 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Increase kick punch and impact\""
+      "detail": "3 items: \"Increase kick punch and presence\""
     },
     {
       "n": 7,
@@ -49,7 +49,7 @@
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "dcd0f3d fix svelte const placement error in ProjectsTab"
+      "detail": "3a27083 fix split undefined in analyze-spotify-track + svelte const placement errors"
     }
   ]
 }

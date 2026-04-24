@@ -1290,3 +1290,9 @@ TASK: fix split undefined + svelte const placement errors
 WHAT: null-guarded url.split('/track/') chain in /analyze-spotify-track with optional chaining + early 400 return; moved {#const ao}/{#const latestA} out of <div> into {#if showVocalEq} block; moved {#const arc}/{#const maxE} before <div class="az-body">; moved {#const chipPool} before <div class="brain-approval-item">
 RESULT: works — clean vite build, 8/8 tests passing
 BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs + FinancesTab.svelte — STATUS: DONE
+TASK: polymarket prediction signals in crypto assessment
+WHAT: getPolymarketSignals() — tries Polymarket CLOB (3s timeout), falls back to Manifold Markets; adds bull/bear scoring (+1 if 2+ markets >65%, +1 bear if 2+ <35%); polymarkets array returned from buildCryptoSignal; GET /polymarket-signals endpoint; Telegram morning briefing sends 🎯 POLYMARKET block; FinancesTab collapsible POLYMARKET section with green/yellow/red per market
+RESULT: works — Manifold returning 8 live crypto markets (Polymarket geo-blocked from CH)
+BLOCKERS: none

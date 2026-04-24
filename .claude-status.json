@@ -1,25 +1,20 @@
 {
   "updated": "2026-04-25T00:00:00.000Z",
-  "last_task": "fix-split-undefined-svelte-const-placement",
+  "last_task": "polymarket-prediction-signals",
   "status": "done",
   "working": [
-    "BUILD 1: buildSuccessPattern() computes BPM/energy/key averages from user refs; /success-pattern endpoint verified",
-    "BUILD 1: compareToSuccessPattern() scores 9 dimensions vs pattern; /analyze-success-match endpoint",
-    "BUILD 2: classifyFeedback() classifies text into 8 types; /log-feedback-pattern; /feedback-insights (needs SQL)",
-    "BUILD 3: calculateVelocity() tracks chart position over 14 days; /trend-velocity endpoint; chart_history upsert in morning briefing (needs SQL)",
-    "BUILD 4: fetchArtistCollaborators() from Spotify top-tracks; /enrich-track-credits; Telegram /credits [Artist - Title]",
-    "BUILD 5: analyze_audio.py — 8-segment emotional arc with energy/brightness/bass, arc_peak_segment/contrast/buildup",
-    "BUILD 5: compareEmotionalArcs() diff function in watcher",
-    "BUILD 6: ProjectsTab ANALYZER — 5 collapsible sub-sections: TRACK ANALYSIS grid, SUCCESS MATCH score+gaps, EMOTIONAL ARC SVG, FEEDBACK HISTORY bars, TREND CONTEXT rising/falling",
-    "/analyze-spotify-track: null-guarded url.split('/track/')[1] with optional chaining + early 400 return",
-    "Svelte {#const} placement fixed in ProjectsTab (ao/latestA/arc/maxE) and BrainTab (chipPool)",
-    "Clean vite build — 0 errors",
-    "8/8 tests passing"
+    "getPolymarketSignals() — Polymarket CLOB (3s) → Manifold Markets fallback; 5-min cache",
+    "buildCryptoSignal() includes polymarkets array + scoring (+1 bull if 2+ markets >65%, +1 bear if 2+ <35%)",
+    "GET /polymarket-signals endpoint returning 8 live crypto markets",
+    "Morning briefing Telegram: 🎯 POLYMARKET block with top 4 markets",
+    "FinancesTab: collapsible POLYMARKET section, green/yellow/red per market",
+    "8/8 tests passing, clean vite build"
   ],
   "broken": [],
   "partial": [
-    "BUILD 2/3: feedback_patterns and chart_history tables need SQL in Supabase (endpoints handle missing table gracefully)"
+    "BUILD 2/3: feedback_patterns and chart_history tables need SQL in Supabase (endpoints handle missing table gracefully)",
+    "Polymarket CLOB geo-blocked from CH — Manifold used as working fallback"
   ],
   "next": "Run SQL in Supabase dashboard:\n\nCREATE TABLE IF NOT EXISTS feedback_patterns (\n  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n  song_id text, version_name text, feedback_text text,\n  feedback_type text, analysis jsonb, created_at timestamptz DEFAULT now()\n);\nALTER TABLE feedback_patterns ENABLE ROW LEVEL SECURITY;\nCREATE POLICY \"anon all\" ON feedback_patterns FOR ALL TO anon USING (true) WITH CHECK (true);\n\nCREATE TABLE IF NOT EXISTS chart_history (\n  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n  title text, artist text, spotify_id text, position integer,\n  chart_date date DEFAULT CURRENT_DATE, source text DEFAULT 'kworb', created_at timestamptz DEFAULT now()\n);\nCREATE INDEX IF NOT EXISTS chart_history_date ON chart_history(chart_date);\nALTER TABLE chart_history ENABLE ROW LEVEL SECURITY;\nCREATE POLICY \"anon all\" ON chart_history FOR ALL TO anon USING (true) WITH CHECK (true);\n\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text;\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;",
-  "notes": "All Svelte {#const} tags now correctly placed as direct children of block directives (not inside HTML elements). Vite build is clean."
+  "notes": "Polymarket CLOB API (212.35.39.96) connection refused from Swiss network. Manifold Markets (https://api.manifold.markets) works fine as fallback with real binary prediction markets."
 }

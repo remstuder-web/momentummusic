@@ -1194,3 +1194,9 @@ TASK: bigger inline buttons, remove duplicate tracks list
 WHAT: inline-play-btn/inline-brain-btn: font-size 8→9px, padding 0/4→2/6px, margin 4/2→5/3px, line-height 1.4→1.6. Removed agent-tracks div from todayBriefing block and inbox briefing items (both occurrences). Inline buttons in text are now the only track interaction.
 RESULT: works — 0 svelte-check errors
 BLOCKERS: none
+
+## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: vocal-eq-fix-rls-reads
+WHAT: RLS was blocking anon reads of vocal_eq_curves. Switched /vocal-eq-curves GET endpoint to supabaseAdmin for reads. Fixed GET filter from 'type' (non-existent column) to 'source_type'. Fixed ref deduplication check same way. Added version_name to mix insert (column confirmed to exist).
+RESULT: works — 4 stems save and are readable via /vocal-eq-curves
+BLOCKERS: none

@@ -6395,6 +6395,7 @@ Respond ONLY in JSON:
               .insert({
                 label: (label || 'My Mix') + ' — ' + stemName,
                 song_id: String(song_id),
+                version_name: latestVersion?.name || 'latest',
                 curve,
                 stem_type: stemName,
                 source_type: 'mix'
@@ -6413,11 +6414,8 @@ Respond ONLY in JSON:
           for (const ref of refLinks) {
             if (!ref.spotify_id && !ref.url) continue
             const refUrl = ref.url || 'https://open.spotify.com/track/' + ref.spotify_id
-            const existRes = await fetch(
-              `${SUPABASE_URL}/rest/v1/vocal_eq_curves?type=eq.reference&url=eq.${encodeURIComponent(refUrl)}&select=id&limit=1`,
-              { headers: sbHeaders }
-            ).then(r => r.json()).catch(() => [])
-            if (!existRes[0]) {
+            const { data: existRes } = await supabaseAdmin.from('vocal_eq_curves').select('id').eq('source_type', 'reference').eq('label', ref.name || 'Reference').limit(1)
+            if (!existRes?.[0]) {
               setImmediate(async () => {
                 try {
                   await analyzeVocalEqUrl(refUrl, song_id, ref.name || 'Reference')
@@ -6446,13 +6444,11 @@ Respond ONLY in JSON:
     res.setHeader('Access-Control-Allow-Origin', '*')
     try {
       const songId = new URL('http://x' + req.url).searchParams.get('song_id')
-      const [mixRes, refRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?type=eq.mix&song_id=eq.${songId}&order=created_at.desc&limit=20`, { headers: sbHeaders }),
-        fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?type=eq.reference&order=created_at.desc&limit=40`, { headers: sbHeaders })
+      const [{ data: mixCurves }, { data: refCurves }] = await Promise.all([
+        supabaseAdmin.from('vocal_eq_curves').select('*').eq('source_type', 'mix').eq('song_id', String(songId)).order('created_at', { ascending: false }).limit(20),
+        supabaseAdmin.from('vocal_eq_curves').select('*').eq('source_type', 'reference').order('created_at', { ascending: false }).limit(40)
       ])
-      const mixCurves = await mixRes.json()
-      const refCurves = await refRes.json()
-      const curves = [...(Array.isArray(mixCurves) ? mixCurves : []), ...(Array.isArray(refCurves) ? refCurves : [])]
+      const curves = [...(mixCurves || []), ...(refCurves || [])]
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, curves }))
     } catch(err) {

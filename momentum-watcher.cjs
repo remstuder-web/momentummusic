@@ -1697,6 +1697,43 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
     // realTrends stays [] — Claude will note data unavailable
   }
 
+  // Synthesize trends into ONE weekly brain entry (upserts by title — no duplicates)
+  if (realTrends.length) {
+    try {
+      const d = new Date()
+      const dayOfWeek = d.getDay() || 7
+      const monday = new Date(d)
+      monday.setDate(d.getDate() - dayOfWeek + 1)
+      const weekLabel = monday.toISOString().slice(0, 10)
+
+      const trackList = realTrends.slice(0, 20)
+        .map(t => (t.artist ? t.artist + ' — ' : '') + t.title)
+        .join('\n')
+
+      const synthRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001', max_tokens: 80,
+          messages: [{ role: 'user', content: `You are a music A&R analyst. Analyze these TikTok trending tracks and write ONE concise insight (max 150 chars) about what genres/moods/sounds are dominating this week. Focus on patterns not individual tracks.\n\n${trackList}` }]
+        })
+      })
+      const synthData = await synthRes.json()
+      const trendSummary = (synthData.content?.[0]?.text || '').trim().slice(0, 150)
+      if (trendSummary) {
+        await supabase.from('brain_knowledge').upsert({
+          category: 'market_knowledge',
+          title: 'TikTok Trends Week ' + weekLabel,
+          content: trendSummary,
+          active: true,
+          confidence: 'medium',
+          source_type: 'tiktok_agent'
+        }, { onConflict: 'title' })
+        console.log(`  ✓ TikTok weekly brain insight saved (week of ${weekLabel})`)
+      }
+    } catch(e) { console.warn('  TikTok brain synthesis error:', e.message) }
+  }
+
   // 3. Build context for Claude (always runs even if data empty)
   const realDataText = realTrends.length
     ? realTrends.map((t, i) => `${i+1}. ${t.artist ? t.artist + ' — ' : ''}${t.title} [${t.source}]`).join('\n')

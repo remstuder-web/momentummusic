@@ -196,6 +196,8 @@ setInterval(cleanupOldStemsZips, 60 * 60 * 1000)
 const SUPABASE_URL = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
 const ANON_KEY     = 'sb_publishable_4yMwlAo6OLpgGPN_6yWvIw_g5bnjnWS'
 const sbHeaders    = { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json' }
+const { createClient } = require('@supabase/supabase-js')
+const supabase = createClient(SUPABASE_URL, ANON_KEY)
 
 // ── Weekly: check watched artists for new releases ────────────────────────
 setInterval(async () => {
@@ -910,15 +912,23 @@ async function extractTracksFromText(text, apiKey) {
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 400,
-        system: 'Extract all song/track mentions from text. Return JSON array only: [{"artist":"","title":""}]. Include every track mentioned.',
+        max_tokens: 600,
+        system: 'Extract all song/track mentions from text. Return a JSON array only, no other text: [{"artist":"","title":""}]. If no tracks found return [].',
         messages: [{ role: 'user', content: text }]
       })
     })
     const d = await res.json()
     const raw = (d.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
-    return JSON.parse(raw)
-  } catch(e) { return [] }
+    console.log('extractTracksFromText raw:', raw.slice(0, 200))
+    if (!raw || raw === '[]') return []
+    // Extract JSON array even if surrounded by extra text
+    const match = raw.match(/\[[\s\S]*\]/)
+    if (!match) { console.warn('extractTracksFromText: no JSON array found in response'); return [] }
+    return JSON.parse(match[0])
+  } catch(e) {
+    console.error('extractTracksFromText error:', e.message)
+    return []
+  }
 }
 
 async function runAgentScout(apiKey, sharedBrainRows) {
@@ -4529,74 +4539,73 @@ ${context}` }]
         const dateStr = now.slice(0, 10)
         for (const track of tracksToSave) {
           try {
-            const titleEnc = encodeURIComponent(track.title)
-            const existCheck = await fetch(
-              `${SUPABASE_URL}/rest/v1/reference_tracks?title=ilike.${titleEnc}&select=id&limit=1`,
-              { headers: sbHeaders }
-            ).then(r => r.json()).catch(() => [])
-            if (Array.isArray(existCheck) && existCheck.length > 0) continue
-            await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
-              method: 'POST',
-              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-              body: JSON.stringify({
-                title: track.title,
-                artist: track.artist,
-                spotify_id: track.spotify_id || null,
-                collection_name: 'scout_' + dateStr,
-                source: 'checkout',
-                checkout_date: now,
-                approved: true,
-                tempo: track.bpm || null,
-                key: track.key || null,
-                camelot: track.camelot || null,
-                energy: track.energy || null,
-                danceability: track.danceability || null,
-                loudness: track.loudness_lufs || null,
-                valence: track.valence || null,
-                brightness: track.brightness || null
-              })
-            })
-            console.log('✓ Scout → checkout:', track.artist, '—', track.title)
+            const { data: existing } = await supabase
+              .from('reference_tracks')
+              .select('id')
+              .ilike('title', track.title)
+              .maybeSingle()
+            if (existing) continue
+            const row = {
+              title: track.title,
+              artist: track.artist,
+              collection_name: 'scout_' + dateStr,
+              source: 'checkout',
+              checkout_date: now,
+              tempo: track.bpm || null,
+              key: track.key || null,
+              camelot: track.camelot || null,
+              energy: track.energy || null,
+              danceability: track.danceability || null,
+              loudness: track.loudness_lufs || null,
+              valence: track.valence || null,
+              brightness: track.brightness || null
+            }
+            if (track.spotify_id) row.spotify_id = track.spotify_id
+            const { error } = await supabase.from('reference_tracks').insert(row)
+            if (error) console.error('✗ kworb save FAILED:', error.message, error.code)
+            else console.log('✓ Scout → checkout:', track.artist, '—', track.title)
           } catch(e) {
             console.error('scout track save error:', e.message)
           }
         }
 
         // Extract ALL track/song mentions from the generated scout text and save to checkout
-        // Root cause of prior failures: spotify_id has NOT NULL constraint — use placeholder until
-        // SQL migration runs: ALTER TABLE reference_tracks ALTER COLUMN spotify_id DROP NOT NULL;
         const mentionedTracks = await extractTracksFromText(result.suggestions || '', apiKey)
-        const nowMentioned = new Date().toISOString()
-        const dateMentioned = nowMentioned.slice(0, 10)
+        console.log('extractTracksFromText returned:', mentionedTracks.length, 'tracks')
+        const dateMentioned = new Date().toISOString().slice(0, 10)
 
         for (const track of mentionedTracks) {
           if (!track.title || !track.artist) continue
           try {
-            const existCheck = await fetch(
-              `${SUPABASE_URL}/rest/v1/reference_tracks?title=ilike.${encodeURIComponent(track.title)}&artist=ilike.${encodeURIComponent(track.artist)}&select=id&limit=1`,
-              { headers: sbHeaders }
-            ).then(r => r.json()).catch(() => [])
-            if (Array.isArray(existCheck) && existCheck.length > 0) continue
-            const saveRes = await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
-              method: 'POST',
-              headers: { ...sbHeaders, 'Prefer': 'return=representation' },
-              body: JSON.stringify({
+            const { data: existing } = await supabase
+              .from('reference_tracks')
+              .select('id')
+              .ilike('title', track.title)
+              .ilike('artist', track.artist)
+              .maybeSingle()
+
+            if (existing) {
+              console.log('skip (exists):', track.title)
+              continue
+            }
+
+            const { data, error } = await supabase
+              .from('reference_tracks')
+              .insert({
                 title: track.title,
                 artist: track.artist,
-                spotify_id: null,
                 collection_name: 'scout_' + dateMentioned,
-                source: 'checkout',
-                checkout_date: nowMentioned
+                source: 'checkout'
               })
-            })
-            const saveData = await saveRes.json()
-            if (!saveRes.ok || saveData?.error) {
-              console.error('✗ Scout checkout save FAILED:', saveRes.status, JSON.stringify(saveData))
+              .select()
+
+            if (error) {
+              console.error('✗ INSERT FAILED:', error.message, error.details, error.code)
             } else {
-              console.log('✓ Scout → checkout:', track.artist, '—', track.title)
+              console.log('✓ INSERTED:', track.artist, '—', track.title)
             }
           } catch(e) {
-            console.error('scout mention save error:', e.message)
+            console.error('✗ EXCEPTION:', e.message)
           }
         }
 

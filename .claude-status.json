@@ -1,22 +1,20 @@
 {
   "updated": "2026-04-25T00:00:00.000Z",
-  "last_task": "speicherbox-file-storage",
+  "last_task": "brain-connection-finder",
   "status": "done",
   "working": [
-    "GET /speicherbox — returns brain_knowledge category=speicherbox, newest first",
-    "POST /save-speicherbox-file — base64 → /Dropbox/!MOMENTUM MUSIC/Brain/speicherbox/TIMESTAMP_name + Supabase insert",
-    "POST /open-file — exec open 'path' to open file in macOS default app",
-    "BrainTab: saveToSpeicherbox(file) — canvas thumbnail (120px JPEG), Haiku text extraction, base64 upload",
-    "BrainTab: loadSpeicherbox() — fetches from /speicherbox on onMount",
-    "BrainTab: paste handler → extractImageText + saveToSpeicherbox",
-    "BrainTab: drop handler → extractImageText + saveToSpeicherbox for images; saveToSpeicherbox for files",
-    "SPEICHERBOX section below LIBRARY — collapsible, grid of cards with thumbnail/icon, name, date, extract, delete",
-    "8/8 tests passing, clean vite build, endpoint verified"
+    "POST /connect-brain-entries — module-level connectBrainEntries(), 200 entries, UUID-aware dedup, individual knowledge_connection rows",
+    "knowledge_connection category: {entry_ids, connection_type, insight, action} in metadata",
+    "7-day dedup: same entry pair not re-saved within 7 days",
+    "Mozart /ask Telegram context: chart signals + recent knowledge_connection entries",
+    "Sunday 8am scheduler still calls connectBrainEntries() from module scope",
+    "Telegram /connect command still works",
+    "8/8 tests passing, clean pm2 restart"
   ],
   "broken": [],
   "partial": [
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
   "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables",
-  "notes": "Speicherbox folder: /Users/remo/Dropbox/!MOMENTUM MUSIC/Brain/speicherbox — created automatically. Files named YYYY-MM-DD_HH-MM_original.ext"
+  "notes": "connectBrainEntries() moved to module scope (was inside server.listen callback). Tested: 12 connections saved on first run. knowledge_connection entries now appear in Mozart /ask context."
 }

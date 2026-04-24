@@ -2278,13 +2278,21 @@ async function handleOwnerCommand(chatId, text) {
     const question = text.slice(5).trim()
     await sendTelegram(chatId, '⏳ Asking Mozart...')
     try {
-      const charts = await getCrossChartTopics().catch(() => ({ crossChart: [], tiktokOnly: [] }))
+      const [charts, connRows] = await Promise.allSettled([
+        getCrossChartTopics().catch(() => ({ crossChart: [], tiktokOnly: [] })),
+        supabase.from('brain_knowledge').select('title, content').eq('category', 'knowledge_connection').eq('active', true).order('created_at', { ascending: false }).limit(5)
+      ])
+      const ch = charts.status === 'fulfilled' ? charts.value : { crossChart: [], tiktokOnly: [] }
       const mozartChartCtx = [
-        charts.crossChart.length ? 'PEAK MOMENTUM (TikTok + Spotify): ' + charts.crossChart.slice(0, 3).map(t => t.artist + ' — ' + t.title).join(', ') : '',
-        charts.tiktokOnly.length ? 'EMERGING (TikTok only): ' + charts.tiktokOnly.slice(0, 3).map(t => t.artist + ' — ' + t.title).join(', ') : ''
+        ch.crossChart.length ? 'PEAK MOMENTUM (TikTok + Spotify): ' + ch.crossChart.slice(0, 3).map(t => t.artist + ' — ' + t.title).join(', ') : '',
+        ch.tiktokOnly.length ? 'EMERGING (TikTok only): ' + ch.tiktokOnly.slice(0, 3).map(t => t.artist + ' — ' + t.title).join(', ') : ''
       ].filter(Boolean).join('\n')
+      const connData = connRows.status === 'fulfilled' ? (connRows.value.data || []) : []
+      const mozartConnCtx = connData.length
+        ? '\n\nKnowledge connections:\n' + connData.map(c => `- ${c.title}: ${(c.content || '').split('\n')[0]}`).join('\n')
+        : ''
       const mozartSystem = 'You are Mozart, music production advisor for Remo. Be concise — max 300 words.' +
-        (mozartChartCtx ? '\n\nCurrent chart signals:\n' + mozartChartCtx : '')
+        (mozartChartCtx ? '\n\nCurrent chart signals:\n' + mozartChartCtx : '') + mozartConnCtx
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
@@ -9195,6 +9203,21 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /connect-brain-entries — manual trigger for brain connection finder ──
+  if (req.method === 'POST' && req.url === '/connect-brain-entries') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const result = await connectBrainEntries()
+      res.writeHead(result.ok ? 200 : 500)
+      res.end(JSON.stringify(result))
+    } catch(e) {
+      res.writeHead(500)
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /brain-file-upload — multipart upload to Dropbox/Brain/uploads + Obsidian ──
   if (req.method === 'POST' && req.url === '/brain-file-upload') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -10251,6 +10274,143 @@ async function pollWhatsApp() {
   } catch(e) { console.warn('pollWhatsApp error:', e.message) }
 }
 
+// ── Brain connection finder — module scope so endpoint + scheduler can both call it ──
+async function connectBrainEntries() {
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) return { ok: false, error: 'No API key' }
+
+    const { data: entries } = await supabase
+      .from('brain_knowledge')
+      .select('id, title, content, category')
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(200)
+
+    if (!entries?.length) return { ok: false, error: 'No entries' }
+
+    // Dedup: skip connections already saved in last 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentConns } = await supabase
+      .from('brain_knowledge')
+      .select('metadata')
+      .eq('category', 'knowledge_connection')
+      .eq('active', true)
+      .gte('created_at', sevenDaysAgo)
+
+    const existingCombos = new Set(
+      (recentConns || []).map(c => (c.metadata?.entry_ids || []).map(String).sort().join(','))
+    )
+
+    // Include recent connection insights as context for Claude
+    const { data: mozartConns } = await supabase
+      .from('brain_knowledge')
+      .select('title, content')
+      .eq('category', 'knowledge_connection')
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    const mozartCtx = mozartConns?.length
+      ? '\n\nRecent connections already found:\n' + mozartConns.map(c => `- ${c.title}: ${(c.content || '').slice(0, 100)}`).join('\n')
+      : ''
+
+    const entrySummary = entries.map(e =>
+      `${e.id}|${e.category}|${e.title}: ${(e.content || '').slice(0, 200)}`
+    ).join('\n')
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        system: `You are a knowledge synthesis engine for a professional music producer's brain database.
+Find meaningful connections between entries: patterns that reinforce each other, contradictions to resolve, complementary insights to merge.
+Focus on actionable connections — pairs or groups where seeing them together creates new value.${mozartCtx}
+Return ONLY a JSON array. Each element: {"entry_ids":[id1,id2],"connection_type":"reinforces|contradicts|complements|extends","insight":"one sentence why these connect","action":"what to do with this connection"}
+Return 5-15 connections. No markdown, no prose.`,
+        messages: [{ role: 'user', content: `Find connections in these ${entries.length} brain entries:\n\n${entrySummary}` }]
+      })
+    })
+
+    const d = await res.json()
+    let raw = (d.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
+    // Extract array from response even if wrapped in prose
+    const arrMatch = raw.match(/\[[\s\S]*\]/)
+    if (arrMatch) raw = arrMatch[0]
+
+    let connections = []
+    try {
+      connections = JSON.parse(raw)
+    } catch(e) {
+      // Try extracting individual objects if full array parse fails
+      const objMatches = [...raw.matchAll(/\{[^{}]*"entry_ids"[^{}]*\}/g)]
+      if (objMatches.length) {
+        for (const m of objMatches) {
+          try { connections.push(JSON.parse(m[0])) } catch(_) {}
+        }
+      }
+      if (!connections.length) {
+        console.warn('connectBrainEntries parse error:', e.message)
+        return { ok: false, error: 'Parse error: ' + e.message }
+      }
+    }
+
+    fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        endpoint: 'connect-brain-entries', model: 'claude-haiku-4-5-20251001',
+        input_tokens: d.usage?.input_tokens || 0, output_tokens: d.usage?.output_tokens || 0,
+        cost_usd: ((d.usage?.input_tokens || 0) * 0.0000008) + ((d.usage?.output_tokens || 0) * 0.000001)
+      })
+    }).catch(() => {})
+
+    let saved = 0, skipped = 0
+    const savedConnections = []
+
+    for (const conn of connections) {
+      const ids = (conn.entry_ids || []).map(String).filter(s => s.length > 8).sort()
+      if (ids.length < 2) continue
+      const comboKey = ids.join(',')
+      if (existingCombos.has(comboKey)) { skipped++; continue }
+
+      const includedEntries = entries.filter(e => ids.includes(String(e.id)))
+      const entryTitles = includedEntries.map(e => e.title).join(' + ')
+
+      const { error } = await supabase.from('brain_knowledge').insert({
+        category: 'knowledge_connection',
+        title: (conn.connection_type + ': ' + entryTitles).slice(0, 120),
+        content: conn.insight + (conn.action ? '\n→ ' + conn.action : ''),
+        confidence: 'medium',
+        source_type: 'brain_connect',
+        active: true,
+        metadata: { entry_ids: ids, connection_type: conn.connection_type, action: conn.action }
+      })
+
+      if (!error) {
+        saved++
+        existingCombos.add(comboKey)
+        savedConnections.push({ ids, type: conn.connection_type, insight: conn.insight })
+      }
+    }
+
+    if (TELEGRAM_TOKEN && savedConnections.length) {
+      await sendTelegram(TELEGRAM_OWNER_ID,
+        `🧠 Brain connections: ${saved} new, ${skipped} already known\n\n` +
+        savedConnections.slice(0, 5).map(c => `· [${c.type}] ${c.insight}`).join('\n')
+      )
+    }
+
+    console.log(`✓ connectBrainEntries: ${saved} saved, ${skipped} skipped`)
+    return { ok: true, connections_found: connections.length, connections_saved: saved, skipped_dupes: skipped }
+  } catch(e) {
+    console.warn('connectBrainEntries error:', e.message)
+    return { ok: false, error: e.message }
+  }
+}
+
 server.listen(PORT, '127.0.0.1', () => {
   server.timeout = 0          // no timeout — needed for large audio file streams
   server.keepAliveTimeout = 0
@@ -10304,67 +10464,7 @@ server.listen(PORT, '127.0.0.1', () => {
     }
   }, 5 * 60 * 1000)
   console.log('✓ Apple Notes auto-sync: every 5 minutes')
-  // Weekly brain connect — Sunday 8am
-  async function connectBrainEntries() {
-    const { data: entries } = await supabase
-      .from('brain_knowledge')
-      .select('id, title, content, category, confidence')
-      .eq('active', true)
-      .order('created_at', { ascending: false })
-      .limit(50)
-
-    if (!entries?.length) return
-
-    const summary = entries.map(e =>
-      e.id + ': [' + e.category + '] ' + e.title + ' — ' +
-      (e.content || '').slice(0, 80)
-    ).join('\n')
-
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
-        system: `You analyze a knowledge base and find connections between entries.
-Find entries that reinforce each other, contradict each other, or belong together.
-Return JSON array: [{"ids":[1,2],"connection":"why they relate","action":"merge|link|promote"}]
-Only return JSON, no other text.`,
-        messages: [{ role: 'user', content: 'Find connections in these brain entries:\n\n' + summary }]
-      })
-    })
-
-    const d = await res.json()
-    const raw = (d.content?.[0]?.text || '[]').replace(/```json|```/g, '').trim()
-
-    try {
-      const connections = JSON.parse(raw)
-      if (connections.length) {
-        await supabase.from('brain_knowledge').insert({
-          category: 'observation',
-          title: 'Brain connections found ' + new Date().toLocaleDateString(),
-          content: connections.map(c =>
-            'Entries ' + c.ids.join('+') + ': ' + c.connection + ' → ' + c.action
-          ).join('\n'),
-          confidence: 'weak',
-          source_type: 'brain_connect',
-          active: true
-        })
-        if (TELEGRAM_TOKEN) {
-          await sendTelegram(TELEGRAM_OWNER_ID,
-            '🧠 Brain connections found:\n\n' +
-            connections.slice(0, 5).map(c =>
-              '· ' + c.connection + ' (' + c.action + ')'
-            ).join('\n')
-          )
-        }
-      }
-    } catch(e) { console.warn('connectBrainEntries parse error:', e.message) }
-  }
+  // connectBrainEntries() — defined at module scope above (accessible via endpoint + scheduler)
 
   // Weekly brain review — Sunday 8am
   async function weeklyBrainReview() {

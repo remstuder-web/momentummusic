@@ -1,22 +1,21 @@
 {
-  "updated": "2026-04-24T19:21:00.000Z",
-  "last_task": "vocal-eq-fix-curve-save",
+  "updated": "2026-04-24T19:52:00.000Z",
+  "last_task": "vocal-eq-fuzzy-audio-search",
   "status": "done",
   "working": [
-    "Song expand/collapse click handler (fixed in ProjectsTab.svelte)",
-    "/analyze-vocal-eq: 4 stems (vocals/drums/bass/other) now save to vocal_eq_curves with IDs",
-    "supabaseAdmin client uses SUPABASE_SECRET_KEY to bypass RLS on vocal_eq_curves",
-    "Per-stem error logging in pm2 logs: '✓ saved curve: stemName for song X'",
-    "analyzeVocalEqUrl (reference type) also fixed with same pattern",
-    "vocal-eq-analyzer: Python script + endpoint both work end-to-end",
-    "torchcodec 0.11.1 installed, Demucs saves stems correctly",
-    "coin-rotation-monitor: all endpoints working",
+    "Song expand/collapse click handler",
+    "/analyze-vocal-eq: exact + fuzzy audio file search by song code",
+    "/analyze-vocal-eq: 4 stems save to vocal_eq_curves via supabaseAdmin",
+    "loadVocalEq: no silent catch, logs curve count to browser console",
+    "GET /vocal-eq-curves: single supabaseAdmin query by song_id",
+    "VocalEqChart: receives plain curve objects with typeof guard",
+    "analyzeVocalEqUrl (reference type): per-stem save with error logging",
     "8/8 tests passing"
   ],
   "broken": [],
   "partial": [
-    "version_name column: code ready but column not in table yet — run SQL: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS version_name text;"
+    "version_name column exists in table but insert uses it — confirm it works next analysis"
   ],
-  "next": "Run SQL: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS version_name text; — then re-enable version_name in the insert",
-  "notes": "Root cause of save failure: (1) 'type' and 'url' columns don't exist in vocal_eq_curves schema, (2) anon key blocked by RLS. Fixed by using supabaseAdmin (service role key from SUPABASE_SECRET_KEY env var) which bypasses RLS. Also fixed broken refCurves/mixCurves template variables in ProjectsTab.svelte."
+  "next": "Test vocal EQ analysis on a song with only a MIX file to confirm fuzzy fallback works",
+  "notes": "Fuzzy fallback: when audio_path from work_data not found in MIXING_DIR or PRODUCTION_DIR, searches both dirs for files starting with song.code, sorts desc to get latest version. Logs 'vocal eq fuzzy match: filename' when triggered."
 }

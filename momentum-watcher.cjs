@@ -6376,12 +6376,36 @@ Respond ONLY in JSON:
           if (!mixVersions.length) throw new Error('No mixing or production versions with audio found')
           const latestVersion = mixVersions[0]
           const filename = latestVersion.audio_path
+          let audioFilePath = null
           const mixPath = path.join(MIXING_DIR, filename)
           const prodPath = path.join(PRODUCTION_DIR, filename)
-          let audioFilePath = null
+
           if (fs.existsSync(mixPath)) audioFilePath = mixPath
           else if (fs.existsSync(prodPath)) audioFilePath = prodPath
-          if (!audioFilePath) throw new Error('Audio file not found: ' + filename)
+
+          // Fuzzy fallback: search by song code when exact path not found
+          if (!audioFilePath) {
+            const code = songRows[0].code || filename.split('_')[0]
+            for (const dir of [MIXING_DIR, PRODUCTION_DIR]) {
+              try {
+                const files = fs.readdirSync(dir)
+                const matches = files
+                  .filter(f => f.startsWith(code) && (f.endsWith('.wav') || f.endsWith('.mp3')))
+                  .sort()
+                  .reverse()
+                if (matches.length) {
+                  audioFilePath = path.join(dir, matches[0])
+                  console.log('vocal eq fuzzy match:', matches[0])
+                  break
+                }
+              } catch(e) {}
+            }
+          }
+
+          if (!audioFilePath) {
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            return res.end(JSON.stringify({ ok: false, error: 'Audio file not found: ' + filename }))
+          }
 
           console.log('⏳ Running 4-stem EQ analysis on:', audioFilePath)
           const raw = execSync(`"${VOCAL_EQ_PYTHON}" "${VOCAL_EQ_SCRIPT}" "${audioFilePath}" 2>/dev/null`, { encoding: 'utf8', timeout: 400000 }).trim()

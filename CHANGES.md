@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: vocal-eq-fuzzy-audio-search
+WHAT: /analyze-vocal-eq now falls back to fuzzy search by song code when exact audio_path from work_data is not found. Searches MIXING_DIR then PRODUCTION_DIR for files starting with song code, takes latest version (sorted desc). Logs 'vocal eq fuzzy match' when used.
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: vocal-eq-fix-curve-save
 WHAT: Replaced bulk fetch insert in /analyze-vocal-eq with per-stem supabaseAdmin loop with explicit error logging. Added supabaseAdmin client using SUPABASE_SECRET_KEY to bypass RLS. Removed non-existent 'type' and 'url' columns from insert. Fixed analyzeVocalEqUrl (reference type) with same pattern. Response now includes 'saved' array with stem names and IDs.
 RESULT: works — 4 stems (vocals/drums/bass/other) saved to vocal_eq_curves for song 118

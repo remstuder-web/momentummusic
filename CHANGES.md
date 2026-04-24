@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-24] ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: analyzer-ref-dropdown, background-processing-pipeline, genius-credits
+WHAT: BUILD 1: ANALYZER ref dropdown selects from library tracks processed by background pipeline, credits panel below chart. BUILD 2: processLibraryTrackInBackground() + queue on startup — Essentia analysis + Demucs EQ curves for all library tracks without curves yet. BUILD 3: fetchGeniusCredits() scrapes Genius for producer/mixer/master credits, wired into background pipeline. POST /fetch-credits + GET /processing-queue endpoints added. Fixed brain dupe root cause: saveBrainFile strips date prefixes before building filename; syncObsidianFile now matches bare title (no date prefix) before inserting new rows.
+RESULT: works — 8/8 tests passing, watcher clean
+BLOCKERS: vocal_eq_curves.reference_track_id + reference_tracks.credits + emotional_arc columns must be added via Supabase dashboard SQL editor (see notes)
+
 ## [2026-04-24] momentum-watcher.cjs + BrainTab.svelte — DONE
 TASK: no-duplicate-ref-saves, library-sort
 WHAT: Added saveToCheckout() with title+artist case-insensitive dedup check before every reference_tracks insert. Replaced all direct inserts in scout/tiktok/chart agents. Added library sort (date/artist) toggle to BrainTab, artist-first display in all three ref sections (checkout/my refs/library), fixed cleanup-brain-dupes to use supabaseAdmin.

@@ -52,6 +52,8 @@
   let showVocalEq = $state({}) // song.id -> bool
   let vocalComparison = $state({}) // song.id -> comparison result
   let activeStem = $state({}) // song.id -> 'vocals' | 'drums' | 'bass' | 'other'
+  let selectedRefId = $state({}) // song.id -> reference_track_id (string)
+  let refTrackOptions = $state([]) // ref tracks that have EQ curves available
 
   function formatMinSec(sec) {
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60)
@@ -2092,15 +2094,42 @@
   async function loadVocalEq(songId) {
     const r = await fetch('http://localhost:4242/vocal-eq-curves?song_id=' + songId)
     const d = await r.json()
-    const curves = d.curves || []
-    vocalEqCurves[songId] = curves
+    const songCurves = d.curves || []
+
+    // Load global reference curves (from background pipeline, song_id IS NULL)
+    const { data: globalRefCurves } = await supabase
+      .from('vocal_eq_curves')
+      .select('*')
+      .is('song_id', null)
+      .eq('source_type', 'reference')
+      .order('created_at', { ascending: false })
+
+    // Merge song curves + global ref curves
+    const allCurves = [...songCurves, ...(globalRefCurves || [])]
+    vocalEqCurves[songId] = allCurves
     vocalEqCurves = { ...vocalEqCurves }
-    vocalEqCache.set(songId, curves)
-    console.log('loaded curves for', songId, ':', curves.length, curves.map(c => c.source_type + '/' + c.stem_type))
-    // Auto-compare: current stem of latest mix vs latest ref
+    vocalEqCache.set(songId, allCurves)
+
+    // Load ref tracks that have been processed (have curves via reference_track_id)
+    const refIds = [...new Set((globalRefCurves || []).map(c => c.reference_track_id).filter(Boolean))]
+    if (refIds.length) {
+      const { data: rts } = await supabase
+        .from('reference_tracks')
+        .select('id, title, artist, source, credits')
+        .in('id', refIds)
+        .order('artist', { ascending: true })
+      refTrackOptions = rts || []
+    } else {
+      refTrackOptions = []
+    }
+
+    // Auto-compare: latest mix vs selected or first ref for current stem
     const stemKey = activeStem[songId] || 'vocals'
-    const latestMix = curves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)
-    const latestRef = curves.find(c => c.source_type === 'reference' && c.stem_type === stemKey)
+    const latestMix = allCurves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)
+    const selRef = selectedRefId[songId]
+    const latestRef = selRef
+      ? allCurves.find(c => c.reference_track_id === selRef && c.stem_type === stemKey)
+      : allCurves.find(c => c.source_type === 'reference' && c.stem_type === stemKey)
     if (latestMix?.curve && latestRef?.curve) {
       const cr = await fetch('http://localhost:4242/compare-vocal-eq', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2957,12 +2986,16 @@
                   {#if showVocalEq[song.id]}
                     {@const songCurves = vocalEqCurves[song.id] || []}
                     {@const stemKey = activeStem[song.id] || 'vocals'}
+                    {@const selectedRef = selectedRefId[song.id] || ''}
                     {@const mixCurveData = songCurves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)}
-                    {@const refCurveData = songCurves.find(c => c.source_type === 'reference' && c.stem_type === stemKey)}
-                    {@const refCurves = songCurves.filter(c => c.source_type === 'reference' && c.stem_type === stemKey)}
+                    {@const refCurveData = selectedRef
+                      ? songCurves.find(c => String(c.reference_track_id) === selectedRef && c.stem_type === stemKey)
+                      : songCurves.find(c => c.source_type === 'reference' && c.stem_type === stemKey)}
+                    {@const refCurves = songCurves.filter(c => c.source_type === 'reference' && c.stem_type === stemKey && !c.reference_track_id)}
                     {@const mixCurves = songCurves.filter(c => c.source_type === 'mix' && c.stem_type === stemKey)}
                     {@const mixCurve = mixCurveData?.curve && typeof mixCurveData.curve === 'object' ? mixCurveData.curve : null}
                     {@const refCurve = refCurveData?.curve && typeof refCurveData.curve === 'object' ? refCurveData.curve : null}
+                    {@const selectedRefTrack = selectedRef ? refTrackOptions.find(r => String(r.id) === selectedRef) : null}
                     {@const cmp = vocalComparison[song.id]}
                     {@const refLoading = vocalEqLoading[song.id]}
                     <div class="vocal-eq-body">
@@ -2975,6 +3008,20 @@
                           </button>
                         {/each}
                       </div>
+                      <!-- Ref dropdown (only when global ref curves exist) -->
+                      {#if refTrackOptions.length > 0}
+                        <div class="ref-select-row">
+                          <span class="ref-select-label">Compare:</span>
+                          <select class="ref-select"
+                            value={selectedRef}
+                            onchange={e => { selectedRefId[song.id] = e.currentTarget.value; selectedRefId = { ...selectedRefId }; loadVocalEq(song.id) }}>
+                            <option value="">— URL ref —</option>
+                            {#each refTrackOptions as ref}
+                              <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                            {/each}
+                          </select>
+                        </div>
+                      {/if}
                       <!-- Chart -->
                       <VocalEqChart
                         mixCurve={mixCurve}
@@ -2982,6 +3029,29 @@
                         mixLabel={mixCurveData?.label ?? ''}
                         refLabel={refCurveData?.label ?? ''}
                       />
+                      <!-- Credits (when a ref track is selected and has credits) -->
+                      {#if selectedRefTrack?.credits}
+                        <div class="ref-credits">
+                          {#if selectedRefTrack.credits.producers?.length}
+                            <div class="credit-row">
+                              <span class="credit-label">Produced</span>
+                              <span class="credit-val">{selectedRefTrack.credits.producers.join(', ')}</span>
+                            </div>
+                          {/if}
+                          {#if selectedRefTrack.credits.mixers?.length}
+                            <div class="credit-row">
+                              <span class="credit-label">Mixed</span>
+                              <span class="credit-val">{selectedRefTrack.credits.mixers.join(', ')}</span>
+                            </div>
+                          {/if}
+                          {#if selectedRefTrack.credits.masterers?.length}
+                            <div class="credit-row">
+                              <span class="credit-label">Mastered</span>
+                              <span class="credit-val">{selectedRefTrack.credits.masterers.join(', ')}</span>
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
 
                       <!-- Status -->
                       {#if vocalEqStatus[song.id] === 'separating'}
@@ -3873,4 +3943,11 @@
   .stem-tab { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; padding: 3px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; letter-spacing: .06em; }
   .stem-tab.active { border-color: #c9a84c; color: #c9a84c; background: rgba(201,168,76,.08); }
   .stem-tab:hover:not(.active) { border-color: #333; color: #666; }
+  .ref-select-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .ref-select-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; white-space: nowrap; }
+  .ref-select { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 11px; padding: 4px 8px; border-radius: 2px; outline: none; }
+  .ref-credits { margin: 4px 0; padding: 6px 8px; background: #111; border-radius: 3px; border-left: 2px solid #252525; }
+  .credit-row { display: flex; gap: 8px; padding: 2px 0; font-family: 'DM Sans', sans-serif; font-size: 11px; }
+  .credit-label { font-family: 'Space Mono', monospace; font-size: 8px; color: #555; width: 55px; flex-shrink: 0; padding-top: 2px; text-transform: uppercase; }
+  .credit-val { color: #9e9690; }
 </style>

@@ -1,17 +1,21 @@
 {
-  "updated": "2026-04-24T20:50:00.000Z",
-  "last_task": "no-duplicate-ref-saves-library-sort",
+  "updated": "2026-04-24T21:15:00.000Z",
+  "last_task": "analyzer-ref-dropdown-background-pipeline-genius-credits",
   "status": "done",
   "working": [
-    "saveToCheckout(): dedup by title+artist (case insensitive) before every reference_tracks insert",
-    "All scout/tiktok/chart inserts replaced with saveToCheckout() calls",
-    "BrainTab library sort by date (newest first) or A–Z artist",
-    "Artist-first display (Unknown fallback) in all 3 ref sections",
-    "cleanup-brain-dupes uses supabaseAdmin — actually deletes (95 cleaned this session)",
+    "ANALYZER ref dropdown — shows library tracks processed by background pipeline",
+    "Credits panel below chart (producer/mixer/mastering) when ref selected + credits exist",
+    "processLibraryTrackInBackground(): preview URL → Essentia → Demucs EQ curves → Genius credits",
+    "Background queue runs on startup (15s delay), 5s gap between tracks",
+    "GET /processing-queue: {queued, processing, next}",
+    "POST /fetch-credits: {title, artist, reference_track_id} → Genius scrape + saves to reference_tracks",
+    "fetchGeniusCredits(): JSON-LD + regex fallback",
+    "saveBrainFile: strips date prefix(es) from title before building filename — stops triple-prefix bug",
+    "syncObsidianFile: bare-title fallback lookup prevents duplicate rows from dated files",
     "8/8 tests passing"
   ],
   "broken": [],
   "partial": [],
-  "next": "Monitor brain_knowledge for recurring duplicates — Obsidian sync is adding them continuously (date-prefixed titles). May need dedup logic in saveBrainFile() itself.",
-  "notes": "Brain dupes are being created by Obsidian sync writing date-prefixed titles. The cleanup-brain-dupes endpoint now works via supabaseAdmin. saveToCheckout() uses the anon supabase client (not supabaseAdmin) — RLS on reference_tracks allows anon inserts for checkout rows."
+  "next": "Run SQL in Supabase dashboard to add missing columns:\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;\nThen monitor background queue: curl localhost:4242/processing-queue",
+  "notes": "Background queue only processes tracks with spotify_id and source in (user, agent). Queue will be empty until SQL columns exist AND library tracks have been promoted to My Refs. Genius scraping may fail for non-English tracks or tracks not on Genius."
 }

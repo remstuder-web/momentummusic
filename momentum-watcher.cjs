@@ -1342,6 +1342,129 @@ async function saveToCheckout(track) {
   return true
 }
 
+// ── Background library track processing queue ─────────────────────────────
+const ESSENTIA_PY = '/opt/homebrew/bin/python3.11'
+const ANALYZE_AUDIO_SCRIPT = path.join(__dirname, 'analyze_audio.py')
+const ANALYZE_EQ_SCRIPT = path.join(__dirname, 'analyze_vocal_eq.py')
+let processingQueue = []
+let isProcessing = false
+
+async function processLibraryTrackInBackground(refTrack) {
+  try {
+    // Skip if already processed
+    const { data: existing } = await supabase.from('vocal_eq_curves').select('id').eq('reference_track_id', String(refTrack.id)).limit(1)
+    if (existing?.length) { console.log('bg: skip processed:', refTrack.artist, '—', refTrack.title); return }
+
+    console.log('bg: processing:', refTrack.artist, '—', refTrack.title)
+
+    // Step 1: Get preview URL
+    let previewUrl = refTrack.preview_url || null
+    if (!previewUrl && refTrack.spotify_id) {
+      try {
+        const token = await getSpotifyToken()
+        const sr = await fetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id, { headers: { 'Authorization': 'Bearer ' + token } })
+        const sd = await sr.json()
+        previewUrl = sd?.preview_url || null
+        if (previewUrl) await supabase.from('reference_tracks').update({ preview_url: previewUrl }).eq('id', refTrack.id)
+      } catch(e) { console.warn('bg: spotify fetch failed:', e.message) }
+    }
+    if (!previewUrl) { console.log('bg: no preview URL for:', refTrack.title); return }
+
+    // Step 2: Download preview
+    const tmpFile = '/tmp/ref_bg_' + refTrack.id + '_' + Date.now() + '.mp3'
+    const dlRes = await fetch(previewUrl)
+    if (!dlRes.ok) throw new Error('preview download failed: ' + dlRes.status)
+    const buf = Buffer.from(await dlRes.arrayBuffer())
+    fs.writeFileSync(tmpFile, buf)
+
+    // Step 3: Essentia analysis
+    try {
+      const esOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_AUDIO_SCRIPT}" "${tmpFile}" 2>/dev/null`, { encoding: 'utf8', timeout: 120000 }).trim()
+      const es = JSON.parse(esOut)
+      if (es.bpm) {
+        const upd = {}
+        if (es.bpm) upd.tempo = es.bpm
+        if (es.key) upd.key = es.key
+        if (es.camelot) upd.camelot = es.camelot
+        if (es.energy != null) upd.energy = es.energy
+        if (es.danceability != null) upd.danceability = es.danceability
+        if (es.loudness_lufs != null) upd.loudness = es.loudness_lufs
+        if (es.valence != null) upd.valence = es.valence
+        if (es.brightness != null) upd.brightness = es.brightness
+        if (es.bass_energy != null) upd.bass_energy = es.bass_energy
+        await supabase.from('reference_tracks').update(upd).eq('id', refTrack.id)
+        console.log('bg: ✓ Essentia for:', refTrack.title)
+      }
+    } catch(e) { console.warn('bg: Essentia failed for:', refTrack.title, e.message.slice(0, 60)) }
+
+    // Step 4: Stem EQ curves via Demucs
+    try {
+      const eqOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_EQ_SCRIPT}" "${tmpFile}" 2>/dev/null`, { encoding: 'utf8', timeout: 300000 }).trim()
+      const eqResult = JSON.parse(eqOut)
+      if (eqResult.ok && eqResult.stems) {
+        for (const [stemName, curve] of Object.entries(eqResult.stems)) {
+          await supabase.from('vocal_eq_curves').insert({
+            label: (refTrack.artist || '') + ' — ' + (refTrack.title || '') + ' (' + stemName + ')',
+            reference_track_id: String(refTrack.id),
+            stem_type: stemName,
+            source_type: 'reference',
+            curve
+          })
+        }
+        console.log('bg: ✓ EQ curves for:', refTrack.title)
+      }
+    } catch(e) { console.warn('bg: stem EQ failed for:', refTrack.title, e.message.slice(0, 60)) }
+
+    // Step 5: Genius credits
+    try {
+      const credits = await fetchGeniusCredits(refTrack.artist, refTrack.title)
+      if (credits && (credits.producers.length || credits.mixers.length || credits.masterers.length)) {
+        await supabase.from('reference_tracks').update({ credits }).eq('id', refTrack.id)
+        console.log('bg: ✓ Credits for:', refTrack.title, '| prod:', credits.producers.join(', '))
+      }
+      await new Promise(r => setTimeout(r, 2000)) // polite delay for Genius
+    } catch(e) { console.warn('bg: credits failed for:', refTrack.title, e.message.slice(0, 60)) }
+
+    try { fs.unlinkSync(tmpFile) } catch(e) {}
+  } catch(e) {
+    console.error('bg: processLibraryTrack error:', refTrack?.title, e.message)
+  }
+}
+
+async function runBackgroundQueue() {
+  if (isProcessing || processingQueue.length === 0) return
+  isProcessing = true
+  const track = processingQueue.shift()
+  await processLibraryTrackInBackground(track)
+  isProcessing = false
+  if (processingQueue.length > 0) setTimeout(runBackgroundQueue, 5000)
+}
+
+function queueLibraryTrack(track) {
+  if (!processingQueue.find(t => t.id === track.id)) {
+    processingQueue.push(track)
+    runBackgroundQueue()
+  }
+}
+
+// Startup: queue all library tracks without EQ curves (15s delay to let watcher settle)
+setTimeout(async () => {
+  try {
+    const { data: libraryTracks } = await supabase
+      .from('reference_tracks').select('*')
+      .in('source', ['user', 'agent'])
+      .not('spotify_id', 'is', null)
+      .order('created_at', { ascending: false }).limit(50)
+    if (!libraryTracks?.length) return
+    for (const track of libraryTracks) {
+      const { data: ex } = await supabase.from('vocal_eq_curves').select('id').eq('reference_track_id', String(track.id)).limit(1)
+      if (!ex?.length) processingQueue.push(track)
+    }
+    console.log('bg: queue ready —', processingQueue.length, 'tracks to process')
+    runBackgroundQueue()
+  } catch(e) { console.warn('bg: startup queue error:', e.message) }
+}, 15000)
+
 async function getCrossChartTopics() {
   try {
     const [tiktokRes, spotifyRes] = await Promise.all([
@@ -1692,17 +1815,24 @@ async function syncObsidianFile(filePath) {
       ...(relatedNotes.length ? { metadata: { related_notes: relatedNotes } } : {})
     }
 
-    // Upsert by title + source_type; if file mtime > created_at, it was manually edited → always update
-    const existing = await fetch(
-      `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(filename)}&source_type=eq.obsidian&select=id,created_at`,
+    // Upsert by title or bare title (strip date prefix); if file mtime > created_at → update
+    const bareFilename = filename.replace(/^(\d{4}-\d{2}-\d{2}_)+/, '')
+    let existingRows = await fetch(
+      `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(filename)}&select=id,created_at`,
       { headers: sbHeaders }
     ).then(r => r.json()).catch(() => [])
+    if (!existingRows[0] && bareFilename !== filename) {
+      existingRows = await fetch(
+        `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(bareFilename)}&select=id,created_at`,
+        { headers: sbHeaders }
+      ).then(r => r.json()).catch(() => [])
+    }
 
-    if (existing[0]?.id) {
-      const createdAt = new Date(existing[0].created_at).getTime()
+    if (existingRows[0]?.id) {
+      const createdAt = new Date(existingRows[0].created_at).getTime()
       const mtime = stat.mtimeMs
       if (mtime > createdAt) {
-        await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=eq.${existing[0].id}`, {
+        await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=eq.${existingRows[0].id}`, {
           method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' }, body: JSON.stringify(row)
         })
         console.log(`✓ Obsidian sync (updated): ${filename}`)
@@ -3561,6 +3691,7 @@ async function saveBrainFile(entry) {
     fs.mkdirSync(folderPath, { recursive: true })
 
     const safeTitle = (entry.title || 'untitled')
+      .replace(/^(\d{4}-\d{2}-\d{2}_)+/, '') // strip any existing date prefix(es)
       .replace(/[^a-zA-Z0-9 \-_]/g, '')
       .trim()
       .slice(0, 60)
@@ -3687,6 +3818,71 @@ Each suggestion max 2 sentences. Be concrete not general.` }]
     }).catch(() => {})
     console.log('✓ Weekly system review sent')
   } catch(e) { console.warn('weeklySystemReview error:', e.message) }
+}
+
+// ── Genius credits scraper ────────────────────────────────────────────────
+async function fetchGeniusCredits(artist, title) {
+  try {
+    const query = encodeURIComponent((artist || '') + ' ' + (title || ''))
+    const searchUrl = 'https://genius.com/search?q=' + query
+    const r = await fetch(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'Accept': 'text/html' } })
+    const html = await r.text()
+    const linkMatch = html.match(/href="(https:\/\/genius\.com\/[^"]+lyrics[^"]+)"/)
+    if (!linkMatch) return null
+    const lyricsUrl = linkMatch[1]
+    const lr = await fetch(lyricsUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' } })
+    const lyricsHtml = await lr.text()
+
+    const credits = { producers: [], writers: [], mixers: [], masterers: [], source_url: lyricsUrl }
+
+    // Try Genius Next.js page data
+    const jsonMatches = [...lyricsHtml.matchAll(/<script[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/g)]
+    for (const m of jsonMatches) {
+      try {
+        const data = JSON.parse(m[1])
+        const song = data?.props?.pageProps?.song || data?.response?.song
+        if (!song) continue
+        if (song.producer_artists?.length) credits.producers.push(...song.producer_artists.map(a => a.name))
+        if (song.writer_artists?.length) credits.writers.push(...song.writer_artists.map(a => a.name))
+        if (song.custom_performances?.length) {
+          for (const perf of song.custom_performances) {
+            const label = (perf.label || '').toLowerCase()
+            const names = (perf.artists || []).map(a => a.name)
+            if (label.includes('produc')) credits.producers.push(...names)
+            if (label.includes('mix')) credits.mixers.push(...names)
+            if (label.includes('master')) credits.masterers.push(...names)
+            if (label.includes('writ')) credits.writers.push(...names)
+          }
+        }
+        if (credits.producers.length || credits.mixers.length) break
+      } catch(e) {}
+    }
+
+    // Fallback: regex
+    if (!credits.producers.length) {
+      const pm = lyricsHtml.match(/[Pp]roduced by[^<]*<[^>]+>([^<]+)/)
+      if (pm) credits.producers.push(pm[1].trim())
+    }
+    if (!credits.mixers.length) {
+      const mm = lyricsHtml.match(/[Mm]ixed by[^<]*<[^>]+>([^<]+)/)
+      if (mm) credits.mixers.push(mm[1].trim())
+    }
+    if (!credits.masterers.length) {
+      const mm = lyricsHtml.match(/[Mm]astered by[^<]*<[^>]+>([^<]+)/)
+      if (mm) credits.masterers.push(mm[1].trim())
+    }
+
+    // Deduplicate
+    credits.producers = [...new Set(credits.producers)]
+    credits.writers = [...new Set(credits.writers)]
+    credits.mixers = [...new Set(credits.mixers)]
+    credits.masterers = [...new Set(credits.masterers)]
+
+    return credits
+  } catch(e) {
+    console.error('genius credits error:', e.message)
+    return null
+  }
 }
 
 // ── Vocal EQ — standalone reference analysis function ────────────────────
@@ -7837,6 +8033,37 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /processing-queue — background track processing status ───────────
+  if (req.method === 'GET' && req.url === '/processing-queue') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, queued: processingQueue.length, processing: isProcessing, next: processingQueue[0] ? (processingQueue[0].artist + ' — ' + processingQueue[0].title) : null }))
+    return
+  }
+
+  // ── POST /fetch-credits — fetch Genius credits for a track ────────────────
+  if (req.method === 'POST' && req.url === '/fetch-credits') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        const { title, artist, reference_track_id } = body
+        if (!title || !artist) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'title and artist required' })); return }
+        const credits = await fetchGeniusCredits(artist, title)
+        if (credits && reference_track_id) {
+          await supabase.from('reference_tracks').update({ credits }).eq('id', reference_track_id)
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, credits }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /cleanup-brain-dupes — delete duplicate brain_knowledge rows ─────
   if (req.method === 'POST' && req.url === '/cleanup-brain-dupes') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -9518,6 +9745,12 @@ Max 150 words. Be specific and actionable.` }]
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?select=stem_type,source_type,version_name&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ vocal_eq_curves missing columns — run SQL in Supabase:\nALTER TABLE vocal_eq_curves\n  ADD COLUMN IF NOT EXISTS stem_type text DEFAULT \'vocals\',\n  ADD COLUMN IF NOT EXISTS source_type text DEFAULT \'mix\',\n  ADD COLUMN IF NOT EXISTS version_name text;') })
+    .catch(() => {})
+  fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?select=reference_track_id&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ vocal_eq_curves missing reference_track_id — run SQL:\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;') })
+    .catch(() => {})
+  fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=credits&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing credits/emotional_arc — run SQL:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;') })
     .catch(() => {})
 })
 

@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: fix-scout-checkout-exist-check
+WHAT: existCheck now uses title+artist ilike (both fields) instead of title alone. Prefer changed to return=representation so saveData contains full response. Error log shows status + full JSON body.
+RESULT: works — verified via pm2 logs, no FAILED lines, track saved OK
+BLOCKERS: none
+
+## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: fix-scout-checkout-save
 WHAT: Removed 'approved: true' from scout mention insert (column doesn't exist). Added proper saveRes error logging — logs status + response body on failure, success message on 201.
 RESULT: works

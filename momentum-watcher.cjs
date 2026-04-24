@@ -4569,15 +4569,14 @@ ${context}` }]
         for (const track of mentionedTracks) {
           if (!track.title || !track.artist) continue
           try {
-            const titleEnc = encodeURIComponent(track.title)
             const existCheck = await fetch(
-              `${SUPABASE_URL}/rest/v1/reference_tracks?title=ilike.${titleEnc}&select=id&limit=1`,
+              `${SUPABASE_URL}/rest/v1/reference_tracks?title=ilike.${encodeURIComponent(track.title)}&artist=ilike.${encodeURIComponent(track.artist)}&select=id&limit=1`,
               { headers: sbHeaders }
             ).then(r => r.json()).catch(() => [])
             if (Array.isArray(existCheck) && existCheck.length > 0) continue
             const saveRes = await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
               method: 'POST',
-              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              headers: { ...sbHeaders, 'Prefer': 'return=representation' },
               body: JSON.stringify({
                 title: track.title,
                 artist: track.artist,
@@ -4586,11 +4585,11 @@ ${context}` }]
                 checkout_date: nowMentioned
               })
             })
-            if (!saveRes.ok) {
-              const errText = await saveRes.text()
-              console.error('✗ Scout checkout save failed:', saveRes.status, errText)
+            const saveData = await saveRes.json()
+            if (!saveRes.ok || saveData?.error) {
+              console.error('✗ Scout checkout save FAILED:', saveRes.status, JSON.stringify(saveData))
             } else {
-              console.log('✓ Scout mention → checkout:', track.artist, '—', track.title)
+              console.log('✓ Scout → checkout:', track.artist, '—', track.title)
             }
           } catch(e) {
             console.error('scout mention save error:', e.message)

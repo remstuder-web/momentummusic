@@ -1,21 +1,19 @@
 {
-  "updated": "2026-04-24T21:45:00.000Z",
-  "last_task": "replace-press-feeds-fix-obsidian-dupes",
+  "updated": "2026-04-24T21:52:00.000Z",
+  "last_task": "submission-brief-auto-match",
   "status": "done",
   "working": [
-    "MUSIC_SOURCES feeds: A&R Factory, Pitchfork Best New, NME, Consequence, The Guardian Music, Earmilk, Uproxx Music, Bedroom Producers — all 8 confirmed working",
-    "chokidar ignoreInitial:true — no more dupe storm on watcher restart",
-    "8/8 tests passing, 860 brain entries, 0 duplicates",
-    "Mozart/ANALYZER: never outputs raw BPM/LUFS/danceability/energy numbers unless explicitly asked",
-    "VocalEqChart: keep-last-value pattern, mix line bright white, ref line gold, zero line visible",
-    "BrainTab: category chips in approval panel",
-    "ANALYZER ref dropdown with credits panel",
-    "Background processing pipeline (Essentia + Demucs + Genius credits)",
-    "saveToCheckout() dedup wrapper",
-    "getCrossChartTopics() wired into morning briefing, scout, Mozart"
+    "Submission brief: paste brief → Find Matches → ref tracks + demo matches + Mozart take",
+    "POST /analyze-submission-brief: Haiku extracts requirements (bpm/energy/key), scores ref tracks and demos",
+    "POST /save-submission-brief: writes brief.txt to Dropbox submission folder on send",
+    "Brief stored per-patch in memory (patchBriefs map), survives modal close until patch is sent",
+    "DailyTab: Match Demos button removed",
+    "All 8 press feeds working (NME, Consequence, The Guardian, Earmilk, Uproxx, A&R Factory, Pitchfork, Bedroom Producers)",
+    "chokidar ignoreInitial:true — no dupe storm on restart",
+    "8/8 tests passing, 860 brain entries, 0 duplicates"
   ],
   "broken": [],
   "partial": [],
   "next": "Run SQL in Supabase dashboard to enable background EQ pipeline:\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;\nThen promote library tracks to My Refs and check: curl localhost:4242/processing-queue",
-  "notes": "Press feeds: Removed FADER, Stereogum, Lyrical Lemonade (blocked), HotNewHipHop (ECONNREFUSED), Ones To Watch (ECONNREFUSED), Pigeons & Planes (ECONNREFUSED). Added NME, Consequence, The Guardian Music, Earmilk, Uproxx Music."
+  "notes": "Demo matching in /analyze-submission-brief relies on songs having work_data.versions[].analysis (from Essentia analysis). Songs without analysis won't appear in matches. Brief txt is only saved when sendPatch() is called (not on createPatch)."
 }

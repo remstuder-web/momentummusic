@@ -1266,3 +1266,9 @@ TASK: replace blocked press feeds + fix obsidian dupe storm
 WHAT: Replaced FADER/Stereogum/Lyrical Lemonade/HotNewHipHop/OnestoWatch/PigeonsPlanes with NME, Consequence, The Guardian, Earmilk, Uproxx; chokidar ignoreInitial:true stops 'add' flood on restart
 RESULT: works — 8/8 tests, 6/8 feeds confirmed live, no dupe storm on restart
 BLOCKERS: none
+
+## [2026-04-24] [DailyTab.svelte, DemoTab.svelte, momentum-watcher.cjs] — DONE
+TASK: submission brief intelligence + remove Match Demos from Daily
+WHAT: New Submission modal has brief textarea + Find Matches button; /analyze-submission-brief extracts requirements, scores ref tracks + demos by BPM/energy/key, Mozart gives 2-3 sentence take; brief.txt saved to Dropbox folder on send; Match Demos button removed from DailyTab
+RESULT: works — 8/8 tests passing
+BLOCKERS: none

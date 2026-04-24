@@ -824,6 +824,8 @@
       .eq('type', 'feedback').lt('created_at', oneDayAgo)
     await supabase.from('inbox_notifications').delete()
       .eq('type', 'download').lt('created_at', sevenDaysAgo)
+    await supabase.from('inbox_notifications').delete()
+      .eq('type', 'reference').lt('metadata->>expires', new Date().toISOString())
 
     const { data } = await supabase.from('inbox_notifications')
       .select('*').order('created_at', { ascending: false }).limit(50)
@@ -1792,6 +1794,24 @@ ${mozartContext}`
         </div>
       {/if}
 
+      <!-- Aktuelle Refs -->
+      {#if inboxItems.some(n => n.type === 'reference')}
+        <div class="year-today-sep" style="margin-bottom:6px">AKTUELLE REFS</div>
+        {#each inboxItems.filter(n => n.type === 'reference') as item (item.id)}
+          <div class="inbox-item ref-item">
+            <div class="ref-item-header">
+              <span class="ref-badge">REF</span>
+              <span class="ref-name">{item.message}</span>
+              {#if item.metadata?.bpm}
+                <span class="ref-meta">{Math.round(item.metadata.bpm)}bpm{item.metadata.camelot ? ' · ' + item.metadata.camelot : ''}</span>
+              {/if}
+              <button class="del-btn" onclick={() => deleteInboxItem(item.id)}>×</button>
+            </div>
+            <div class="ref-expires">surfaces for {Math.max(0, Math.round((new Date(item.metadata?.expires) - Date.now()) / 86400000))} more days</div>
+          </div>
+        {/each}
+      {/if}
+
       <!-- Messages section (WhatsApp) -->
       {#if whatsappItems.length}
         <div class="year-today-sep" style="margin-bottom:6px">MESSAGES</div>
@@ -1832,8 +1852,8 @@ ${mozartContext}`
       {#if !inboxItems.filter(n => n.metadata?.platform !== 'whatsapp').length}
         <p class="empty-sm" style="padding:10px 0;color:#333">No notifications yet. Run an agent or send a listen link.</p>
       {:else}
-        {@const todayInbox = inboxItems.filter(n => n.metadata?.platform !== 'whatsapp' && n.created_at?.slice(0,10) === todayISO && !(n.type === 'briefing' && n.id === todayBriefing?.id))}
-        {@const olderInbox = inboxItems.filter(n => n.metadata?.platform !== 'whatsapp' && n.created_at?.slice(0,10) !== todayISO)}
+        {@const todayInbox = inboxItems.filter(n => n.metadata?.platform !== 'whatsapp' && n.type !== 'reference' && n.created_at?.slice(0,10) === todayISO && !(n.type === 'briefing' && n.id === todayBriefing?.id))}
+        {@const olderInbox = inboxItems.filter(n => n.metadata?.platform !== 'whatsapp' && n.type !== 'reference' && n.created_at?.slice(0,10) !== todayISO)}
         <div class="inbox-scroll">
           {#if todayInbox.length}
             <div class="year-today-sep">TODAY</div>
@@ -2172,6 +2192,14 @@ ${mozartContext}`
   .wa-copy-btn:hover { color: #c9a84c; border-color: #c9a84c; }
 
   /* WhatsApp MESSAGES section */
+  .ref-item { border-left: 2px solid #c9a84c; background: rgba(201,168,76,.03); padding: 6px 10px; margin-bottom: 5px; border-radius: 0 3px 3px 0; }
+  .ref-item-header { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+  .ref-badge { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: #c9a84c; border: 1px solid rgba(201,168,76,.3); padding: 1px 5px; border-radius: 2px; flex-shrink: 0; }
+  .ref-name { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #cec9c1; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref-meta { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; flex-shrink: 0; }
+  .ref-expires { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #444; font-style: italic; margin-top: 2px; }
+  .del-btn { background: transparent; border: none; color: #333; cursor: pointer; font-size: 14px; padding: 0 2px; flex-shrink: 0; }
+  .del-btn:hover { color: #9e9690; }
   .whatsapp-item { border-left: 2px solid #25d366; background: rgba(37,211,102,.03); padding: 8px 10px; margin-bottom: 6px; border-radius: 0 3px 3px 0; }
   .whatsapp-item.boundary { border-left-color: #e05a4a; background: rgba(224,90,74,.05); }
   .whatsapp-item.urgent { border-left-color: #e8a838; }

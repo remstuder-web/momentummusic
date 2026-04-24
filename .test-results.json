@@ -1,5 +1,5 @@
 {
-  "run": "2026-04-24T21:48:54.597Z",
+  "run": "2026-04-24T21:58:44.862Z",
   "passed": 8,
   "total": 8,
   "results": [
@@ -7,7 +7,7 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: replace-press-feeds-fix-obsidian-dupes"
+      "detail": "last_task: submission-brief-auto-match"
     },
     {
       "n": 2,
@@ -25,7 +25,7 @@
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok + past briefing has real content (1452 chars)"
+      "detail": "endpoint ok + past briefing has real content (1615 chars)"
     },
     {
       "n": 5,
@@ -49,7 +49,7 @@
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "26349ab replace blocked press feeds, fix obsidian dupe storm on restart"
+      "detail": "706e3ec submission brief: auto-match demos + reference tracks + Mozart analysis"
     }
   ]
 }

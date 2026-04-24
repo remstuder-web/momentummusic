@@ -833,6 +833,7 @@ Return ONLY JSON (single item array):
       genre_tags: t.genres,
       tempo: t.bpm,
       key: t.key,
+      camelot: t.camelot,
       energy: t.energy,
       danceability: t.danceability,
       valence: t.valence,
@@ -848,8 +849,26 @@ Return ONLY JSON (single item array):
       preview_url: t.preview_url,
       album_art: t.art_url,
       source: 'user',
+      collection_name: spotifyPreviewType,
       approved: true
     }, { onConflict: 'spotify_id' })
+
+    // For aktuelle refs — surface in Daily inbox for 7 days
+    if (spotifyPreviewType === 'reference_current') {
+      await supabase.from('inbox_notifications').insert({
+        type: 'reference',
+        message: t.artist + ' — ' + t.title,
+        metadata: {
+          platform: 'reference',
+          ref_type: 'aktuelle',
+          spotify_id: t.spotify_id,
+          bpm: t.bpm,
+          key: t.key,
+          camelot: t.camelot,
+          expires: new Date(Date.now() + 7 * 24 * 3600000).toISOString()
+        }
+      })
+    }
 
     const keyLabel = t.key ? t.key + (t.scale ? ' ' + t.scale : '') : 'unknown'
     const content = [

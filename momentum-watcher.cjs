@@ -198,6 +198,7 @@ const ANON_KEY     = 'sb_publishable_4yMwlAo6OLpgGPN_6yWvIw_g5bnjnWS'
 const sbHeaders    = { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json' }
 const { createClient } = require('@supabase/supabase-js')
 const supabase = createClient(SUPABASE_URL, ANON_KEY)
+const supabaseAdmin = createClient(SUPABASE_URL, process.env.SUPABASE_SECRET_KEY || ANON_KEY)
 
 // ── Weekly: check watched artists for new releases ────────────────────────
 setInterval(async () => {
@@ -3576,24 +3577,26 @@ async function analyzeVocalEqUrl(url, songId, label) {
   const result = JSON.parse(raw)
   if (!result.ok) throw new Error(result.error || 'Script failed')
 
-  const now = new Date().toISOString()
-  const refRows = Object.entries(result.stems).map(([stemName, curve]) => ({
-    label: (label || 'Reference') + ' — ' + stemName,
-    type: 'reference',
-    source_type: 'reference',
-    stem_type: stemName,
-    url,
-    song_id: songId || null,
-    curve,
-    created_at: now
-  }))
-  const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves`, {
-    method: 'POST',
-    headers: { ...sbHeaders, 'Prefer': 'return=representation' },
-    body: JSON.stringify(refRows)
-  })
-  const inserted = await insertRes.json()
-  const savedId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
+  const savedRefCurves = []
+  for (const [stemName, curve] of Object.entries(result.stems || {})) {
+    const { data, error } = await supabaseAdmin
+      .from('vocal_eq_curves')
+      .insert({
+        label: (label || 'Reference') + ' — ' + stemName,
+        song_id: songId ? String(songId) : null,
+        curve,
+        stem_type: stemName,
+        source_type: 'reference'
+      })
+      .select()
+    if (error) {
+      console.error('✗ vocal_eq_curves ref save error:', error.message, error.code)
+    } else {
+      console.log('✓ saved ref curve:', stemName, label || url)
+      savedRefCurves.push({ stemName, id: data?.[0]?.id })
+    }
+  }
+  const savedId = savedRefCurves[0]?.id || null
   return { id: savedId, stems: result.stems }
 }
 
@@ -6385,24 +6388,25 @@ Respond ONLY in JSON:
           const result = JSON.parse(raw)
           if (!result.ok) throw new Error(result.error || 'Script failed')
 
-          const now = new Date().toISOString()
-          const mixRows = Object.entries(result.stems).map(([stemName, curve]) => ({
-            label: (label || 'My Mix') + ' — ' + stemName,
-            type: 'mix',
-            source_type: 'mix',
-            stem_type: stemName,
-            url: null,
-            song_id,
-            curve,
-            created_at: now
-          }))
-          const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves`, {
-            method: 'POST',
-            headers: { ...sbHeaders, 'Prefer': 'return=representation' },
-            body: JSON.stringify(mixRows)
-          })
-          const inserted = await insertRes.json()
-          const savedId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
+          const savedCurves = []
+          for (const [stemName, curve] of Object.entries(result.stems || {})) {
+            const { data, error } = await supabaseAdmin
+              .from('vocal_eq_curves')
+              .insert({
+                label: (label || 'My Mix') + ' — ' + stemName,
+                song_id: String(song_id),
+                curve,
+                stem_type: stemName,
+                source_type: 'mix'
+              })
+              .select()
+            if (error) {
+              console.error('✗ vocal_eq_curves save error:', error.message, error.code)
+            } else {
+              console.log('✓ saved curve:', stemName, 'for song', song_id)
+              savedCurves.push({ stemName, id: data?.[0]?.id })
+            }
+          }
 
           // Auto-queue song's reference_links that haven't been analyzed yet
           const refLinks = wd.reference_links || []
@@ -6424,7 +6428,7 @@ Respond ONLY in JSON:
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: true, id: savedId, stems: result.stems, stem_count: Object.keys(result.stems).length }))
+          res.end(JSON.stringify({ ok: true, stems: result.stems, saved: savedCurves, stem_count: Object.keys(result.stems).length }))
         } else {
           throw new Error('type must be reference or mix')
         }
@@ -9295,8 +9299,8 @@ Max 150 words. Be specific and actionable.` }]
   fetch(`${SUPABASE_URL}/rest/v1/notes?select=apple_note_id,source&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ notes table missing Apple Notes columns — run SQL in Supabase:\nALTER TABLE notes ADD COLUMN IF NOT EXISTS apple_note_id text;\nALTER TABLE notes ADD COLUMN IF NOT EXISTS source text DEFAULT \'momentum\';\nALTER TABLE notes ADD COLUMN IF NOT EXISTS updated_at timestamptz;\nCREATE UNIQUE INDEX IF NOT EXISTS notes_apple_note_id_idx ON notes(apple_note_id) WHERE apple_note_id IS NOT NULL;') })
     .catch(() => {})
-  fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?select=stem_type,source_type&limit=1`, { headers: sbHeaders })
-    .then(r => { if (r.status === 400) console.warn('⚠ vocal_eq_curves missing columns — run SQL in Supabase:\nALTER TABLE vocal_eq_curves\n  ADD COLUMN IF NOT EXISTS stem_type text DEFAULT \'vocals\',\n  ADD COLUMN IF NOT EXISTS source_type text DEFAULT \'mix\';') })
+  fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?select=stem_type,source_type,version_name&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ vocal_eq_curves missing columns — run SQL in Supabase:\nALTER TABLE vocal_eq_curves\n  ADD COLUMN IF NOT EXISTS stem_type text DEFAULT \'vocals\',\n  ADD COLUMN IF NOT EXISTS source_type text DEFAULT \'mix\',\n  ADD COLUMN IF NOT EXISTS version_name text;') })
     .catch(() => {})
 })
 

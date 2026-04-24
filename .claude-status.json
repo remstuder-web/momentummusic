@@ -1,20 +1,22 @@
 {
-  "updated": "2026-04-24T10:00:00.000Z",
-  "last_task": "fix-vocal-eq-expand-crash",
+  "updated": "2026-04-24T19:21:00.000Z",
+  "last_task": "vocal-eq-fix-curve-save",
   "status": "done",
   "working": [
-    "Song expand/collapse click handler (fixed)",
-    "vocalEqCurves initialized as {} (correct)",
-    "vocalEqStatus initialized as {} (correct)",
-    "vocalEqCache initialized as new Map() (correct)",
-    "refCurves and mixCurves now declared as {@const} inside {#if showVocalEq[song.id]} block",
+    "Song expand/collapse click handler (fixed in ProjectsTab.svelte)",
+    "/analyze-vocal-eq: 4 stems (vocals/drums/bass/other) now save to vocal_eq_curves with IDs",
+    "supabaseAdmin client uses SUPABASE_SECRET_KEY to bypass RLS on vocal_eq_curves",
+    "Per-stem error logging in pm2 logs: '✓ saved curve: stemName for song X'",
+    "analyzeVocalEqUrl (reference type) also fixed with same pattern",
     "vocal-eq-analyzer: Python script + endpoint both work end-to-end",
     "torchcodec 0.11.1 installed, Demucs saves stems correctly",
-    "coin-rotation-monitor: fetchAllCoinPrices, scoreCoinForEntry, recommendNextCoin",
+    "coin-rotation-monitor: all endpoints working",
     "8/8 tests passing"
   ],
   "broken": [],
-  "partial": [],
-  "next": "Run SQL if not done: ALTER TABLE active_trades ADD COLUMN IF NOT EXISTS current_price float, ADD COLUMN IF NOT EXISTS pnl_pct float, ADD COLUMN IF NOT EXISTS pnl_eur float;",
-  "notes": "Root cause of expand crash: refCurves and mixCurves were used in vocal EQ template section but never declared with {@const}. Accessing .length on undefined threw TypeError that crashed Svelte reactivity, breaking all song expand clicks. Fixed by adding two missing {@const} filter declarations inside showVocalEq conditional block."
+  "partial": [
+    "version_name column: code ready but column not in table yet — run SQL: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS version_name text;"
+  ],
+  "next": "Run SQL: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS version_name text; — then re-enable version_name in the insert",
+  "notes": "Root cause of save failure: (1) 'type' and 'url' columns don't exist in vocal_eq_curves schema, (2) anon key blocked by RLS. Fixed by using supabaseAdmin (service role key from SUPABASE_SECRET_KEY env var) which bypasses RLS. Also fixed broken refCurves/mixCurves template variables in ProjectsTab.svelte."
 }

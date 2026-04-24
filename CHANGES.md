@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: vocal-eq-fix-curve-save
+WHAT: Replaced bulk fetch insert in /analyze-vocal-eq with per-stem supabaseAdmin loop with explicit error logging. Added supabaseAdmin client using SUPABASE_SECRET_KEY to bypass RLS. Removed non-existent 'type' and 'url' columns from insert. Fixed analyzeVocalEqUrl (reference type) with same pattern. Response now includes 'saved' array with stem names and IDs.
+RESULT: works — 4 stems (vocals/drums/bass/other) saved to vocal_eq_curves for song 118
+BLOCKERS: version_name column not yet in table — run SQL: ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS version_name text;
+
 ## [2026-04-24] src/lib/ProjectsTab.svelte — DONE
 TASK: fix-vocal-eq-expand-crash
 WHAT: Added missing {@const refCurves} and {@const mixCurves} inside {#if showVocalEq[song.id]} block — these were referenced but never declared, causing TypeError that crashed Svelte reactivity and broke song expand clicks

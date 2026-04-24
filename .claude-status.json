@@ -1,24 +1,22 @@
 {
   "updated": "2026-04-25T00:00:00.000Z",
-  "last_task": "analyzer-project-refs-merge-my-refs",
-  "status": "partial",
+  "last_task": "speicherbox-file-storage",
+  "status": "done",
   "working": [
-    "CHANGE 1: refTrackOptions includes popularity + collection_name",
-    "CHANGE 1: ref dropdown optgroups: PROJECT REFS (work_data.reference_links) / HIT SONGS (popularity>70 or daily_chart/tiktok_trending) / LIBRARY",
-    "CHANGE 1: buildSuccessPattern(refsOverride) — accepts optional refs array",
-    "CHANGE 1: /analyze-success-match uses project refs first when work_data.reference_links set",
-    "CHANGE 2: POST /migrate-my-refs-to-library — ran, 2 tracks migrated source=user→agent",
-    "CHANGE 2: MY REFERENCES section removed from BrainTab",
-    "CHANGE 2: libraryRefs includes source=user/mozart/promoted=true",
-    "CHANGE 2: CHECKOUT ★ Mine removed, only → lib (saves agent)",
-    "CHANGE 2: brain-reftrack-promote saves source=agent",
-    "8/8 tests passing, clean vite build"
+    "GET /speicherbox — returns brain_knowledge category=speicherbox, newest first",
+    "POST /save-speicherbox-file — base64 → /Dropbox/!MOMENTUM MUSIC/Brain/speicherbox/TIMESTAMP_name + Supabase insert",
+    "POST /open-file — exec open 'path' to open file in macOS default app",
+    "BrainTab: saveToSpeicherbox(file) — canvas thumbnail (120px JPEG), Haiku text extraction, base64 upload",
+    "BrainTab: loadSpeicherbox() — fetches from /speicherbox on onMount",
+    "BrainTab: paste handler → extractImageText + saveToSpeicherbox",
+    "BrainTab: drop handler → extractImageText + saveToSpeicherbox for images; saveToSpeicherbox for files",
+    "SPEICHERBOX section below LIBRARY — collapsible, grid of cards with thumbnail/icon, name, date, extract, delete",
+    "8/8 tests passing, clean vite build, endpoint verified"
   ],
   "broken": [],
   "partial": [
-    "CHANGE 3 (Brain Speicherbox) — spec was cut off mid-sentence, needs user to resend",
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
-  "next": "User needs to resend CHANGE 3 (Brain Speicherbox: files stored by date) — message was cut off at '/Users/remo/Dropbox/!MOMENTUM'",
-  "notes": "work_data.reference_links is not yet populated by any UI — PROJECT REFS optgroup will be empty until a UI is added to link refs to songs."
+  "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables",
+  "notes": "Speicherbox folder: /Users/remo/Dropbox/!MOMENTUM MUSIC/Brain/speicherbox — created automatically. Files named YYYY-MM-DD_HH-MM_original.ext"
 }

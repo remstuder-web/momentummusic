@@ -1314,3 +1314,9 @@ TASK: change1+2 of three — analyzer project refs first + merge my-refs into li
 WHAT: CHANGE 1 — refTrackOptions select now includes popularity/collection_name; ref dropdown shows optgroups PROJECT REFS/HIT SONGS/LIBRARY based on work_data.reference_links + popularity/collection_name; buildSuccessPattern(refsOverride) accepts optional refs; /analyze-success-match checks work_data.reference_links and passes project refs to buildSuccessPattern first. CHANGE 2 — POST /migrate-my-refs-to-library (ran: 2 migrated); MY REFERENCES section removed from BrainTab; libraryRefs now includes source=user/mozart/promoted; CHECKOUT: ★ Mine removed, only → lib (source=agent); brain-reftrack-promote saves agent not user
 RESULT: works — clean build, 8/8 tests, migration confirmed 2 tracks moved
 BLOCKERS: CHANGE 3 was cut off mid-spec — needs completion from user
+
+## [2026-04-25] momentum-watcher.cjs + BrainTab.svelte — STATUS: DONE
+TASK: speicherbox file storage endpoint + Brain tab UI + paste support
+WHAT: GET /speicherbox (brain_knowledge category=speicherbox, newest first); POST /save-speicherbox-file (base64 decode → Dropbox/!MOMENTUM MUSIC/Brain/speicherbox/TIMESTAMP_name, insert brain_knowledge with metadata{file_path,file_type,thumbnail}); POST /open-file (exec open "path"); BrainTab: loadSpeicherbox()/saveToSpeicherbox() with canvas thumbnail generation + Haiku text extraction for images; onMount loads speicherbox; paste and drop handlers save to speicherbox + extract text; SPEICHERBOX section below LIBRARY with grid of cards (thumbnail/icon, name, date, extracted text preview, delete); CSS for speicher-card/thumb/grid
+RESULT: works — file saved to disk, Supabase entry created, GET /speicherbox returns item; 8/8 tests passing
+BLOCKERS: none

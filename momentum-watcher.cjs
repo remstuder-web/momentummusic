@@ -9116,6 +9116,85 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /speicherbox — list stored speicherbox entries ──────────────────
+  if (req.method === 'GET' && req.url === '/speicherbox') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const { data } = await supabase
+        .from('brain_knowledge')
+        .select('*')
+        .eq('category', 'speicherbox')
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(100)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, items: data || [] }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /save-speicherbox-file — save base64 file to disk + brain ───────
+  if (req.method === 'POST' && req.url === '/save-speicherbox-file') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body)
+        const speicherboxDir = '/Users/remo/Dropbox/!MOMENTUM MUSIC/Brain/speicherbox'
+        if (!fs.existsSync(speicherboxDir)) fs.mkdirSync(speicherboxDir, { recursive: true })
+        const timestamp = new Date().toISOString().replace(/T/, '_').replace(/:/g, '-').slice(0, 16)
+        const safeOrigName = (data.originalName || 'file').replace(/[^a-zA-Z0-9._-]/g, '_')
+        const filename = timestamp + '_' + safeOrigName
+        const filePath = path.join(speicherboxDir, filename)
+        const buffer = Buffer.from(data.fileData, 'base64')
+        fs.writeFileSync(filePath, buffer)
+        await supabase.from('brain_knowledge').insert({
+          category: 'speicherbox',
+          title: (data.originalName || 'file') + ' — ' + new Date().toLocaleDateString('de-CH'),
+          content: data.extractedText || '',
+          active: true,
+          metadata: JSON.stringify({
+            file_path: filePath,
+            file_type: data.fileType || '',
+            original_name: data.originalName || '',
+            stored_name: filename,
+            thumbnail: data.thumbnail || null
+          })
+        })
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, stored: filename, path: filePath }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /open-file — open a local file with macOS default app ───────────
+  if (req.method === 'POST' && req.url === '/open-file') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', () => {
+      try {
+        const { path: filePath } = JSON.parse(body)
+        if (!filePath) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'No path' })); return }
+        exec('open "' + filePath.replace(/"/g, '\\"') + '"')
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /brain-file-upload — multipart upload to Dropbox/Brain/uploads + Obsidian ──
   if (req.method === 'POST' && req.url === '/brain-file-upload') {
     res.setHeader('Access-Control-Allow-Origin', '*')

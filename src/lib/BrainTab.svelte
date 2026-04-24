@@ -42,6 +42,9 @@
   let fileUploading = $state(false)
   let processing = $state(false)
   let imageExtracting = $state(false)
+  let speicherboxItems = $state([])
+  let speicherboxExpanded = $state(true)
+  let speicherboxSaving = $state(false)
   let capturing = $state(false)
   let captureResult = $state(null)
   let captureMixingSuggestions = $state([])
@@ -216,6 +219,79 @@
     if (tErr) console.error('reference_tracks load error:', tErr.message)
     referenceTrackEntries = tracks || []
     await loadCategories()
+  }
+
+  async function loadSpeicherbox() {
+    try {
+      const r = await fetch('http://localhost:4242/speicherbox')
+      const d = await r.json()
+      speicherboxItems = d.items || []
+    } catch(e) {}
+  }
+
+  async function saveToSpeicherbox(file) {
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    speicherboxSaving = true
+    try {
+      // Generate thumbnail for images
+      let thumbnail = null
+      if (file.type.startsWith('image/')) {
+        thumbnail = await new Promise(res => {
+          const img = new Image()
+          const url = URL.createObjectURL(file)
+          img.onload = () => {
+            const canvas = document.createElement('canvas')
+            const max = 120
+            const ratio = Math.min(max / img.width, max / img.height)
+            canvas.width = Math.round(img.width * ratio)
+            canvas.height = Math.round(img.height * ratio)
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+            URL.revokeObjectURL(url)
+            res(canvas.toDataURL('image/jpeg', 0.7).split(',')[1])
+          }
+          img.src = url
+        })
+      }
+
+      // Extract text from image via Haiku if API key available
+      let extractedText = ''
+      if (file.type.startsWith('image/') && apiKey) {
+        const base64data = await new Promise((res, rej) => {
+          const r = new FileReader()
+          r.onload = () => res(r.result.split(',')[1])
+          r.onerror = rej
+          r.readAsDataURL(file)
+        })
+        try {
+          const exRes = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+            body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 400, messages: [{ role: 'user', content: [
+              { type: 'image', source: { type: 'base64', media_type: file.type, data: base64data } },
+              { type: 'text', text: 'Extract all text and key information from this image. Return as plain text.' }
+            ]}]})
+          })
+          const exData = await exRes.json()
+          extractedText = exData.content?.[0]?.text || ''
+        } catch(e) {}
+      }
+
+      // Read file as base64
+      const fileData = await new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = () => res(r.result.split(',')[1])
+        r.onerror = rej
+        r.readAsDataURL(file)
+      })
+
+      const saveRes = await fetch('http://localhost:4242/save-speicherbox-file', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileData, originalName: file.name || 'paste.png', fileType: file.type, extractedText, thumbnail })
+      })
+      const saved = await saveRes.json()
+      if (saved.ok) await loadSpeicherbox()
+    } catch(e) { console.error('speicherbox save error:', e.message) }
+    speicherboxSaving = false
   }
 
   async function updateTrackNotes(id, notes) {
@@ -1060,6 +1136,7 @@ Return ONLY JSON (single item array):
 
   onMount(async () => {
     await loadEntries()
+    loadSpeicherbox()
     loadDueReview().then(items => dueReviewItems = items)
 
     const interval = setInterval(() => {
@@ -1159,8 +1236,9 @@ Return ONLY JSON (single item array):
       dumpDragging = null; fileDragging = false
       const file = [...e.dataTransfer.files][0]
       if (!file) return
-      if (file.type.startsWith('image/')) { await extractImageText(file); return }
+      if (file.type.startsWith('image/')) { await extractImageText(file); await saveToSpeicherbox(file); return }
       if (file.type === 'text/plain') { dumpText = await file.text(); return }
+      await saveToSpeicherbox(file)
       await handleFileDrop(file)
     }}>
 
@@ -1218,7 +1296,10 @@ Return ONLY JSON (single item array):
         if (imageItem) {
           e.preventDefault()
           const file = imageItem.getAsFile()
-          if (file) await extractImageText(file)
+          if (file) {
+            await extractImageText(file)
+            await saveToSpeicherbox(file)
+          }
         }
       }}
     ></textarea>
@@ -1871,6 +1952,58 @@ Return ONLY JSON (single item array):
         {/each}
         {#if !filteredLibraryRefs.length}
           <p class="brain-empty" style="font-size:11px;padding:6px 0">{librarySearch ? 'No matches.' : 'Library empty.'}</p>
+        {/if}
+      {/if}
+    </div>
+
+    <!-- SPEICHERBOX -->
+    <div class="refs-section speicher-section">
+      <div class="refs-section-header speicher-hdr"
+           onclick={() => speicherboxExpanded = !speicherboxExpanded}>
+        <span>📦 SPEICHERBOX</span>
+        <span class="refs-count">{speicherboxItems.length}</span>
+        {#if speicherboxSaving}<span style="font-size:9px;color:#c9a84c;margin-left:4px">saving…</span>{/if}
+        <span style="margin-left:auto">{speicherboxExpanded ? '▲' : '▼'}</span>
+      </div>
+      {#if speicherboxExpanded}
+        {#if !speicherboxItems.length}
+          <p class="brain-empty" style="font-size:11px;padding:8px 0">No files yet — paste or drop an image, PDF, or file into the dump area.</p>
+        {:else}
+          <div class="speicher-grid">
+            {#each speicherboxItems as item}
+              {@const meta = (() => { try { return typeof item.metadata === 'string' ? JSON.parse(item.metadata) : (item.metadata || {}) } catch(e) { return {} } })()}
+              {@const isImg = (meta.file_type || '').startsWith('image/')}
+              {@const dateStr = item.created_at ? new Date(item.created_at).toLocaleDateString('de-CH', { day:'2-digit', month:'2-digit' }) : ''}
+              <div class="speicher-card" title={item.title}>
+                <div class="speicher-thumb" onclick={async () => {
+                  if (meta.file_path) await fetch('http://localhost:4242/open-file', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path: meta.file_path }) })
+                }}>
+                  {#if meta.thumbnail}
+                    <img src="data:image/jpeg;base64,{meta.thumbnail}" alt={meta.original_name} class="speicher-img" />
+                  {:else if isImg}
+                    <div class="speicher-icon">🖼</div>
+                  {:else if (meta.file_type || '').includes('pdf')}
+                    <div class="speicher-icon">📄</div>
+                  {:else if (meta.file_type || '').startsWith('audio/')}
+                    <div class="speicher-icon">🎵</div>
+                  {:else}
+                    <div class="speicher-icon">📎</div>
+                  {/if}
+                </div>
+                <div class="speicher-info">
+                  <div class="speicher-name">{meta.original_name || item.title}</div>
+                  <div class="speicher-date">{dateStr}</div>
+                  {#if item.content}
+                    <div class="speicher-extract">{item.content.slice(0, 60)}{item.content.length > 60 ? '…' : ''}</div>
+                  {/if}
+                </div>
+                <button class="speicher-del" onclick={async () => {
+                  await supabase.from('brain_knowledge').update({ active: false }).eq('id', item.id)
+                  speicherboxItems = speicherboxItems.filter(i => i.id !== item.id)
+                }}>×</button>
+              </div>
+            {/each}
+          </div>
         {/if}
       {/if}
     </div>
@@ -2810,6 +2943,22 @@ Return ONLY JSON (single item array):
   .refs-section-header.refs-checkout { color: #9e9690; cursor: default; }
   .refs-section-header.refs-library { color: #444; }
   .refs-section-header.refs-library:hover { color: #666; }
+  .speicher-section { margin-top: 8px; }
+  .speicher-hdr { color: rgba(201,168,76,.5); }
+  .speicher-hdr:hover { color: rgba(201,168,76,.8); }
+  .speicher-grid { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
+  .speicher-card { display: flex; align-items: flex-start; gap: 8px; background: #131313; border: 1px solid #222; border-radius: 3px; padding: 6px 8px; cursor: default; }
+  .speicher-card:hover { border-color: #2a2a2a; }
+  .speicher-thumb { width: 40px; height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 2px; overflow: hidden; background: #1a1a1a; }
+  .speicher-thumb:hover { opacity: .8; }
+  .speicher-img { width: 100%; height: 100%; object-fit: cover; }
+  .speicher-icon { font-size: 18px; line-height: 1; }
+  .speicher-info { flex: 1; min-width: 0; }
+  .speicher-name { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #cec9c1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .speicher-date { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; margin-top: 2px; }
+  .speicher-extract { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #555; margin-top: 2px; line-height: 1.3; }
+  .speicher-del { background: transparent; border: none; color: #333; font-size: 13px; cursor: pointer; padding: 0 2px; align-self: flex-start; }
+  .speicher-del:hover { color: #e05a4a; }
   .refs-count { font-family: 'Space Mono', monospace; font-size: 8px; background: #1c1c1c; padding: 1px 5px; border-radius: 8px; color: #555; }
   .refs-empty { font-size: 11px; color: #444; padding: 6px 0 8px; font-style: italic; }
   .ref-track-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #161616; font-size: 12px; }

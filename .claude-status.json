@@ -1,23 +1,19 @@
 {
-  "updated": "2026-04-24T20:11:00.000Z",
-  "last_task": "obsidian-smart-folders",
+  "updated": "2026-04-24T20:15:00.000Z",
+  "last_task": "tiktok-daily-schedule",
   "status": "done",
   "working": [
-    "Obsidian smart folders: 8 emoji folders created, 233 entries backfilled",
-    "⚡ CORE: 36 files (locked/priority entries)",
-    "📋 RULES: 2 files (music_tips/power_dynamics_principles)",
-    "🎵 PRODUCTION: 42 files (mixing_technique, production_style, sound_design)",
-    "🧠 KNOWLEDGE: 34 files (market_knowledge, industry_insight, observation)",
-    "👥 PEOPLE: 32 files (networking, contact_profile, collaboration)",
-    "📦 MY SONGS: 13 files (own_production, project_references)",
-    "💡 IDEAS: 4 files (creative_process, question)",
-    "INDEX.md auto-generated at vault root",
-    "Protected files (Notes/, NOW.md, Unbenannt.canvas, Willkommen.md) untouched",
+    "TikTok trends: fires daily at 9am via shared setInterval",
+    "Morning briefing: sends TikTok top 5 as 3rd Telegram message after crypto signal",
+    "/tiktok Telegram command: triggers agent-tiktok-trends, confirms with CHECKOUT message",
+    "Obsidian smart folders: 8 emoji folders, 233 entries backfilled, INDEX.md generated",
     "connectBrainEntries() + /connect Telegram command",
+    "/analyze-vocal-eq: fuzzy audio search + supabaseAdmin saves",
+    "GET /vocal-eq-curves: supabaseAdmin reads, 30-key curves returned",
     "8/8 tests passing"
   ],
   "broken": [],
   "partial": [],
-  "next": "Open Obsidian to confirm folder structure looks correct",
-  "notes": "saveBrainFile() always checks fs.existsSync() before writing to smart folder. INDEX.md is overwrite-allowed (auto-generated). updateObsidianIndex() also called in brainToObsidian() flow and after backfill."
+  "next": "Test /tiktok via Telegram to confirm agent fires correctly",
+  "notes": "TikTok 9am check reuses the existing 60s setInterval (same one as Sunday brain review). Morning briefing TikTok block uses supabase anon client to read reference_tracks where collection_name='tiktok_trending'. Errors are caught and logged without breaking the briefing flow."
 }

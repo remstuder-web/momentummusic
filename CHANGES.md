@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: tiktok-daily-schedule
+WHAT: Added 9am daily TikTok trends trigger in shared setInterval (alongside Sunday brain review). Morning briefing now sends TikTok top 5 as a 3rd Telegram message after crypto signal. /tiktok Telegram command for manual trigger. /tiktok added to /help.
+RESULT: works — watcher starts clean
+BLOCKERS: none
+
+## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: obsidian-smart-folders
 WHAT: Added getSmartFolder() routing (8 emoji folders by category/confidence/priority), updateObsidianIndex() that writes INDEX.md with top 10 entries per section. saveBrainFile() now copies to smart folder if fs.existsSync check passes. 8s startup backfill populated 233 entries. Protected files (Notes/, NOW.md, Unbenannt.canvas, Willkommen.md) untouched.
 RESULT: works — ⚡ CORE:36, 📋 RULES:2, 🎯 GOALS:2, 🎵 PRODUCTION:42, 🧠 KNOWLEDGE:34, 👥 PEOPLE:32, 📦 MY SONGS:13, 💡 IDEAS:4

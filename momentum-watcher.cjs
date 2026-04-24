@@ -2417,6 +2417,16 @@ async function handleOwnerCommand(chatId, text) {
       await sendTelegram(chatId, msg)
     } catch(e) { await sendTelegram(chatId, '❌ Next coin error: ' + e.message) }
   }
+  else if (cmd === '/tiktok') {
+    await sendTelegram(chatId, '⏳ Fetching TikTok top 10...')
+    fetch('http://localhost:4242/agent-tiktok-trends', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: process.env.ANTHROPIC_API_KEY })
+    }).then(r => r.json()).then(() => {
+      sendTelegram(chatId, '✓ TikTok trends updated — check Brain CHECKOUT')
+    }).catch(e => sendTelegram(chatId, '✗ Error: ' + e.message))
+  }
   else if (cmd === '/connect') {
     await sendTelegram(chatId, '⏳ Analyzing brain connections...')
     try {
@@ -2461,6 +2471,7 @@ async function handleOwnerCommand(chatId, text) {
       '/unmonitor [name] — Remove from monitor list\n' +
       '/enrich — Bulk enrich all contacts\n' +
       '/improve — Weekly system improvement review\n' +
+      '/tiktok — Fetch TikTok trending sounds now\n' +
       '/connect — Find connections between brain entries\n' +
       '📷 Send photo — Extract WhatsApp screenshot\n' +
       '↩️ Forward message — Auto-analyze forwarded chat\n' +
@@ -4787,6 +4798,22 @@ ${context}` }]
             if (crypto.binanceAction === 'buy') cryptoMsg += '\n\n→ Open Binance: ' + crypto.binanceDeepLink
             sendTelegram(TELEGRAM_OWNER_ID, cryptoMsg).catch(() => {})
           } catch(e) { console.warn('crypto signal in briefing failed:', e.message) }
+          // TikTok top 5 as separate message
+          try {
+            const tiktokTracks = await supabase
+              .from('reference_tracks')
+              .select('title, artist')
+              .eq('collection_name', 'tiktok_trending')
+              .order('created_at', { ascending: false })
+              .limit(5)
+            if (tiktokTracks.data?.length) {
+              let morningMsg = '🎵 TikTok Top 5:\n'
+              morningMsg += tiktokTracks.data
+                .map((t, i) => (i + 1) + '. ' + t.artist + ' — ' + t.title)
+                .join('\n')
+              sendTelegram(TELEGRAM_OWNER_ID, morningMsg).catch(() => {})
+            }
+          } catch(e) { console.warn('tiktok top 5 in briefing failed:', e.message) }
         }
         console.log(`✓ Morning briefing generated for ${todayISO}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -9401,6 +9428,14 @@ Max 150 words. Be specific and actionable.` }]
       weeklyBrainReview()
       weeklySystemReview()
       connectBrainEntries()
+    }
+    // 9am daily — TikTok trends
+    if (now.getHours() === 9 && now.getMinutes() === 0) {
+      fetch('http://localhost:4242/agent-tiktok-trends', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: process.env.ANTHROPIC_API_KEY })
+      }).catch(e => console.error('tiktok-trends schedule error:', e.message))
     }
   }, 60000)
   setInterval(() => {

@@ -54,6 +54,7 @@
   let myRefsExpanded = $state(true)
   let checkoutExpanded = $state(true)
   let librarySearch = $state('')
+  let librarySort = $state('date')
 
   // Preview audio player
   let previewAudio = null
@@ -147,16 +148,19 @@
       .sort((a, b) => (a.artist || '').localeCompare(b.artist || ''))
   )
   const libraryRefs = $derived(
-    referenceTrackEntries
-      .filter(t => t.source === 'agent' && !t.promoted)
-      .sort((a, b) => (a.artist || '').localeCompare(b.artist || ''))
+    referenceTrackEntries.filter(t => t.source === 'agent' && !t.promoted)
   )
   const filteredLibraryRefs = $derived(
-    libraryRefs.filter(t =>
-      !librarySearch ||
-      (t.title || '').toLowerCase().includes(librarySearch.toLowerCase()) ||
-      (t.artist || '').toLowerCase().includes(librarySearch.toLowerCase())
-    )
+    libraryRefs
+      .filter(t =>
+        !librarySearch ||
+        (t.title || '').toLowerCase().includes(librarySearch.toLowerCase()) ||
+        (t.artist || '').toLowerCase().includes(librarySearch.toLowerCase())
+      )
+      .sort((a, b) => {
+        if (librarySort === 'artist') return (a.artist || '').localeCompare(b.artist || '')
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0)
+      })
   )
 
   // Categories derived from loaded entries — used for Claude prompts inside processDump
@@ -1688,7 +1692,7 @@ Return ONLY JSON (single item array):
                   }}>+</button>
                 {/if}
                 <span class="brain-reftrack-info">
-                  {track.artist ? track.artist + ' — ' : ''}{track.title}
+                  {track.artist || 'Unknown'} — {track.title}
                   <span class="brain-reftrack-stats">
                     {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
                     {track.key ? ' · ' + track.key + (track.scale ? ' ' + track.scale : '') : ''}
@@ -1733,7 +1737,7 @@ Return ONLY JSON (single item array):
         {#each checkoutRefs as track}
           <div class="ref-track-row checkout-row">
             <span class="ref-source-dot checkout">⬇</span>
-            <span class="ref-title">{track.artist ? track.artist + ' — ' : ''}{track.title}</span>
+            <span class="ref-title">{track.artist || 'Unknown'} — {track.title}</span>
             <span class="ref-stats">
               {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
               {track.camelot ? ' · ' + track.camelot : ''}
@@ -1771,7 +1775,7 @@ Return ONLY JSON (single item array):
         {#each myRefs as track}
           <div class="ref-track-row">
             <span class="ref-source-dot user">●</span>
-            <span class="ref-title">{track.artist ? track.artist + ' — ' : ''}{track.title}</span>
+            <span class="ref-title">{track.artist || 'Unknown'} — {track.title}</span>
             <span class="ref-stats">
               {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
               {track.camelot ? ' · ' + track.camelot : (track.key ? ' · ' + track.key : '')}
@@ -1797,11 +1801,15 @@ Return ONLY JSON (single item array):
         <span style="margin-left:auto">{libraryExpanded ? '▲' : '▼'}</span>
       </div>
       {#if libraryExpanded}
+        <div class="library-sort-btns">
+          <button class="sort-btn {librarySort === 'date' ? 'active' : ''}" onclick={() => librarySort = 'date'}>↓ Date</button>
+          <button class="sort-btn {librarySort === 'artist' ? 'active' : ''}" onclick={() => librarySort = 'artist'}>A–Z</button>
+        </div>
         <input class="library-search" placeholder="Search library..." bind:value={librarySearch} />
         {#each filteredLibraryRefs as track}
           <div class="ref-track-row library">
             <span class="ref-source-dot">○</span>
-            <span class="ref-title">{track.artist ? track.artist + ' — ' : ''}{track.title}</span>
+            <span class="ref-title">{track.artist || 'Unknown'} — {track.title}</span>
             <span class="ref-stats">
               {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
               {track.camelot ? ' · ' + track.camelot : (track.key ? ' · ' + track.key : '')}
@@ -2772,6 +2780,9 @@ Return ONLY JSON (single item array):
   .ref-checkout-btns { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
   .library-search { background: #1c1c1c; border: 1px solid #252525; color: #9e9690; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 4px 8px; border-radius: 3px; width: 100%; margin-bottom: 6px; outline: none; box-sizing: border-box; }
   .library-search:focus { border-color: #303030; }
+  .library-sort-btns { display: flex; gap: 4px; margin-bottom: 6px; }
+  .sort-btn { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; background: transparent; border: 1px solid #252525; color: #444; padding: 2px 8px; border-radius: 2px; cursor: pointer; letter-spacing: .06em; }
+  .sort-btn.active { border-color: #c9a84c; color: #c9a84c; background: rgba(201,168,76,.06); }
   .promote-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #666; padding: 1px 5px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .promote-btn:hover { background: rgba(201,168,76,.1); color: #c9a84c; }
   .promote-btn.gold { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: #c9a84c; border: 1px solid rgba(201,168,76,.4); background: rgba(201,168,76,.06); padding: 2px 6px; border-radius: 2px; cursor: pointer; }

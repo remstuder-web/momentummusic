@@ -1298,6 +1298,50 @@ async function fetchTikTokRealData() {
   }
 }
 
+async function saveToCheckout(track) {
+  if (!track.title || !track.artist) return false
+  const { data: existing } = await supabase
+    .from('reference_tracks')
+    .select('id')
+    .ilike('title', track.title.trim())
+    .ilike('artist', track.artist.trim())
+    .maybeSingle()
+  if (existing) {
+    console.log('skip duplicate:', track.artist, '—', track.title)
+    return false
+  }
+  const row = {
+    title: track.title.trim(),
+    artist: track.artist.trim(),
+    source: 'checkout',
+    checkout_date: new Date().toISOString(),
+    collection_name: track.collection_name || 'scout',
+  }
+  if (track.approved != null) row.approved = track.approved
+  if (track.spotify_id)        row.spotify_id = track.spotify_id
+  if (track.tempo || track.bpm) row.tempo = track.tempo || track.bpm
+  if (track.key)               row.key = track.key
+  if (track.scale)             row.scale = track.scale
+  if (track.camelot)           row.camelot = track.camelot
+  if (track.energy != null)    row.energy = track.energy
+  if (track.danceability != null) row.danceability = track.danceability
+  if (track.loudness != null)  row.loudness = track.loudness
+  if (track.valence != null)   row.valence = track.valence
+  if (track.brightness != null) row.brightness = track.brightness
+  if (track.popularity != null) row.popularity = track.popularity
+  if (track.artist_popularity != null) row.artist_popularity = track.artist_popularity
+  if (track.artist_followers != null)  row.artist_followers = track.artist_followers
+  if (track.preview_url)       row.preview_url = track.preview_url
+  if (track.album_art)         row.album_art = track.album_art
+  if (track.album)             row.album = track.album
+  if (track.release_date)      row.release_date = track.release_date
+  if (track.genre_tags)        row.genre_tags = track.genre_tags
+  const { error } = await supabase.from('reference_tracks').insert(row)
+  if (error) { console.error('saveToCheckout error:', track.title, error.message); return false }
+  console.log('✓ checkout:', track.artist, '—', track.title)
+  return true
+}
+
 async function getCrossChartTopics() {
   try {
     const [tiktokRes, spotifyRes] = await Promise.all([
@@ -1333,17 +1377,10 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
     realTrends = await fetchTikTokRealData()
     console.log(`  TikTok agent: ${realTrends.length} real trends fetched`)
 
-    // Save all raw tracks to reference_tracks checkout
+    // Save all raw tracks to reference_tracks checkout (skip existing)
     for (const track of realTrends) {
-      if (!track.title) continue
-      supabaseAdmin.from('reference_tracks').upsert({
-        title: track.title,
-        artist: track.artist || '',
-        source: 'checkout',
-        checkout_date: new Date().toISOString(),
-        collection_name: 'tiktok_trending',
-        approved: true
-      }, { onConflict: 'title,artist' }).catch(() => {})
+      if (!track.title || !track.artist) continue
+      await saveToCheckout({ title: track.title, artist: track.artist, collection_name: 'tiktok_trending', approved: true })
     }
 
     // 2. Spotify search + Essentia for top tracks
@@ -1383,16 +1420,13 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
           }
           analyzedTrends.push(trackData)
 
-          // Store in reference_tracks (fire-and-forget)
-          fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
-            method: 'POST', headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-            body: JSON.stringify({
-              spotify_id: spTrack.id, title: spTrack.name,
-              artist: spTrack.artists.map(a => a.name).join(', '),
-              collection_name: 'tiktok_trending', source: 'checkout', checkout_date: new Date().toISOString(), approved: true,
-              tempo: feat.bpm || null, key: feat.key || null, scale: feat.scale || null,
-              energy: feat.energy || null, danceability: feat.danceability || null
-            })
+          // Store in reference_tracks (skip if already exists)
+          saveToCheckout({
+            spotify_id: spTrack.id, title: spTrack.name,
+            artist: spTrack.artists.map(a => a.name).join(', '),
+            collection_name: 'tiktok_trending', approved: true,
+            tempo: feat.bpm || null, key: feat.key || null, scale: feat.scale || null,
+            energy: feat.energy || null, danceability: feat.danceability || null
           }).catch(() => {})
 
           // Store in brain_knowledge (fire-and-forget)
@@ -4887,31 +4921,15 @@ ${context}` }]
         const dateStr = now.slice(0, 10)
         for (const track of tracksToSave) {
           try {
-            const { data: existing } = await supabase
-              .from('reference_tracks')
-              .select('id')
-              .ilike('title', track.title)
-              .maybeSingle()
-            if (existing) continue
-            const row = {
-              title: track.title,
-              artist: track.artist,
+            await saveToCheckout({
+              title: track.title, artist: track.artist,
               collection_name: 'scout_' + dateStr,
-              source: 'checkout',
-              checkout_date: now,
-              tempo: track.bpm || null,
-              key: track.key || null,
-              camelot: track.camelot || null,
-              energy: track.energy || null,
-              danceability: track.danceability || null,
-              loudness: track.loudness_lufs || null,
-              valence: track.valence || null,
-              brightness: track.brightness || null
-            }
-            if (track.spotify_id) row.spotify_id = track.spotify_id
-            const { error } = await supabase.from('reference_tracks').insert(row)
-            if (error) console.error('✗ kworb save FAILED:', error.message, error.code)
-            else console.log('✓ Scout → checkout:', track.artist, '—', track.title)
+              spotify_id: track.spotify_id || null,
+              tempo: track.bpm || null, key: track.key || null,
+              camelot: track.camelot || null, energy: track.energy || null,
+              danceability: track.danceability || null, loudness: track.loudness_lufs || null,
+              valence: track.valence || null, brightness: track.brightness || null
+            })
           } catch(e) {
             console.error('scout track save error:', e.message)
           }
@@ -4925,33 +4943,7 @@ ${context}` }]
         for (const track of mentionedTracks) {
           if (!track.title || !track.artist) continue
           try {
-            const { data: existing } = await supabase
-              .from('reference_tracks')
-              .select('id')
-              .ilike('title', track.title)
-              .ilike('artist', track.artist)
-              .maybeSingle()
-
-            if (existing) {
-              console.log('skip (exists):', track.title)
-              continue
-            }
-
-            const { data, error } = await supabase
-              .from('reference_tracks')
-              .insert({
-                title: track.title,
-                artist: track.artist,
-                collection_name: 'scout_' + dateMentioned,
-                source: 'checkout'
-              })
-              .select()
-
-            if (error) {
-              console.error('✗ INSERT FAILED:', error.message, error.details, error.code)
-            } else {
-              console.log('✓ INSERTED:', track.artist, '—', track.title)
-            }
+            await saveToCheckout({ title: track.title, artist: track.artist, collection_name: 'scout_' + dateMentioned })
           } catch(e) {
             console.error('✗ EXCEPTION:', e.message)
           }
@@ -5419,27 +5411,21 @@ ${context}` }]
           const spotifyUrl = track.external_urls?.spotify || `https://open.spotify.com/track/${track.id}`
           const collectionName = collection || 'reference_current'
 
-          await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
-            method: 'POST',
-            headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-            body: JSON.stringify({
-              spotify_id: track.id,
-              title: track.name,
-              artist: track.artists.map(a => a.name).join(', '),
-              album: track.album?.name,
-              release_date: track.album?.release_date,
-              genre_tags: artist.genres || [],
-              tempo: bpm || null,
-              key: key || null,
-              camelot: camelot || null,
-              popularity: track.popularity,
-              preview_url: track.preview_url,
-              album_art: track.album?.images?.[0]?.url,
-              collection_name: collectionName,
-              source: 'checkout',
-              checkout_date: new Date().toISOString(),
-              approved: true
-            })
+          await saveToCheckout({
+            spotify_id: track.id,
+            title: track.name,
+            artist: track.artists.map(a => a.name).join(', '),
+            album: track.album?.name,
+            release_date: track.album?.release_date,
+            genre_tags: artist.genres || [],
+            tempo: bpm || null,
+            key: key || null,
+            camelot: camelot || null,
+            popularity: track.popularity,
+            preview_url: track.preview_url,
+            album_art: track.album?.images?.[0]?.url,
+            collection_name: collectionName,
+            approved: true
           })
 
           if (song_id) {
@@ -5528,28 +5514,22 @@ ${context}` }]
             `Genres: ${(artist.genres||[]).slice(0,4).join(', ')}`,
           ].filter(Boolean).join('\n')
 
-          // Save to reference_tracks
-          await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
-            method: 'POST',
-            headers: { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-            body: JSON.stringify({
-              spotify_id: trackId,
-              title: track.name,
-              artist: track.artists.map(a => a.name).join(', '),
-              album: track.album?.name,
-              release_date: track.album?.release_date,
-              genre_tags: artist.genres || [],
-              tempo: bpm || null,
-              key: key || null,
-              popularity: track.popularity,
-              artist_popularity: artist.popularity,
-              artist_followers: artist.followers?.total,
-              preview_url: track.preview_url,
-              album_art: albumArt,
-              source: 'checkout',
-              checkout_date: new Date().toISOString(),
-              approved: true
-            })
+          // Save to reference_tracks (skip if already exists)
+          await saveToCheckout({
+            spotify_id: trackId,
+            title: track.name,
+            artist: track.artists.map(a => a.name).join(', '),
+            album: track.album?.name,
+            release_date: track.album?.release_date,
+            genre_tags: artist.genres || [],
+            tempo: bpm || null,
+            key: key || null,
+            popularity: track.popularity,
+            artist_popularity: artist.popularity,
+            artist_followers: artist.followers?.total,
+            preview_url: track.preview_url,
+            album_art: albumArt,
+            approved: true
           })
 
           // Save to brain_knowledge

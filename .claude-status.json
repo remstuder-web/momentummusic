@@ -1,20 +1,17 @@
 {
-  "updated": "2026-04-24T20:24:00.000Z",
-  "last_task": "tiktok-tracks-response-and-checkout",
+  "updated": "2026-04-24T20:50:00.000Z",
+  "last_task": "no-duplicate-ref-saves-library-sort",
   "status": "done",
   "working": [
-    "agent-tiktok-trends: returns tracks:realTrends (20 tracks) in response",
-    "All raw realTrends upserted to reference_tracks collection_name=tiktok_trending via supabaseAdmin",
-    "fetchTikTokRealData: __NEXT_DATA__ extraction, 100 tracks found, 20 returned",
-    "TikTok daily 9am + /tiktok Telegram command",
-    "Morning briefing: TikTok top 5 as 3rd message",
-    "Obsidian smart folders: 8 folders, 233 entries",
-    "connectBrainEntries + /connect command",
-    "vocal EQ full pipeline working",
+    "saveToCheckout(): dedup by title+artist (case insensitive) before every reference_tracks insert",
+    "All scout/tiktok/chart inserts replaced with saveToCheckout() calls",
+    "BrainTab library sort by date (newest first) or A–Z artist",
+    "Artist-first display (Unknown fallback) in all 3 ref sections",
+    "cleanup-brain-dupes uses supabaseAdmin — actually deletes (95 cleaned this session)",
     "8/8 tests passing"
   ],
   "broken": [],
   "partial": [],
-  "next": "Verify upsert lands in reference_tracks by querying Supabase for collection_name=tiktok_trending",
-  "notes": "upsert uses onConflict:'title,artist' — requires unique constraint on those columns in reference_tracks. If constraint doesn't exist in DB, upsert will insert duplicates. The supabaseAdmin client bypasses RLS so writes succeed regardless of RLS policy."
+  "next": "Monitor brain_knowledge for recurring duplicates — Obsidian sync is adding them continuously (date-prefixed titles). May need dedup logic in saveBrainFile() itself.",
+  "notes": "Brain dupes are being created by Obsidian sync writing date-prefixed titles. The cleanup-brain-dupes endpoint now works via supabaseAdmin. saveToCheckout() uses the anon supabase client (not supabaseAdmin) — RLS on reference_tracks allows anon inserts for checkout rows."
 }

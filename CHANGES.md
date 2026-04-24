@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-24] momentum-watcher.cjs + BrainTab.svelte — DONE
+TASK: no-duplicate-ref-saves, library-sort
+WHAT: Added saveToCheckout() with title+artist case-insensitive dedup check before every reference_tracks insert. Replaced all direct inserts in scout/tiktok/chart agents. Added library sort (date/artist) toggle to BrainTab, artist-first display in all three ref sections (checkout/my refs/library), fixed cleanup-brain-dupes to use supabaseAdmin.
+RESULT: works — 8/8 tests passing, no duplicate ref saves, sort buttons render
+BLOCKERS: none
+
 ## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: tiktok-tracks-response-and-checkout
 WHAT: Added tracks:realTrends to runAgentTikTokTrends return value. Added upsert of all raw realTrends to reference_tracks (collection_name=tiktok_trending) immediately after fetch, using supabaseAdmin to bypass RLS.

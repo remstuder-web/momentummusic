@@ -753,7 +753,6 @@
   let whatsappItems = $derived(inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp'))
   let pinnedTask = $derived((state.tasks || []).find(t => t.pinned))
   let scoutingArtists = $state(false)
-  let matchingDemos = $state(false)
   let whatsappName = $state('')
 
   function timeAgo(iso) {
@@ -815,25 +814,6 @@
     scoutingArtists = false
   }
 
-  async function matchDemos() {
-    const apiKey = localStorage.getItem('mm_api_key') || ''
-    if (!apiKey) { alert('Add your Anthropic API key in Settings first.'); return }
-    matchingDemos = true
-    try {
-      const res = await fetch('http://localhost:4242/agent-demo-match', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey })
-      })
-      const data = await res.json()
-      if (!data.ok) throw new Error(data.error)
-      agentLastRun = { ...agentLastRun, match: new Date().toISOString() }
-      await loadInbox()
-    } catch(e) {
-      alert('Demo match error: ' + e.message + '\nMake sure watcher is running.')
-    }
-    matchingDemos = false
-  }
 
 
   async function loadInbox() {
@@ -1792,12 +1772,6 @@ ${mozartContext}`
             {scoutingArtists ? '✦ Scouting...' : '✦ Scout'}
           </button>
           {#if agentLastRun.scout}<div class="agent-last-run">{timeAgo(agentLastRun.scout)}</div>{/if}
-        </div>
-        <div class="agent-btn-wrap">
-          <button class="briefing-btn agent-match {matchingDemos?'loading':''}" onclick={() => matchDemos()}>
-            {matchingDemos ? '✦ Matching...' : '✦ Match Demos'}
-          </button>
-          {#if agentLastRun.match}<div class="agent-last-run">{timeAgo(agentLastRun.match)}</div>{/if}
         </div>
       </div>
 

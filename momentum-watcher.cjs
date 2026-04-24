@@ -6081,6 +6081,130 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
+  // ── POST /analyze-submission-brief — extract requirements + match ref tracks + demos ──
+  if (req.method === 'POST' && req.url === '/analyze-submission-brief') {
+    const chunks = []
+    req.on('data', chunk => chunks.push(chunk))
+    req.on('end', async () => {
+      try {
+        const { brief, label } = JSON.parse(Buffer.concat(chunks).toString())
+
+        // Step 1: extract requirements via Claude Haiku
+        const extractRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001', max_tokens: 400,
+            system: 'Extract music brief requirements. Return JSON only: { genre, subgenre, bpm_min, bpm_max, keys, mood, vocal_style, references, energy_level, keywords }',
+            messages: [{ role: 'user', content: brief }]
+          })
+        })
+        const extractData = await extractRes.json()
+        let requirements = {}
+        try { requirements = JSON.parse(extractData.content?.[0]?.text?.replace(/```json|```/g,'').trim() || '{}') } catch(_) {}
+
+        // Step 2: fetch reference tracks + score against brief
+        let refQuery = supabaseAdmin.from('reference_tracks').select('*').in('source', ['user', 'agent'])
+        if (requirements.bpm_min) refQuery = refQuery.gte('tempo', requirements.bpm_min - 5)
+        if (requirements.bpm_max) refQuery = refQuery.lte('tempo', requirements.bpm_max + 5)
+        const { data: allRefs } = await refQuery.limit(100)
+
+        const scoredRefs = (allRefs || []).map(ref => {
+          let score = 0
+          if (requirements.bpm_min && requirements.bpm_max && ref.tempo) {
+            const inRange = ref.tempo >= requirements.bpm_min && ref.tempo <= requirements.bpm_max
+            score += inRange ? 30 : Math.max(0, 20 - Math.abs(ref.tempo - ((requirements.bpm_min + requirements.bpm_max) / 2)) * 0.5)
+          }
+          if (requirements.energy_level === 'high' && ref.energy > 0.7) score += 20
+          if (requirements.energy_level === 'low' && ref.energy < 0.4) score += 20
+          if (requirements.energy_level === 'medium' && ref.energy > 0.4 && ref.energy < 0.7) score += 20
+          if (requirements.keys?.length && ref.key) {
+            if (requirements.keys.some(k => ref.key?.toLowerCase().includes(k.toLowerCase()))) score += 15
+          }
+          return { ...ref, brief_score: score }
+        }).sort((a, b) => b.brief_score - a.brief_score).slice(0, 10)
+
+        // Step 3: find matching demos from songs with analysis
+        const { data: songs } = await supabaseAdmin.from('songs').select('id, title, code, work_data').not('work_data', 'is', null)
+        const matchingDemos = []
+        for (const song of (songs || [])) {
+          const versions = song.work_data?.versions || []
+          const latestAnalysis = versions.filter(v => v.analysis).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+          if (!latestAnalysis?.analysis) continue
+          const a = latestAnalysis.analysis
+          let score = 0; const reasons = []
+          if (requirements.bpm_min && requirements.bpm_max && a.bpm) {
+            if (a.bpm >= requirements.bpm_min - 5 && a.bpm <= requirements.bpm_max + 5) { score += 30; reasons.push(Math.round(a.bpm) + 'bpm ✓') }
+          }
+          if (requirements.energy_level === 'high' && a.energy > 0.7) { score += 25; reasons.push('high energy ✓') }
+          if (requirements.energy_level === 'medium' && a.energy > 0.4 && a.energy < 0.75) { score += 25; reasons.push('mid energy ✓') }
+          if (requirements.keys?.length && a.key) {
+            if (requirements.keys.some(k => a.key?.toLowerCase().includes(k.toLowerCase()))) { score += 20; reasons.push(a.key + ' ✓') }
+          }
+          if (a.danceability > 0.6 && requirements.energy_level !== 'low') { score += 10; reasons.push('danceable ✓') }
+          if (score > 20) matchingDemos.push({ id: song.id, title: song.title || song.code, code: song.code, match_score: Math.min(100, score), reasons, bpm: a.bpm, key: a.key, energy: a.energy })
+        }
+        matchingDemos.sort((a, b) => b.match_score - a.match_score)
+
+        // Step 4: Mozart takes
+        const mozRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001', max_tokens: 300,
+            system: 'You are a music producer A&R advisor. Be specific and brief.',
+            messages: [{ role: 'user', content: `Brief: "${brief}"\n\nTop demo matches: ${matchingDemos.slice(0,3).map(d => d.title + ' (' + d.match_score + '%)').join(', ')}\n\nIn 2-3 sentences: which demo should be sent first and why? What should be avoided?` }]
+          })
+        })
+        const mozData = await mozRes.json()
+        const analysis = mozData.content?.[0]?.text || ''
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, requirements, reference_tracks: scoredRefs, matching_demos: matchingDemos.slice(0, 8), analysis }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /save-submission-brief — writes brief.txt to submission folder ──
+  if (req.method === 'POST' && req.url === '/save-submission-brief') {
+    const chunks = []
+    req.on('data', chunk => chunks.push(chunk))
+    req.on('end', () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString())
+        if (!body.folder || !body.brief) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing folder or brief' })); return }
+        const content = [
+          'SUBMISSION BRIEF',
+          '================',
+          new Date().toLocaleDateString('de-CH'),
+          '',
+          'BRIEF:',
+          body.brief,
+          '',
+          'REQUIREMENTS EXTRACTED:',
+          JSON.stringify(body.results?.requirements || {}, null, 2),
+          '',
+          'MATCHING DEMOS:',
+          (body.results?.matching_demos || []).map(d => d.title + ' — ' + d.match_score + '% match').join('\n'),
+          '',
+          'MOZART ANALYSIS:',
+          body.results?.analysis || ''
+        ].join('\n')
+        fs.writeFileSync(path.join(body.folder, 'brief.txt'), content)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /save-instrumental — saves to Production/-Instrumentals/, overwrites old ──
   if (req.method === 'POST' && req.url.startsWith('/save-instrumental')) {
     const u = new URL(req.url, 'http://localhost')

@@ -1260,3 +1260,9 @@ TASK: THREE FIXES (mozart no analysis, EQ chart, category chips)
 WHAT: Mozart suppresses raw numbers; EQ chart persists on collapse, ref=gold, mix=bright white; category chips in approval panel
 RESULT: works — 8/8 tests passing, 8 brain dupes cleaned
 BLOCKERS: none
+
+## [2026-04-24] [momentum-watcher.cjs] — DONE
+TASK: replace blocked press feeds + fix obsidian dupe storm
+WHAT: Replaced FADER/Stereogum/Lyrical Lemonade/HotNewHipHop/OnestoWatch/PigeonsPlanes with NME, Consequence, The Guardian, Earmilk, Uproxx; chokidar ignoreInitial:true stops 'add' flood on restart
+RESULT: works — 8/8 tests, 6/8 feeds confirmed live, no dupe storm on restart
+BLOCKERS: none

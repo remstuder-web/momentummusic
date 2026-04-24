@@ -84,6 +84,10 @@
   let newProjectArtist = $state('')
 
   let showPatchModal = $state(false)
+  let submissionBrief = $state('')
+  let submissionResults = $state(null)
+  let submissionLoading = $state(false)
+  const patchBriefs = {}
   let newPatchName = $state('')
   let newPatchArtist = $state('')
   let newPatchArtistId = $state('')  // selected artist connection id (second picker)
@@ -568,6 +572,22 @@
     }
   }
 
+  async function analyzeBrief() {
+    submissionLoading = true
+    try {
+      const contactName = connections.find(c => c.id == newPatchContact)?.name || 'Unknown'
+      const r = await fetch('http://localhost:4242/analyze-submission-brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brief: submissionBrief, label: contactName })
+      })
+      submissionResults = await r.json()
+    } catch(e) {
+      alert('Brief analysis failed: ' + e.message)
+    }
+    submissionLoading = false
+  }
+
   async function createPatch() {
     const contact = connections.find(c => String(c.id) === String(newPatchContact))
     const artistConn = connections.find(c => String(c.id) === String(newPatchArtistId))
@@ -587,10 +607,13 @@
       .insert({ name: fullName, artist: artistConn?.name || null, contact_id: contact?.id || null, status: 'open' })
       .select().single()
     patches = [{ ...data, songs: [] }, ...patches]
+    if (submissionBrief) patchBriefs[data.id] = { brief: submissionBrief, results: submissionResults }
     newPatchName = ''
     newPatchArtist = ''
     newPatchArtistId = ''
     newPatchContact = ''
+    submissionBrief = ''
+    submissionResults = null
     showPatchContactPicker = false
     showPatchArtistPicker = false
     showPatchModal = false
@@ -694,6 +717,16 @@
       patch.songs = patch.songs.map(s => ({ ...s, status: 'sent' }))
       songs = songs.map(s => songIds.includes(s.id) ? { ...s, status: 'sent' } : s)
       patches = [...patches]
+
+      const saved = patchBriefs[patch.id]
+      if (saved?.brief && result.folderPath) {
+        fetch('http://localhost:4242/save-submission-brief', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder: result.folderPath, brief: saved.brief, results: saved.results })
+        }).catch(() => {})
+        delete patchBriefs[patch.id]
+      }
 
       alert(`✓ Submission sent!\nDropbox link copied to clipboard.${result.missing?.length ? '\n⚠ Missing: ' + result.missing.join(', ') : ''}`)
     } catch(err) {
@@ -1400,8 +1433,67 @@
         {/each}
       </div>
 
+      <div class="submission-brief-section">
+        <div class="sub-label">BRIEF / REQUEST INFO</div>
+        <textarea
+          class="brief-input"
+          placeholder="Paste the brief here... e.g. 'Looking for dark R&B, female vocals, 90-100bpm, emotional but club-ready, ref: Summer Walker, SZA'"
+          bind:value={submissionBrief}
+          rows="4"
+        ></textarea>
+        {#if submissionBrief.trim().length > 10}
+          <button
+            class="analyze-brief-btn"
+            disabled={submissionLoading}
+            onclick={() => analyzeBrief()}>
+            {submissionLoading ? '⏳ Finding matches...' : '🔍 Find Matches'}
+          </button>
+        {/if}
+      </div>
+
+      {#if submissionResults}
+        <div class="brief-results">
+          <div class="result-section">
+            <div class="result-title">REFERENCE TRACKS FOR THIS BRIEF</div>
+            <div class="result-subtitle">{submissionResults.reference_tracks?.length || 0} tracks matching the genre/style</div>
+            {#each (submissionResults.reference_tracks || []) as track}
+              <div class="result-track">
+                <span class="track-name">{track.artist} — {track.title}</span>
+                {#if track.spotify_id}
+                  <a href="https://open.spotify.com/track/{track.spotify_id}" class="listen-link" target="_blank">▶ listen</a>
+                {/if}
+                {#if track.tempo}
+                  <span class="track-meta">{Math.round(track.tempo)}bpm{track.key ? ' · ' + track.key : ''}{track.camelot ? ' · ' + track.camelot : ''}</span>
+                {/if}
+              </div>
+            {/each}
+          </div>
+
+          <div class="result-section" style="margin-top:8px">
+            <div class="result-title">YOUR DEMOS THAT MATCH</div>
+            <div class="result-subtitle">Best fits from your catalog</div>
+            {#each (submissionResults.matching_demos || []) as demo}
+              <div class="result-track">
+                <span class="track-name">{demo.title || demo.code}</span>
+                <span class="match-score" style="color:{demo.match_score > 75 ? '#4caf82' : demo.match_score > 50 ? '#e8a838' : '#9e9690'}">{demo.match_score}% match</span>
+                {#if demo.reasons?.[0]}
+                  <span class="match-reason">{demo.reasons[0]}</span>
+                {/if}
+              </div>
+            {/each}
+          </div>
+
+          {#if submissionResults.analysis}
+            <div class="result-section" style="margin-top:8px">
+              <div class="result-title">MOZART'S TAKE</div>
+              <div class="brief-analysis">{submissionResults.analysis}</div>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       <button class="btn-gold-full" style="margin-top:10px" onclick={createPatch}>Create Submission</button>
-      <button class="modal-cancel" onclick={() => { showPatchModal = false; showPatchContactPicker = false; showPatchArtistPicker = false }}>Cancel</button>
+      <button class="modal-cancel" onclick={() => { showPatchModal = false; showPatchContactPicker = false; showPatchArtistPicker = false; submissionBrief = ''; submissionResults = null }}>Cancel</button>
     </div>
   </div>
 {/if}
@@ -1671,6 +1763,24 @@
   .patch-name-preview { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; padding: 7px 0 2px; border-top: 1px solid #1c1c1c; margin-top: 10px; letter-spacing: .04em; }
   .modal-cancel { font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 3px; cursor: pointer; }
   .modal-cancel:hover { color: #9e9690; }
+  .submission-brief-section { margin: 10px 0; border-top: 1px solid #1a1a1a; padding-top: 10px; }
+  .sub-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-bottom: 6px; }
+  .brief-input { width: 100%; background: #1c1c1c; border: 1px solid #252525; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; padding: 8px; border-radius: 3px; outline: none; resize: vertical; line-height: 1.5; box-sizing: border-box; }
+  .brief-input:focus { border-color: #303030; }
+  .analyze-brief-btn { margin-top: 6px; font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.3); color: #c9a84c; padding: 5px 14px; border-radius: 2px; cursor: pointer; letter-spacing: .06em; }
+  .analyze-brief-btn:disabled { opacity: .4; cursor: default; }
+  .brief-results { margin-top: 10px; max-height: 340px; overflow-y: auto; }
+  .result-section { background: #111; border-radius: 3px; padding: 8px 10px; }
+  .result-title { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-bottom: 2px; }
+  .result-subtitle { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #444; margin-bottom: 8px; }
+  .result-track { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #1a1a1a; flex-wrap: wrap; }
+  .result-track:last-child { border-bottom: none; }
+  .track-name { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #cec9c1; flex: 1; min-width: 0; }
+  .listen-link { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; text-decoration: none; flex-shrink: 0; }
+  .track-meta { font-family: 'Space Mono', monospace; font-size: 8px; color: #444; flex-shrink: 0; }
+  .match-score { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+  .match-reason { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #555; font-style: italic; }
+  .brief-analysis { font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #9e9690; line-height: 1.6; }
   .bg-options { display: flex; flex-direction: column; gap: 6px; }
   .bg-opt { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #141414; border: 1px solid #252525; border-radius: 4px; cursor: pointer; text-align: left; transition: all .15s; }
   .bg-opt:hover { border-color: #303030; background: #1c1c1c; }

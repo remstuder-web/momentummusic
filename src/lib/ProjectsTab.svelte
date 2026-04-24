@@ -3049,6 +3049,8 @@
                     {@const selectedRefTrack = selectedRef ? refTrackOptions.find(r => String(r.id) === selectedRef) : null}
                     {@const cmp = vocalComparison[song.id]}
                     {@const refLoading = vocalEqLoading[song.id]}
+                    {@const ao = analyzerOpen[String(song.id)] || {}}
+                    {@const latestA = (wd.versions||[]).filter(v=>v.analysis).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]?.analysis}
                     <div class="vocal-eq-body">
                       <!-- Stem selector -->
                       <div class="stem-tabs">
@@ -3165,9 +3167,6 @@
                           {/each}
                         </div>
                       {/if}
-
-                      {@const ao = analyzerOpen[String(song.id)] || {}}
-                      {@const latestA = (wd.versions||[]).filter(v=>v.analysis).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]?.analysis}
 
                       <!-- TRACK ANALYSIS sub-section -->
                       {#if latestA}

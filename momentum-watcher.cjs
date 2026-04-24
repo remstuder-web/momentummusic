@@ -1303,6 +1303,19 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
     realTrends = await fetchTikTokRealData()
     console.log(`  TikTok agent: ${realTrends.length} real trends fetched`)
 
+    // Save all raw tracks to reference_tracks checkout
+    for (const track of realTrends) {
+      if (!track.title) continue
+      supabaseAdmin.from('reference_tracks').upsert({
+        title: track.title,
+        artist: track.artist || '',
+        source: 'checkout',
+        checkout_date: new Date().toISOString(),
+        collection_name: 'tiktok_trending',
+        approved: true
+      }, { onConflict: 'title,artist' }).catch(() => {})
+    }
+
     // 2. Spotify search + Essentia for top tracks
     let spToken = null
     try { spToken = await getSpotifyToken() } catch(e) { console.warn('  TikTok: Spotify token failed:', e.message) }
@@ -1418,7 +1431,7 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     body: JSON.stringify({ type: 'briefing', song_code: null, song_title: 'TikTok Trends', artist: null, message: trendsText + tracksJson, patch_name: `Trends ${today}`, read: false })
   })
   console.log(`✓ Agent TikTok Trends: ${analyzedTrends.length} tracks analyzed, saved to inbox`)
-  return { ok: true, trends: trendsText, trend_tracks: analyzedTrends, source: realTrends.length ? 'real' : 'fallback' }
+  return { ok: true, tracks: realTrends, trends: trendsText, trend_tracks: analyzedTrends, source: realTrends.length ? 'real' : 'fallback' }
 }
 
 console.log('Spotify ID:', SPOTIFY_CLIENT_ID ? 'set' : 'EMPTY')

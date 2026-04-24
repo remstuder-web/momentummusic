@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: tiktok-tracks-response-and-checkout
+WHAT: Added tracks:realTrends to runAgentTikTokTrends return value. Added upsert of all raw realTrends to reference_tracks (collection_name=tiktok_trending) immediately after fetch, using supabaseAdmin to bypass RLS.
+RESULT: works — tracks found: 20, positions 1-20 from tikcharts week 2026-02-16
+BLOCKERS: none
+
+## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: tikcharts-next-data-scraper
 WHAT: Replaced HTML table row parsing with __NEXT_DATA__ JSON extraction. tikcharts.com uses Next.js — data is embedded in <script id="__NEXT_DATA__">. Now navigates props.pageProps.entriesByWeek, takes latest week key, returns up to 20 tracks with position/title/artist/youtube_id/tiktok_slug/image_url/week.
 RESULT: works — found 100 tracks for week 2026-02-16, 5 processed into trend_tracks

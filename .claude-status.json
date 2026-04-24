@@ -1,10 +1,13 @@
 {
-  "updated": "2026-04-24T08:29:00.000Z",
-  "last_task": "vocal-eq-production-versions",
+  "updated": "2026-04-24T09:06:00.000Z",
+  "last_task": "vocal-eq-analyzer-fix",
   "status": "done",
   "working": [
-    "vocal-eq-production-versions: /analyze-vocal-eq accepts mixing OR production versions, sorted by name desc, checks MIXING_DIR then PRODUCTION_DIR",
-    "coin-rotation-monitor: fetchAllCoinPrices, scoreCoinForEntry, recommendNextCoin, monitorActiveTrades every 15min, /next /trade* /sell* Telegram commands, GET /all-coin-prices, FinancesTab MONITORED COINS section",
+    "vocal-eq-analyzer: Python script + endpoint both work end-to-end (tested on Fantasmas song_id=118)",
+    "torchcodec 0.11.1 installed, Demucs saves stems correctly",
+    "analyze-vocal-eq accepts type=mix with production versions, checks MIXING_DIR then PRODUCTION_DIR",
+    "coin-rotation-monitor: fetchAllCoinPrices, scoreCoinForEntry, recommendNextCoin, monitorActiveTrades every 15min",
+    "/next /trade* /sell* Telegram commands, GET /all-coin-prices, FinancesTab MONITORED COINS section",
     "BrainTab ▶ always visible with Spotify search fallback for text-extracted tracks",
     "BrainTab sticky dump col: background #0a0a0a + z-index:2",
     "8/8 tests passing"
@@ -12,5 +15,5 @@
   "broken": [],
   "partial": [],
   "next": "Run SQL if not done: ALTER TABLE active_trades ADD COLUMN IF NOT EXISTS current_price float, ADD COLUMN IF NOT EXISTS pnl_pct float, ADD COLUMN IF NOT EXISTS pnl_eur float;",
-  "notes": "vocal-eq now finds production files when no mix version exists. Sort by name desc picks highest version number (v02 > v01)."
+  "notes": "Vocal EQ analyzer was failing due to torchcodec missing module error in pm2 logs (historical). torchcodec 0.11.1 is installed and working. Full analysis pipeline confirmed working on Fantasmas file."
 }

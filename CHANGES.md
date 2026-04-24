@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: fix-triple-date-prefix, tiktok-tracks-to-checkout-only
+WHAT: FIX 1: added cleanTitle() helper (strips all leading YYYY-MM-DD_ patterns); applied in saveBrainFile heading, syncObsidianFile now stores bareFilename as Supabase title, connectBrainEntries uses cleanTitle on entry titles. POST /fix-brain-titles endpoint cleans existing corrupted entries — ran immediately, fixed 478 entries + deduplicated 185 duplicates revealed by cleanup. FIX 2: removed brain_knowledge insert from runAgentTikTokTrends — tracks go to reference_tracks (checkout) only; brain only gets Claude's market_knowledge insight via inbox.
+RESULT: works — 8/8 tests, 696 clean entries, 0 double-prefix entries, 0 duplicates
+BLOCKERS: none
+
 ## [2026-04-24] ProjectsTab.svelte + momentum-watcher.cjs — DONE
 TASK: analyzer-ref-dropdown, background-processing-pipeline, genius-credits
 WHAT: BUILD 1: ANALYZER ref dropdown selects from library tracks processed by background pipeline, credits panel below chart. BUILD 2: processLibraryTrackInBackground() + queue on startup — Essentia analysis + Demucs EQ curves for all library tracks without curves yet. BUILD 3: fetchGeniusCredits() scrapes Genius for producer/mixer/master credits, wired into background pipeline. POST /fetch-credits + GET /processing-queue endpoints added. Fixed brain dupe root cause: saveBrainFile strips date prefixes before building filename; syncObsidianFile now matches bare title (no date prefix) before inserting new rows.

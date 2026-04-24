@@ -1,20 +1,21 @@
 {
   "updated": "2026-04-25T00:00:00.000Z",
-  "last_task": "brain-connection-finder",
+  "last_task": "fix-brain-titles-tiktok",
   "status": "done",
   "working": [
-    "POST /connect-brain-entries — module-level connectBrainEntries(), 200 entries, UUID-aware dedup, individual knowledge_connection rows",
-    "knowledge_connection category: {entry_ids, connection_type, insight, action} in metadata",
-    "7-day dedup: same entry pair not re-saved within 7 days",
-    "Mozart /ask Telegram context: chart signals + recent knowledge_connection entries",
-    "Sunday 8am scheduler still calls connectBrainEntries() from module scope",
-    "Telegram /connect command still works",
-    "8/8 tests passing, clean pm2 restart"
+    "cleanTitle() helper strips ^(YYYY-MM-DD_)+ from any title",
+    "saveBrainFile: file heading uses cleanTitle, safeTitle uses cleanTitle",
+    "syncObsidianFile: stores bareFilename (no date prefix) as Supabase title",
+    "connectBrainEntries: entryTitles use cleanTitle per source entry",
+    "POST /fix-brain-titles: cleaned 478 triple-prefixed entries, revealed+deduped 185 dupes",
+    "TikTok tracks: reference_tracks checkout only — brain_knowledge insert removed",
+    "696 brain entries, 0 duplicates, 0 double-date-prefix entries",
+    "8/8 tests passing"
   ],
   "broken": [],
   "partial": [
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
   "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables",
-  "notes": "connectBrainEntries() moved to module scope (was inside server.listen callback). Tested: 12 connections saved on first run. knowledge_connection entries now appear in Mozart /ask context."
+  "notes": "Root cause of triple prefix: backfill (on watcher restart) calls saveBrainFile on existing dated-title entries, which triggered Obsidian sync to insert new entries with current-day prefix. Fixed by storing clean (no-date) title in Supabase; Obsidian files keep date prefix in filename only."
 }

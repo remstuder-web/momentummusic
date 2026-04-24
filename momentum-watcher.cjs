@@ -1689,21 +1689,6 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
             tempo: feat.bpm || null, key: feat.key || null, scale: feat.scale || null,
             energy: feat.energy || null, danceability: feat.danceability || null
           }).catch(() => {})
-
-          // Store in brain_knowledge (fire-and-forget)
-          fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
-            method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-            body: JSON.stringify({
-              category: 'market_knowledge',
-              title: `TikTok trending ${today}: ${spTrack.name} by ${spTrack.artists[0]?.name || ''}`,
-              content: [
-                feat.bpm ? `${Math.round(feat.bpm)}bpm · ${feat.key || '?'} ${feat.scale || ''}${feat.camelot ? ' (' + feat.camelot + ')' : ''}` : 'No Essentia data',
-                feat.energy != null ? `nrg ${Number(feat.energy).toFixed(2)}` : null,
-              ].filter(Boolean).join(' · '),
-              entry_type: 'observation', confidence: 'weak', active: true,
-              metadata: { source_type: 'tiktok', date: today, spotify_id: spTrack.id }
-            })
-          }).catch(() => {})
         } catch(e) { console.warn('  TikTok track failed:', e.message.slice(0, 80)) }
       }
     }
@@ -1942,9 +1927,11 @@ async function syncObsidianFile(filePath) {
     const backlinkMatches = body.match(/\[\[([^\]]+)\]\]/g) || []
     const relatedNotes = backlinkMatches.map(m => m.slice(2, -2).trim())
 
+    // Strip date prefix from filename to get the clean Supabase title
+    const bareFilename = filename.replace(/^(\d{4}-\d{2}-\d{2}_)+/, '')
     const row = {
       category,
-      title: filename,
+      title: bareFilename,
       content: body.replace(/\[\[([^\]]+)\]\]/g, '$1').slice(0, 500),
       source_type: 'obsidian',
       confidence: frontmatter.confidence || 'medium',
@@ -1953,15 +1940,14 @@ async function syncObsidianFile(filePath) {
       ...(relatedNotes.length ? { metadata: { related_notes: relatedNotes } } : {})
     }
 
-    // Upsert by title or bare title (strip date prefix); if file mtime > created_at → update
-    const bareFilename = filename.replace(/^(\d{4}-\d{2}-\d{2}_)+/, '')
+    // Upsert by bare title first, then full filename for backward compat
     let existingRows = await fetch(
-      `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(filename)}&select=id,created_at`,
+      `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(bareFilename)}&select=id,created_at`,
       { headers: sbHeaders }
     ).then(r => r.json()).catch(() => [])
     if (!existingRows[0] && bareFilename !== filename) {
       existingRows = await fetch(
-        `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(bareFilename)}&select=id,created_at`,
+        `${SUPABASE_URL}/rest/v1/brain_knowledge?title=eq.${encodeURIComponent(filename)}&select=id,created_at`,
         { headers: sbHeaders }
       ).then(r => r.json()).catch(() => [])
     }
@@ -4014,14 +4000,17 @@ async function updateObsidianIndex() {
   } catch(e) { console.error('updateObsidianIndex error:', e.message) }
 }
 
+function cleanTitle(title) {
+  return (title || '').replace(/^(\d{4}-\d{2}-\d{2}_)+/, '').trim()
+}
+
 async function saveBrainFile(entry) {
   try {
     const category = entry.category || 'uncategorized'
     const folderPath = path.join(BRAIN_FILES_PATH, category)
     fs.mkdirSync(folderPath, { recursive: true })
 
-    const safeTitle = (entry.title || 'untitled')
-      .replace(/^(\d{4}-\d{2}-\d{2}_)+/, '') // strip any existing date prefix(es)
+    const safeTitle = cleanTitle(entry.title || 'untitled')
       .replace(/[^a-zA-Z0-9 \-_]/g, '')
       .trim()
       .slice(0, 60)
@@ -4038,7 +4027,7 @@ async function saveBrainFile(entry) {
       entry.source_url ? 'url: ' + entry.source_url : null,
       '---',
       '',
-      '# ' + (entry.title || 'Untitled'),
+      '# ' + cleanTitle(entry.title || 'Untitled'),
       '',
       entry.content || ''
     ].filter(s => s !== null)
@@ -8699,6 +8688,33 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /fix-brain-titles — strip duplicate date prefixes from titles ──────
+  if (req.method === 'POST' && req.url === '/fix-brain-titles') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const { data: rows, error: fetchErr } = await supabaseAdmin
+        .from('brain_knowledge')
+        .select('id, title')
+        .like('title', '%-%-%\\_%-%-%\\_%')
+      if (fetchErr) throw new Error(fetchErr.message)
+      let fixed = 0
+      for (const row of rows || []) {
+        const cleaned = (row.title || '').replace(/^(\d{4}-\d{2}-\d{2}_)+/, '').trim()
+        if (cleaned !== row.title) {
+          await supabaseAdmin.from('brain_knowledge').update({ title: cleaned }).eq('id', row.id)
+          fixed++
+        }
+      }
+      console.log(`✓ fix-brain-titles: ${fixed} entries fixed`)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, fixed, checked: rows?.length || 0 }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /cleanup-brain-dupes — delete duplicate brain_knowledge rows ─────
   if (req.method === 'POST' && req.url === '/cleanup-brain-dupes') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -10377,7 +10393,7 @@ Return 5-15 connections. No markdown, no prose.`,
       if (existingCombos.has(comboKey)) { skipped++; continue }
 
       const includedEntries = entries.filter(e => ids.includes(String(e.id)))
-      const entryTitles = includedEntries.map(e => e.title).join(' + ')
+      const entryTitles = includedEntries.map(e => cleanTitle(e.title)).join(' + ')
 
       const { error } = await supabase.from('brain_knowledge').insert({
         category: 'knowledge_connection',

@@ -2,7 +2,17 @@
   let { mixCurve = null, refCurve = null, mixLabel = '', refLabel = '' } = $props()
 
   const REF_COLOR = '#c9a84c'
-  const MIX_COLOR = '#e0dbd2'
+  const MIX_COLOR = 'rgba(255,255,255,0.85)'
+
+  // Keep last non-null values so chart doesn't blank out during async reloads
+  let lastMixCurve = $state(null)
+  let lastRefCurve = $state(null)
+
+  $effect(() => { if (mixCurve != null) lastMixCurve = mixCurve })
+  $effect(() => { if (refCurve != null) lastRefCurve = refCurve })
+
+  const displayMix = $derived(mixCurve ?? lastMixCurve)
+  const displayRef = $derived(refCurve ?? lastRefCurve)
 
   const ISO_FREQS = [
     20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160,
@@ -60,7 +70,7 @@
   {#each gridDbs as db}
     {@const y = yForDb(db)}
     <line x1={PAD_L} y1={y} x2={PAD_L + CHART_W} y2={y}
-      stroke={db === 0 ? '#333' : '#1c1c1c'} stroke-width={db === 0 ? 1 : 0.5} />
+      stroke={db === 0 ? 'rgba(255,255,255,0.3)' : '#1a1a1a'} stroke-width={db === 0 ? 1.5 : 0.5} />
     <text x={PAD_L - 4} y={y + 3.5} text-anchor="end" font-size="9" fill="#444" font-family="Space Mono, monospace">{db > 0 ? '+' : ''}{db}</text>
   {/each}
 
@@ -73,29 +83,29 @@
 
   <rect x={PAD_L} y={PAD_T} width={CHART_W} height={CHART_H} fill="none" stroke="#252525" stroke-width="0.5" />
 
-  <!-- Reference curve (behind mix) -->
-  {#if refCurve}
-    <polygon points={curveToArea(refCurve)} fill="rgba(201,168,76,0.05)" clip-path="url(#chart-clip)" />
-    <polyline points={curveToPoints(refCurve)} fill="none" stroke={REF_COLOR} stroke-width="1.5"
+  <!-- Reference curve (behind mix) — gold -->
+  {#if displayRef}
+    <polygon points={curveToArea(displayRef)} fill="rgba(201,168,76,0.05)" clip-path="url(#chart-clip)" />
+    <polyline points={curveToPoints(displayRef)} fill="none" stroke={REF_COLOR} stroke-width="1.5"
       stroke-linejoin="round" stroke-linecap="round" opacity="0.7" clip-path="url(#chart-clip)" />
   {/if}
 
-  <!-- Mix curve (on top) -->
-  {#if mixCurve}
-    <polygon points={curveToArea(mixCurve)} fill="rgba(224,219,210,0.04)" clip-path="url(#chart-clip)" />
-    <polyline points={curveToPoints(mixCurve)} fill="none" stroke={MIX_COLOR} stroke-width="2"
+  <!-- Mix curve (on top) — bright white -->
+  {#if displayMix}
+    <polygon points={curveToArea(displayMix)} fill="rgba(255,255,255,0.03)" clip-path="url(#chart-clip)" />
+    <polyline points={curveToPoints(displayMix)} fill="none" stroke={MIX_COLOR} stroke-width="2"
       stroke-linejoin="round" stroke-linecap="round" clip-path="url(#chart-clip)" />
   {/if}
 
   <!-- Legend -->
-  {#if refCurve}
+  {#if displayRef}
     <line x1={PAD_L + 4} y1={PAD_T + 8} x2={PAD_L + 18} y2={PAD_T + 8} stroke={REF_COLOR} stroke-width="1.5" opacity="0.7" />
     <text x={PAD_L + 22} y={PAD_T + 11.5} font-size="9" fill={REF_COLOR} font-family="Space Mono, monospace" opacity="0.7">{refLabel || 'REF'}</text>
   {/if}
-  {#if mixCurve}
-    {@const legendX = refCurve ? PAD_L + 4 + 88 : PAD_L + 4}
+  {#if displayMix}
+    {@const legendX = displayRef ? PAD_L + 4 + 88 : PAD_L + 4}
     <line x1={legendX} y1={PAD_T + 8} x2={legendX + 14} y2={PAD_T + 8} stroke={MIX_COLOR} stroke-width="2" />
-    <text x={legendX + 18} y={PAD_T + 11.5} font-size="9" fill={MIX_COLOR} font-family="Space Mono, monospace">{mixLabel || 'MY MIX'}</text>
+    <text x={legendX + 18} y={PAD_T + 11.5} font-size="9" fill="rgba(255,255,255,0.8)" font-family="Space Mono, monospace">{mixLabel || 'MY MIX'}</text>
   {/if}
 </svg>
 

@@ -98,6 +98,7 @@
   let catSuggestion = $state(null)
   let catSuggestLoading = $state(false)
   let catSuggestOverride = $state('')
+  let approvalCatPool = $state([]) // categories available as chips in approval panel
   let splitEdits = $state([])
   let prefilledCategory = $state('')
   let dumpCollection = $state('')
@@ -387,6 +388,7 @@ Return ONLY JSON:
       const d = await res.json()
       if (!d.ok) throw new Error(d.error)
       catSuggestion = d
+      if (d.allCategories?.length) approvalCatPool = d.allCategories
       if (d.action === 'split' && Array.isArray(d.splits)) {
         splitEdits = d.splits.map(s => ({ category: s.category, title: s.title || s.content?.slice(0, 60) || '', content: s.content || s.text || '' }))
       }
@@ -706,6 +708,7 @@ Return ONLY JSON (single item array):
       pendingApproval = items
       pendingOriginalText = dumpText
       showApproval = true
+      if (!approvalCatPool.length) approvalCatPool = existingCategories.slice()
 
     } catch(e) { alert('Processing error: ' + e.message) }
     processing = false
@@ -1388,6 +1391,15 @@ Return ONLY JSON (single item array):
                 <span class="brain-approval-conf conf-badge-{item.confidence}">{item.confidence}</span>
               {/if}
               <button class="brain-approval-remove" onclick={() => pendingApproval = pendingApproval.filter((_, i) => i !== idx)}>×</button>
+            </div>
+            {@const chipPool = [item.suggestedCategory, ...(approvalCatPool.length ? approvalCatPool : existingCategories).filter(c => c !== item.suggestedCategory)].slice(0, 8)}
+            <div class="category-chips">
+              {#each chipPool as cat}
+                <button class="cat-chip {item.suggestedCategory === cat ? 'selected' : ''}"
+                  onclick={() => pendingApproval = pendingApproval.map((it, i) => i === idx ? { ...it, suggestedCategory: cat, isNewCategory: !existingCategories.includes(cat) } : it)}>
+                  {cat}
+                </button>
+              {/each}
             </div>
             <div class="brain-approval-title">{item.title}</div>
             <div class="brain-approval-content">{item.content}</div>
@@ -2783,6 +2795,10 @@ Return ONLY JSON (single item array):
   .library-sort-btns { display: flex; gap: 4px; margin-bottom: 6px; }
   .sort-btn { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; background: transparent; border: 1px solid #252525; color: #444; padding: 2px 8px; border-radius: 2px; cursor: pointer; letter-spacing: .06em; }
   .sort-btn.active { border-color: #c9a84c; color: #c9a84c; background: rgba(201,168,76,.06); }
+  .category-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 6px; }
+  .cat-chip { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #252525; color: #555; padding: 2px 8px; border-radius: 2px; cursor: pointer; white-space: nowrap; }
+  .cat-chip:hover { border-color: #444; color: #9e9690; }
+  .cat-chip.selected { border-color: #c9a84c; color: #c9a84c; background: rgba(201,168,76,.08); }
   .promote-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #666; padding: 1px 5px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .promote-btn:hover { background: rgba(201,168,76,.1); color: #c9a84c; }
   .promote-btn.gold { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: #c9a84c; border: 1px solid rgba(201,168,76,.4); background: rgba(201,168,76,.06); padding: 2px 6px; border-radius: 2px; cursor: pointer; }

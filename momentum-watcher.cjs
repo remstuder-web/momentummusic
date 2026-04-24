@@ -6424,9 +6424,17 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
           { headers: sbHeaders }
         ).catch(() => null)
         const freshCatsData = freshCatsRes ? await freshCatsRes.json().catch(() => []) : []
-        const cats = [...new Set(
+        const dbCats = [...new Set(
           (Array.isArray(freshCatsData) ? freshCatsData : []).map(r => r.category).filter(Boolean)
-        )].sort()
+        )]
+        const standardCats = [
+          'goal', 'mixing_technique', 'production_style', 'market_knowledge', 'own_production',
+          'contact_profile', 'collaboration', 'observation', 'creative_process', 'sound_design',
+          'business', 'power_dynamics_principles', 'release_strategy', 'industry_insight',
+          'networking', 'artist_strategy', 'reference_current', 'question', 'artist_breaking',
+          'genre_strategy', 'correction'
+        ]
+        const cats = [...new Set([...dbCats, ...standardCats])].sort()
 
         let prompt
 
@@ -6526,7 +6534,12 @@ Respond ONLY in JSON:
           result = { action: 'new', suggestion: 'knowledge', reason: 'Parse error', alternatives: [] }
         }
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, ...result }))
+        res.end(JSON.stringify({
+          ok: true,
+          ...result,
+          category: result.suggestion || result.category || '',
+          allCategories: cats
+        }))
         setImmediate(() => brainToObsidian().catch(() => {}))
       } catch(err) {
         logError('suggest-category', err.message)

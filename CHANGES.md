@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: scout-checkout-null-spotify-id
+WHAT: Removed placeholder txt_* spotify_id now that SQL migration dropped NOT NULL constraint. Text-extracted tracks insert cleanly with spotify_id: null.
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: fix-scout-checkout-not-null
 WHAT: Root cause: spotify_id NOT NULL constraint blocks text-extracted track inserts. Fix: generate placeholder spotify_id ('txt_' + timestamp36 + random6) so insert succeeds. Removed all diagnostic code. Proper fix is SQL: ALTER TABLE reference_tracks ALTER COLUMN spotify_id DROP NOT NULL; — run when convenient, then remove placeholder logic.
 RESULT: works — tracks now insert

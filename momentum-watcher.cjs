@@ -4577,15 +4577,13 @@ ${context}` }]
               { headers: sbHeaders }
             ).then(r => r.json()).catch(() => [])
             if (Array.isArray(existCheck) && existCheck.length > 0) continue
-            // Generate placeholder spotify_id until NOT NULL constraint is dropped via SQL migration
-            const placeholderId = 'txt_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
             const saveRes = await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
               method: 'POST',
               headers: { ...sbHeaders, 'Prefer': 'return=representation' },
               body: JSON.stringify({
                 title: track.title,
                 artist: track.artist,
-                spotify_id: placeholderId,
+                spotify_id: null,
                 collection_name: 'scout_' + dateMentioned,
                 source: 'checkout',
                 checkout_date: nowMentioned

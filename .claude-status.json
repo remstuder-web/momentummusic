@@ -1,19 +1,20 @@
 {
-  "updated": "2026-04-24T07:32:00.000Z",
-  "last_task": "scout-checkout-null-spotify-id",
+  "updated": "2026-04-24T07:45:00.000Z",
+  "last_task": "fix-scout-save-final",
   "status": "done",
   "working": [
-    "scout-checkout-null-spotify-id: placeholder removed, spotify_id: null, all 3 SQL migrations applied",
-    "fix-scout-checkout-not-null: root cause identified and fixed",
+    "fix-scout-save-final: supabase client used for all inserts, kworb loop fixed, extractTracksFromText returns 26 tracks with regex fallback — VERIFIED working",
+    "fix-scout-checkout-not-null: placeholder removed after SQL migration",
     "brain-refs-auto-refresh: refsInterval polls reference_tracks every 2min",
     "ref-track-preview-audio: BrainTab playPreview() + DailyTab inline data-preview + ProjectsTab playRefUrl()",
     "popup-window-dimensions: 900x700 momentum_popup window reused for all external links",
     "scout-extract-mentions: extractTracksFromText() saves text-mentioned tracks to checkout",
-    "fix-reference-tracks-order: reference_tracks ordered by created_at DESC",
-    "vocal-eq-stems: stem_type + source_type columns now exist in vocal_eq_curves"
+    "fix-reference-tracks-order: reference_tracks ordered by created_at DESC"
   ],
   "broken": [],
-  "partial": [],
-  "next": "Run /agent-scout and verify new tracks appear in BrainTab checkout section within 2 minutes",
-  "notes": "All SQL migrations done: spotify_id nullable, checkout_date added to reference_tracks, stem_type + source_type added to vocal_eq_curves. System fully unblocked."
+  "partial": [
+    "extractTracksFromText raw log still in code — remove once confirmed stable over a few runs"
+  ],
+  "next": "After a few successful scout runs, remove the 'extractTracksFromText raw:' console.log line (it logs first 200 chars of response every run)",
+  "notes": "Root causes resolved: (1) old fetch code swallowed errors with return=minimal, (2) JSON.parse threw on non-array response and catch returned [], (3) spotify_id NOT NULL blocked inserts. All three fixed."
 }

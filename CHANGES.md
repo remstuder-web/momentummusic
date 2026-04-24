@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: fix-scout-save-final
+WHAT: Three fixes: (1) supabase client initialized (createClient) and used for all reference_tracks inserts instead of raw fetch. (2) kworb loop uses supabase client, only sets spotify_id if non-null. (3) extractTracksFromText regex extracts JSON array even if surrounded by extra text, logs raw response for debug, returns 26 tracks per run. Verified: ✓ INSERTED logs + skip (exists) working correctly.
+RESULT: works — 26 tracks extracted and inserted per scout run
+BLOCKERS: none
+
+## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: scout-checkout-null-spotify-id
 WHAT: Removed placeholder txt_* spotify_id now that SQL migration dropped NOT NULL constraint. Text-extracted tracks insert cleanly with spotify_id: null.
 RESULT: works

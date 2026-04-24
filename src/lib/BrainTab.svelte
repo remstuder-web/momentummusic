@@ -1388,6 +1388,7 @@ Return ONLY JSON (single item array):
           REVIEW BEFORE SAVING — {pendingApproval.length} item(s)
         </div>
         {#each pendingApproval as item, idx}
+          {@const chipPool = [item.suggestedCategory, ...(approvalCatPool.length ? approvalCatPool : existingCategories).filter(c => c !== item.suggestedCategory)].slice(0, 8)}
           <div class="brain-approval-item">
             <div class="brain-approval-item-header">
               <span class="brain-approval-type">
@@ -1411,7 +1412,6 @@ Return ONLY JSON (single item array):
               {/if}
               <button class="brain-approval-remove" onclick={() => pendingApproval = pendingApproval.filter((_, i) => i !== idx)}>×</button>
             </div>
-            {@const chipPool = [item.suggestedCategory, ...(approvalCatPool.length ? approvalCatPool : existingCategories).filter(c => c !== item.suggestedCategory)].slice(0, 8)}
             <div class="category-chips">
               {#each chipPool as cat}
                 <button class="cat-chip {item.suggestedCategory === cat ? 'selected' : ''}"

@@ -5469,7 +5469,8 @@ ${context}` }]
         const { url } = JSON.parse(body)
         if (!url) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'No URL' })); return }
 
-        const trackId = url.split('/track/')[1].split('?')[0].split('/')[0]
+        const trackId = url.split('/track/')[1]?.split('?')[0]?.split('/')[0]
+        if (!trackId) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'Invalid Spotify track URL — expected open.spotify.com/track/...' })); return }
         const token = await getSpotifyToken()
         const spH = { 'Authorization': `Bearer ${token}` }
 

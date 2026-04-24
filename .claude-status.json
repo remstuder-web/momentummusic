@@ -1,23 +1,25 @@
 {
-  "updated": "2026-04-24T22:15:00.000Z",
-  "last_task": "spotify-ref-types-daily-aktuelle",
+  "updated": "2026-04-25T00:00:00.000Z",
+  "last_task": "fix-split-undefined-svelte-const-placement",
   "status": "done",
   "working": [
-    "Spotify→Brain: collection_name set per type (reference_current/mixing/inspiration/sound)",
-    "Aktuelle refs insert inbox_notifications type='reference' with 7-day expiry metadata",
-    "DailyTab: AKTUELLE REFS section with gold border, days-remaining, auto-cleared on load",
-    "DailyTab: reference items excluded from main inbox stream",
-    "DailyTab: expired reference notifications cleaned on loadInbox",
-    "Mozart no raw analysis numbers (ProjectsTab buildProjectContext)",
-    "VocalEqChart persist on collapse/reopen, gold ref, white mix, visible zero line",
-    "BrainTab category chips in approval panel (approvalCatPool + per-item chip toggle)",
-    "Submission brief: Find Matches in New Submission modal",
-    "All 8 press feeds working",
-    "chokidar ignoreInitial:true — no dupe storm on restart",
+    "BUILD 1: buildSuccessPattern() computes BPM/energy/key averages from user refs; /success-pattern endpoint verified",
+    "BUILD 1: compareToSuccessPattern() scores 9 dimensions vs pattern; /analyze-success-match endpoint",
+    "BUILD 2: classifyFeedback() classifies text into 8 types; /log-feedback-pattern; /feedback-insights (needs SQL)",
+    "BUILD 3: calculateVelocity() tracks chart position over 14 days; /trend-velocity endpoint; chart_history upsert in morning briefing (needs SQL)",
+    "BUILD 4: fetchArtistCollaborators() from Spotify top-tracks; /enrich-track-credits; Telegram /credits [Artist - Title]",
+    "BUILD 5: analyze_audio.py — 8-segment emotional arc with energy/brightness/bass, arc_peak_segment/contrast/buildup",
+    "BUILD 5: compareEmotionalArcs() diff function in watcher",
+    "BUILD 6: ProjectsTab ANALYZER — 5 collapsible sub-sections: TRACK ANALYSIS grid, SUCCESS MATCH score+gaps, EMOTIONAL ARC SVG, FEEDBACK HISTORY bars, TREND CONTEXT rising/falling",
+    "/analyze-spotify-track: null-guarded url.split('/track/')[1] with optional chaining + early 400 return",
+    "Svelte {#const} placement fixed in ProjectsTab (ao/latestA/arc/maxE) and BrainTab (chipPool)",
+    "Clean vite build — 0 errors",
     "8/8 tests passing"
   ],
   "broken": [],
-  "partial": [],
-  "next": "Run SQL in Supabase dashboard:\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text;\nThen promote library tracks to My Refs and check: curl localhost:4242/processing-queue",
-  "notes": "reference_tracks.camelot column may not exist yet — check Supabase if Aktuelle Ref saves throw errors. inbox_notifications.metadata is jsonb — filter .lt('metadata->>expires', ...) uses JSONB arrow operator which Supabase REST supports."
+  "partial": [
+    "BUILD 2/3: feedback_patterns and chart_history tables need SQL in Supabase (endpoints handle missing table gracefully)"
+  ],
+  "next": "Run SQL in Supabase dashboard:\n\nCREATE TABLE IF NOT EXISTS feedback_patterns (\n  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n  song_id text, version_name text, feedback_text text,\n  feedback_type text, analysis jsonb, created_at timestamptz DEFAULT now()\n);\nALTER TABLE feedback_patterns ENABLE ROW LEVEL SECURITY;\nCREATE POLICY \"anon all\" ON feedback_patterns FOR ALL TO anon USING (true) WITH CHECK (true);\n\nCREATE TABLE IF NOT EXISTS chart_history (\n  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n  title text, artist text, spotify_id text, position integer,\n  chart_date date DEFAULT CURRENT_DATE, source text DEFAULT 'kworb', created_at timestamptz DEFAULT now()\n);\nCREATE INDEX IF NOT EXISTS chart_history_date ON chart_history(chart_date);\nALTER TABLE chart_history ENABLE ROW LEVEL SECURITY;\nCREATE POLICY \"anon all\" ON chart_history FOR ALL TO anon USING (true) WITH CHECK (true);\n\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS camelot text;\nALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS reference_track_id text;\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;",
+  "notes": "All Svelte {#const} tags now correctly placed as direct children of block directives (not inside HTML elements). Vite build is clean."
 }

@@ -3234,10 +3234,10 @@
                           <span>EMOTIONAL ARC</span><span class="az-arr {ao.arc?'open':''}">▶</span>
                         </button>
                         {#if ao.arc}
+                          {@const arc = latestA.emotional_arc}
+                          {@const maxE = Math.max(...arc.map(s=>s.energy), 0.01)}
                           <div class="az-body">
-                            {@const arc = latestA.emotional_arc}
                             <svg viewBox="0 0 520 80" class="arc-svg">
-                              {@const maxE = Math.max(...arc.map(s=>s.energy), 0.01)}
                               {#each arc as seg, i}
                                 {@const x = i * (520/arc.length) + 2}
                                 {@const barW = (520/arc.length) - 4}

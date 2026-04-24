@@ -1278,3 +1278,15 @@ TASK: FIX 1 — Spotify ref types wired correctly
 WHAT: reference_tracks now saves collection_name per type; aktuelle refs create inbox_notifications with 7-day expiry; DailyTab shows AKTUELLE REFS section with gold border and days-remaining; expired refs auto-cleaned on loadInbox; FIX 2/3/4 confirmed already in place
 RESULT: works — 8/8 tests passing
 BLOCKERS: none
+
+## [2026-04-25] [momentum-watcher.cjs, ProjectsTab.svelte, analyze_audio.py] — DONE
+TASK: FIVE MAJOR BUILDS — success pattern, feedback loops, trend velocity, emotional arc, credits
+WHAT: 6 builds implemented — see commit a47560d for full details
+RESULT: works — 8/8 tests, /success-pattern and /trend-velocity endpoints verified
+BLOCKERS: 2 SQL tables need creating in Supabase dashboard before feedback/chart endpoints activate
+
+## [2026-04-25] momentum-watcher.cjs + ProjectsTab.svelte + BrainTab.svelte — STATUS: DONE
+TASK: fix split undefined + svelte const placement errors
+WHAT: null-guarded url.split('/track/') chain in /analyze-spotify-track with optional chaining + early 400 return; moved {#const ao}/{#const latestA} out of <div> into {#if showVocalEq} block; moved {#const arc}/{#const maxE} before <div class="az-body">; moved {#const chipPool} before <div class="brain-approval-item">
+RESULT: works — clean vite build, 8/8 tests passing
+BLOCKERS: none

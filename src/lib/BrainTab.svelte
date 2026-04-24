@@ -1000,7 +1000,19 @@ Return ONLY JSON (single item array):
     const interval = setInterval(() => {
       placeholderIndex = (placeholderIndex + 1) % DUMP_HINTS.length
     }, 4000)
-    return () => clearInterval(interval)
+
+    const refsInterval = setInterval(async () => {
+      const { data: tracks } = await supabase
+        .from('reference_tracks')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (tracks) referenceTrackEntries = tracks
+    }, 120000)
+
+    return () => {
+      clearInterval(interval)
+      clearInterval(refsInterval)
+    }
   })
 
   // Pick up items dispatched from DailyTab WhatsApp button

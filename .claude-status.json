@@ -1,18 +1,16 @@
 {
-  "updated": "2026-04-23T22:10:00.000Z",
-  "last_task": "ref-track-preview-audio",
+  "updated": "2026-04-24T08:00:00.000Z",
+  "last_task": "brain-refs-auto-refresh",
   "status": "done",
   "working": [
-    "ref-track-preview-audio: BrainTab playPreview() + DailyTab inline data-preview + ProjectsTab playRefUrl() — all ▶ buttons play 30s audio, ■ to stop, fallback to momentum_popup",
+    "brain-refs-auto-refresh: refsInterval polls reference_tracks every 2min, both intervals cleaned up on destroy",
+    "ref-track-preview-audio: BrainTab playPreview() + DailyTab inline data-preview + ProjectsTab playRefUrl()",
     "popup-window-dimensions: 900x700 momentum_popup window reused for all external links",
-    "popup-window-open-override: window.open overridden; click capture interceptor",
     "scout-extract-mentions: extractTracksFromText() saves text-mentioned tracks to checkout",
     "brain-loadentries-onmount: onMount async, awaits loadEntries()",
     "fix-reference-tracks-order: reference_tracks ordered by created_at DESC",
     "scout-tracks-checkout: /agent-scout saves kworb tracks to checkout",
-    "sync-project-refs: POST /sync-project-refs → project_meta.reference_links → reference_tracks",
-    "fix-vocal-eq-header-click: z-index fix on vocal-eq-section/header",
-    "remove-checkout-banner: CHECK OUT TODAY banner + pulse dot removed"
+    "sync-project-refs: POST /sync-project-refs → project_meta.reference_links → reference_tracks"
   ],
   "broken": [],
   "partial": [
@@ -20,5 +18,5 @@
     "checkout_date column: run SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;"
   ],
   "next": "Run SQL migrations: (1) ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; (2) ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;",
-  "notes": "Preview audio: BrainTab uses track.preview_url directly. DailyTab embeds preview in data-preview attribute on button. ProjectsTab fetches preview_url from reference_tracks by spotify_id (async on click). All fall back to momentum_popup if no preview available."
+  "notes": "BrainTab now auto-refreshes reference_tracks every 2 minutes so new checkout tracks from scout runs appear without manual reload."
 }

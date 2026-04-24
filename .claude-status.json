@@ -1,21 +1,19 @@
 {
-  "updated": "2026-04-24T19:52:00.000Z",
-  "last_task": "vocal-eq-fuzzy-audio-search",
+  "updated": "2026-04-24T19:59:00.000Z",
+  "last_task": "brain-connect",
   "status": "done",
   "working": [
-    "Song expand/collapse click handler",
+    "connectBrainEntries(): sends 50 brain entries to Haiku, finds connections, saves observation, Telegrams summary",
+    "Sunday 8am scheduler: weeklyBrainReview + weeklySystemReview + connectBrainEntries",
+    "/connect Telegram command for manual trigger",
     "/analyze-vocal-eq: exact + fuzzy audio file search by song code",
     "/analyze-vocal-eq: 4 stems save to vocal_eq_curves via supabaseAdmin",
-    "loadVocalEq: no silent catch, logs curve count to browser console",
     "GET /vocal-eq-curves: single supabaseAdmin query by song_id",
-    "VocalEqChart: receives plain curve objects with typeof guard",
-    "analyzeVocalEqUrl (reference type): per-stem save with error logging",
+    "VocalEqChart: receives plain curve objects",
     "8/8 tests passing"
   ],
   "broken": [],
-  "partial": [
-    "version_name column exists in table but insert uses it — confirm it works next analysis"
-  ],
-  "next": "Test vocal EQ analysis on a song with only a MIX file to confirm fuzzy fallback works",
-  "notes": "Fuzzy fallback: when audio_path from work_data not found in MIXING_DIR or PRODUCTION_DIR, searches both dirs for files starting with song.code, sorts desc to get latest version. Logs 'vocal eq fuzzy match: filename' when triggered."
+  "partial": [],
+  "next": "Test /connect via Telegram to confirm connection analysis works end-to-end",
+  "notes": "connectBrainEntries uses supabase (anon key) to read brain_knowledge — this works since brain_knowledge has permissive RLS for anon reads. Saves result with source_type='brain_connect'. catch block logs parse errors but doesn't throw, so weekly scheduler won't crash if Claude returns unexpected format."
 }

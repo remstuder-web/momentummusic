@@ -2417,6 +2417,13 @@ async function handleOwnerCommand(chatId, text) {
       await sendTelegram(chatId, msg)
     } catch(e) { await sendTelegram(chatId, '❌ Next coin error: ' + e.message) }
   }
+  else if (cmd === '/connect') {
+    await sendTelegram(chatId, '⏳ Analyzing brain connections...')
+    try {
+      await connectBrainEntries()
+      await sendTelegram(chatId, '✓ Brain connection analysis complete')
+    } catch(e) { await sendTelegram(chatId, '❌ Connect error: ' + e.message) }
+  }
   else if (cmd === '/help') {
     await sendTelegram(chatId,
       '🎵 Momentum Commands:\n\n' +
@@ -2454,6 +2461,7 @@ async function handleOwnerCommand(chatId, text) {
       '/unmonitor [name] — Remove from monitor list\n' +
       '/enrich — Bulk enrich all contacts\n' +
       '/improve — Weekly system improvement review\n' +
+      '/connect — Find connections between brain entries\n' +
       '📷 Send photo — Extract WhatsApp screenshot\n' +
       '↩️ Forward message — Auto-analyze forwarded chat\n' +
       '/help — This message'
@@ -9209,6 +9217,68 @@ server.listen(PORT, '127.0.0.1', () => {
     }
   }, 5 * 60 * 1000)
   console.log('✓ Apple Notes auto-sync: every 5 minutes')
+  // Weekly brain connect — Sunday 8am
+  async function connectBrainEntries() {
+    const { data: entries } = await supabase
+      .from('brain_knowledge')
+      .select('id, title, content, category, confidence')
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (!entries?.length) return
+
+    const summary = entries.map(e =>
+      e.id + ': [' + e.category + '] ' + e.title + ' — ' +
+      (e.content || '').slice(0, 80)
+    ).join('\n')
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        system: `You analyze a knowledge base and find connections between entries.
+Find entries that reinforce each other, contradict each other, or belong together.
+Return JSON array: [{"ids":[1,2],"connection":"why they relate","action":"merge|link|promote"}]
+Only return JSON, no other text.`,
+        messages: [{ role: 'user', content: 'Find connections in these brain entries:\n\n' + summary }]
+      })
+    })
+
+    const d = await res.json()
+    const raw = (d.content?.[0]?.text || '[]').replace(/```json|```/g, '').trim()
+
+    try {
+      const connections = JSON.parse(raw)
+      if (connections.length) {
+        await supabase.from('brain_knowledge').insert({
+          category: 'observation',
+          title: 'Brain connections found ' + new Date().toLocaleDateString(),
+          content: connections.map(c =>
+            'Entries ' + c.ids.join('+') + ': ' + c.connection + ' → ' + c.action
+          ).join('\n'),
+          confidence: 'weak',
+          source_type: 'brain_connect',
+          active: true
+        })
+        if (TELEGRAM_TOKEN) {
+          await sendTelegram(TELEGRAM_OWNER_ID,
+            '🧠 Brain connections found:\n\n' +
+            connections.slice(0, 5).map(c =>
+              '· ' + c.connection + ' (' + c.action + ')'
+            ).join('\n')
+          )
+        }
+      }
+    } catch(e) { console.warn('connectBrainEntries parse error:', e.message) }
+  }
+
   // Weekly brain review — Sunday 8am
   async function weeklyBrainReview() {
     try {
@@ -9263,6 +9333,7 @@ Max 150 words. Be specific and actionable.` }]
     if (now.getDay() === 0 && now.getHours() === 8 && now.getMinutes() === 0) {
       weeklyBrainReview()
       weeklySystemReview()
+      connectBrainEntries()
     }
   }, 60000)
   setInterval(() => {

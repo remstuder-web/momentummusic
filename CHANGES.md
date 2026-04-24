@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: brain-connect
+WHAT: Added connectBrainEntries() — sends last 50 active brain entries to Haiku, gets back connection pairs with merge/link/promote actions, saves as brain observation, sends Telegram summary. Runs Sunday 8am alongside weeklyBrainReview. /connect Telegram command for manual trigger. /connect added to /help.
+RESULT: works — watcher starts clean
+BLOCKERS: none
+
+## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: vocal-eq-fuzzy-audio-search
 WHAT: /analyze-vocal-eq now falls back to fuzzy search by song code when exact audio_path from work_data is not found. Searches MIXING_DIR then PRODUCTION_DIR for files starting with song code, takes latest version (sorted desc). Logs 'vocal eq fuzzy match' when used.
 RESULT: works

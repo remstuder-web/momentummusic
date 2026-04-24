@@ -954,6 +954,14 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     connectionsRes.json(), refTracksRes.json(), watchedRes.json()
   ])
 
+  const crossChartData = await getCrossChartTopics()
+  const crossChartBlock = crossChartData.crossChart.length
+    ? 'PEAK MOMENTUM (on both TikTok + Spotify):\n' + crossChartData.crossChart.slice(0, 5).map((t, i) => `${i+1}. ${t.artist} — ${t.title}`).join('\n')
+    : ''
+  const tiktokOnlyBlock = crossChartData.tiktokOnly.length
+    ? 'EMERGING (TikTok only — not yet on Spotify chart):\n' + crossChartData.tiktokOnly.slice(0, 5).map((t, i) => `${i+1}. ${t.artist} — ${t.title}`).join('\n')
+    : ''
+
   // Spotify new releases DE
   let newReleasesText = ''
   if (spToken) {
@@ -1048,16 +1056,18 @@ ${watchedNewText || 'none this week'}
 ## TECH — NEW GEAR & PLUGINS (top 5)
 ${gearBlock}
 
-${refTrackText ? `REFERENCE TRACKS (Remo's taste):\n${refTrackText}\n` : ''}Already known — skip: ${knownNames}
+${crossChartBlock ? crossChartBlock + '\n\n' : ''}${tiktokOnlyBlock ? tiktokOnlyBlock + '\n\n' : ''}${refTrackText ? `REFERENCE TRACKS (Remo's taste):\n${refTrackText}\n` : ''}Already known — skip: ${knownNames}
 ${brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]\n` : ''}
 Based ONLY on the above real data:
 
 ## Breaking Artists
 - Name artists actually in the new releases or chart data
 - Only reference real tracks listed above
+- [CROSS-CHART SIGNAL]: Artists appearing in PEAK MOMENTUM section are confirmed on both platforms — prioritize these
 
 ## Trending Sounds
 - Patterns visible across Spotify chart + YouTube trending + new releases
+- Note any sounds from EMERGING section not yet mainstream
 
 ## Opportunities
 - Based on gaps in the real data vs Remo's sound (genres: ${SUB_GENRE_LABELS})
@@ -1285,6 +1295,26 @@ async function fetchTikTokRealData() {
   } catch(e) {
     console.error('tikcharts error:', e.message)
     return []
+  }
+}
+
+async function getCrossChartTopics() {
+  try {
+    const [tiktokRes, spotifyRes] = await Promise.all([
+      supabaseAdmin.from('reference_tracks').select('title, artist').eq('collection_name', 'tiktok_trending').order('created_at', { ascending: false }).limit(20),
+      supabaseAdmin.from('reference_tracks').select('title, artist').eq('collection_name', 'daily_chart').order('created_at', { ascending: false }).limit(20)
+    ])
+    const tiktok = tiktokRes.data || []
+    const spotify = spotifyRes.data || []
+    const spotifyTitles = new Set(spotify.map(t => (t.title || '').toLowerCase().trim()))
+    const tiktokTitles = new Set(tiktok.map(t => (t.title || '').toLowerCase().trim()))
+    const crossChart = tiktok.filter(t => spotifyTitles.has((t.title || '').toLowerCase().trim()))
+    const tiktokOnly = tiktok.filter(t => !spotifyTitles.has((t.title || '').toLowerCase().trim()))
+    const spotifyOnly = spotify.filter(t => !tiktokTitles.has((t.title || '').toLowerCase().trim()))
+    return { crossChart, tiktokOnly, spotifyOnly, tiktok, spotify }
+  } catch(e) {
+    console.warn('getCrossChartTopics error:', e.message)
+    return { crossChart: [], tiktokOnly: [], spotifyOnly: [], tiktok: [], spotify: [] }
   }
 }
 
@@ -1946,12 +1976,19 @@ async function handleOwnerCommand(chatId, text) {
     const question = text.slice(5).trim()
     await sendTelegram(chatId, '⏳ Asking Mozart...')
     try {
+      const charts = await getCrossChartTopics().catch(() => ({ crossChart: [], tiktokOnly: [] }))
+      const mozartChartCtx = [
+        charts.crossChart.length ? 'PEAK MOMENTUM (TikTok + Spotify): ' + charts.crossChart.slice(0, 3).map(t => t.artist + ' — ' + t.title).join(', ') : '',
+        charts.tiktokOnly.length ? 'EMERGING (TikTok only): ' + charts.tiktokOnly.slice(0, 3).map(t => t.artist + ' — ' + t.title).join(', ') : ''
+      ].filter(Boolean).join('\n')
+      const mozartSystem = 'You are Mozart, music production advisor for Remo. Be concise — max 300 words.' +
+        (mozartChartCtx ? '\n\nCurrent chart signals:\n' + mozartChartCtx : '')
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001', max_tokens: 500,
-          system: 'You are Mozart, music production advisor for Remo. Be concise — max 300 words.',
+          system: mozartSystem,
           messages: [{ role: 'user', content: question }]
         })
       })
@@ -4794,22 +4831,26 @@ ${context}` }]
             if (crypto.binanceAction === 'buy') cryptoMsg += '\n\n→ Open Binance: ' + crypto.binanceDeepLink
             sendTelegram(TELEGRAM_OWNER_ID, cryptoMsg).catch(() => {})
           } catch(e) { console.warn('crypto signal in briefing failed:', e.message) }
-          // TikTok top 5 as separate message
+          // Chart Pulse — cross-chart correlation + TikTok top 5 + Spotify top 5
           try {
-            const tiktokTracks = await supabase
-              .from('reference_tracks')
-              .select('title, artist')
-              .eq('collection_name', 'tiktok_trending')
-              .order('created_at', { ascending: false })
-              .limit(5)
-            if (tiktokTracks.data?.length) {
-              let morningMsg = '🎵 TikTok Top 5:\n'
-              morningMsg += tiktokTracks.data
-                .map((t, i) => (i + 1) + '. ' + t.artist + ' — ' + t.title)
-                .join('\n')
-              sendTelegram(TELEGRAM_OWNER_ID, morningMsg).catch(() => {})
+            const charts = await getCrossChartTopics()
+            let chartMsg = '📊 CHART PULSE\n'
+            if (charts.crossChart.length) {
+              chartMsg += '\nPEAK MOMENTUM (TikTok + Spotify):\n'
+              chartMsg += charts.crossChart.slice(0, 5).map((t, i) => (i + 1) + '. ' + t.artist + ' — ' + t.title).join('\n')
             }
-          } catch(e) { console.warn('tiktok top 5 in briefing failed:', e.message) }
+            if (charts.tiktokOnly.length) {
+              chartMsg += '\n\nEMERGING (TikTok only):\n'
+              chartMsg += charts.tiktokOnly.slice(0, 5).map((t, i) => (i + 1) + '. ' + t.artist + ' — ' + t.title).join('\n')
+            }
+            if (charts.spotify.length) {
+              chartMsg += '\n\nSpotify Top 5:\n'
+              chartMsg += charts.spotify.slice(0, 5).map((t, i) => (i + 1) + '. ' + t.artist + ' — ' + t.title).join('\n')
+            }
+            if (charts.tiktok.length || charts.spotify.length) {
+              sendTelegram(TELEGRAM_OWNER_ID, chartMsg).catch(() => {})
+            }
+          } catch(e) { console.warn('chart pulse in briefing failed:', e.message) }
         }
         console.log(`✓ Morning briefing generated for ${todayISO}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -7821,14 +7862,12 @@ ${chatText.slice(0, 4000)}`
     res.setHeader('Access-Control-Allow-Origin', '*')
     try {
       // Fetch all brain_knowledge rows ordered by id so we keep the earliest (MIN id) per category+title
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?select=id,category,title&order=id.asc`, {
-        headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
-      })
-      if (!r.ok) throw new Error('Failed to fetch brain_knowledge: ' + r.status)
-      const rows = await r.json()
+      const { data: rows, error: fetchErr } = await supabaseAdmin
+        .from('brain_knowledge').select('id,category,title').order('id', { ascending: true })
+      if (fetchErr) throw new Error('Failed to fetch brain_knowledge: ' + fetchErr.message)
       const seen = new Map()
       const toDelete = []
-      for (const row of rows) {
+      for (const row of rows || []) {
         const key = `${row.category}||${row.title}`
         if (seen.has(key)) {
           toDelete.push(row.id)
@@ -7841,15 +7880,13 @@ ${chatText.slice(0, 4000)}`
         res.end(JSON.stringify({ ok: true, deleted: 0 }))
         return
       }
-      // Delete in batches of 50 using in filter
+      // Delete in batches of 50
       let deleted = 0
       for (let i = 0; i < toDelete.length; i += 50) {
         const batch = toDelete.slice(i, i + 50)
-        const del = await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=in.(${batch.join(',')})`, {
-          method: 'DELETE',
-          headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}`, 'Prefer': 'return=minimal' }
-        })
-        if (del.ok) deleted += batch.length
+        const { error: delErr } = await supabaseAdmin.from('brain_knowledge').delete().in('id', batch)
+        if (!delErr) deleted += batch.length
+        else console.error('cleanup-brain-dupes delete error:', delErr.message)
       }
       console.log(`✓ cleanup-brain-dupes: deleted ${deleted} duplicate(s)`)
       res.writeHead(200, { 'Content-Type': 'application/json' })

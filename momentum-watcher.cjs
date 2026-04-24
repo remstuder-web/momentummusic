@@ -1242,67 +1242,50 @@ ${context}` }] })
 
 // ── Agent: TikTok Trends — surface viral sounds aligned to taste profile ──
 async function fetchTikTokRealData() {
-  const results = []
-
-  // 1. tikcharts.com — primary TikTok chart source (weekly viral chart)
   try {
-    const res = await fetch('https://tikcharts.com/', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-      signal: AbortSignal.timeout(10000)
+    const r = await fetch('https://tikcharts.com/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+        'Accept': 'text/html'
+      }
     })
-    if (res.ok) {
-      const html = await res.text()
-      // Table rows: <td> cells with rank, title, artist pattern
-      const rowMatches = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || []
-      for (const row of rowMatches.slice(0, 40)) {
-        const cells = (row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [])
-          .map(c => c.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim())
-          .filter(Boolean)
-        if (cells.length >= 2) {
-          const title = cells[1] || cells[0]
-          const artist = cells[2] || ''
-          if (title && title.length > 2 && !/^(title|song|track|#|rank)/i.test(title)) {
-            results.push({ title, artist, source: 'tikcharts' })
-          }
-        }
-      }
-      console.log(`  tikcharts: ${results.length} chart tracks extracted`)
-    }
-  } catch(e) { console.warn('tikcharts fetch failed:', e.message) }
+    const html = await r.text()
 
-  // 2. Try tokboard.com as fallback
-  if (results.length < 5) {
-    try {
-      const res = await fetch('https://www.tokboard.com/', {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
-        signal: AbortSignal.timeout(8000)
-      })
-      if (res.ok) {
-        const html = await res.text()
-        const titleMatches = html.match(/["']([A-Za-z][^"']{3,40})["']/g) || []
-        for (const raw of titleMatches.slice(0, 30)) {
-          const text = raw.replace(/^["']|["']$/g, '').trim()
-          if (text && !/^(trending|music|tiktok|tokboard|https?|www\.|script|style|class|div|span)/i.test(text)) {
-            results.push({ title: text, artist: '', source: 'tokboard' })
-          }
-        }
-        console.log(`  tokboard: ${results.length} total after fallback`)
-      }
-    } catch(e) { console.warn('tokboard fetch failed:', e.message) }
+    // Extract __NEXT_DATA__ JSON (Next.js embeds all page data here)
+    const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/)
+    if (!match) {
+      console.warn('tikcharts: __NEXT_DATA__ not found')
+      return []
+    }
+
+    const nextData = JSON.parse(match[1])
+
+    // Navigate to chart entries
+    const entriesByWeek = nextData?.props?.pageProps?.entriesByWeek
+    if (!entriesByWeek) return []
+
+    // Get the latest week (first key)
+    const latestWeek = Object.keys(entriesByWeek)[0]
+    const entries = entriesByWeek[latestWeek] || []
+
+    console.log('tikcharts: found', entries.length, 'tracks for week', latestWeek)
+
+    // Map to standard format
+    return entries.slice(0, 20).map(e => ({
+      position: e.rank,
+      title: e.title,
+      artist: e.artist,
+      youtube_id: e.youtube_id,
+      tiktok_slug: e.tiktok_slug,
+      image_url: e.image_url,
+      source: 'tikcharts',
+      week: latestWeek
+    }))
+
+  } catch(e) {
+    console.error('tikcharts error:', e.message)
+    return []
   }
-
-  // 3. kworb YouTube as proxy (always run — fill remaining gaps)
-  try {
-    const kworbYT = await fetchKworbTrending()
-    for (const line of kworbYT.slice(0, 10)) {
-      const parts = line.split(' · ')
-      if (parts.length >= 2) {
-        results.push({ title: parts[1] || line, artist: parts[0] || '', source: 'tiktok_proxy_youtube' })
-      }
-    }
-  } catch(e) { console.warn('kworb YouTube for tiktok failed:', e.message) }
-
-  return results.slice(0, 10)
 }
 
 async function runAgentTikTokTrends(apiKey, sharedBrainRows) {

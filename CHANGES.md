@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: tikcharts-next-data-scraper
+WHAT: Replaced HTML table row parsing with __NEXT_DATA__ JSON extraction. tikcharts.com uses Next.js — data is embedded in <script id="__NEXT_DATA__">. Now navigates props.pageProps.entriesByWeek, takes latest week key, returns up to 20 tracks with position/title/artist/youtube_id/tiktok_slug/image_url/week.
+RESULT: works — found 100 tracks for week 2026-02-16, 5 processed into trend_tracks
+BLOCKERS: none (response key is trend_tracks not tracks)
+
+## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: tiktok-daily-schedule
 WHAT: Added 9am daily TikTok trends trigger in shared setInterval (alongside Sunday brain review). Morning briefing now sends TikTok top 5 as a 3rd Telegram message after crypto signal. /tiktok Telegram command for manual trigger. /tiktok added to /help.
 RESULT: works — watcher starts clean

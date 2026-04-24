@@ -1,19 +1,19 @@
 {
-  "updated": "2026-04-24T20:15:00.000Z",
-  "last_task": "tiktok-daily-schedule",
+  "updated": "2026-04-24T20:20:00.000Z",
+  "last_task": "tikcharts-next-data-scraper",
   "status": "done",
   "working": [
-    "TikTok trends: fires daily at 9am via shared setInterval",
-    "Morning briefing: sends TikTok top 5 as 3rd Telegram message after crypto signal",
-    "/tiktok Telegram command: triggers agent-tiktok-trends, confirms with CHECKOUT message",
-    "Obsidian smart folders: 8 emoji folders, 233 entries backfilled, INDEX.md generated",
-    "connectBrainEntries() + /connect Telegram command",
-    "/analyze-vocal-eq: fuzzy audio search + supabaseAdmin saves",
-    "GET /vocal-eq-curves: supabaseAdmin reads, 30-key curves returned",
+    "fetchTikTokRealData: __NEXT_DATA__ extraction finds 100 tracks from tikcharts.com",
+    "agent-tiktok-trends returns trend_tracks (5 processed), ok:true",
+    "TikTok daily 9am schedule + /tiktok Telegram command",
+    "Morning briefing: TikTok top 5 as 3rd message",
+    "Obsidian smart folders: 8 folders, 233 entries",
+    "connectBrainEntries + /connect command",
+    "vocal EQ full pipeline working",
     "8/8 tests passing"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test /tiktok via Telegram to confirm agent fires correctly",
-  "notes": "TikTok 9am check reuses the existing 60s setInterval (same one as Sunday brain review). Morning briefing TikTok block uses supabase anon client to read reference_tracks where collection_name='tiktok_trending'. Errors are caught and logged without breaking the briefing flow."
+  "next": "Monitor tomorrow 9am to confirm TikTok auto-fires correctly",
+  "notes": "tikcharts response key is trend_tracks (not tracks). The scraper now returns richer data: position, youtube_id, tiktok_slug, image_url, week. The runAgentTikTokTrends function only uses title/artist from the trend data so the extra fields are forward-compatible."
 }

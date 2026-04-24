@@ -3418,6 +3418,64 @@ async function seedProductionRules() {
 }
 
 // ── Brain file storage (Dropbox + Obsidian) ───────────────────────────────
+// Smart folder names (emoji prefix keeps them sorted at top in Obsidian)
+const SMART_FOLDERS = {
+  CORE:       '⚡ CORE',
+  RULES:      '📋 RULES',
+  GOALS:      '🎯 GOALS',
+  PRODUCTION: '🎵 PRODUCTION',
+  KNOWLEDGE:  '🧠 KNOWLEDGE',
+  PEOPLE:     '👥 PEOPLE',
+  SONGS:      '📦 MY SONGS',
+  IDEAS:      '💡 IDEAS',
+}
+
+function getSmartFolder(entry) {
+  const cat = entry.category || ''
+  if (entry.confidence === 'locked' || entry.priority === true) return SMART_FOLDERS.CORE
+  if (entry.source_type === 'music_tips' || cat === 'power_dynamics_principles') return SMART_FOLDERS.RULES
+  if (cat === 'goal') return SMART_FOLDERS.GOALS
+  if (['mixing_technique', 'production_style', 'sound_design'].includes(cat)) return SMART_FOLDERS.PRODUCTION
+  if (['market_knowledge', 'industry_insight', 'observation'].includes(cat)) return SMART_FOLDERS.KNOWLEDGE
+  if (['contact_profile', 'collaboration', 'networking'].includes(cat)) return SMART_FOLDERS.PEOPLE
+  if (['own_production', 'project_references'].includes(cat)) return SMART_FOLDERS.SONGS
+  if (['creative_process', 'question'].includes(cat)) return SMART_FOLDERS.IDEAS
+  return null
+}
+
+async function updateObsidianIndex() {
+  try {
+    const { data: entries } = await supabase
+      .from('brain_knowledge')
+      .select('id, title, category, confidence, priority, source_type, content')
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(200)
+    if (!entries?.length) return
+
+    const sections = {}
+    for (const e of entries) {
+      const folder = getSmartFolder(e) || '🧠 KNOWLEDGE'
+      if (!sections[folder]) sections[folder] = []
+      if (sections[folder].length < 10) sections[folder].push(e)
+    }
+
+    const lines = ['# Momentum Brain Index', '', `*Auto-generated ${new Date().toLocaleDateString('de-CH')}*`, '']
+    for (const [folder, items] of Object.entries(sections)) {
+      lines.push('## ' + folder)
+      for (const e of items) {
+        const snip = (e.content || '').slice(0, 60).replace(/\n/g, ' ')
+        lines.push('- **' + e.title + '** — ' + snip)
+      }
+      lines.push('')
+    }
+
+    const indexPath = path.join(OBSIDIAN_VAULT_PATH, 'INDEX.md')
+    fs.writeFileSync(indexPath, lines.join('\n'), 'utf8')
+    console.log('✓ Obsidian INDEX.md updated')
+  } catch(e) { console.error('updateObsidianIndex error:', e.message) }
+}
+
 async function saveBrainFile(entry) {
   try {
     const category = entry.category || 'uncategorized'
@@ -3453,6 +3511,15 @@ async function saveBrainFile(entry) {
     const obsidianPath = path.join(OBSIDIAN_VAULT_PATH, 'Brain', category, filename)
     fs.mkdirSync(path.dirname(obsidianPath), { recursive: true })
     fs.writeFileSync(obsidianPath, content, 'utf8')
+
+    // Copy to smart folder — never overwrite existing files
+    const smartFolder = getSmartFolder(entry)
+    if (smartFolder) {
+      const smartDir = path.join(OBSIDIAN_VAULT_PATH, smartFolder)
+      fs.mkdirSync(smartDir, { recursive: true })
+      const smartPath = path.join(smartDir, filename)
+      if (!fs.existsSync(smartPath)) fs.writeFileSync(smartPath, content, 'utf8')
+    }
 
     return filepath
   } catch(e) {
@@ -9367,6 +9434,16 @@ Max 150 words. Be specific and actionable.` }]
     if (err) console.warn('⚠ Essentia not available — BPM/key analysis disabled')
     else console.log('✓ Essentia ready')
   })
+  // Backfill all active brain entries into smart Obsidian folders
+  setTimeout(() => {
+    supabase.from('brain_knowledge')
+      .select('*').eq('active', true)
+      .then(({ data }) => {
+        for (const entry of data || []) saveBrainFile(entry).catch(() => {})
+        updateObsidianIndex()
+        console.log('✓ Obsidian smart folders populated (' + (data?.length || 0) + ' entries)')
+      }).catch(e => console.warn('smart folder backfill error:', e.message))
+  }, 8000)
   // Check new columns exist — warn with SQL if missing
   fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=scale,key_strength,valence,acousticness,instrumentalness,duration_seconds,camelot,spectral_centroid,spectral_contrast,spectral_flux,mfcc_mean&limit=1`, { headers: sbHeaders })
     .then(r => {

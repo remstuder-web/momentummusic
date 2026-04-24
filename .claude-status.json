@@ -1,19 +1,23 @@
 {
-  "updated": "2026-04-24T19:59:00.000Z",
-  "last_task": "brain-connect",
+  "updated": "2026-04-24T20:11:00.000Z",
+  "last_task": "obsidian-smart-folders",
   "status": "done",
   "working": [
-    "connectBrainEntries(): sends 50 brain entries to Haiku, finds connections, saves observation, Telegrams summary",
-    "Sunday 8am scheduler: weeklyBrainReview + weeklySystemReview + connectBrainEntries",
-    "/connect Telegram command for manual trigger",
-    "/analyze-vocal-eq: exact + fuzzy audio file search by song code",
-    "/analyze-vocal-eq: 4 stems save to vocal_eq_curves via supabaseAdmin",
-    "GET /vocal-eq-curves: single supabaseAdmin query by song_id",
-    "VocalEqChart: receives plain curve objects",
+    "Obsidian smart folders: 8 emoji folders created, 233 entries backfilled",
+    "⚡ CORE: 36 files (locked/priority entries)",
+    "📋 RULES: 2 files (music_tips/power_dynamics_principles)",
+    "🎵 PRODUCTION: 42 files (mixing_technique, production_style, sound_design)",
+    "🧠 KNOWLEDGE: 34 files (market_knowledge, industry_insight, observation)",
+    "👥 PEOPLE: 32 files (networking, contact_profile, collaboration)",
+    "📦 MY SONGS: 13 files (own_production, project_references)",
+    "💡 IDEAS: 4 files (creative_process, question)",
+    "INDEX.md auto-generated at vault root",
+    "Protected files (Notes/, NOW.md, Unbenannt.canvas, Willkommen.md) untouched",
+    "connectBrainEntries() + /connect Telegram command",
     "8/8 tests passing"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test /connect via Telegram to confirm connection analysis works end-to-end",
-  "notes": "connectBrainEntries uses supabase (anon key) to read brain_knowledge — this works since brain_knowledge has permissive RLS for anon reads. Saves result with source_type='brain_connect'. catch block logs parse errors but doesn't throw, so weekly scheduler won't crash if Claude returns unexpected format."
+  "next": "Open Obsidian to confirm folder structure looks correct",
+  "notes": "saveBrainFile() always checks fs.existsSync() before writing to smart folder. INDEX.md is overwrite-allowed (auto-generated). updateObsidianIndex() also called in brainToObsidian() flow and after backfill."
 }

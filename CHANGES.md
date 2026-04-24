@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: obsidian-smart-folders
+WHAT: Added getSmartFolder() routing (8 emoji folders by category/confidence/priority), updateObsidianIndex() that writes INDEX.md with top 10 entries per section. saveBrainFile() now copies to smart folder if fs.existsSync check passes. 8s startup backfill populated 233 entries. Protected files (Notes/, NOW.md, Unbenannt.canvas, Willkommen.md) untouched.
+RESULT: works — ⚡ CORE:36, 📋 RULES:2, 🎯 GOALS:2, 🎵 PRODUCTION:42, 🧠 KNOWLEDGE:34, 👥 PEOPLE:32, 📦 MY SONGS:13, 💡 IDEAS:4
+BLOCKERS: none
+
+## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: brain-connect
 WHAT: Added connectBrainEntries() — sends last 50 active brain entries to Haiku, gets back connection pairs with merge/link/promote actions, saves as brain observation, sends Telegram summary. Runs Sunday 8am alongside weeklyBrainReview. /connect Telegram command for manual trigger. /connect added to /help.
 RESULT: works — watcher starts clean

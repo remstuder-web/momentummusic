@@ -6444,13 +6444,14 @@ Respond ONLY in JSON:
     res.setHeader('Access-Control-Allow-Origin', '*')
     try {
       const songId = new URL('http://x' + req.url).searchParams.get('song_id')
-      const [{ data: mixCurves }, { data: refCurves }] = await Promise.all([
-        supabaseAdmin.from('vocal_eq_curves').select('*').eq('source_type', 'mix').eq('song_id', String(songId)).order('created_at', { ascending: false }).limit(20),
-        supabaseAdmin.from('vocal_eq_curves').select('*').eq('source_type', 'reference').order('created_at', { ascending: false }).limit(40)
-      ])
-      const curves = [...(mixCurves || []), ...(refCurves || [])]
+      const { data, error } = await supabaseAdmin
+        .from('vocal_eq_curves')
+        .select('*')
+        .eq('song_id', String(songId))
+        .order('created_at', { ascending: false })
+      if (error) throw new Error(error.message)
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, curves }))
+      res.end(JSON.stringify({ ok: true, curves: data || [] }))
     } catch(err) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: err.message }))

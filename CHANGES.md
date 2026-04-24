@@ -1200,3 +1200,9 @@ TASK: vocal-eq-fix-rls-reads
 WHAT: RLS was blocking anon reads of vocal_eq_curves. Switched /vocal-eq-curves GET endpoint to supabaseAdmin for reads. Fixed GET filter from 'type' (non-existent column) to 'source_type'. Fixed ref deduplication check same way. Added version_name to mix insert (column confirmed to exist).
 RESULT: works — 4 stems save and are readable via /vocal-eq-curves
 BLOCKERS: none
+
+## [2026-04-24] ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: vocal-eq-chart-display-fix
+WHAT: loadVocalEq: removed silent catch, added console.log, cleaned up source_type/stem_type matching. Watcher GET: simplified to single supabaseAdmin query by song_id. Template: added explicit mixCurve/refCurve consts with typeof guard, cleaned all filters to use source_type directly.
+RESULT: works — GET returns 12 curves with 30 freq keys each, chart receives plain objects
+BLOCKERS: none

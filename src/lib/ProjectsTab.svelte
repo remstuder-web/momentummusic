@@ -2090,31 +2090,28 @@
   }
 
   async function loadVocalEq(songId) {
-    try {
-      const r = await fetch(`http://localhost:4242/vocal-eq-curves?song_id=${songId}`)
-      const d = await r.json()
-      if (d.ok) {
-        const curves = d.curves || []
-        vocalEqCache.set(songId, curves)
-        vocalEqCurves[songId] = curves
-        vocalEqCurves = { ...vocalEqCurves }
-        // Auto-compare: vocals stem of latest mix vs latest ref
-        const stemKey = activeStem[songId] || 'vocals'
-        const latestMix = curves.find(c => (c.source_type || c.type) === 'mix' && (c.stem_type || 'vocals') === stemKey)
-        const latestRef = curves.find(c => (c.source_type || c.type) === 'reference' && (c.stem_type || 'vocals') === stemKey)
-        if (latestMix && latestRef) {
-          const cr = await fetch('http://localhost:4242/compare-vocal-eq', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mix_curve: latestMix.curve, reference_curve: latestRef.curve })
-          })
-          const cd = await cr.json()
-          if (cd.ok) {
-            vocalComparison[songId] = cd
-            vocalComparison = { ...vocalComparison }
-          }
-        }
+    const r = await fetch('http://localhost:4242/vocal-eq-curves?song_id=' + songId)
+    const d = await r.json()
+    const curves = d.curves || []
+    vocalEqCurves[songId] = curves
+    vocalEqCurves = { ...vocalEqCurves }
+    vocalEqCache.set(songId, curves)
+    console.log('loaded curves for', songId, ':', curves.length, curves.map(c => c.source_type + '/' + c.stem_type))
+    // Auto-compare: current stem of latest mix vs latest ref
+    const stemKey = activeStem[songId] || 'vocals'
+    const latestMix = curves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)
+    const latestRef = curves.find(c => c.source_type === 'reference' && c.stem_type === stemKey)
+    if (latestMix?.curve && latestRef?.curve) {
+      const cr = await fetch('http://localhost:4242/compare-vocal-eq', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mix_curve: latestMix.curve, reference_curve: latestRef.curve })
+      })
+      const cd = await cr.json()
+      if (cd.ok) {
+        vocalComparison[songId] = cd
+        vocalComparison = { ...vocalComparison }
       }
-    } catch(e) {}
+    }
   }
 
   async function analyzeMyVocal(song) {
@@ -2960,10 +2957,12 @@
                   {#if showVocalEq[song.id]}
                     {@const songCurves = vocalEqCurves[song.id] || []}
                     {@const stemKey = activeStem[song.id] || 'vocals'}
-                    {@const mixCurveData = songCurves.find(c => (c.source_type || c.type) === 'mix' && (c.stem_type || 'vocals') === stemKey)}
-                    {@const refCurveData = songCurves.find(c => (c.source_type || c.type) === 'reference' && (c.stem_type || 'vocals') === stemKey)}
-                    {@const refCurves = songCurves.filter(c => (c.source_type || c.type) === 'reference' && (c.stem_type || 'vocals') === stemKey)}
-                    {@const mixCurves = songCurves.filter(c => (c.source_type || c.type) === 'mix' && (c.stem_type || 'vocals') === stemKey)}
+                    {@const mixCurveData = songCurves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)}
+                    {@const refCurveData = songCurves.find(c => c.source_type === 'reference' && c.stem_type === stemKey)}
+                    {@const refCurves = songCurves.filter(c => c.source_type === 'reference' && c.stem_type === stemKey)}
+                    {@const mixCurves = songCurves.filter(c => c.source_type === 'mix' && c.stem_type === stemKey)}
+                    {@const mixCurve = mixCurveData?.curve && typeof mixCurveData.curve === 'object' ? mixCurveData.curve : null}
+                    {@const refCurve = refCurveData?.curve && typeof refCurveData.curve === 'object' ? refCurveData.curve : null}
                     {@const cmp = vocalComparison[song.id]}
                     {@const refLoading = vocalEqLoading[song.id]}
                     <div class="vocal-eq-body">
@@ -2978,8 +2977,8 @@
                       </div>
                       <!-- Chart -->
                       <VocalEqChart
-                        mixCurve={mixCurveData?.curve ?? null}
-                        refCurve={refCurveData?.curve ?? null}
+                        mixCurve={mixCurve}
+                        refCurve={refCurve}
                         mixLabel={mixCurveData?.label ?? ''}
                         refLabel={refCurveData?.label ?? ''}
                       />

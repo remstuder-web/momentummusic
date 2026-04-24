@@ -751,11 +751,14 @@ async function fetchSharedBrainContext() {
 // ── Agent: Scout — real market intelligence + AI analysis ─────────────────
 
 const MUSIC_SOURCES = [
-  { name: 'Pitchfork Best New', url: 'https://pitchfork.com/reviews/best/tracks/feed/rss', type: 'rss' },
-  { name: 'The FADER',         url: 'https://www.thefader.com/rss',                        type: 'rss' },
-  { name: 'Stereogum',         url: 'https://www.stereogum.com/feed/',                     type: 'rss' },
-  { name: 'Lyrical Lemonade',  url: 'https://lyricallemonade.com/feed/',                   type: 'rss' },
-  { name: 'A&R Factory',       url: 'https://www.anrfactory.com/feed/',                    type: 'rss' }
+  { name: 'A&R Factory',        url: 'https://www.anrfactory.com/feed/',                    type: 'rss' },
+  { name: 'Pitchfork Best New', url: 'https://pitchfork.com/reviews/best/tracks/feed/rss',  type: 'rss' },
+  { name: 'NME',                url: 'https://www.nme.com/news/music/feed',                 type: 'rss' },
+  { name: 'Consequence',        url: 'https://consequence.net/feed/',                       type: 'rss' },
+  { name: 'The Guardian Music',  url: 'https://www.theguardian.com/music/rss',               type: 'rss' },
+  { name: 'Earmilk',            url: 'https://earmilk.com/feed/',                           type: 'rss' },
+  { name: 'Uproxx Music',        url: 'https://uproxx.com/music/feed/',                      type: 'rss' },
+  { name: 'Bedroom Producers',  url: 'https://bedroomproducersblog.com/feed/',               type: 'rss' }
 ]
 
 const GEAR_SOURCES = [
@@ -9546,7 +9549,7 @@ server.listen(PORT, '127.0.0.1', () => {
   }
   // Obsidian vault watcher
   if (fs.existsSync(OBSIDIAN_VAULT_PATH)) {
-    chokidar.watch(OBSIDIAN_VAULT_PATH, { ignored: /(^|[\/\\])\../, persistent: true })
+    chokidar.watch(OBSIDIAN_VAULT_PATH, { ignored: /(^|[\/\\])\../, persistent: true, ignoreInitial: true })
       .on('add', p => syncObsidianFile(p))
       .on('change', p => syncObsidianFile(p))
     console.log('✓ Obsidian vault watching:', OBSIDIAN_VAULT_PATH)

@@ -1,5 +1,5 @@
 {
-  "run": "2026-04-24T21:21:59.200Z",
+  "run": "2026-04-24T21:42:24.574Z",
   "passed": 8,
   "total": 8,
   "results": [
@@ -7,7 +7,7 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: analyzer-ref-dropdown-background-pipeline-genius-credits"
+      "detail": "last_task: mozart-no-analysis-eq-chart-persist-category-chips"
     },
     {
       "n": 2,
@@ -25,7 +25,7 @@
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok + past briefing has real content (1456 chars)"
+      "detail": "endpoint ok + past briefing has real content (1615 chars)"
     },
     {
       "n": 5,
@@ -37,19 +37,19 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Increase kick punch and presence\""
+      "detail": "3 items: \"Increase kick punch and impact\""
     },
     {
       "n": 7,
       "label": "No brain duplicates",
       "ok": true,
-      "detail": "887 entries, 0 duplicates"
+      "detail": "860 entries, 0 duplicates"
     },
     {
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "1699d00 analyzer: ref dropdown, background processing pipeline, Genius credits"
+      "detail": "d1a7ea4 mozart: no raw analysis output, EQ chart persist+gold ref, category chips"
     }
   ]
 }

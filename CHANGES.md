@@ -1254,3 +1254,9 @@ TASK: vocal-eq-chart-display-fix
 WHAT: loadVocalEq: removed silent catch, added console.log, cleaned up source_type/stem_type matching. Watcher GET: simplified to single supabaseAdmin query by song_id. Template: added explicit mixCurve/refCurve consts with typeof guard, cleaned all filters to use source_type directly.
 RESULT: works — GET returns 12 curves with 30 freq keys each, chart receives plain objects
 BLOCKERS: none
+
+## [2026-04-24] [ProjectsTab.svelte, VocalEqChart.svelte, BrainTab.svelte, momentum-watcher.cjs] — DONE
+TASK: THREE FIXES (mozart no analysis, EQ chart, category chips)
+WHAT: Mozart suppresses raw numbers; EQ chart persists on collapse, ref=gold, mix=bright white; category chips in approval panel
+RESULT: works — 8/8 tests passing, 8 brain dupes cleaned
+BLOCKERS: none

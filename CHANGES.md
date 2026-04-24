@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-24] momentum-watcher.cjs — DONE
+TASK: fix-scout-checkout-save
+WHAT: Removed 'approved: true' from scout mention insert (column doesn't exist). Added proper saveRes error logging — logs status + response body on failure, success message on 201.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-24] BrainTab.svelte — DONE
 TASK: brain-refs-auto-refresh
 WHAT: Added refsInterval in onMount — polls reference_tracks every 2 min (created_at DESC) and updates referenceTrackEntries. Both intervals cleaned up on destroy.

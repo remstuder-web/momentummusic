@@ -1,16 +1,16 @@
 {
-  "updated": "2026-04-24T08:00:00.000Z",
-  "last_task": "brain-refs-auto-refresh",
+  "updated": "2026-04-24T07:20:00.000Z",
+  "last_task": "fix-scout-checkout-save",
   "status": "done",
   "working": [
-    "brain-refs-auto-refresh: refsInterval polls reference_tracks every 2min, both intervals cleaned up on destroy",
+    "fix-scout-checkout-save: removed approved:true from scout mention insert, proper error logging with status + body",
+    "brain-refs-auto-refresh: refsInterval polls reference_tracks every 2min",
     "ref-track-preview-audio: BrainTab playPreview() + DailyTab inline data-preview + ProjectsTab playRefUrl()",
     "popup-window-dimensions: 900x700 momentum_popup window reused for all external links",
     "scout-extract-mentions: extractTracksFromText() saves text-mentioned tracks to checkout",
     "brain-loadentries-onmount: onMount async, awaits loadEntries()",
     "fix-reference-tracks-order: reference_tracks ordered by created_at DESC",
-    "scout-tracks-checkout: /agent-scout saves kworb tracks to checkout",
-    "sync-project-refs: POST /sync-project-refs → project_meta.reference_links → reference_tracks"
+    "scout-tracks-checkout: /agent-scout saves kworb tracks to checkout"
   ],
   "broken": [],
   "partial": [
@@ -18,5 +18,5 @@
     "checkout_date column: run SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;"
   ],
   "next": "Run SQL migrations: (1) ALTER TABLE vocal_eq_curves ADD COLUMN IF NOT EXISTS stem_type text DEFAULT 'vocals', ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'mix'; (2) ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS checkout_date timestamptz;",
-  "notes": "BrainTab now auto-refreshes reference_tracks every 2 minutes so new checkout tracks from scout runs appear without manual reload."
+  "notes": "Scout checkout inserts now log the full error response body on failure so DB constraint errors are visible in pm2 logs."
 }

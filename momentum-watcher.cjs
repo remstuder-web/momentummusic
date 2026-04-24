@@ -4575,7 +4575,7 @@ ${context}` }]
               { headers: sbHeaders }
             ).then(r => r.json()).catch(() => [])
             if (Array.isArray(existCheck) && existCheck.length > 0) continue
-            await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
+            const saveRes = await fetch(`${SUPABASE_URL}/rest/v1/reference_tracks`, {
               method: 'POST',
               headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
               body: JSON.stringify({
@@ -4583,11 +4583,15 @@ ${context}` }]
                 artist: track.artist,
                 collection_name: 'scout_' + dateMentioned,
                 source: 'checkout',
-                checkout_date: nowMentioned,
-                approved: true
+                checkout_date: nowMentioned
               })
             })
-            console.log('✓ Scout mention → checkout:', track.artist, '—', track.title)
+            if (!saveRes.ok) {
+              const errText = await saveRes.text()
+              console.error('✗ Scout checkout save failed:', saveRes.status, errText)
+            } else {
+              console.log('✓ Scout mention → checkout:', track.artist, '—', track.title)
+            }
           } catch(e) {
             console.error('scout mention save error:', e.message)
           }

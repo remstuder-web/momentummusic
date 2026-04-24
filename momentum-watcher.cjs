@@ -919,7 +919,6 @@ async function extractTracksFromText(text, apiKey) {
     })
     const d = await res.json()
     const raw = (d.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
-    console.log('extractTracksFromText raw:', raw.slice(0, 200))
     if (!raw || raw === '[]') return []
     // Extract JSON array even if surrounded by extra text
     const match = raw.match(/\[[\s\S]*\]/)

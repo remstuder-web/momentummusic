@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-24] src/lib/ProjectsTab.svelte — DONE
+TASK: fix-vocal-eq-expand-crash
+WHAT: Added missing {@const refCurves} and {@const mixCurves} inside {#if showVocalEq[song.id]} block — these were referenced but never declared, causing TypeError that crashed Svelte reactivity and broke song expand clicks
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-24] momentum-watcher.cjs — DONE
 TASK: vocal-eq-production-versions
 WHAT: /analyze-vocal-eq mix type now accepts both version_type='mixing' and version_type='production'. Versions sorted by name descending to get latest. File lookup checks MIXING_DIR first, then PRODUCTION_DIR.

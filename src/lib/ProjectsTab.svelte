@@ -2962,6 +2962,8 @@
                     {@const stemKey = activeStem[song.id] || 'vocals'}
                     {@const mixCurveData = songCurves.find(c => (c.source_type || c.type) === 'mix' && (c.stem_type || 'vocals') === stemKey)}
                     {@const refCurveData = songCurves.find(c => (c.source_type || c.type) === 'reference' && (c.stem_type || 'vocals') === stemKey)}
+                    {@const refCurves = songCurves.filter(c => (c.source_type || c.type) === 'reference' && (c.stem_type || 'vocals') === stemKey)}
+                    {@const mixCurves = songCurves.filter(c => (c.source_type || c.type) === 'mix' && (c.stem_type || 'vocals') === stemKey)}
                     {@const cmp = vocalComparison[song.id]}
                     {@const refLoading = vocalEqLoading[song.id]}
                     <div class="vocal-eq-body">

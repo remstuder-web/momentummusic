@@ -1,15 +1,9 @@
 {
-  "updated": "2026-04-25T08:22:00Z",
-  "last_task": "brain-category-consolidation",
+  "updated": "2026-04-25T08:24:00Z",
+  "last_task": "fix-scout-supabase-catch",
   "status": "done",
   "working": [
-    "consolidateBrainCategories() — updates artist_breaking + emerging_artists_tracking → artist_strategy in batches of 50",
-    "POST /consolidate-brain-categories — ran migration, moved 12 entries",
-    "standardCats: artist_breaking removed",
-    "Agent chart prompt: artist_breaking → artist_strategy",
-    "suggest-category rule 6: artist_breaking removed",
-    "NOW note extraction enum: artist_breaking removed, artist_strategy kept",
-    "Overlap detection block removed (was artist_breaking/emerging_artists_tracking check)",
+    "scout chart_history upsert: converted .catch() → async/await with error check",
     "Watcher restart OK, ping confirmed"
   ],
   "broken": [],
@@ -17,5 +11,5 @@
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
   "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables",
-  "notes": "artist_breaking and emerging_artists_tracking are fully retired. All 12 migrated entries now live under artist_strategy."
+  "notes": "Supabase query builder is thenable but not a full Promise — never chain .catch() directly on supabaseAdmin.from(...) calls. Always use async/await with destructured { error }."
 }

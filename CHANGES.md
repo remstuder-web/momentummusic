@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: fix-scout-supabase-catch
+WHAT: Replaced supabaseAdmin.from('chart_history').upsert(...).catch() with async/await + error check — supabase query builder is thenable but not a full Promise so .catch() is not a function
+RESULT: works — watcher ping OK
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
 TASK: brain-category-consolidation
 WHAT: Merged artist_breaking + emerging_artists_tracking → artist_strategy. Added consolidateBrainCategories() + POST /consolidate-brain-categories endpoint. Removed deprecated categories from standardCats, agent prompts, and NOW note extraction enum. Removed obsolete overlap detection check. Migration moved 12 entries.
 RESULT: works — moved 12 entries, watcher ping OK

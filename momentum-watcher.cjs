@@ -1229,7 +1229,8 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   if (Array.isArray(kworbSP) && kworbSP.length) {
     const today = new Date().toISOString().slice(0,10)
     const histRows = kworbSP.slice(0,50).map(t => ({ title: t.title, artist: t.artist, position: t.position, chart_date: today, source: 'kworb' }))
-    supabaseAdmin.from('chart_history').upsert(histRows, { onConflict: 'title,artist,chart_date', ignoreDuplicates: true }).catch(() => {})
+    const { error: histErr } = await supabaseAdmin.from('chart_history').upsert(histRows, { onConflict: 'title,artist,chart_date', ignoreDuplicates: true })
+    if (histErr) console.error('chart_history upsert error:', histErr.message)
   }
 
   // Encode kworb tracks as structured data in inbox message

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: brain-dump-master-obsidian-core
+WHAT: rebuildBrainMaster() writes /ObsidianVault/Momentum/⚡CORE/BRAIN DUMP MASTER.md — all user text + locked entries grouped by category. Triggered on every /save-brain-file call + POST /rebuild-brain-master endpoint + startup at 8s. Creates CORE dir if missing.
+RESULT: works — file created (119KB), endpoint returns ok:true
+BLOCKERS: none
+
 ## [2026-04-25] momentum-watcher.cjs + BrainTab.svelte + mozartContext.js — DONE
 TASK: reference-tracks-spotify-genres-library-chips-mozart-fingerprint
 WHAT: fetchTrackGenres() fetches Spotify artist genres; processLibraryTrackInBackground saves to genres column; startup enriches missing tracks (45s delay, 3s between); POST /enrich-library-genres endpoint; genre chips in BrainTab library rows; genre fingerprint section in Mozart context and suggest-category prompt

@@ -1598,6 +1598,89 @@ setTimeout(async () => {
   } catch(e) { console.warn('bg-genres startup error:', e.message) }
 }, 45000)
 
+// Startup: rebuild brain master on boot
+setTimeout(rebuildBrainMaster, 8000)
+
+async function rebuildBrainMaster() {
+  try {
+    const { data: entries } = await supabase
+      .from('brain_knowledge')
+      .select('category, title, content, confidence, created_at, priority')
+      .or('source_type.eq.text,confidence.eq.locked')
+      .eq('active', true)
+      .order('category', { ascending: true })
+      .order('created_at', { ascending: false })
+
+    if (!entries?.length) return
+
+    const byCategory = {}
+    for (const e of entries) {
+      const cat = e.category || 'uncategorized'
+      if (!byCategory[cat]) byCategory[cat] = []
+      byCategory[cat].push(e)
+    }
+
+    const lines = [
+      '# BRAIN DUMP MASTER',
+      '> Every insight you personally entered — by category, newest first.',
+      '> Auto-updated. Do not edit manually.',
+      '',
+      'Updated: ' + new Date().toLocaleDateString('de-CH') + ' ' + new Date().toLocaleTimeString('de-CH'),
+      '',
+      '---',
+      ''
+    ]
+
+    const priorityEntries = entries.filter(e => e.priority || e.confidence === 'locked')
+    if (priorityEntries.length) {
+      lines.push('## ⚡ LOCKED / HIGH PRIORITY')
+      lines.push('')
+      for (const e of priorityEntries) {
+        lines.push('**' + e.title + '**')
+        if (e.content) lines.push(e.content)
+        lines.push('`' + (e.category || '') + '`')
+        lines.push('')
+      }
+      lines.push('---')
+      lines.push('')
+    }
+
+    const categoryEmojis = {
+      goal: '🎯', mixing_technique: '🎛', production_style: '🎵',
+      market_knowledge: '📊', own_production: '🎧', contact_profile: '👤',
+      collaboration: '🤝', observation: '👁', creative_process: '💡',
+      sound_design: '🔊', business: '💼', power_dynamics_principles: '⚖️',
+      release_strategy: '🚀', industry_insight: '🏭', networking: '🌐',
+      artist_strategy: '🌟', reference_current: '🎯', question: '❓',
+      knowledge_connection: '🔗'
+    }
+
+    for (const [cat, catEntries] of Object.entries(byCategory)) {
+      const emoji = categoryEmojis[cat] || '📌'
+      lines.push('## ' + emoji + ' ' + cat.toUpperCase().replace(/_/g, ' '))
+      lines.push('')
+      for (const e of catEntries) {
+        const lock = e.confidence === 'locked' ? ' 🔒' : ''
+        const prio = e.priority ? ' ⚡' : ''
+        lines.push('### ' + e.title + lock + prio)
+        if (e.content && e.content !== e.title) lines.push(e.content)
+        lines.push('_' + new Date(e.created_at).toLocaleDateString('de-CH') + '_')
+        lines.push('')
+      }
+      lines.push('---')
+      lines.push('')
+    }
+
+    const masterPath = '/Users/remo/ObsidianVault/Momentum/⚡CORE/BRAIN DUMP MASTER.md'
+    const dir = require('path').dirname(masterPath)
+    if (!require('fs').existsSync(dir)) require('fs').mkdirSync(dir, { recursive: true })
+    require('fs').writeFileSync(masterPath, lines.join('\n'), 'utf8')
+    console.log('✓ Brain dump master rebuilt:', entries.length, 'entries')
+  } catch(e) {
+    console.warn('rebuildBrainMaster error:', e.message)
+  }
+}
+
 async function getCrossChartTopics() {
   try {
     const [tiktokRes, spotifyRes] = await Promise.all([
@@ -2065,7 +2148,7 @@ async function buildStatusResponse() {
     'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
     'GET /get-env-keys', 'POST /save-env-key', 'POST /save-tasks',
     'GET /status', 'GET /system-status', 'GET /ping',
-    'POST /cleanup-brain-dupes', 'POST /enrich-library-genres',
+    'POST /cleanup-brain-dupes', 'POST /enrich-library-genres', 'POST /rebuild-brain-master',
     'GET /find-whatsapp-db', 'POST /setup-whatsapp',
     'GET /whatsapp-contacts', 'POST /whatsapp-add-contact'
   ]
@@ -9329,6 +9412,20 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /rebuild-brain-master — manually rebuild BRAIN DUMP MASTER.md ─────
+  if (req.method === 'POST' && req.url === '/rebuild-brain-master') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      await rebuildBrainMaster()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /enrich-library-genres — fetch Spotify genres for tracks missing them ──
   if (req.method === 'POST' && req.url === '/enrich-library-genres') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -9739,6 +9836,7 @@ ${chatText.slice(0, 4000)}`
         const filepath = await saveBrainFile(entry)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, filepath }))
+        setImmediate(() => rebuildBrainMaster().catch(() => {}))
       } catch(e) {
         res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
       }

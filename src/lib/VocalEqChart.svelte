@@ -84,6 +84,9 @@
     Array.from({ length: Math.round((DB_MAX - DB_MIN) / 5) + 1 }, (_, i) => DB_MIN + i * 5)
   )
 
+  // Unique clip-path ID per instance — prevents ID collision when multiple charts render
+  const clipId = 'cc-' + Math.random().toString(36).slice(2, 7)
+
   let showIzotope = $state(true)
 
   function makeIzotopePath() {
@@ -113,7 +116,7 @@
 <div class="eq-wrap">
   <svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" class="eq-svg">
     <defs>
-      <clipPath id="chart-clip">
+      <clipPath id={clipId}>
         <rect x={PAD_L} y={PAD_T} width={CHART_W} height={CHART_H} />
       </clipPath>
     </defs>
@@ -137,22 +140,22 @@
 
     <!-- iZotope range band + avg line (behind all curves) -->
     {#if showIzotope}
-      <path d={makeIzotopeRange()} fill="rgba(255,255,255,0.04)" stroke="none" clip-path="url(#chart-clip)" />
-      <path d={makeIzotopePath()} fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,4" clip-path="url(#chart-clip)" />
+      <path d={makeIzotopeRange()} fill="rgba(255,255,255,0.04)" stroke="none" clip-path="url(#{clipId})" />
+      <path d={makeIzotopePath()} fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,4" clip-path="url(#{clipId})" />
     {/if}
 
     <!-- Reference curve (behind mix) — gold -->
     {#if displayRef}
-      <polygon points={curveToArea(displayRef)} fill="rgba(201,168,76,0.05)" clip-path="url(#chart-clip)" />
+      <polygon points={curveToArea(displayRef)} fill="rgba(201,168,76,0.05)" clip-path="url(#{clipId})" />
       <polyline points={curveToPoints(displayRef)} fill="none" stroke={REF_COLOR} stroke-width="1.5"
-        stroke-linejoin="round" stroke-linecap="round" opacity="0.7" clip-path="url(#chart-clip)" />
+        stroke-linejoin="round" stroke-linecap="round" opacity="0.7" clip-path="url(#{clipId})" />
     {/if}
 
     <!-- Mix curve (on top) — bright white -->
     {#if displayMix}
-      <polygon points={curveToArea(displayMix)} fill="rgba(255,255,255,0.03)" clip-path="url(#chart-clip)" />
+      <polygon points={curveToArea(displayMix)} fill="rgba(255,255,255,0.03)" clip-path="url(#{clipId})" />
       <polyline points={curveToPoints(displayMix)} fill="none" stroke={MIX_COLOR} stroke-width="2"
-        stroke-linejoin="round" stroke-linecap="round" clip-path="url(#chart-clip)" />
+        stroke-linejoin="round" stroke-linecap="round" clip-path="url(#{clipId})" />
     {/if}
 
     <!-- Legend -->

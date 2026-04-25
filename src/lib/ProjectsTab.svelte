@@ -2118,13 +2118,13 @@
     vocalEqCurves = { ...vocalEqCurves }
     vocalEqCache.set(songId, allCurves)
 
-    // Load all library tracks for ref dropdown (not limited to those with EQ curves)
+    // Load all library tracks for ref dropdown
     const { data: libraryTracks } = await supabase
       .from('reference_tracks')
-      .select('id, title, artist, source, credits, popularity, collection_name')
-      .in('source', ['user', 'agent', 'mozart'])
+      .select('id, title, artist, source, credits, popularity, collection_name, spotify_id')
+      .in('source', ['user', 'agent', 'mozart', 'promoted'])
       .order('artist', { ascending: true })
-      .limit(100)
+      .limit(200)
     refTrackOptions = libraryTracks || []
 
     // Auto-compare: latest mix vs selected or first ref for current stem
@@ -3058,41 +3058,42 @@
                           </button>
                         {/each}
                       </div>
-                      <!-- Ref dropdown (only when global ref curves exist) -->
-                      {#if refTrackOptions.length > 0}
-                        {@const refLinks = new Set(wd.reference_links || [])}
-                        {@const projectRefs = refTrackOptions.filter(r => refLinks.has(String(r.id)))}
-                        {@const hitRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && ((r.popularity || 0) > 70 || r.collection_name === 'daily_chart' || r.collection_name === 'tiktok_trending'))}
-                        {@const libraryRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && (r.popularity || 0) <= 70 && r.collection_name !== 'daily_chart' && r.collection_name !== 'tiktok_trending')}
-                        <div class="ref-select-row">
-                          <span class="ref-select-label">Compare:</span>
-                          <select class="ref-select"
-                            value={selectedRef}
-                            onchange={e => { selectedRefId[song.id] = e.currentTarget.value; selectedRefId = { ...selectedRefId }; loadVocalEq(song.id) }}>
-                            <option value="">— URL ref —</option>
-                            {#if projectRefs.length}
-                              <optgroup label="── PROJECT REFS ──">
-                                {#each projectRefs as ref}
-                                  <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
-                                {/each}
-                              </optgroup>
-                            {/if}
-                            {#if hitRefs.length}
-                              <optgroup label="── HIT SONGS ──">
-                                {#each hitRefs as ref}
-                                  <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
-                                {/each}
-                              </optgroup>
-                            {/if}
-                            {#if libraryRefs.length}
-                              <optgroup label="── LIBRARY ──">
-                                {#each libraryRefs as ref}
-                                  <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
-                                {/each}
-                              </optgroup>
-                            {/if}
-                          </select>
-                        </div>
+                      <!-- Ref dropdown — always show, curves load when available -->
+                      {@const refLinks = new Set(wd.reference_links || [])}
+                      {@const projectRefs = refTrackOptions.filter(r => refLinks.has(String(r.id)))}
+                      {@const hitRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && ((r.popularity || 0) > 70 || r.collection_name === 'daily_chart' || r.collection_name === 'tiktok_trending'))}
+                      {@const libraryRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && (r.popularity || 0) <= 70 && r.collection_name !== 'daily_chart' && r.collection_name !== 'tiktok_trending')}
+                      <div class="ref-select-row">
+                        <span class="ref-select-label">Compare:</span>
+                        <select class="ref-select"
+                          value={selectedRef}
+                          onchange={e => { selectedRefId[song.id] = e.currentTarget.value; selectedRefId = { ...selectedRefId }; loadVocalEq(song.id) }}>
+                          <option value="">— no ref —</option>
+                          {#if projectRefs.length}
+                            <optgroup label="── PROJECT REFS ──">
+                              {#each projectRefs as ref}
+                                <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                              {/each}
+                            </optgroup>
+                          {/if}
+                          {#if hitRefs.length}
+                            <optgroup label="── HIT SONGS ──">
+                              {#each hitRefs as ref}
+                                <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                              {/each}
+                            </optgroup>
+                          {/if}
+                          {#if libraryRefs.length}
+                            <optgroup label="── LIBRARY ──">
+                              {#each libraryRefs as ref}
+                                <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                              {/each}
+                            </optgroup>
+                          {/if}
+                        </select>
+                      </div>
+                      {#if selectedRef && !refCurveData}
+                        <div class="no-curve-msg">No EQ curve yet for this track — background analysis pending</div>
                       {/if}
                       <!-- Chart -->
                       <VocalEqChart
@@ -4163,6 +4164,7 @@
   .ref-select-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
   .ref-select-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; white-space: nowrap; }
   .ref-select { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 11px; padding: 4px 8px; border-radius: 2px; outline: none; }
+  .no-curve-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #444; font-style: italic; padding: 2px 0 4px; }
   .ref-credits { margin: 4px 0; padding: 6px 8px; background: #111; border-radius: 3px; border-left: 2px solid #252525; }
   .credit-row { display: flex; gap: 8px; padding: 2px 0; font-family: 'DM Sans', sans-serif; font-size: 11px; }
   .credit-label { font-family: 'Space Mono', monospace; font-size: 8px; color: #555; width: 55px; flex-shrink: 0; padding-top: 2px; text-transform: uppercase; }

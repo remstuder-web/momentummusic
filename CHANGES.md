@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-25] VocalEqChart.svelte + ProjectsTab.svelte — DONE
+TASK: chart-clip-id-collision-ref-dropdown-always-show
+WHAT: FIX1: unique clipId per chart instance (Math.random) — prevents shared chart-clip ID collision when multiple songs open simultaneously. FIX2: ref dropdown always shows (removed length guard); source list adds 'promoted', limit→200, spotify_id added; "no EQ curve yet" message when ref selected but no curve found.
+RESULT: svelte-check clean
+BLOCKERS: none
+
+## [2026-04-25] VocalEqChart.svelte + ProjectsTab.svelte — DONE
 TASK: analyzer-chart-autoscale-izotope-successmatch-trenddropdown
 WHAT: FIX1: Y-axis auto-scales from actual curve data (DB_MIN/DB_MAX derived, gridDbs derived) — clip-path already existed. FIX2: IZOTOPE_OFFSET computed dynamically (-Math.max avg) instead of hardcoded 36.32; band fill more visible (0.04). FIX3: loadSuccessMatch guard (skip if already loaded); refTrackOptions loads ALL library tracks (source IN user/agent/mozart, limit 100) not just those with EQ curves.
 RESULT: svelte-check clean

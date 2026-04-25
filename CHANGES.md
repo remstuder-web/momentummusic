@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: unified-fetchSpotifyId-helper
+WHAT: Added fetchSpotifyId(title, artist) shared helper. add_project_reference now auto-enriches with Spotify before saving, also calls saveToCheckout(collection=project_reference). TikTok trend search replaced with fetchSpotifyId(). Duplicate check now also matches by spotify_id. 
+RESULT: works — pm2 restart OK
+BLOCKERS: none
+
 ## [2026-04-25] momentum-watcher.cjs + mozartContext.js — DONE
 TASK: fix-mozart-add-project-reference
 WHAT: Rewrote add_project_reference handler to use supabase client + write to work_data.reference_links (not top-level column). Added project_name ilike lookup + latest-song fallback + full error logging. Updated mozartTools payload description to use title/artist/spotify_id instead of track string.

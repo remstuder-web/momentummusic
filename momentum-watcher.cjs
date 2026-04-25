@@ -2014,12 +2014,9 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
       for (const trend of tiktokTracks.slice(0, 5)) {
         if (!trend.title) continue
         try {
-          const q = encodeURIComponent((trend.artist ? trend.artist + ' ' : '') + trend.title)
-          const srRes = await fetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`, { headers: spH })
-          if (!srRes.ok) continue
-          const srData = await srRes.json()
-          const spTrack = srData.tracks?.items?.[0]
-          if (!spTrack) continue
+          const sp = await fetchSpotifyId(trend.title, trend.artist)
+          if (!sp) continue
+          const spTrack = { id: sp.spotify_id, name: sp.title, preview_url: sp.preview_url, artists: [{ name: sp.artist }] }
 
           let feat = {}
           const tmpAudio = `/tmp/tiktok_${Date.now()}.mp3`
@@ -2208,6 +2205,34 @@ async function getSpotifyToken() {
   if (!r.ok) throw new Error(`Spotify token error: ${r.status} ${text}`)
   const d = JSON.parse(text)
   return d.access_token
+}
+
+// ── Spotify track search by title + artist ───────────────────────────────────
+async function fetchSpotifyId(title, artist) {
+  if (!title) return null
+  try {
+    const token = await getSpotifyToken()
+    const q = encodeURIComponent((artist ? artist + ' ' : '') + title)
+    const r = await fetch(
+      `https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`,
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    )
+    if (!r.ok) return null
+    const d = await r.json()
+    const track = d.tracks?.items?.[0]
+    if (!track) return null
+    return {
+      spotify_id: track.id,
+      spotify_url: 'https://open.spotify.com/track/' + track.id,
+      title: track.name,
+      artist: track.artists.map(a => a.name).join(', '),
+      popularity: track.popularity,
+      preview_url: track.preview_url || null
+    }
+  } catch(e) {
+    console.warn('[fetchSpotifyId] failed for "' + title + '":', e.message)
+    return null
+  }
 }
 
 // ── Public filename — strips internal code prefix for artist-facing downloads ──
@@ -10381,11 +10406,36 @@ ${chatText.slice(0, 4000)}`
               console.error('[mozart] fetch song error:', fetchErr.message)
               result = '✗ DB error: ' + fetchErr.message
             } else {
+              // Auto-enrich with Spotify if no spotify_id yet
+              if (!payload.spotify_id && payload.title) {
+                const sp = await fetchSpotifyId(payload.title, payload.artist)
+                if (sp) {
+                  payload.spotify_id = sp.spotify_id
+                  payload.title     = sp.title
+                  payload.artist    = sp.artist
+                  payload.popularity = sp.popularity
+                  console.log('[mozart] Spotify enriched:', payload.title, payload.spotify_id)
+                }
+              }
+
+              // Save to reference_tracks checkout when we have a spotify_id
+              if (payload.spotify_id) {
+                saveToCheckout({
+                  spotify_id: payload.spotify_id,
+                  title: payload.title,
+                  artist: payload.artist,
+                  collection_name: 'project_reference',
+                  approved: true,
+                  popularity: payload.popularity || null
+                }).catch(() => {})
+              }
+
               const wd = song.work_data || {}
               const refs = Array.isArray(wd.reference_links) ? wd.reference_links : []
 
               const alreadyExists = refs.find(r =>
                 r.id === payload.reference_track_id ||
+                (r.spotify_id && r.spotify_id === payload.spotify_id) ||
                 (r.title === payload.title && r.artist === payload.artist)
               )
 

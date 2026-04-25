@@ -1,14 +1,13 @@
 {
-  "updated": "2026-04-25T14:21:00Z",
-  "last_task": "fix-mozart-add-project-reference",
+  "updated": "2026-04-25T14:23:00Z",
+  "last_task": "unified-fetchSpotifyId-helper",
   "status": "done",
   "working": [
-    "add_project_reference: uses supabase client, writes to songs.work_data.reference_links",
-    "project_name resolution: ilike title match → fallback to most recent song → error if nothing found",
-    "Full error logging at every step with [mozart] prefix",
-    "Duplicate check by reference_track_id OR (title+artist)",
-    "mozartTools payload description updated: title/artist/spotify_id instead of track string",
-    "Smoke test confirmed: project_name=nidjo resolved song and wrote to DB"
+    "fetchSpotifyId(title, artist): shared helper, returns {spotify_id, spotify_url, title, artist, popularity, preview_url} or null",
+    "add_project_reference: auto-enriches with Spotify before saving, fires saveToCheckout(collection_name=project_reference) when spotify_id available",
+    "Duplicate check now also matches by spotify_id (in addition to title+artist)",
+    "TikTok trends: replaced inline search with fetchSpotifyId()",
+    "pm2 restart OK"
   ],
   "broken": [],
   "partial": [
@@ -16,5 +15,5 @@
     "genres column: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb;"
   ],
   "next": "Run ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb; in Supabase, then POST /enrich-library-genres to backfill",
-  "notes": "Root cause of silent failure: previous handler wrote to songs.reference_links (top-level column) via direct fetch. New handler writes to songs.work_data.reference_links via supabase client, which is what ProjectsTab reads."
+  "notes": "/agent-import-spotify query mode (line ~6649) was intentionally NOT replaced — it does full Essentia analysis on top of the search, too complex to reduce to fetchSpotifyId()."
 }

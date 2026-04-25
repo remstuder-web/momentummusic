@@ -232,8 +232,6 @@ const supabaseAdmin = createClient(SUPABASE_URL, process.env.SUPABASE_SECRET_KEY
 setInterval(async () => {
   console.log('🎵 Checking watched artists for new releases...')
   try {
-    const token = await getSpotifyToken()
-
     const r = await fetch(
       `${SUPABASE_URL}/rest/v1/watched_artists?active=eq.true&select=*`,
       { headers: sbHeaders }
@@ -244,10 +242,8 @@ setInterval(async () => {
     let newReleases = []
 
     for (const artist of artists) {
-      const relRes = await fetch(
-        `https://api.spotify.com/v1/artists/${artist.spotify_id}/albums`
-        + `?include_groups=single,album&limit=5`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const relRes = await spotifyFetch(
+        `https://api.spotify.com/v1/artists/${artist.spotify_id}/albums?include_groups=single,album&limit=5`
       )
       const rels = await relRes.json()
       const latest = rels.items?.[0]
@@ -462,13 +458,10 @@ async function runPulseCheck(apiKey, sharedBrainRows) {
 
   // Spotify new releases + featured playlists + Viral 50
   try {
-    const spToken = await getSpotifyToken()
-    const spH = { 'Authorization': `Bearer ${spToken}` }
-
     const [relRes, featRes, viralRes] = await Promise.allSettled([
-      fetch('https://api.spotify.com/v1/browse/new-releases?limit=10&country=DE', { headers: spH }),
-      fetch('https://api.spotify.com/v1/browse/featured-playlists?limit=5&country=DE', { headers: spH }),
-      fetch('https://api.spotify.com/v1/playlists/4rOoJ6Egrf8K2IrywzwOMk/tracks?limit=20', { headers: spH })
+      spotifyFetch('https://api.spotify.com/v1/browse/new-releases?limit=10&country=DE'),
+      spotifyFetch('https://api.spotify.com/v1/browse/featured-playlists?limit=5&country=DE'),
+      spotifyFetch('https://api.spotify.com/v1/playlists/4rOoJ6Egrf8K2IrywzwOMk/tracks?limit=20')
     ])
 
     if (relRes.status === 'fulfilled' && relRes.value.ok) {
@@ -591,13 +584,10 @@ ${brainSummary}` }]
 async function runAgentChartAnalysis(apiKey) {
   const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
   const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
-  const spToken = await getSpotifyToken()
-  const spH = { 'Authorization': `Bearer ${spToken}` }
-
   // 1. Fetch current popular tracks (limit capped at 10 with Client Credentials; popularity unavailable in search)
   const searchUrl = 'https://api.spotify.com/v1/search?' +
     new URLSearchParams({ q: 'year:2026 genre:pop', type: 'track', limit: '10' }).toString()
-  const searchRes = await fetch(searchUrl, { headers: spH })
+  const searchRes = await spotifyFetch(searchUrl)
   if (!searchRes.ok) {
     const errBody = await searchRes.text()
     throw new Error(`Spotify track search failed: ${searchRes.status} — ${errBody}`)
@@ -631,13 +621,13 @@ async function runAgentChartAnalysis(apiKey) {
   for (const track of newTracks) {
     const trackId = track.id
     const artistId = track.artists?.[0]?.id
-    const artistRes = artistId ? await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: spH }) : null
+    const artistRes = artistId ? await spotifyFetch(`https://api.spotify.com/v1/artists/${artistId}`) : null
     const artist = artistRes?.ok ? await artistRes.json() : { genres: [] }
 
     let genres = artist.genres || []
     if (!genres.length && artistId) {
       try {
-        const relRes = await fetch(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, { headers: spH })
+        const relRes = await spotifyFetch(`https://api.spotify.com/v1/artists/${artistId}/related-artists`)
         if (relRes.ok) {
           const rel = await relRes.json()
           const gc = {}
@@ -1019,7 +1009,6 @@ async function extractTracksFromText(text, apiKey) {
 
 // ── importSpotifyPlaylist — import all tracks from a playlist URL ─────────
 async function importSpotifyPlaylist(playlistUrl, genreTag) {
-  const token = spotifyUserToken || await getSpotifyToken()
   const playlistId = playlistUrl.split('/playlist/')[1]?.split('?')[0]
   if (!playlistId) throw new Error('invalid playlist URL')
 
@@ -1027,14 +1016,14 @@ async function importSpotifyPlaylist(playlistUrl, genreTag) {
   let tracks = []
   let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50&fields=items(track(id,name,artists,popularity,preview_url,album)),next`
   while (url) {
-    const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
+    const r = await spotifyFetch(url)
     const d = await r.json()
     tracks.push(...(d.items || []).map(i => i.track).filter(Boolean))
     url = d.next || null
   }
 
   // Fetch playlist name
-  const plRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,description`, { headers: { 'Authorization': 'Bearer ' + token } })
+  const plRes = await spotifyFetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,description`)
   const plData = await plRes.json()
   const playlistName = plData.name || 'Imported Playlist'
 
@@ -1051,7 +1040,7 @@ async function importSpotifyPlaylist(playlistUrl, genreTag) {
     let genres = []
     if (artistId) {
       try {
-        const ar = await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: { 'Authorization': 'Bearer ' + token } })
+        const ar = await spotifyFetch(`https://api.spotify.com/v1/artists/${artistId}`)
         const ad = await ar.json()
         genres = ad.genres || []
       } catch(e) {}
@@ -1113,25 +1102,21 @@ async function runAgentScout(apiKey, sharedBrainRows) {
 
   // Spotify new releases DE
   let newReleasesText = ''
-  if (spToken) {
-    try {
-      const spH = { 'Authorization': `Bearer ${spToken}` }
-      const relRes = await fetch('https://api.spotify.com/v1/browse/new-releases?limit=10&country=DE', { headers: spH })
-      if (relRes.ok) {
-        const relData = await relRes.json()
-        const albums = relData.albums?.items || []
-        newReleasesText = albums.map(a => `- ${a.artists.map(x=>x.name).join(', ')} — ${a.name} (${a.release_date})`).join('\n')
-      }
-    } catch(e) { console.warn('Spotify new-releases failed:', e.message) }
-  }
+  try {
+    const relRes = await spotifyFetch('https://api.spotify.com/v1/browse/new-releases?limit=10&country=DE')
+    if (relRes.ok) {
+      const relData = await relRes.json()
+      const albums = relData.albums?.items || []
+      newReleasesText = albums.map(a => `- ${a.artists.map(x=>x.name).join(', ')} — ${a.name} (${a.release_date})`).join('\n')
+    }
+  } catch(e) { console.warn('Spotify new-releases failed:', e.message) }
 
   // Watched artists — flag any released in last 7 days
   let watchedNewText = ''
-  if (spToken && Array.isArray(watchedArtists) && watchedArtists.length) {
-    const spH = { 'Authorization': `Bearer ${spToken}` }
+  if (Array.isArray(watchedArtists) && watchedArtists.length) {
     const watchedChecks = await Promise.allSettled(
       watchedArtists.map(async a => {
-        const r = await fetch(`https://api.spotify.com/v1/artists/${a.spotify_id}/albums?include_groups=single,album&limit=1`, { headers: spH })
+        const r = await spotifyFetch(`https://api.spotify.com/v1/artists/${a.spotify_id}/albums?include_groups=single,album&limit=1`)
         const d = await r.json()
         const latest = d.items?.[0]
         if (latest && latest.release_date >= sevenDaysAgo) {
@@ -1539,14 +1524,7 @@ async function processLibraryTrackInBackground(refTrack) {
     let previewUrl = refTrack.preview_url || null
     if (refTrack.spotify_id) {
       try {
-        const token = spotifyUserToken || await getSpotifyToken()
-        let sr = await fetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id, { headers: { 'Authorization': 'Bearer ' + token } })
-        if (sr.status === 429) {
-          const retryAfter = parseInt(sr.headers.get('Retry-After') || '30', 10)
-          spotifyRateLimitUntil = Date.now() + (retryAfter * 1000)
-          console.warn('bg: Spotify rate limit — pausing queue for', retryAfter, 's')
-          return
-        }
+        const sr = await spotifyFetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id)
         if (!sr.ok) { console.warn('bg: Spotify track fetch failed:', sr.status, refTrack.title); return }
         const sd = await sr.json()
         if (!previewUrl) {
@@ -1558,7 +1536,7 @@ async function processLibraryTrackInBackground(refTrack) {
         }
         // Fetch and save genres if not already set
         if (!refTrack.genres?.length) {
-          const genres = await fetchTrackGenres(refTrack.spotify_id, token)
+          const genres = await fetchTrackGenres(refTrack.spotify_id)
           if (genres.length) {
             const { error: gnErr } = await supabase.from('reference_tracks').update({ genres }).eq('id', refTrack.id)
             if (gnErr) console.error('bg: genres update failed:', refTrack.title, gnErr.message)
@@ -1633,26 +1611,14 @@ async function processLibraryTrackInBackground(refTrack) {
   }
 }
 
-async function fetchTrackGenres(spotifyId, token) {
+async function fetchTrackGenres(spotifyId) {
   try {
-    let trackRes = await fetch('https://api.spotify.com/v1/tracks/' + spotifyId, { headers: { 'Authorization': 'Bearer ' + token } })
-    if (trackRes.status === 429) {
-      const retryAfter = parseInt(trackRes.headers.get('Retry-After') || '30', 10)
-      spotifyRateLimitUntil = Date.now() + (retryAfter * 1000)
-      console.warn('fetchTrackGenres: rate limit — pausing queue for', retryAfter, 's')
-      return []
-    }
+    const trackRes = await spotifyFetch('https://api.spotify.com/v1/tracks/' + spotifyId)
     if (!trackRes.ok) return []
     const track = await trackRes.json()
     const artistId = track.artists?.[0]?.id
     if (!artistId) return []
-    let artistRes = await fetch('https://api.spotify.com/v1/artists/' + artistId, { headers: { 'Authorization': 'Bearer ' + token } })
-    if (artistRes.status === 429) {
-      const retryAfter = parseInt(artistRes.headers.get('Retry-After') || '30', 10)
-      spotifyRateLimitUntil = Date.now() + (retryAfter * 1000)
-      console.warn('fetchTrackGenres: rate limit (artist) — pausing queue for', retryAfter, 's')
-      return []
-    }
+    const artistRes = await spotifyFetch('https://api.spotify.com/v1/artists/' + artistId)
     if (!artistRes.ok) return []
     const artist = await artistRes.json()
     return artist.genres || []
@@ -1660,12 +1626,17 @@ async function fetchTrackGenres(spotifyId, token) {
 }
 
 async function runBackgroundQueue() {
+  if (Date.now() < spotifyRateLimitUntil) {
+    console.log('bg queue paused — rate limited, retrying in 60s')
+    setTimeout(runBackgroundQueue, 60000)
+    return
+  }
   if (isProcessing || processingQueue.length === 0) return
   isProcessing = true
   const track = processingQueue.shift()
   await processLibraryTrackInBackground(track)
   isProcessing = false
-  if (processingQueue.length > 0) setTimeout(runBackgroundQueue, 5000)
+  if (processingQueue.length > 0) setTimeout(runBackgroundQueue, 3000)
 }
 
 function queueLibraryTrack(track) {
@@ -1705,9 +1676,8 @@ setTimeout(async () => {
     const missing = (tracks || []).filter(t => !t.genres?.length)
     if (!missing.length) return
     console.log('bg-genres: enriching', missing.length, 'tracks')
-    const token = await getSpotifyToken()
     for (const track of missing) {
-      const genres = await fetchTrackGenres(track.spotify_id, token)
+      const genres = await fetchTrackGenres(track.spotify_id)
       if (genres.length) {
         const { error: bgGnErr } = await supabase.from('reference_tracks').update({ genres }).eq('id', track.id)
         if (bgGnErr) console.error('bg-genres: update failed:', track.title, bgGnErr.message)
@@ -2120,8 +2090,7 @@ async function calculateVelocity() {
 // ── BUILD 4: Artist collaborators ──────────────────────────────────────────
 async function fetchArtistCollaborators(spotifyId) {
   try {
-    const token = await getSpotifyToken()
-    const r = await fetch(`https://api.spotify.com/v1/artists/${spotifyId}/top-tracks?market=US`, { headers: { 'Authorization': 'Bearer ' + token } })
+    const r = await spotifyFetch(`https://api.spotify.com/v1/artists/${spotifyId}/top-tracks?market=US`)
     const d = await r.json()
     const collaborators = new Set()
     for (const track of d.tracks || []) {
@@ -2180,11 +2149,7 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
     }
 
     // 5. Spotify search + Essentia for TikTok top 5
-    let spToken = null
-    try { spToken = await getSpotifyToken() } catch(e) { console.warn('  TikTok: Spotify token failed:', e.message) }
-
-    if (spToken && tiktokTracks.length) {
-      const spH = { 'Authorization': `Bearer ${spToken}` }
+    if (tiktokTracks.length) {
       for (const trend of tiktokTracks.slice(0, 5)) {
         if (!trend.title) continue
         try {
@@ -2367,6 +2332,11 @@ console.log('Spotify Secret:', SPOTIFY_CLIENT_SECRET ? 'set' : 'EMPTY')
 let spotifyUserToken = null
 let spotifyUserRefresh = null
 
+// Spotify rate limit tracking
+let spotifyCallCount = 0
+let spotifyCallWindowStart = Date.now()
+const SPOTIFY_MAX_CALLS_PER_30S = 30
+
 async function getSpotifyToken() {
   if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
     throw new Error('Spotify credentials not set — fill in SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in momentum-watcher.js')
@@ -2384,6 +2354,46 @@ async function getSpotifyToken() {
   if (!r.ok) throw new Error(`Spotify token error: ${r.status} ${text}`)
   const d = JSON.parse(text)
   return d.access_token
+}
+
+// ── spotifyFetch — rate-limited wrapper for all Spotify API calls ────────────
+async function spotifyFetch(url, opts = {}) {
+  if (Date.now() < spotifyRateLimitUntil) {
+    const waitSec = Math.ceil((spotifyRateLimitUntil - Date.now()) / 1000)
+    throw new Error('Spotify rate limited for ' + waitSec + 's')
+  }
+
+  // Throttle: reset window every 30s
+  const now = Date.now()
+  if (now - spotifyCallWindowStart > 30000) {
+    spotifyCallCount = 0
+    spotifyCallWindowStart = now
+  }
+  if (spotifyCallCount >= SPOTIFY_MAX_CALLS_PER_30S) {
+    await new Promise(r => setTimeout(r, 2000))
+  }
+  spotifyCallCount++
+
+  const token = spotifyUserToken || await getSpotifyToken()
+  const r = await fetch(url, {
+    ...opts,
+    headers: { 'Authorization': 'Bearer ' + token, ...(opts.headers || {}) }
+  })
+
+  if (r.status === 429) {
+    const retryAfter = parseInt(r.headers.get('Retry-After') || '60', 10)
+    spotifyRateLimitUntil = Date.now() + retryAfter * 1000
+    console.warn('⚠ Spotify rate limit hit — blocked for', retryAfter, 's')
+    sendTelegram(TELEGRAM_OWNER_ID, '⚠️ Spotify rate limited for ' + Math.ceil(retryAfter / 60) + ' min').catch(() => {})
+    throw new Error('Spotify rate limited for ' + retryAfter + 's')
+  }
+
+  if (r.status === 403) {
+    const body = await r.text()
+    throw new Error('Spotify 403 Forbidden: ' + body.slice(0, 200))
+  }
+
+  return r
 }
 
 // ── Spotify track search by title + artist ───────────────────────────────────
@@ -5160,8 +5170,7 @@ async function analyzeVocalEqUrl(url, songId, label) {
     const trackId = url.split('/track/')[1]?.split('?')[0]?.split('/')[0]
     if (!trackId) return
     try {
-      const token = await getSpotifyToken()
-      const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: { 'Authorization': 'Bearer ' + token } })
+      const trackRes = await spotifyFetch(`https://api.spotify.com/v1/tracks/${trackId}`)
       const track = await trackRes.json()
       if (track.preview_url) {
         execSync(`curl -s -o "${tmpAudio}" "${track.preview_url}"`, { timeout: 15000 })
@@ -6642,16 +6651,13 @@ ${context}` }]
 
         const trackId = url.split('/track/')[1]?.split('?')[0]?.split('/')[0]
         if (!trackId) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'Invalid Spotify track URL — expected open.spotify.com/track/...' })); return }
-        const token = await getSpotifyToken()
-        const spH = { 'Authorization': `Bearer ${token}` }
-
-        const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: spH })
+        const trackRes = await spotifyFetch(`https://api.spotify.com/v1/tracks/${trackId}`)
         if (!trackRes.ok) throw new Error(`Spotify track error: ${trackRes.status}`)
         const track = await trackRes.json()
 
         const artistId = track.artists?.[0]?.id
         const artistRes = artistId
-          ? await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: spH })
+          ? await spotifyFetch(`https://api.spotify.com/v1/artists/${artistId}`)
           : null
         const artist = artistRes?.ok ? await artistRes.json() : { genres: [] }
 
@@ -6659,7 +6665,7 @@ ${context}` }]
         let genres_source = genres.length ? 'artist' : 'none'
         if (!genres.length && artistId) {
           try {
-            const relRes = await fetch(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, { headers: spH })
+            const relRes = await spotifyFetch(`https://api.spotify.com/v1/artists/${artistId}/related-artists`)
             if (relRes.ok) {
               const rel = await relRes.json()
               const genreCounts = {}
@@ -6833,8 +6839,7 @@ ${context}` }]
         const trackId = url.split('/track/')[1]?.split('?')[0]?.split('/')[0]
         if (!trackId) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'Invalid Spotify URL' })); return }
 
-        const token = await getSpotifyToken()
-        const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        const trackRes = await spotifyFetch(`https://api.spotify.com/v1/tracks/${trackId}`)
         if (!trackRes.ok) throw new Error(`Spotify track error: ${trackRes.status}`)
         const track = await trackRes.json()
 
@@ -6893,9 +6898,7 @@ ${context}` }]
 
         // ── QUERY MODE (Mozart action: add_reference) ─────────────────
         if (query) {
-          const token = await getSpotifyToken()
-          const spH = { 'Authorization': `Bearer ${token}` }
-          const searchRes = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`, { headers: spH })
+          const searchRes = await spotifyFetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`)
           if (!searchRes.ok) throw new Error(`Spotify search error: ${searchRes.status}`)
           const searchData = await searchRes.json()
           const track = searchData.tracks?.items?.[0]
@@ -6906,7 +6909,7 @@ ${context}` }]
           }
 
           const artistId = track.artists?.[0]?.id
-          const artistRes = artistId ? await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: spH }) : null
+          const artistRes = artistId ? await spotifyFetch(`https://api.spotify.com/v1/artists/${artistId}`) : null
           const artist = artistRes?.ok ? await artistRes.json() : { genres: [] }
 
           let bpm = null, key = null, camelot = null
@@ -6978,16 +6981,13 @@ ${context}` }]
         // ── SINGLE TRACK ──────────────────────────────────────────────
         if (url.includes('/track/')) {
           const trackId = url.split('/track/')[1]?.split('?')[0]?.split('/')[0]
-          const token = await getSpotifyToken()
-          const spH = { 'Authorization': `Bearer ${token}` }
-
-          const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: spH })
+          const trackRes = await spotifyFetch(`https://api.spotify.com/v1/tracks/${trackId}`)
           if (!trackRes.ok) throw new Error(`Spotify track fetch error: ${trackRes.status}`)
           const track = await trackRes.json()
 
           const artistId  = track.artists?.[0]?.id
           const artistRes = artistId
-            ? await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: spH })
+            ? await spotifyFetch(`https://api.spotify.com/v1/artists/${artistId}`)
             : null
           const artist = artistRes?.ok ? await artistRes.json() : { genres: [] }
 
@@ -7105,12 +7105,9 @@ ${context}` }]
         // ── ARTIST WATCH ──────────────────────────────────────────────
         if (url.includes('/artist/') && body.watch) {
           const artistId = url.split('/artist/')[1]?.split('?')[0]?.split('/')[0]
-          const token = await getSpotifyToken()
-          const spH = { 'Authorization': `Bearer ${token}` }
-
           const [artistRes, relRes] = await Promise.all([
-            fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: spH }),
-            fetch(`https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=single,album&limit=1`, { headers: spH })
+            spotifyFetch(`https://api.spotify.com/v1/artists/${artistId}`),
+            spotifyFetch(`https://api.spotify.com/v1/artists/${artistId}/albums?include_groups=single,album&limit=1`)
           ])
           if (!artistRes.ok) throw new Error(`Spotify artist fetch error: ${artistRes.status}`)
           const [artist, releases] = await Promise.all([artistRes.json(), relRes.ok ? relRes.json() : { items: [] }])
@@ -7146,10 +7143,6 @@ ${context}` }]
         if (!isPlaylist && !isArtist) throw new Error('URL must be a Spotify playlist, artist, or track link')
         const id = url.split(isPlaylist ? '/playlist/' : '/artist/')[1]?.split('?')[0]?.split('/')[0]
 
-        // 2. Spotify token — prefer user token for private playlist access
-        const spotifyToken = spotifyUserToken || await getSpotifyToken()
-        const spHeaders = { 'Authorization': `Bearer ${spotifyToken}` }
-
         // 3/4. Collect track IDs and artist IDs
         const trackItems = []   // { id, name, popularity }
         const artistIdSet = new Set()
@@ -7158,9 +7151,8 @@ ${context}` }]
           // Paginate up to 500 tracks
           let offset = 0
           while (trackItems.length < 500) {
-            const r = await fetch(
-              `https://api.spotify.com/v1/playlists/${id}/tracks?limit=100&offset=${offset}`,
-              { headers: spHeaders }
+            const r = await spotifyFetch(
+              `https://api.spotify.com/v1/playlists/${id}/tracks?limit=100&offset=${offset}`
             )
             if (!r.ok) {
               const errBody = await r.text()
@@ -7178,8 +7170,8 @@ ${context}` }]
         } else {
           // Artist top tracks + related artists
           const [topR, relR] = await Promise.all([
-            fetch(`https://api.spotify.com/v1/artists/${id}/top-tracks?market=US`, { headers: spHeaders }),
-            fetch(`https://api.spotify.com/v1/artists/${id}/related-artists`, { headers: spHeaders })
+            spotifyFetch(`https://api.spotify.com/v1/artists/${id}/top-tracks?market=US`),
+            spotifyFetch(`https://api.spotify.com/v1/artists/${id}/related-artists`)
           ])
           if (!topR.ok) throw new Error(`Spotify top-tracks error: ${topR.status}`)
           const topD = await topR.json()
@@ -7201,7 +7193,7 @@ ${context}` }]
         const allArtists = []
         for (let i = 0; i < artistIds.length; i += 50) {
           const batch = artistIds.slice(i, i + 50)
-          const r = await fetch(`https://api.spotify.com/v1/artists?ids=${batch.join(',')}`, { headers: spHeaders })
+          const r = await spotifyFetch(`https://api.spotify.com/v1/artists?ids=${batch.join(',')}`)
           if (!r.ok) continue
           const d = await r.json()
           for (const a of (d.artists || [])) if (a?.id) allArtists.push(a)
@@ -8601,14 +8593,12 @@ Respond ONLY in JSON:
         }
 
         // 4. Batch fetch track data + audio features + artists from Spotify
-        const token = await getSpotifyToken()
-        const spH = { 'Authorization': `Bearer ${token}` }
         const KEY_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
 
         const allTracks = []
         for (let i = 0; i < newIds.length; i += 50) {
           const batch = newIds.slice(i, i + 50)
-          const r = await fetch(`https://api.spotify.com/v1/tracks?ids=${batch.join(',')}`, { headers: spH })
+          const r = await spotifyFetch(`https://api.spotify.com/v1/tracks?ids=${batch.join(',')}`)
           if (!r.ok) { console.warn(`  tracks batch error: ${r.status}`); continue }
           const d = await r.json()
           for (const t of (d.tracks || [])) if (t?.id) allTracks.push(t)
@@ -8617,7 +8607,7 @@ Respond ONLY in JSON:
         const allFeatures = []
         for (let i = 0; i < newIds.length; i += 50) {
           const batch = newIds.slice(i, i + 50)
-          const r = await fetch(`https://api.spotify.com/v1/audio-features?ids=${batch.join(',')}`, { headers: spH })
+          const r = await spotifyFetch(`https://api.spotify.com/v1/audio-features?ids=${batch.join(',')}`)
           if (!r.ok) { console.warn(`  features batch error: ${r.status}`); continue }
           const d = await r.json()
           for (const f of (d.audio_features || [])) if (f?.id) allFeatures.push(f)
@@ -8629,7 +8619,7 @@ Respond ONLY in JSON:
         const artistMap = {}
         for (let i = 0; i < artistIds.length; i += 50) {
           const batch = artistIds.slice(i, i + 50)
-          const r = await fetch(`https://api.spotify.com/v1/artists?ids=${batch.join(',')}`, { headers: spH })
+          const r = await spotifyFetch(`https://api.spotify.com/v1/artists?ids=${batch.join(',')}`)
           if (!r.ok) continue
           const d = await r.json()
           for (const a of (d.artists || [])) if (a?.id) artistMap[a.id] = a
@@ -8736,19 +8726,17 @@ Respond ONLY in JSON:
           return
         }
 
-        const token = await getSpotifyToken()
-        const spH = { 'Authorization': `Bearer ${token}` }
         let added = 0
         const errors = []
 
         for (const trackId of newIds) {
           try {
-            const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: spH })
+            const trackRes = await spotifyFetch(`https://api.spotify.com/v1/tracks/${trackId}`)
             if (!trackRes.ok) throw new Error(`Spotify ${trackRes.status}`)
             const track = await trackRes.json()
 
             const artistId = track.artists?.[0]?.id
-            const artistRes = artistId ? await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: spH }) : null
+            const artistRes = artistId ? await spotifyFetch(`https://api.spotify.com/v1/artists/${artistId}`) : null
             const artist = artistRes?.ok ? await artistRes.json() : { genres: [] }
 
             let bpm = null, keyStr = null, camelot = null
@@ -9769,6 +9757,21 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /spotify-status — rate limit + token health ──────────────────────
+  if (req.method === 'GET' && req.url === '/spotify-status') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({
+      rate_limited: Date.now() < spotifyRateLimitUntil,
+      rate_limit_until: spotifyRateLimitUntil ? new Date(spotifyRateLimitUntil).toISOString() : null,
+      seconds_remaining: Math.max(0, Math.ceil((spotifyRateLimitUntil - Date.now()) / 1000)),
+      call_count: spotifyCallCount,
+      user_token: !!spotifyUserToken,
+      queue_size: processingQueue?.length || 0
+    }))
+    return
+  }
+
   // ── GET /ping ─────────────────────────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/ping') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -10033,9 +10036,8 @@ ${chatText.slice(0, 4000)}`
         const missing = tracks.filter(t => !t.genres?.length)
         console.log(`enrich-library-genres: ${missing.length} tracks missing genres`)
         let enriched = 0
-        const token = await getSpotifyToken()
         for (const track of missing) {
-          const genres = await fetchTrackGenres(track.spotify_id, token)
+          const genres = await fetchTrackGenres(track.spotify_id)
           if (genres.length) {
             const { error: elGnErr } = await supabaseAdmin.from('reference_tracks').update({ genres }).eq('id', track.id)
             if (elGnErr) console.error('enrich-library-genres update failed:', track.title, elGnErr.message)
@@ -11535,10 +11537,8 @@ async function enrichContact(name) {
 
   // 1. Search Spotify for artist
   try {
-    const token = await getSpotifyToken()
-    const res = await fetch(
-      'https://api.spotify.com/v1/search?q=' + encodeURIComponent(name) + '&type=artist&limit=1',
-      { headers: { 'Authorization': 'Bearer ' + token } }
+    const res = await spotifyFetch(
+      'https://api.spotify.com/v1/search?q=' + encodeURIComponent(name) + '&type=artist&limit=1'
     )
     const d = await res.json()
     const artist = d.artists?.items?.[0]

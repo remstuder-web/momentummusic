@@ -1,23 +1,24 @@
 {
-  "updated": "2026-04-25T16:00:00Z",
-  "last_task": "spotify-playlist-import",
+  "updated": "2026-04-25T16:24:00Z",
+  "last_task": "fix-rate-limit-queue-and-user-token",
   "status": "done",
   "working": [
-    "POST /import-spotify-playlist: paginates playlist tracks, dedupes by spotify_id, fetches artist genres, inserts to reference_tracks",
-    "importSpotifyPlaylist(): saves genre_tag, playlist_name, genres[], popularity, approved=true",
-    "Startup SQL check warns if genre_tag/playlist_name columns missing",
-    "BrainTab library: Genre sort button added (date/artist/genre)",
-    "BrainTab library: libraryGenreFilter state + genre-filter-chips row",
-    "BrainTab library: filteredLibraryRefs filters by genre (genres[] OR genre_tag)",
-    "BrainTab library: track-genre-tag chip on each row",
-    "svelte-check: 0 errors, pm2: ok"
+    "spotifyRateLimitUntil: module-level flag, set on any 429 in bg queue or fetchTrackGenres",
+    "processLibraryTrackInBackground: skips immediately if rate limited (no more log flood)",
+    "fetchTrackGenres: sets flag + returns [] on 429 (no blocking delay)",
+    "bg queue token: uses spotifyUserToken || getSpotifyToken()",
+    "/agent-import-spotify playlist fetch: uses spotifyUserToken || getSpotifyToken()",
+    "importSpotifyPlaylist: already uses spotifyUserToken || getSpotifyToken()",
+    "GET /spotify-auth + GET /spotify-callback: redirect_uri uses 127.0.0.1",
+    "pm2 restart: ok, ping responding"
   ],
   "broken": [],
   "partial": [
     "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;",
     "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]';",
+    "Spotify user token is in-memory only — resets on watcher restart; OAuth flow must be re-run after each restart",
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
-  "next": "Run the two ALTER TABLE statements in Supabase, then test: POST /import-spotify-playlist with a playlist URL to verify tracks save with genre_tag and appear in BrainTab Library with genre filter chips.",
-  "notes": "Playlist import rate-limits: 200ms after artist fetch, 300ms after each track insert. Skips duplicates by spotify_id."
+  "next": "1. Run ALTER TABLE SQL in Supabase. 2. Open http://localhost:4242/spotify-auth to authorize private playlists. 3. Test POST /import-spotify-playlist with a private playlist URL.",
+  "notes": "Rate limit flag persists in memory — bg queue will self-resume once Date.now() > spotifyRateLimitUntil on the next queue iteration."
 }

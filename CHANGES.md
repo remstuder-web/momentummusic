@@ -1548,3 +1548,9 @@ TASK: spotify-playlist-import + library-sort-genre
 WHAT: Added POST /import-spotify-playlist endpoint + importSpotifyPlaylist() — paginates playlist, dedupes by spotify_id, fetches artist genres, saves to reference_tracks with genre_tag/playlist_name; startup SQL check for new columns; BrainTab library: added Genre sort button, libraryGenreFilter state, genre-filter-chips row, track-genre-tag per row, filteredLibraryRefs now filters by genre
 RESULT: works
 BLOCKERS: Run SQL manually: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;
+
+## 2026-04-25 momentum-watcher.cjs — DONE
+TASK: fix-rate-limit-queue + fix-playlist-user-token
+WHAT: FIX 1 — spotifyRateLimitUntil var; bg queue skips immediately when rate limited instead of blocking; fetchTrackGenres sets flag on 429 instead of waiting; FIX 2 — /agent-import-spotify playlist fetch uses spotifyUserToken || getSpotifyToken(); importSpotifyPlaylist already had this fix; Spotify OAuth endpoints use 127.0.0.1 for redirect_uri
+RESULT: works
+BLOCKERS: none

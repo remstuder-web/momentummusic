@@ -10510,7 +10510,7 @@ ${chatText.slice(0, 4000)}`
           } else {
             const { data: song, error: fetchErr } = await supabase
               .from('songs')
-              .select('work_data')
+              .select('reference_links, work_data')
               .eq('id', songId)
               .single()
 
@@ -10545,21 +10545,8 @@ ${chatText.slice(0, 4000)}`
               const normTrack = (t, a) =>
                 ((a || '') + (t || '')).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30)
 
-              const wd = song.work_data || {}
-              let refs = Array.isArray(wd.reference_links) ? wd.reference_links : []
-
-              // Dedup existing refs (prefer entry with spotify_id)
-              const seen = new Map()
-              const deduped = []
-              for (const ref of refs) {
-                const key = normTrack(ref.title, ref.artist)
-                if (!seen.has(key)) { seen.set(key, deduped.length); deduped.push(ref) }
-                else if (ref.spotify_id) {
-                  const idx = seen.get(key)
-                  if (!deduped[idx]?.spotify_id) deduped[idx] = ref
-                }
-              }
-              refs = deduped
+              // Read reference_links column (not work_data)
+              let refs = Array.isArray(song.reference_links) ? song.reference_links : []
 
               const newKey = normTrack(payload.title, payload.artist)
               const alreadyExists = refs.find(r =>
@@ -10570,12 +10557,6 @@ ${chatText.slice(0, 4000)}`
               if (alreadyExists) {
                 console.log('[mozart] duplicate reference skipped:', payload.title)
                 result = `✓ "${payload.title} — ${payload.artist}" already in references`
-                // Still save deduped refs if they changed
-                if (deduped.length !== (song.work_data?.reference_links?.length || 0)) {
-                  wd.reference_links = refs
-                  const { error: ddErr } = await supabase.from('songs').update({ work_data: wd }).eq('id', songId)
-                  if (ddErr) console.error('[mozart] dedup save failed:', songId, ddErr.message)
-                }
               } else {
                 refs.push({
                   id: payload.reference_track_id ||
@@ -10587,11 +10568,10 @@ ${chatText.slice(0, 4000)}`
                   added_by: 'mozart',
                   added_at: new Date().toISOString()
                 })
-                wd.reference_links = refs
 
                 const { error: updateErr } = await supabase
                   .from('songs')
-                  .update({ work_data: wd })
+                  .update({ reference_links: refs })
                   .eq('id', songId)
 
                 if (updateErr) {
@@ -10689,7 +10669,7 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
-  // ── POST /fix-song-refs — dedup + clean work_data.reference_links for a song ─
+  // ── POST /fix-song-refs — migrate work_data.reference_links → reference_links column ─
   if (req.method === 'POST' && req.url === '/fix-song-refs') {
     res.setHeader('Access-Control-Allow-Origin', '*')
     const chunks = []; req.on('data', c => chunks.push(c))
@@ -10698,37 +10678,54 @@ ${chatText.slice(0, 4000)}`
         const { song_id } = JSON.parse(Buffer.concat(chunks).toString() || '{}')
         if (!song_id) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing song_id' })); return }
 
-        const { data: song, error: fetchErr } = await supabase.from('songs').select('work_data').eq('id', song_id).single()
+        const { data: song, error: fetchErr } = await supabase
+          .from('songs').select('reference_links, work_data').eq('id', song_id).single()
         if (fetchErr) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: fetchErr.message })); return }
-
-        const wd = song.work_data || {}
-        const raw = Array.isArray(wd.reference_links) ? wd.reference_links : []
 
         const normTrack = (t, a) =>
           ((a || '') + (t || '')).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30)
 
-        // Remove test entries
-        const filtered = raw.filter(r => (r.artist || '').toLowerCase() !== 'test artist')
+        const colRefs = Array.isArray(song.reference_links) ? song.reference_links : []
+        const wdRefs  = Array.isArray(song.work_data?.reference_links) ? song.work_data.reference_links : []
 
-        // Dedup — prefer entry with spotify_id
-        const seen = new Map()
-        const deduped = []
-        for (const ref of filtered) {
-          const key = normTrack(ref.title, ref.artist)
-          if (!seen.has(key)) { seen.set(key, deduped.length); deduped.push(ref) }
-          else if (ref.spotify_id) {
-            const idx = seen.get(key)
-            if (!deduped[idx]?.spotify_id) deduped[idx] = ref
-          }
+        // Merge: start with column refs, add work_data refs that aren't already present
+        const merged = [...colRefs]
+        for (const r of wdRefs) {
+          const exists = merged.find(x =>
+            (r.spotify_id && x.spotify_id === r.spotify_id) ||
+            normTrack(x.title, x.artist) === normTrack(r.title, r.artist)
+          )
+          if (!exists) merged.push(r)
         }
 
-        wd.reference_links = deduped
-        const { error: updateErr } = await supabase.from('songs').update({ work_data: wd }).eq('id', song_id)
-        if (updateErr) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: updateErr.message })); return }
+        // Filter test entries + dedup
+        const filtered = merged.filter(r =>
+          (r.artist || '').toLowerCase() !== 'test artist' &&
+          (r.title  || '').toLowerCase() !== 'test track'
+        )
+        const seen = new Map()
+        const cleaned = []
+        for (const ref of filtered) {
+          const key = normTrack(ref.title, ref.artist)
+          if (!seen.has(key)) { seen.set(key, cleaned.length); cleaned.push(ref) }
+          else if (ref.spotify_id && !cleaned[seen.get(key)]?.spotify_id) cleaned[seen.get(key)] = ref
+        }
 
-        console.log(`[fix-song-refs] song ${song_id}: ${raw.length} → ${deduped.length} refs`)
+        // Write to reference_links column
+        const { error: colErr } = await supabase.from('songs')
+          .update({ reference_links: cleaned }).eq('id', song_id)
+        if (colErr) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: colErr.message })); return }
+
+        // Clear work_data.reference_links
+        const wd = song.work_data || {}
+        delete wd.reference_links
+        const { error: wdErr } = await supabase.from('songs')
+          .update({ work_data: wd }).eq('id', song_id)
+        if (wdErr) console.warn('[fix-song-refs] work_data clear failed:', wdErr.message)
+
+        console.log(`[fix-song-refs] song ${song_id}: merged ${colRefs.length} col + ${wdRefs.length} wd → ${cleaned.length} refs`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, before: raw.length, after: deduped.length, refs: deduped }))
+        res.end(JSON.stringify({ ok: true, col_before: colRefs.length, wd_before: wdRefs.length, after: cleaned.length, refs: cleaned }))
       } catch(e) {
         res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
       }

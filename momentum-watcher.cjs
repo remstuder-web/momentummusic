@@ -10343,63 +10343,82 @@ ${chatText.slice(0, 4000)}`
         let result = ''
 
         if (action === 'add_project_reference') {
-          // Resolve project_name → song_id if no song_id provided
-          if (!payload.song_id && payload.project_name) {
-            const term = encodeURIComponent('%' + payload.project_name + '%')
-            let songRes = await fetch(
-              `${SUPABASE_URL}/rest/v1/songs?select=id,title&title=ilike.${term}&order=created_at.desc&limit=1`,
-              { headers: sbHeaders }
-            )
-            let found = await songRes.json()
-            if (!Array.isArray(found) || !found[0]) {
-              songRes = await fetch(
-                `${SUPABASE_URL}/rest/v1/songs?select=id,title&title=is.null&order=created_at.desc&limit=1`,
-                { headers: sbHeaders }
-              )
-              found = await songRes.json()
+          let songId = payload.song_id
+
+          // Resolve project_name → song_id
+          if (!songId && payload.project_name) {
+            const { data: found } = await supabase
+              .from('songs')
+              .select('id, title')
+              .ilike('title', '%' + payload.project_name + '%')
+              .order('created_at', { ascending: false })
+              .limit(1)
+            if (found?.length) {
+              songId = found[0].id
+              console.log('[mozart] found song', songId, 'for project_name', payload.project_name)
+            } else {
+              const { data: latest } = await supabase
+                .from('songs')
+                .select('id, title')
+                .order('created_at', { ascending: false })
+                .limit(1)
+              if (latest?.length) songId = latest[0].id
+              console.log('[mozart] fallback to latest song', songId)
             }
-            if (Array.isArray(found) && found[0]) payload.song_id = found[0].id
           }
 
-          // Import Spotify track → reference_tracks, then push URL to song or project
-          const importRes = await fetch('http://localhost:4242/agent-import-spotify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: payload.track, collection: 'reference_current', source: 'mozart' })
-          })
-          const imp = await importRes.json()
-          if (!imp.ok) { res.writeHead(200); res.end(JSON.stringify({ ok: false, result: '✗ Could not find track: ' + payload.track })); return }
-          const trackUrl = 'https://open.spotify.com/track/' + imp.spotify_id
-          const refEntry = { id: 'r' + Date.now(), url: trackUrl, name: imp.title, artist: imp.artist, source: 'mozart' }
-
-          if (payload.song_id) {
-            const songRes = await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${payload.song_id}&select=reference_links`, { headers: sbHeaders })
-            const [song] = await songRes.json()
-            const refs = Array.isArray(song?.reference_links) ? song.reference_links : []
-            if (!refs.find(r => (typeof r === 'string' ? r : r.url) === trackUrl)) {
-              refs.push(refEntry)
-              await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${payload.song_id}`, {
-                method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-                body: JSON.stringify({ reference_links: refs })
-              })
-            }
-            result = `✓ Added "${imp.title} — ${imp.artist}" to song references`
-          } else if (payload.project_id) {
-            const projRes = await fetch(`${SUPABASE_URL}/rest/v1/projects?id=eq.${payload.project_id}&select=project_meta`, { headers: sbHeaders })
-            const [proj] = await projRes.json()
-            const meta = proj?.project_meta || {}
-            const refs = Array.isArray(meta.reference_links) ? meta.reference_links : []
-            if (!refs.find(r => r.url === trackUrl)) {
-              refs.push(refEntry)
-              meta.reference_links = refs
-              await fetch(`${SUPABASE_URL}/rest/v1/projects?id=eq.${payload.project_id}`, {
-                method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-                body: JSON.stringify({ project_meta: meta })
-              })
-            }
-            result = `✓ Added "${imp.title} — ${imp.artist}" to project references`
+          if (!songId) {
+            console.error('[mozart] add_project_reference: no song_id resolved, payload:', JSON.stringify(payload))
+            result = '✗ No song found — provide song_id or project_name'
           } else {
-            result = '✗ No song_id or project_id provided'
+            const { data: song, error: fetchErr } = await supabase
+              .from('songs')
+              .select('work_data')
+              .eq('id', songId)
+              .single()
+
+            if (fetchErr) {
+              console.error('[mozart] fetch song error:', fetchErr.message)
+              result = '✗ DB error: ' + fetchErr.message
+            } else {
+              const wd = song.work_data || {}
+              const refs = Array.isArray(wd.reference_links) ? wd.reference_links : []
+
+              const alreadyExists = refs.find(r =>
+                r.id === payload.reference_track_id ||
+                (r.title === payload.title && r.artist === payload.artist)
+              )
+
+              if (alreadyExists) {
+                console.log('[mozart] reference already exists, skipping')
+                result = `✓ "${payload.title} — ${payload.artist}" already in references`
+              } else {
+                refs.push({
+                  id: payload.reference_track_id ||
+                      (payload.artist + '_' + payload.title).replace(/\s+/g, '_').toLowerCase(),
+                  title: payload.title,
+                  artist: payload.artist,
+                  spotify_id: payload.spotify_id || null,
+                  ref_type: payload.ref_type || 'music',
+                  added_by: 'mozart',
+                  added_at: new Date().toISOString()
+                })
+                wd.reference_links = refs
+
+                const { error: updateErr } = await supabase
+                  .from('songs')
+                  .update({ work_data: wd })
+                  .eq('id', songId)
+
+                if (updateErr) {
+                  console.error('[mozart] update error:', updateErr.message)
+                  result = '✗ DB write failed: ' + updateErr.message
+                } else {
+                  console.log('[mozart] ✓ added reference', payload.title, 'to song', songId)
+                  result = `✓ Added "${payload.title} — ${payload.artist}" to song references`
+                }
+              }
+            }
           }
 
         } else if (action === 'add_brain_entry') {

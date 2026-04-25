@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] momentum-watcher.cjs + mozartContext.js — DONE
+TASK: fix-mozart-add-project-reference
+WHAT: Rewrote add_project_reference handler to use supabase client + write to work_data.reference_links (not top-level column). Added project_name ilike lookup + latest-song fallback + full error logging. Updated mozartTools payload description to use title/artist/spotify_id instead of track string.
+RESULT: works — tested with project_name=nidjo, song resolved and DB write confirmed
+BLOCKERS: none
+
 ## [2026-04-25] ProjectsTab.svelte + momentum-watcher.cjs — DONE
 TASK: mozart-actions-refs-untitled-projects
 WHAT: Song-level REFERENCE LINKS block now always visible (removed {#if} guard on stage/links count). Add form also always shown. /mozart-action add_project_reference resolves project_name → song_id via ilike title match, falls back to most recent null-title song.

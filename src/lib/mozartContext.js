@@ -368,7 +368,7 @@ export const mozartTools = [{
       },
       payload: {
         type: 'object',
-        description: 'Action-specific fields. add_project_reference: {track, song_id?, project_id?}. add_brain_entry: {category, title, content, confidence?}. add_inbox_task: {title, message, song_code?, song_title?}. set_version_feedback: {song_id, version_label, feedback}. update_now_note: {content}. add_contact_note: {name, note}.'
+        description: 'Action-specific fields. add_project_reference: {title, artist, spotify_id?, song_id?, project_name?}. add_brain_entry: {category, title, content, confidence?}. add_inbox_task: {title, message, song_code?, song_title?}. set_version_feedback: {song_id, version_label, feedback}. update_now_note: {content}. add_contact_note: {name, note}.'
       }
     },
     required: ['action', 'payload']

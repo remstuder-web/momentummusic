@@ -24,6 +24,33 @@ const formidable = require('formidable')
 let Database = null
 try { Database = require('better-sqlite3') } catch(e) { console.warn('better-sqlite3 not available:', e.message) }
 
+/*
+ * MOMENTUM DATA MAP — where things live
+ *
+ * songs.reference_links     ← array of {id,title,artist,spotify_id,ref_type}
+ * songs.work_data           ← {versions[], notes, release_checklist}
+ * songs.work_data.versions  ← [{name, feedback, analysis, created_at}]
+ *
+ * brain_knowledge           ← all knowledge entries
+ *   source_type='text'      ← user typed manually (PROTECTED)
+ *   confidence='locked'     ← user locked (PROTECTED)
+ *   source_type='mozart'    ← mozart sessions
+ *   category='speicherbox'  ← file attachments
+ *
+ * reference_tracks          ← music references
+ *   source='checkout'       ← incoming/scouted
+ *   source='agent'          ← promoted to library
+ *
+ * inbox_notifications       ← daily display only (ephemeral)
+ *   type='briefing'         ← one per day, replaced
+ *   type='scout'            ← one per day, replaced
+ *   type='reference'        ← aktuelle refs, expire 7 days
+ *
+ * vocal_eq_curves           ← EQ analysis per stem
+ *   song_id                 ← mix curves
+ *   reference_track_id      ← reference curves
+ */
+
 // ── CONFIG ────────────────────────────────────────────────────────────────
 // Dropbox OAuth2 — fill in App Key and App Secret from your Dropbox App Console
 // https://www.dropbox.com/developers/apps → your app → Settings

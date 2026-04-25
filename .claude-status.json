@@ -1,22 +1,23 @@
 {
-  "updated": "2026-04-25T22:52:00Z",
-  "last_task": "fix-playlist-import-token",
+  "updated": "2026-04-25T22:55:00Z",
+  "last_task": "persist-spotify-oauth-token",
   "status": "done",
   "working": [
-    "importSpotifyPlaylist(): logs token type at start (USER_OAUTH vs CLIENT_CREDS)",
-    "importSpotifyPlaylist(): captures token before loop, uses direct fetch bypassing spotifyFetch wrapper",
-    "importSpotifyPlaylist(): 403 body logged explicitly for debugging",
-    "Debug confirmed: CLIENT_CREDS causes 403 on private playlists — expected behavior",
-    "Fix is correct — will work once USER_OAUTH token set via /spotify-auth"
+    "loadSpotifyToken(): reads .spotify-token.json on startup, sets spotifyUserToken if not expired, auto-refreshes if refresh_token present",
+    "saveSpotifyToken(): writes token + refresh_token + expires_at to .spotify-token.json",
+    "refreshSpotifyToken(): uses refresh_token to get new access_token, saves to disk",
+    "saveSpotifyToken() called in /spotify-callback after successful OAuth exchange",
+    "loadSpotifyToken() called in server.listen startup callback",
+    "pm2 restart clean — watcher online"
   ],
   "broken": [],
   "partial": [
-    "Playlist import returns 403 until OAuth flow is completed — MUST open http://127.0.0.1:4242/spotify-auth after every pm2 restart",
-    "FULL MIX tab has no curve yet",
+    ".spotify-token.json does not exist yet — need one OAuth round to seed it",
+    "Once seeded: token survives all future pm2 restarts via auto-refresh",
     "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;",
     "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]';",
     "OPTIONAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS tonal_balance jsonb, ADD COLUMN IF NOT EXISTS stereo_width float, ADD COLUMN IF NOT EXISTS stereo_width_per_band jsonb, ADD COLUMN IF NOT EXISTS crest_factor_per_band jsonb;"
   ],
-  "next": "Open http://127.0.0.1:4242/spotify-auth → complete OAuth → check pm2 logs for '✓ User OAuth token saved, scope: playlist-read-private' → re-test curl import. Consider persisting OAuth token to disk so it survives pm2 restarts.",
-  "notes": "Root cause confirmed via debug logs: spotifyUserToken is null after pm2 restart, falls back to CLIENT_CREDS which gets 403 on private playlists. Token persistence to disk would eliminate the need to re-auth after every restart."
+  "next": "Open http://127.0.0.1:4242/spotify-auth ONE TIME to seed .spotify-token.json. After that, all restarts will auto-load the token. Check pm2 logs for '✓ Spotify token saved to disk' after OAuth.",
+  "notes": "Token file at momentum-watcher directory root (.spotify-token.json). 1-minute expiry buffer built in. refresh_token is persisted so expired tokens auto-refresh without user interaction."
 }

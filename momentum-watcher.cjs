@@ -1016,9 +1016,17 @@ async function importSpotifyPlaylist(playlistUrl, genreTag) {
   if (!playlistId) throw new Error('invalid playlist URL')
   console.log('importSpotifyPlaylist: playlist id:', playlistId)
 
-  // Fetch all tracks (paginated) — use token directly to bypass any wrapper substitution
+  // Fetch playlist name first
+  const plInfoRes = await fetch(
+    'https://api.spotify.com/v1/playlists/' + playlistId,
+    { headers: { 'Authorization': 'Bearer ' + token } }
+  )
+  const plInfoData = await plInfoRes.json()
+  const playlistName = plInfoData.name || 'Imported Playlist'
+
+  // Fetch all tracks (paginated) — no fields filter to avoid 403
   let tracks = []
-  let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50&fields=items(track(id,name,artists,popularity,preview_url)),next`
+  let url = 'https://api.spotify.com/v1/playlists/' + playlistId + '/tracks?limit=50'
   while (url) {
     const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
     console.log('importSpotifyPlaylist: response status:', r.status)
@@ -1032,14 +1040,6 @@ async function importSpotifyPlaylist(playlistUrl, genreTag) {
     tracks.push(...(d.items || []).map(i => i.track).filter(Boolean))
     url = d.next || null
   }
-
-  // Fetch playlist name — also use token directly
-  const plRes = await fetch(
-    `https://api.spotify.com/v1/playlists/${playlistId}?fields=name,description`,
-    { headers: { 'Authorization': 'Bearer ' + token } }
-  )
-  const plData = await plRes.json()
-  const playlistName = plData.name || 'Imported Playlist'
 
   let saved = 0
   let skipped = 0

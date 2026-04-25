@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-26] momentum-watcher.cjs — PARTIAL
+TASK: fix-playlist-import-fields-param
+WHAT: importSpotifyPlaylist(): removed fields filter from /tracks URL, fetches full response. Moved playlist name fetch before tracks loop. Both fetches use direct token (no spotifyFetch wrapper).
+RESULT: fields param removed — but /playlists/{id}/tracks returns 403 for ALL playlists with BOTH client_credentials and user OAuth tokens. /playlists/{id} metadata works, /me/playlists works. Confirmed: this is a Spotify API-level restriction (app quota/extended access), not a code bug.
+BLOCKERS: Spotify Developer App likely needs Extended Access approval for /playlists/{id}/tracks. Check https://developer.spotify.com/documentation/web-api/concepts/quota-modes
+
 ## [2026-04-26] momentum-watcher.cjs — DONE
 TASK: persist-spotify-oauth-token
 WHAT: Added SPOTIFY_TOKEN_FILE (.spotify-token.json), loadSpotifyToken() (reads on startup, auto-refreshes if expired), saveSpotifyToken() (writes after OAuth + refresh), refreshSpotifyToken() (uses refresh_token to get new access_token). loadSpotifyToken() called in server.listen on startup. saveSpotifyToken() called in /spotify-callback after successful exchange. Token survives pm2 restarts.

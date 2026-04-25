@@ -1,5 +1,5 @@
 <script>
-  let { mixCurve = null, refCurve = null, mixLabel = '', refLabel = '' } = $props()
+  let { mixCurve = null, refCurve = null, mixLabel = '', refLabel = '', isMixTab = false } = $props()
 
   const REF_COLOR = '#c9a84c'
   const MIX_COLOR = 'rgba(255,255,255,0.85)'
@@ -70,14 +70,15 @@
   // iZotope 2024 Mastering Trends — Top 40 commercial average
   // [freq_hz, avg_dB, hi_dB, lo_dB]
   const IZOTOPE_2024 = [[22,-41.06,-31.69,-63.51],[22,-41.06,-31.69,-63.51],[32,-38.46,-29.12,-60.83],[43,-36.85,-28.1,-58.43],[54,-36.32,-28.02,-56.42],[65,-36.48,-28.43,-54.95],[86,-37.52,-29.71,-53.07],[108,-38.74,-31.04,-52.26],[129,-39.98,-32.4,-51.89],[172,-42.08,-35.14,-52.14],[215,-43.34,-36.38,-52.64],[280,-44.73,-37.8,-53.51],[345,-46.53,-39.7,-55.01],[441,-48.51,-41.65,-57.08],[560,-49.76,-42.78,-58.88],[711,-51.63,-44.65,-60.43],[904,-53.92,-47.15,-62.43],[1152,-56.29,-49.86,-64.5],[1453,-58.11,-52.06,-65.71],[1852,-59.79,-54.06,-66.96],[2347,-61.93,-56.57,-69.01],[2972,-63.81,-58.84,-70.83],[3779,-65.68,-60.91,-72.74],[4791,-67.84,-63.21,-74.85],[6083,-69.25,-64.23,-77.87],[7709,-69.88,-64.89,-79.4],[9787,-70.93,-65.97,-81.2],[12425,-75.17,-69.68,-84.64],[15762,-81.16,-75.32,-88.3],[20004,-86.22,-81.27,-91.21]]
-  // Normalize so avg peak aligns to 0dB on the relative chart
-  const IZOTOPE_OFFSET = -Math.max(...IZOTOPE_2024.map(p => p[1]))
+  // Normalize: peak at 54hz (-36.32dB) maps to 0dB — subtract peak so all values become relative
+  const IZOTOPE_PEAK_DB = Math.max(...IZOTOPE_2024.map(p => p[1]))  // -36.32
+  function iZotopeNorm(db) { return db - IZOTOPE_PEAK_DB }
 
-  // Dynamic Y-axis: fit mix, ref, and iZotope avg values
+  // Dynamic Y-axis: include iZotope range only on FULL MIX tab (avoids squishing stem curves)
   const dbRange = $derived((() => {
     const mixVals = displayMix ? ISO_FREQS.filter(f => displayMix[String(f)] !== undefined).map(f => displayMix[String(f)]) : []
     const refVals = displayRef ? ISO_FREQS.filter(f => displayRef[String(f)] !== undefined).map(f => displayRef[String(f)]) : []
-    const izVals = IZOTOPE_2024.map(([,avg]) => avg + IZOTOPE_OFFSET)
+    const izVals = isMixTab ? IZOTOPE_2024.map(([,avg]) => iZotopeNorm(avg)) : []
     const all = [...mixVals, ...refVals, ...izVals].filter(v => isFinite(v))
     if (!all.length) return { min: -20, max: 20 }
     const dataMin = Math.min(...all)
@@ -103,7 +104,7 @@
   function makeIzotopePath() {
     const pts = IZOTOPE_2024.map(([freq, avg]) => {
       const x = xForFreq(freq).toFixed(1)
-      const y = yForDb(avg + IZOTOPE_OFFSET).toFixed(1)
+      const y = yForDb(iZotopeNorm(avg)).toFixed(1)
       return `${x},${y}`
     })
     return 'M ' + pts.join(' L ')
@@ -112,12 +113,12 @@
   function makeIzotopeRange() {
     const hiPts = IZOTOPE_2024.map(([freq,,hi]) => {
       const x = xForFreq(freq).toFixed(1)
-      const y = yForDb(hi + IZOTOPE_OFFSET).toFixed(1)
+      const y = yForDb(iZotopeNorm(hi)).toFixed(1)
       return `${x},${y}`
     })
     const loPts = [...IZOTOPE_2024].reverse().map(([freq,,,lo]) => {
       const x = xForFreq(freq).toFixed(1)
-      const y = yForDb(lo + IZOTOPE_OFFSET).toFixed(1)
+      const y = yForDb(iZotopeNorm(lo)).toFixed(1)
       return `${x},${y}`
     })
     return 'M ' + hiPts.join(' L ') + ' L ' + loPts.join(' L ') + ' Z'
@@ -149,8 +150,8 @@
 
     <rect x={PAD_L} y={PAD_T} width={CHART_W} height={CHART_H} fill="none" stroke="#252525" stroke-width="0.5" />
 
-    <!-- iZotope range band + avg line (behind all curves) -->
-    {#if showIzotope}
+    <!-- iZotope range band + avg line — only on FULL MIX tab -->
+    {#if isMixTab && showIzotope}
       <path d={makeIzotopeRange()} fill="rgba(255,255,255,0.04)" stroke="none" clip-path="url(#{clipId})" />
       <path d={makeIzotopePath()} fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,4" clip-path="url(#{clipId})" />
     {/if}
@@ -179,7 +180,7 @@
       <line x1={legendX} y1={PAD_T + 8} x2={legendX + 14} y2={PAD_T + 8} stroke={MIX_COLOR} stroke-width="2" />
       <text x={legendX + 18} y={PAD_T + 11.5} font-size="9" fill="rgba(255,255,255,0.8)" font-family="Space Mono, monospace">{mixLabel || 'MY MIX'}</text>
     {/if}
-    {#if showIzotope}
+    {#if isMixTab && showIzotope}
       {@const izX = W - PAD_R - 114}
       <line x1={izX} y1={PAD_T + 8} x2={izX + 14} y2={PAD_T + 8} stroke="rgba(255,255,255,0.3)" stroke-width="1" stroke-dasharray="3,3" />
       <text x={izX + 18} y={PAD_T + 11.5} font-size="9" fill="rgba(255,255,255,0.3)" font-family="Space Mono, monospace">iZotope 2024</text>
@@ -187,11 +188,13 @@
   </svg>
 
   <div class="eq-controls">
-    <button
-      class="izotope-toggle {showIzotope ? 'active' : ''}"
-      onclick={() => showIzotope = !showIzotope}>
-      iZ
-    </button>
+    {#if isMixTab}
+      <button
+        class="izotope-toggle {showIzotope ? 'active' : ''}"
+        onclick={() => showIzotope = !showIzotope}>
+        iZ
+      </button>
+    {/if}
   </div>
 </div>
 

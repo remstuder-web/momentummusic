@@ -1,5 +1,15 @@
 # CHANGES
 
+## [2026-04-25] src/lib/VocalEqChart.svelte + src/lib/ProjectsTab.svelte — DONE
+TASK: analyzer-four-fixes
+WHAT:
+  FIX1: FULL MIX added as first stem tab (default). mixCurveData/refCurveData handle stemKey==='mix' (null/undefined stem_type). isMixTab const derived and passed to VocalEqChart.
+  FIX2: iZotope curve, range band, legend, and iZ toggle button all gated behind isMixTab. Hidden on VOCALS/DRUMS/BASS/OTHER tabs.
+  FIX3: IZOTOPE_OFFSET renamed to IZOTOPE_PEAK_DB with iZotopeNorm() helper. iZotope values excluded from dbRange calculation on stem tabs — prevents chart range from being squished by -50dB iZ tail. On FULL MIX tab, iZ values included in range so full curve is visible.
+  FIX4: loadVocalEq() now collects project+song reference_links, looks up matching reference_tracks rows by spotify_id, populates refTrackOptions with _section='PROJECT'|'SONG'|'LIBRARY'. Dropdown shows PROJECT REFS + SONG REFS optgroups above HIT SONGS + LIBRARY. genre_tag shown in LIBRARY options.
+RESULT: works — svelte-check 0 errors
+BLOCKERS: none
+
 ## [2026-04-25] src/lib/DailyTab.svelte — DONE
 TASK: agent-buttons-routine-only
 WHAT: Agent buttons row (Morning Briefing + Scout) and todayBriefing block wrapped in {#if activeSection === 'routine'}. They no longer appear in PRIVATE or HELPERS sections. visibleInbox $derived confirmed active in all 3 inbox stream filter positions.

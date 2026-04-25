@@ -2152,14 +2152,50 @@
     vocalEqCurves = { ...vocalEqCurves }
     vocalEqCache.set(songId, allCurves)
 
+    // Collect project + song refs to show as priority groups in dropdown
+    const song = songs.find(s => s.id === songId)
+    const project = projects.find(p => p.id === song?.project_id)
+    const projectRefObjs = [
+      ...(project?.reference_links || []),
+      ...(project?.project_meta?.reference_links || [])
+    ].filter(r => r.spotify_id)
+    const songRefObjs = (song?.reference_links || []).filter(r => r.spotify_id)
+    const refSpotifyIds = [...new Set([...projectRefObjs, ...songRefObjs].map(r => r.spotify_id))]
+
+    let spotifyMap = {}
+    if (refSpotifyIds.length) {
+      const { data: spotifyRows } = await supabase
+        .from('reference_tracks')
+        .select('id, title, artist, credits, popularity, collection_name, spotify_id, genre_tag')
+        .in('spotify_id', refSpotifyIds)
+      for (const t of (spotifyRows || [])) spotifyMap[t.spotify_id] = t
+    }
+
+    const projectRefTracks = projectRefObjs.map(r => {
+      const t = spotifyMap[r.spotify_id]
+      return { id: t?.id ?? null, title: r.title || r.name || t?.title || '?', artist: r.artist || t?.artist || '?', spotify_id: r.spotify_id, credits: t?.credits, _section: 'PROJECT', _rt_id: t?.id ?? null }
+    }).filter((r, i, arr) => r._rt_id && arr.findIndex(x => x._rt_id === r._rt_id) === i)
+
+    const songRefTracks = songRefObjs.map(r => {
+      const t = spotifyMap[r.spotify_id]
+      return { id: t?.id ?? null, title: r.title || r.name || t?.title || '?', artist: r.artist || t?.artist || '?', spotify_id: r.spotify_id, credits: t?.credits, _section: 'SONG', _rt_id: t?.id ?? null }
+    }).filter((r, i, arr) => r._rt_id && arr.findIndex(x => x._rt_id === r._rt_id) === i)
+
+    const priorityIds = new Set([...projectRefTracks, ...songRefTracks].map(r => r._rt_id).filter(Boolean))
+
     // Load all library tracks for ref dropdown
     const { data: libraryTracks } = await supabase
       .from('reference_tracks')
-      .select('id, title, artist, source, credits, popularity, collection_name, spotify_id')
+      .select('id, title, artist, source, credits, popularity, collection_name, spotify_id, genre_tag')
       .in('source', ['user', 'agent', 'mozart', 'promoted'])
       .order('artist', { ascending: true })
       .limit(200)
-    refTrackOptions = libraryTracks || []
+
+    refTrackOptions = [
+      ...projectRefTracks,
+      ...songRefTracks,
+      ...(libraryTracks || []).filter(r => !priorityIds.has(r.id)).map(r => ({ ...r, _section: 'LIBRARY', _rt_id: r.id }))
+    ]
 
     // Auto-compare: latest mix vs selected or first ref for current stem
     const stemKey = activeStem[songId] || 'vocals'
@@ -3257,32 +3293,35 @@ Return JSON only:
                   </button>
                   {#if showVocalEq[song.id]}
                     {@const songCurves = vocalEqCurves[song.id] || []}
-                    {@const stemKey = activeStem[song.id] || 'vocals'}
+                    {@const stemKey = activeStem[song.id] || 'mix'}
                     {@const selectedRef = selectedRefId[song.id] || ''}
-                    {@const mixCurveData = songCurves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)}
+                    {@const isMixTab = stemKey === 'mix'}
+                    {@const mixCurveData = isMixTab
+                      ? songCurves.find(c => c.source_type === 'mix' && (!c.stem_type || c.stem_type === 'mix'))
+                      : songCurves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)}
                     {@const refCurveData = selectedRef
-                      ? songCurves.find(c => String(c.reference_track_id) === selectedRef && c.stem_type === stemKey)
-                      : songCurves.find(c => c.source_type === 'reference' && c.stem_type === stemKey)}
+                      ? songCurves.find(c => String(c.reference_track_id) === selectedRef && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey))
+                      : songCurves.find(c => c.source_type === 'reference' && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey))}
                     {@const refCurves = songCurves.filter(c => c.source_type === 'reference' && c.stem_type === stemKey && !c.reference_track_id)}
                     {@const mixCurves = songCurves.filter(c => c.source_type === 'mix' && c.stem_type === stemKey)}
                     {@const mixCurve = mixCurveData?.curve && typeof mixCurveData.curve === 'object' ? mixCurveData.curve : null}
                     {@const refCurve = refCurveData?.curve && typeof refCurveData.curve === 'object' ? refCurveData.curve : null}
-                    {@const selectedRefTrack = selectedRef ? refTrackOptions.find(r => String(r.id) === selectedRef) : null}
+                    {@const selectedRefTrack = selectedRef ? refTrackOptions.find(r => String(r._rt_id ?? r.id) === selectedRef) : null}
                     {@const cmp = vocalComparison[song.id]}
                     {@const refLoading = vocalEqLoading[song.id]}
                     {@const ao = analyzerOpen[String(song.id)] || {}}
                     {@const latestA = (wd.versions||[]).filter(v=>v.analysis).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]?.analysis}
-                    {@const refLinks = new Set(wd.reference_links || [])}
-                    {@const projectRefs = refTrackOptions.filter(r => refLinks.has(String(r.id)))}
-                    {@const hitRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && ((r.popularity || 0) > 70 || r.collection_name === 'daily_chart' || r.collection_name === 'tiktok_trending'))}
-                    {@const libraryRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && (r.popularity || 0) <= 70 && r.collection_name !== 'daily_chart' && r.collection_name !== 'tiktok_trending')}
+                    {@const projectRefs = refTrackOptions.filter(r => r._section === 'PROJECT')}
+                    {@const songRefs = refTrackOptions.filter(r => r._section === 'SONG')}
+                    {@const hitRefs = refTrackOptions.filter(r => r._section === 'LIBRARY' && ((r.popularity || 0) > 70 || r.collection_name === 'daily_chart' || r.collection_name === 'tiktok_trending'))}
+                    {@const libraryRefs = refTrackOptions.filter(r => r._section === 'LIBRARY' && (r.popularity || 0) <= 70 && r.collection_name !== 'daily_chart' && r.collection_name !== 'tiktok_trending')}
                     <div class="vocal-eq-body">
                       <!-- Stem selector -->
                       <div class="stem-tabs">
-                        {#each ['vocals', 'drums', 'bass', 'other'] as stem}
+                        {#each ['mix', 'vocals', 'drums', 'bass', 'other'] as stem}
                           <button class="stem-tab {stemKey === stem ? 'active' : ''}"
                             onclick={() => { activeStem[song.id] = stem; activeStem = { ...activeStem }; loadVocalEq(song.id) }}>
-                            {stem.toUpperCase()}
+                            {stem === 'mix' ? 'FULL MIX' : stem.toUpperCase()}
                           </button>
                         {/each}
                       </div>
@@ -3295,28 +3334,35 @@ Return JSON only:
                             selectedRefId[song.id] = e.currentTarget.value
                             selectedRefId = { ...selectedRefId }
                             loadVocalEq(song.id)
-                            const ref = refTrackOptions.find(r => String(r.id) === e.currentTarget.value)
+                            const ref = refTrackOptions.find(r => String(r._rt_id ?? r.id) === e.currentTarget.value)
                             if (ref) loadMozartInsight(song.id, ref)
                           }}>
                           <option value="">— no ref —</option>
                           {#if projectRefs.length}
                             <optgroup label="── PROJECT REFS ──">
                               {#each projectRefs as ref}
-                                <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                                <option value={String(ref._rt_id)}>{ref.artist} — {ref.title}</option>
+                              {/each}
+                            </optgroup>
+                          {/if}
+                          {#if songRefs.length}
+                            <optgroup label="── SONG REFS ──">
+                              {#each songRefs as ref}
+                                <option value={String(ref._rt_id)}>{ref.artist} — {ref.title}</option>
                               {/each}
                             </optgroup>
                           {/if}
                           {#if hitRefs.length}
                             <optgroup label="── HIT SONGS ──">
                               {#each hitRefs as ref}
-                                <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                                <option value={String(ref._rt_id ?? ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
                               {/each}
                             </optgroup>
                           {/if}
                           {#if libraryRefs.length}
                             <optgroup label="── LIBRARY ──">
                               {#each libraryRefs as ref}
-                                <option value={String(ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                                <option value={String(ref._rt_id ?? ref.id)}>{ref.artist || 'Unknown'} — {ref.title}{ref.genre_tag ? ' (' + ref.genre_tag + ')' : ''}</option>
                               {/each}
                             </optgroup>
                           {/if}
@@ -3331,6 +3377,7 @@ Return JSON only:
                         refCurve={refCurve}
                         mixLabel={mixCurveData?.label ?? ''}
                         refLabel={refCurveData?.label ?? ''}
+                        isMixTab={isMixTab}
                       />
                       <!-- Credits (when a ref track is selected and has credits) -->
                       {#if selectedRefTrack?.credits}

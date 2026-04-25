@@ -925,7 +925,6 @@
     const monthEnd = addDays(28)
 
     const recurringMapped = recurring.map(t => ({ ...t, date: todayISO, _recurring: true }))
-    if (tab === 'general') return recurringMapped
     if (tab === 'week')  return all.filter(t => t.date >= todayISO && t.date <= weekEnd)
     if (tab === 'month') return all.filter(t => t.date >= todayISO && t.date <= monthEnd)
     if (tab === 'check') return [...recurringMapped, ...all]
@@ -1426,7 +1425,7 @@ ${mozartContext}`
       <!-- ── PLAN: WEEK / MONTH / YEAR sub-tabs ──────────────── -->
       <div class="plan-section">
         <div class="up-tabs">
-          {#each [['week','WEEK'],['month','MONTH'],['year','YEAR'],['general','TODO']] as [id,label]}
+          {#each [['week','WEEK'],['month','MONTH'],['year','YEAR']] as [id,label]}
             <button class="up-tab {upcomingTab===id?'on':''}" onclick={() => {
               upcomingTab = id
               if (id === 'year') setTimeout(() => {

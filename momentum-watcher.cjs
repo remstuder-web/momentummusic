@@ -38,6 +38,7 @@ const SPOTIFY_CLIENT_SECRET = 'ab5d6290dc404f48b261870262f23a0c'
 const TELEGRAM_TOKEN    = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_OWNER_ID = 33858745
 const TELEGRAM_API      = 'https://api.telegram.org/bot' + TELEGRAM_TOKEN
+const sentMessages = [] // { chat_id, message_id, sent_at }
 
 // Gemini API (optional — used for cheap WhatsApp analysis)
 const GEMINI_API_KEY    = process.env.GEMINI_API_KEY
@@ -2133,12 +2134,36 @@ const lastExitAlertSent = {} // coin → ms timestamp (3h cooldown)
 let lastSignalResult = null  // cached from last buildCryptoSignal() call
 
 async function sendTelegram(chatId, text) {
-  await fetch(TELEGRAM_API + '/sendMessage', {
+  const res = await fetch(TELEGRAM_API + '/sendMessage', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
   })
+  try {
+    const d = await res.json()
+    if (d.ok && d.result?.message_id) {
+      sentMessages.push({ chat_id: chatId, message_id: d.result.message_id, sent_at: Date.now() })
+      if (sentMessages.length > 500) sentMessages.splice(0, 100)
+    }
+  } catch(e) {}
 }
+
+async function runTelegramCleanup() {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000
+  const toDelete = sentMessages.filter(m => m.sent_at < cutoff)
+  for (const m of toDelete) {
+    try { await fetch(TELEGRAM_API + '/deleteMessage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: m.chat_id, message_id: m.message_id })
+    }) } catch(e) {}
+  }
+  sentMessages.splice(0, sentMessages.length, ...sentMessages.filter(m => m.sent_at >= cutoff))
+  if (toDelete.length > 0) console.log('Deleted ' + toDelete.length + ' old bot messages')
+  return toDelete.length
+}
+
+setInterval(runTelegramCleanup, 60 * 60 * 1000)
 
 // ── WhatsApp / forwarded message analysis helpers ───────────────────────────
 
@@ -2939,6 +2964,10 @@ async function handleOwnerCommand(chatId, text) {
       await sendTelegram(chatId, '✓ Brain connection analysis complete')
     } catch(e) { await sendTelegram(chatId, '❌ Connect error: ' + e.message) }
   }
+  else if (cmd === '/cleanup') {
+    const count = await runTelegramCleanup()
+    await sendTelegram(chatId, '🗑 Deleted ' + count + ' messages older than 24h')
+  }
   else if (cmd === '/help') {
     await sendTelegram(chatId,
       '🎵 Momentum Commands:\n\n' +
@@ -2979,6 +3008,7 @@ async function handleOwnerCommand(chatId, text) {
       '/improve — Weekly system improvement review\n' +
       '/tiktok — Fetch TikTok trending sounds now\n' +
       '/connect — Find connections between brain entries\n' +
+      '/cleanup — Delete bot messages older than 24h\n' +
       '📷 Send photo — Extract WhatsApp screenshot\n' +
       '↩️ Forward message — Auto-analyze forwarded chat\n' +
       '/help — This message'

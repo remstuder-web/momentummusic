@@ -4,7 +4,7 @@
   import { GENRE_LIST } from '$lib/genres.js'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
   import VocalEqChart from './VocalEqChart.svelte'
-  import { onDestroy } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
 
   let projects = $state([])
   let songs = $state([])
@@ -2367,19 +2367,19 @@ Return JSON only:
   }
 
   async function loadFinishingChecklist() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('brain_knowledge')
-      .select('content, created_at')
+      .select('content')
       .eq('category', 'checklist_70')
       .eq('title', 'Finishing Checklist — Latest')
       .maybeSingle()
-    if (error) { console.error('checklist load error:', error.message); return }
     if (data?.content) {
-      try { finishingChecklist = JSON.parse(data.content) } catch(e) { console.error('checklist parse error:', e.message) }
+      try { finishingChecklist = JSON.parse(data.content) }
+      catch(e) { console.error('checklist parse:', e.message) }
     }
   }
 
-  loadFinishingChecklist()
+  onMount(() => { loadFinishingChecklist() })
 
   onDestroy(() => stopWorkTimer(true))
 
@@ -3697,10 +3697,11 @@ Return JSON only:
       </button>
       {#if sanityOpen}
         <div class="checklist-panel">
-          <div class="checklist-title">FINISHING QUESTIONS</div>
-          <div class="checklist-subtitle">Mozart-generated · {finishingChecklist.length} questions</div>
           {#if finishingChecklist.length === 0}
-            <div class="checklist-empty">Run /rebuild-finishing-checklist to generate</div>
+            <div class="checklist-empty">
+              Loading questions...
+              <button onclick={loadFinishingChecklist}>retry</button>
+            </div>
           {:else}
             {@const phases = [...new Set(finishingChecklist.map(i => i.phase))]}
             {#each phases as phase}
@@ -3710,7 +3711,10 @@ Return JSON only:
                   <div class="checklist-item {checkedItems[item.question] ? 'done' : ''}">
                     <input type="checkbox"
                       checked={checkedItems[item.question] || false}
-                      onchange={() => { checkedItems[item.question] = !checkedItems[item.question]; checkedItems = { ...checkedItems } }} />
+                      onchange={() => {
+                        checkedItems[item.question] = !checkedItems[item.question]
+                        checkedItems = {...checkedItems}
+                      }} />
                     <div class="checklist-content">
                       <div class="checklist-q">{item.question}</div>
                       {#if item.why}
@@ -3721,7 +3725,9 @@ Return JSON only:
                 {/each}
               </div>
             {/each}
-            <button class="reset-checklist-btn" onclick={() => checkedItems = {}}>Reset</button>
+            <button class="reset-btn" onclick={() => checkedItems = {}}>
+              Reset all
+            </button>
           {/if}
         </div>
       {/if}
@@ -4280,8 +4286,6 @@ Return JSON only:
   .right-arr.open { transform: rotate(90deg); }
 
   .checklist-panel { padding: 8px 14px 10px; border-bottom: 1px solid #1a1a1a; margin-bottom: 4px; }
-  .checklist-title { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: rgba(201,168,76,.75); letter-spacing: .1em; margin-bottom: 2px; }
-  .checklist-subtitle { font-family: 'DM Sans', sans-serif; font-size: 9px; color: #333; margin-bottom: 8px; }
   .checklist-phase-group { margin-bottom: 10px; }
   .checklist-phase-label { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: rgba(201,168,76,.5); letter-spacing: .12em; margin-bottom: 5px; padding-bottom: 3px; border-bottom: 1px solid #1a1a1a; }
   .checklist-item { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid #111; align-items: flex-start; }
@@ -4290,9 +4294,10 @@ Return JSON only:
   .checklist-content { display: flex; flex-direction: column; gap: 2px; }
   .checklist-q { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #cec9c1; line-height: 1.5; }
   .checklist-why { font-family: 'DM Sans', sans-serif; font-size: 9px; color: #444; font-style: italic; margin-top: 2px; }
-  .checklist-empty { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #333; font-style: italic; padding: 6px 0; }
-  .reset-checklist-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #1a1a1a; color: #333; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 8px; }
-  .reset-checklist-btn:hover { color: #555; border-color: #252525; }
+  .checklist-empty { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #333; font-style: italic; padding: 6px 0; display: flex; gap: 8px; align-items: center; }
+  .checklist-empty button { background: none; border: 1px solid #252525; color: #555; font-size: 9px; padding: 2px 6px; cursor: pointer; border-radius: 2px; }
+  .reset-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #1a1a1a; color: #333; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 8px; }
+  .reset-btn:hover { color: #555; border-color: #252525; }
   .sanity-list { padding: 10px 14px; display: flex; flex-direction: column; gap: 5px; max-height: 320px; overflow-y: auto; }
   .sanity-row { display: flex; align-items: flex-start; gap: 9px; padding: 5px 0; border-bottom: 1px solid #0f0f0f; }
   .sanity-row.checked { opacity: .35; }

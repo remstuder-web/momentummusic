@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: cleanup-temp-audio-files
+WHAT: Startup sweeps all /tmp/ref_preview_* ref_bg_* tiktok_* sp_preview_* vocal_* mm_* yt_* acapella_* demucs_* stem_eq_* onset_* on every watcher start. processLibraryTrackInBackground() adds exec('rm -rf /tmp/demucs_* /tmp/stem_eq_*') after unlinkSync(tmpFile). analyze_vocal_eq.py already had shutil.rmtree in finally block — no change needed. All yt-dlp/curl tmpAudio paths already had unlinkSync — confirmed.
+RESULT: works — pm2 restart ok, ping ok
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
 TASK: acapella-output-cleanup
 WHAT: extractAcapella() saves output to /Users/remo/Desktop (not Stems). Demucs temp folder cleaned with exec('rm -rf tmpDir'). Base64 temp input cleaned in endpoint after call. Original file_path never touched. Response includes saved_to:'Desktop', original_untouched:true.
 RESULT: works — pm2 restart ok, ping ok

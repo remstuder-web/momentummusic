@@ -1606,6 +1606,7 @@ async function processLibraryTrackInBackground(refTrack) {
     } catch(e) { console.warn('bg: credits failed for:', refTrack.title, e.message.slice(0, 60)) }
 
     try { fs.unlinkSync(tmpFile) } catch(e) {}
+    exec('rm -rf /tmp/demucs_* /tmp/stem_eq_* 2>/dev/null')
   } catch(e) {
     console.error('bg: processLibraryTrack error:', refTrack?.title, e.message)
   }
@@ -12177,6 +12178,7 @@ Return 5-15 connections. No markdown, no prose.`,
 server.listen(PORT, '127.0.0.1', () => {
   server.timeout = 0          // no timeout — needed for large audio file streams
   server.keepAliveTimeout = 0
+  exec('rm -rf /tmp/ref_preview_* /tmp/ref_bg_* /tmp/tiktok_* /tmp/sp_preview_* /tmp/vocal_* /tmp/mm_qimport_* /tmp/mm_preview_* /tmp/yt_* /tmp/acapella_* /tmp/demucs_* /tmp/stem_eq_* /tmp/onset_* 2>/dev/null')
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   console.log('  Momentum Watcher + Audio Server')
   console.log('  Watch:       ', WATCH_DIR)

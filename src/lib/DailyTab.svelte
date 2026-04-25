@@ -42,6 +42,11 @@
   let normDragging = $state(false)
   let normStatus = $state('')   // '' | 'working' | 'ok' | 'err'
   let normMsg = $state('')
+
+  let acapellaFile = $state(null)
+  let acapellaLoading = $state(false)
+  let acapellaResult = $state(null)
+  let acapellaDragging = $state(false)
   let reminders = $state([])
   let subReminders = $state([]) // weekly submission nudges
   let tasksOpen = $state(true)
@@ -1200,6 +1205,37 @@ ${mozartContext}`
     checkOutItems = checkOutItems.filter(i => i.id !== id)
   }
 
+  function handleAcapellaDrop(e) {
+    e.preventDefault()
+    acapellaDragging = false
+    const file = e.dataTransfer.files[0]
+    if (file) { acapellaFile = file; acapellaResult = null }
+  }
+
+  async function runAcapellaExtract() {
+    if (!acapellaFile) return
+    acapellaLoading = true
+    acapellaResult = null
+    const base64 = await new Promise(res => {
+      const reader = new FileReader()
+      reader.onload = () => res(reader.result.split(',')[1])
+      reader.readAsDataURL(acapellaFile)
+    })
+    const ext = acapellaFile.name.split('.').pop()
+    try {
+      const r = await fetch('http://localhost:4242/extract-acapella', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_data: base64, ext })
+      })
+      acapellaResult = await r.json()
+    } catch(e) {
+      acapellaResult = { ok: false, error: e.message }
+    }
+    acapellaLoading = false
+    acapellaFile = null
+  }
+
   // loadStaticData MUST complete before load() so customs/helpers aren't lost to the state spread
   ;(async () => { await loadStaticData(); load() })()
   ;(async () => { await loadInbox() })()
@@ -1738,6 +1774,61 @@ ${mozartContext}`
             <span class="norm-hint">Drop audio here → –14 LUFS → Desktop</span>
           {/if}
         </div>
+
+        <!-- ACAPELLA EXTRACTOR -->
+        <div class="normalizer-title" style="margin-top:16px">ACAPELLA EXTRACTOR</div>
+        <div class="helper-sub">Drop track → strips vocals → trims to vocal start → saves to Desktop with BPM tag</div>
+
+        <div class="acapella-drop {acapellaDragging ? 'dragging' : ''}"
+          ondragover={e => { e.preventDefault(); acapellaDragging = true }}
+          ondragleave={() => acapellaDragging = false}
+          ondrop={handleAcapellaDrop}>
+          {#if acapellaLoading}
+            <div class="acapella-loading">● Extracting... 2-5 min</div>
+          {:else if acapellaFile}
+            <div class="acapella-ready">
+              📁 {acapellaFile.name}
+              <button class="extract-btn" onclick={runAcapellaExtract}>Extract Acapella</button>
+            </div>
+          {:else}
+            <div class="acapella-placeholder">
+              🎤 Drop audio file here
+              <span style="font-size:9px;color:#252525">mp3 · wav · aif · m4a</span>
+            </div>
+          {/if}
+        </div>
+
+        {#if acapellaResult}
+          <div class="acapella-result">
+            {#if acapellaResult.ok}
+              <div class="result-row">
+                <span class="result-label">FILE</span>
+                <span class="result-val">{acapellaResult.filename}</span>
+              </div>
+              {#if acapellaResult.bpm}
+                <div class="result-row">
+                  <span class="result-label">BPM</span>
+                  <span class="result-val">{acapellaResult.bpm}</span>
+                </div>
+              {/if}
+              {#if acapellaResult.key}
+                <div class="result-row">
+                  <span class="result-label">KEY</span>
+                  <span class="result-val">{acapellaResult.key}{acapellaResult.camelot ? ' · ' + acapellaResult.camelot : ''}</span>
+                </div>
+              {/if}
+              {#if acapellaResult.onset !== undefined}
+                <div class="result-row">
+                  <span class="result-label">VOCAL IN</span>
+                  <span class="result-val">{typeof acapellaResult.onset === 'number' ? acapellaResult.onset.toFixed(2) : acapellaResult.onset}s</span>
+                </div>
+              {/if}
+              <div style="font-family:'Space Mono',monospace;font-size:9px;color:#4caf82;margin-top:6px">✓ Saved to Desktop</div>
+            {:else}
+              <div style="color:#e57373;font-size:11px">{acapellaResult.error}</div>
+            {/if}
+          </div>
+        {/if}
       {/if}
 
       {#if activeSection === 'private'}
@@ -2402,6 +2493,18 @@ ${mozartContext}`
   .norm-hint { font-family: 'Space Mono', monospace; font-size: 11px; color: #333; }
   .norm-ok { font-family: 'Space Mono', monospace; font-size: 11px; color: #4caf82; }
   .norm-err { font-family: 'Space Mono', monospace; font-size: 11px; color: #e05a4a; }
+  .helper-sub { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #333; margin-bottom: 6px; }
+  .acapella-drop { border: 1px dashed #252525; border-radius: 3px; padding: 20px; text-align: center; min-height: 70px; display: flex; align-items: center; justify-content: center; cursor: pointer; margin: 6px 0; transition: border-color .15s; }
+  .acapella-drop.dragging { border-color: #c9a84c; background: rgba(201,168,76,.04); }
+  .acapella-placeholder { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #333; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  .acapella-loading { font-family: 'Space Mono', monospace; font-size: 10px; color: #c9a84c; }
+  .acapella-ready { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .extract-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.3); color: #c9a84c; padding: 5px 14px; border-radius: 2px; cursor: pointer; }
+  .extract-btn:hover { background: rgba(201,168,76,.15); }
+  .acapella-result { background: #111; border-radius: 3px; padding: 8px 10px; margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+  .result-row { display: flex; gap: 8px; align-items: baseline; }
+  .result-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; letter-spacing: .08em; width: 56px; flex-shrink: 0; }
+  .result-val { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; }
   .add-inp::placeholder { color: #555; }
   .add-inp.url { flex: 2; min-width: 120px; }
   .add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 5px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }

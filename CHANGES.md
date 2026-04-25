@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] src/lib/DailyTab.svelte — DONE
+TASK: acapella-extractor-dailytab
+WHAT: Added Acapella Extractor section to Helpers tab directly below Normalizer. Drop zone, loading state, result panel (filename/BPM/key/vocal-in). State vars: acapellaFile, acapellaLoading, acapellaResult, acapellaDragging. Functions: handleAcapellaDrop(), runAcapellaExtract() (FileReader base64 → POST /extract-acapella). Full CSS matching palette.
+RESULT: works — svelte-check 0 errors
+BLOCKERS: none
+
 ## [2026-04-25] momentum-watcher.cjs — DONE
 TASK: cleanup-temp-audio-files
 WHAT: Startup sweeps all /tmp/ref_preview_* ref_bg_* tiktok_* sp_preview_* vocal_* mm_* yt_* acapella_* demucs_* stem_eq_* onset_* on every watcher start. processLibraryTrackInBackground() adds exec('rm -rf /tmp/demucs_* /tmp/stem_eq_*') after unlinkSync(tmpFile). analyze_vocal_eq.py already had shutil.rmtree in finally block — no change needed. All yt-dlp/curl tmpAudio paths already had unlinkSync — confirmed.

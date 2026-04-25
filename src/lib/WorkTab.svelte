@@ -22,6 +22,12 @@
   let aiMessages = $state([])
   let aiLoading = $state(false)
 
+  let acapellaFile = $state(null)
+  let acapellaLoading = $state(false)
+  let acapellaResult = $state(null)
+  let acapellaDragging = $state(false)
+  let acapellaError = $state('')
+
   const STAGES = [
     { id: 'demo',       label: 'DEMO' },
     { id: 'production', label: 'PRODUCTION', hasSent: true },
@@ -301,6 +307,39 @@
     aiLoading = false
   }
 
+  function handleAcapellaDrop(e) {
+    e.preventDefault()
+    acapellaDragging = false
+    const file = e.dataTransfer?.files?.[0] || e.target?.files?.[0]
+    if (!file) return
+    acapellaFile = file
+    acapellaResult = null
+    acapellaError = ''
+  }
+
+  async function runAcapellaExtract() {
+    if (!acapellaFile || acapellaLoading) return
+    acapellaLoading = true
+    acapellaResult = null
+    acapellaError = ''
+    try {
+      const buf = await acapellaFile.arrayBuffer()
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
+      const ext = acapellaFile.name.split('.').pop()
+      const res = await fetch('http://localhost:4242/extract-acapella', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_data: b64, ext })
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || 'Extraction failed')
+      acapellaResult = data
+    } catch(e) {
+      acapellaError = e.message
+    }
+    acapellaLoading = false
+  }
+
   load()
 </script>
 
@@ -501,6 +540,37 @@
       </div>
     {/if}
 
+    <div class="acapella-block">
+      <div class="acapella-title">ACAPELLA EXTRACTOR</div>
+      <div class="acapella-zone {acapellaDragging ? 'drag-over' : ''} {acapellaFile ? 'has-file' : ''}"
+        ondragover={e => { e.preventDefault(); acapellaDragging = true }}
+        ondragleave={() => acapellaDragging = false}
+        ondrop={handleAcapellaDrop}>
+        {#if acapellaFile}
+          <span class="acapella-fname">{acapellaFile.name}</span>
+          <button class="acapella-clear" onclick={() => { acapellaFile = null; acapellaResult = null; acapellaError = '' }}>×</button>
+        {:else}
+          <span class="acapella-hint">↓ Drop WAV / MP3</span>
+        {/if}
+      </div>
+      {#if acapellaFile && !acapellaLoading && !acapellaResult}
+        <button class="acapella-run-btn" onclick={runAcapellaExtract}>Extract Vocals</button>
+      {/if}
+      {#if acapellaLoading}
+        <div class="acapella-status loading">⏳ Extracting vocals... 2–5 min</div>
+      {/if}
+      {#if acapellaError}
+        <div class="acapella-status error">{acapellaError}</div>
+      {/if}
+      {#if acapellaResult}
+        <div class="acapella-result">
+          <div class="acapella-result-name">✓ {acapellaResult.filename}</div>
+          <div class="acapella-result-meta">{acapellaResult.bpm}bpm · {acapellaResult.key} · onset {acapellaResult.onset?.toFixed?.(2)}s</div>
+          <div class="acapella-result-loc">Saved to Stems folder</div>
+        </div>
+      {/if}
+    </div>
+
     <div class="mozart-block">
       <div class="mozart-title">ASK MOZART</div>
       <div class="chat-out">
@@ -639,4 +709,22 @@
   .btn-ghost-sm { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 4px 9px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 2px; cursor: pointer; white-space: nowrap; }
   .btn-ghost-sm:hover { border-color: #c9a84c; color: #c9a84c; }
   .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 6px 11px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
+  .acapella-block { display: flex; flex-direction: column; gap: 7px; }
+  .acapella-title { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); }
+  .acapella-zone { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px dashed #303030; border-radius: 3px; background: #111; min-height: 42px; cursor: default; transition: border-color .15s; }
+  .acapella-zone.drag-over { border-color: #c9a84c; background: rgba(201,168,76,.05); }
+  .acapella-zone.has-file { border-style: solid; border-color: #3c3c3c; }
+  .acapella-hint { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; flex: 1; text-align: center; }
+  .acapella-fname { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acapella-clear { background: transparent; border: none; color: #555; font-size: 16px; cursor: pointer; padding: 0; flex-shrink: 0; }
+  .acapella-clear:hover { color: #e05a4a; }
+  .acapella-run-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 6px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; width: 100%; }
+  .acapella-run-btn:hover { background: #d4b456; }
+  .acapella-status { font-family: 'Space Mono', monospace; font-size: 11px; padding: 7px 10px; border-radius: 3px; }
+  .acapella-status.loading { color: #9e9690; background: #1c1c1c; border: 1px solid #252525; }
+  .acapella-status.error { color: #e05a4a; background: rgba(224,90,74,.07); border: 1px solid rgba(224,90,74,.2); }
+  .acapella-result { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; background: rgba(76,175,130,.07); border: 1px solid rgba(76,175,130,.2); border-radius: 3px; }
+  .acapella-result-name { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; font-weight: 700; }
+  .acapella-result-meta { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; }
+  .acapella-result-loc { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; }
 </style>

@@ -2486,7 +2486,7 @@ async function buildStatusResponse() {
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
     'GET /instrumentals/:filename', 'GET /stems/:filename',
     'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /speak',
-    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-youtube-track',
+    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /extract-acapella', 'POST /analyze-youtube-track',
     'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
     'POST /launch-claude-code', 'POST /launch-claude-overnight',
     'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
@@ -5156,6 +5156,70 @@ async function fetchGeniusCredits(artist, title) {
     console.error('genius credits error:', e.message)
     return null
   }
+}
+
+// ── Acapella extraction — Demucs vocal separation + librosa onset + ffmpeg trim ──
+const ACAPELLA_PYTHON = '/opt/homebrew/bin/python3.11'
+const ACAPELLA_ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
+
+async function extractAcapella(inputPath, outputDir) {
+  const basename = path.basename(inputPath, path.extname(inputPath))
+  const tmpDir = `/tmp/acapella_${Date.now()}`
+  fs.mkdirSync(tmpDir, { recursive: true })
+
+  // Step 1: Demucs vocal separation
+  await new Promise((resolve, reject) => {
+    exec(
+      `"${ACAPELLA_PYTHON}" -m demucs --two-stems=vocals -o "${tmpDir}" "${inputPath}"`,
+      { timeout: 300000 },
+      (err) => err ? reject(new Error('Demucs failed: ' + err.message)) : resolve()
+    )
+  })
+
+  const vocalsPath = path.join(tmpDir, 'htdemucs', basename, 'vocals.wav')
+  if (!fs.existsSync(vocalsPath)) throw new Error('Demucs output not found: ' + vocalsPath)
+
+  // Step 2: librosa onset detection via inline Python
+  const onsetScript = `
+import librosa, numpy as np, json, sys
+y, sr = librosa.load(sys.argv[1], sr=None, mono=True)
+rms = librosa.feature.rms(y=y)[0]
+thresh = rms.max() * 0.05
+frames = np.where(rms > thresh)[0]
+onset_sec = max(0, librosa.frames_to_time(frames[0], sr=sr) - 0.1) if len(frames) else 0.0
+print(json.dumps({'onset': float(onset_sec)}))
+`
+  const onsetScriptPath = `/tmp/onset_${Date.now()}.py`
+  fs.writeFileSync(onsetScriptPath, onsetScript)
+  const onsetRaw = execSync(`"${ACAPELLA_PYTHON}" "${onsetScriptPath}" "${vocalsPath}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+  const { onset: onsetTime } = JSON.parse(onsetRaw)
+  fs.unlinkSync(onsetScriptPath)
+
+  // Step 3: Essentia BPM + key
+  let bpm = 0, keyLabel = 'unknown'
+  try {
+    const esRaw = execSync(`"${ACAPELLA_PYTHON}" "${ACAPELLA_ANALYZE_SCRIPT}" "${vocalsPath}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+    const esData = JSON.parse(esRaw)
+    bpm = Math.round(esData.bpm || 0)
+    keyLabel = (esData.key && esData.scale) ? `${esData.key}${esData.scale === 'minor' ? 'm' : ''}` : (esData.key || 'unknown')
+  } catch(e) { console.warn('Essentia on vocals failed (non-fatal):', e.message) }
+
+  // Step 4: ffmpeg trim from onset
+  const safeBpm = bpm || 'unknown'
+  const outFilename = `${basename}_acapella_${safeBpm}bpm_${keyLabel}.wav`
+  const outPath = path.join(outputDir || STEMS_DIR, outFilename)
+  await new Promise((resolve, reject) => {
+    exec(
+      `ffmpeg -y -ss ${onsetTime.toFixed(3)} -i "${vocalsPath}" -c copy "${outPath}"`,
+      { timeout: 60000 },
+      (err) => err ? reject(new Error('ffmpeg trim failed: ' + err.message)) : resolve()
+    )
+  })
+
+  // Cleanup tmp
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch(e) {}
+
+  return { filename: outFilename, path: outPath, bpm: safeBpm, key: keyLabel, onset: onsetTime }
 }
 
 // ── Vocal EQ — standalone reference analysis function ────────────────────
@@ -8515,6 +8579,43 @@ Respond ONLY in JSON:
         res.end(JSON.stringify({ ok: true, analysis: rawFeat, ...rawFeat, tempo: features.tempo, key: features.key }))
       } catch(e) {
         console.warn('analyze-audio-features error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /extract-acapella — Demucs vocal separation + trim to onset ──
+  if (req.method === 'POST' && req.url === '/extract-acapella') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString())
+        let inputPath
+
+        if (body.file_path) {
+          inputPath = body.file_path
+          if (!fs.existsSync(inputPath)) throw new Error('File not found: ' + inputPath)
+        } else if (body.file_data) {
+          const ext = (body.ext || 'wav').replace(/^\./, '')
+          const tmpInput = `/tmp/acapella_in_${Date.now()}.${ext}`
+          fs.writeFileSync(tmpInput, Buffer.from(body.file_data, 'base64'))
+          inputPath = tmpInput
+        } else {
+          throw new Error('file_path or file_data required')
+        }
+
+        const outputDir = body.output_dir || STEMS_DIR
+        console.log('⏳ Extracting acapella from:', path.basename(inputPath))
+        const result = await extractAcapella(inputPath, outputDir)
+        console.log(`✓ Acapella: ${result.filename} | onset:${result.onset.toFixed(2)}s bpm:${result.bpm} key:${result.key}`)
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, ...result }))
+      } catch(e) {
+        console.error('extract-acapella error:', e.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: e.message }))
       }

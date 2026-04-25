@@ -1716,7 +1716,7 @@ async function rebuildMusicTips() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: 'claude-opus-4-5-20251001',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 2000,
         system: `You are maintaining a music producer's master knowledge file.
 Rules:
@@ -1744,12 +1744,19 @@ Rules:
     ].join('\n')
 
     const tipsPath = '/Users/remo/ObsidianVault/Momentum/🎵 MUSIC TIPS MASTER.md'
-    require('fs').writeFileSync(tipsPath, header + synthesized, 'utf8')
-    console.log('✓ Music Tips master rebuilt')
+    try {
+      require('fs').writeFileSync(tipsPath, header + synthesized, 'utf8')
+      const stat = require('fs').statSync(tipsPath)
+      console.log(`✓ Music Tips master rebuilt (${stat.size} bytes)`)
+    } catch(writeErr) {
+      console.error('rebuildMusicTips write error:', writeErr.message)
+      throw writeErr
+    }
     setImmediate(() => rebuildFinishingChecklist().catch(e => console.warn('checklist rebuild failed:', e.message)))
     return synthesized
   } catch(e) {
     console.error('rebuildMusicTips error:', e.message)
+    throw e
   }
 }
 
@@ -4655,6 +4662,20 @@ function cleanTitle(title) {
   return (title || '').replace(/^(\d{4}-\d{2}-\d{2}_)+/, '').trim()
 }
 
+// Find an existing .md file in dir whose bare name (date prefix stripped, lowercased) matches normalizedTitle
+function findExistingObsidianFile(dir, normalizedTitle) {
+  try {
+    if (!fs.existsSync(dir)) return null
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.md'))
+    const norm = (s) => s.toLowerCase().replace(/^(\d{4}-\d{2}-\d{2}_)+/, '').replace(/[^a-z0-9]/g, '').slice(0, 40)
+    const target = norm(normalizedTitle)
+    for (const f of files) {
+      if (norm(path.basename(f, '.md')) === target) return path.join(dir, f)
+    }
+  } catch(e) {}
+  return null
+}
+
 async function saveBrainFile(entry) {
   try {
     const category = entry.category || 'uncategorized'
@@ -4686,9 +4707,11 @@ async function saveBrainFile(entry) {
 
     fs.writeFileSync(filepath, content, 'utf8')
 
-    // Mirror into Obsidian vault under Brain/category/
-    const obsidianPath = path.join(OBSIDIAN_VAULT_PATH, 'Brain', category, filename)
-    fs.mkdirSync(path.dirname(obsidianPath), { recursive: true })
+    // Mirror into Obsidian vault under Brain/category/ — reuse existing file if same title
+    const obsidianDir = path.join(OBSIDIAN_VAULT_PATH, 'Brain', category)
+    fs.mkdirSync(obsidianDir, { recursive: true })
+    const existingObsidian = findExistingObsidianFile(obsidianDir, safeTitle)
+    const obsidianPath = existingObsidian || path.join(obsidianDir, filename)
     fs.writeFileSync(obsidianPath, content, 'utf8')
 
     // Copy to smart folder — never overwrite existing files
@@ -9591,6 +9614,62 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /fix-obsidian-dupes — deduplicate .md files by normalized title ────
+  if (req.method === 'POST' && req.url === '/fix-obsidian-dupes') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const deleted = []
+      const norm = (s) => s.toLowerCase().replace(/^(\d{4}-\d{2}-\d{2}_)+/, '').replace(/[^a-z0-9]/g, '').slice(0, 40)
+      // Walk vault recursively, skip MOC/ and Notes/
+      const walk = (dir) => {
+        let results = []
+        let entries
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch(e) { return results }
+        for (const e of entries) {
+          const full = path.join(dir, e.name)
+          if (e.isDirectory()) {
+            if (e.name === 'MOC' || e.name === 'Notes' || e.name === '.git') continue
+            results = results.concat(walk(full))
+          } else if (e.name.endsWith('.md')) {
+            results.push(full)
+          }
+        }
+        return results
+      }
+      const allFiles = walk(OBSIDIAN_VAULT_PATH)
+      // Group by dir + normalized basename
+      const groups = {}
+      for (const f of allFiles) {
+        const key = path.dirname(f) + '|' + norm(path.basename(f, '.md'))
+        if (!groups[key]) groups[key] = []
+        groups[key].push(f)
+      }
+      for (const [, files] of Object.entries(groups)) {
+        if (files.length < 2) continue
+        // Prefer file without date prefix; otherwise keep newest by mtime
+        files.sort((a, b) => {
+          const aHasDate = /^\d{4}-\d{2}-\d{2}_/.test(path.basename(a))
+          const bHasDate = /^\d{4}-\d{2}-\d{2}_/.test(path.basename(b))
+          if (!aHasDate && bHasDate) return -1
+          if (aHasDate && !bHasDate) return 1
+          return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs
+        })
+        const [keep, ...dupes] = files
+        for (const dupe of dupes) {
+          try { fs.unlinkSync(dupe); deleted.push(dupe) } catch(e) { console.warn('fix-obsidian-dupes unlink error:', e.message) }
+        }
+        console.log(`✓ kept ${path.basename(keep)}, deleted ${dupes.length} dupe(s)`)
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, deleted: deleted.length, files: deleted }))
+    } catch(e) {
+      console.error('fix-obsidian-dupes error:', e.message)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /rebuild-brain-master — manually rebuild BRAIN DUMP MASTER.md ─────
   if (req.method === 'POST' && req.url === '/rebuild-brain-master') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -9608,9 +9687,17 @@ ${chatText.slice(0, 4000)}`
   // ── POST /rebuild-music-tips — synthesize Music Tips master + finishing checklist ─
   if (req.method === 'POST' && req.url === '/rebuild-music-tips') {
     res.setHeader('Access-Control-Allow-Origin', '*')
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, message: 'Music Tips rebuild started in background' }))
-    setImmediate(() => rebuildMusicTips().catch(e => console.error('rebuild-music-tips error:', e.message)))
+    try {
+      await rebuildMusicTips()
+      const tipsPath = '/Users/remo/ObsidianVault/Momentum/🎵 MUSIC TIPS MASTER.md'
+      const written = require('fs').existsSync(tipsPath)
+      const size = written ? require('fs').statSync(tipsPath).size : 0
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, written, path: tipsPath, size }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
     return
   }
 

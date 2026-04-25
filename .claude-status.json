@@ -1,20 +1,20 @@
 {
-  "updated": "2026-04-25T09:50:00Z",
-  "last_task": "chart-clip-id-collision-ref-dropdown-always-show",
+  "updated": "2026-04-25T14:04:00Z",
+  "last_task": "mozart-tool-use-actions",
   "status": "done",
   "working": [
-    "VocalEqChart: unique clipId per instance ('cc-' + random) — no more shared chart-clip ID across simultaneous song charts",
-    "VocalEqChart: all clip-path refs updated to url(#{clipId})",
-    "ProjectsTab: ref dropdown always visible (removed length guard)",
-    "ProjectsTab: source includes 'promoted', limit 200, spotify_id selected",
-    "ProjectsTab: 'no EQ curve yet' message when ref selected but refCurveData null",
-    "ProjectsTab: .no-curve-msg CSS added",
-    "svelte-check clean"
+    "POST /mozart-action endpoint: 6 actions — add_project_reference, add_brain_entry, add_inbox_task, set_version_feedback, update_now_note, add_contact_note",
+    "mozartTools exported from mozartContext.js — Anthropic tool_use API definition for take_action",
+    "sendAI() upgraded to tool_use API: tools:[mozartTools] passed, stop_reason=tool_use handled, /mozart-action called, tool_result continuation, final text displayed",
+    "Legacy [ACTION:] regex parsing retained as fallback for normal text responses",
+    "svelte-check: 0 errors",
+    "pm2 restart successful, /ping OK"
   ],
   "broken": [],
   "partial": [
-    "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
+    "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase",
+    "genres column: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb;"
   ],
-  "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables",
-  "notes": "clipId uses Math.random — stable per component instance lifetime, regenerates on remount (which is fine since clipPath is local to that SVG render)."
+  "next": "Run ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb; in Supabase, then POST /enrich-library-genres to backfill",
+  "notes": "Mozart now uses tool_use API natively. When Claude returns stop_reason=tool_use, the action executes server-side via /mozart-action, then a continuation call gets the confirmation text. add_project_reference still calls /agent-import-spotify internally."
 }

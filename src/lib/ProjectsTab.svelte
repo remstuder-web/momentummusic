@@ -1,6 +1,6 @@
 <script>
   import { supabase } from './supabase.js'
-  import { buildMozartContext, parseActions, executeAction } from './mozartContext.js'
+  import { buildMozartContext, parseActions, executeAction, mozartTools } from './mozartContext.js'
   import { GENRE_LIST } from '$lib/genres.js'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
   import VocalEqChart from './VocalEqChart.svelte'
@@ -2363,7 +2363,6 @@
     try {
       const wd = expandedSong ? workData(expandedSong) : null
 
-      // Extract song-specific reference tracks from reference_links
       let songSpecificRefs = []
       const refLinks = expandedSong?.reference_links || []
       if (refLinks.length) {
@@ -2386,37 +2385,72 @@
       let system = brainContext + '\n\n' + buildProjectContext()
       if (selectedProject && !expandedSongId) {
         system += '\nCurrent project: ' + selectedProject.artist + ' — ' + selectedProject.name +
-          ' (id: ' + selectedProject.id + ')\n' +
-          'No specific song open. References go to PROJECT level.\n' +
-          'Use: [ACTION: add_reference | track="Artist - Title" | project_id=' + selectedProject.id + ']'
+          ' (id: ' + selectedProject.id + ')\nNo specific song open. References go to PROJECT level.'
       } else if (expandedSong) {
         system += '\nCurrent song open: ' + (expandedSong.title || expandedSong.code) +
-          ' (id: ' + expandedSong.id + ')\n' +
-          'References go to THIS SONG.\n' +
-          'Use: [ACTION: add_reference | track="Artist - Title" | song_id=' + expandedSong.id + ']'
+          ' (id: ' + expandedSong.id + ')\nReferences go to THIS SONG.'
       }
+
+      const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }
+      const convoMessages = aiMessages.slice(-12)
+
+      // First call — may return tool_use
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 600,
-          system,
-          messages: aiMessages.slice(-12)
-        })
+        headers: apiHeaders,
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 800, system, messages: convoMessages, tools: mozartTools })
       })
       const d = await res.json()
       if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/project-chat', model: 'claude-sonnet-4-20250514', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
-      let reply = d.content?.[0]?.text || 'No response.'
-      if (reply.length > 300 && /research|found|analysis|suggests|shows|according|trend|data|insight|indicates/i.test(reply)) {
-        reply += '\n\n---\n💡 Worth saving to Brain? Paste the key insight in Brain dump.'
-      }
-      const actions = parseActions(reply)
-      const cleanReply = reply.replace(/\[ACTION:[^\]]+\]/g, '').trim()
-      aiMessages = [...aiMessages, { role: 'assistant', content: cleanReply }]
-      for (const action of actions) {
-        const result = await executeAction(action, supabase, expandedSong, selectedProject)
-        if (result) aiMessages = [...aiMessages, { role: 'assistant', content: result, _system: true }]
+
+      if (d.stop_reason === 'tool_use') {
+        const toolUseBlocks = (d.content || []).filter(b => b.type === 'tool_use')
+        const toolResults = []
+
+        for (const block of toolUseBlocks) {
+          if (block.name !== 'take_action') continue
+          const actionRes = await fetch('http://localhost:4242/mozart-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(block.input)
+          })
+          const actionData = await actionRes.json()
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: actionData.result || (actionData.ok ? 'done' : 'error') })
+        }
+
+        // Continuation call with tool results
+        const res2 = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 400,
+            system,
+            tools: mozartTools,
+            messages: [...convoMessages, { role: 'assistant', content: d.content }, { role: 'user', content: toolResults }]
+          })
+        })
+        const d2 = await res2.json()
+        if (d2.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/project-chat', model: 'claude-sonnet-4-20250514', input_tokens: d2.usage.input_tokens, output_tokens: d2.usage.output_tokens, cost_usd: (d2.usage.input_tokens * 0.000003) + (d2.usage.output_tokens * 0.000015) }) }).catch(() => {})
+
+        // Show action results as system messages
+        for (const tr of toolResults) aiMessages = [...aiMessages, { role: 'assistant', content: tr.content, _system: true }]
+        const finalText = (d2.content || []).find(b => b.type === 'text')?.text || ''
+        if (finalText) aiMessages = [...aiMessages, { role: 'assistant', content: finalText }]
+
+      } else {
+        // Normal text response — fall back to legacy regex actions if any
+        let reply = (d.content || []).find(b => b.type === 'text')?.text || 'No response.'
+        if (reply.length > 300 && /research|found|analysis|suggests|shows|according|trend|data|insight|indicates/i.test(reply)) {
+          reply += '\n\n---\n💡 Worth saving to Brain? Paste the key insight in Brain dump.'
+        }
+        const actions = parseActions(reply)
+        const cleanReply = reply.replace(/\[ACTION:[^\]]+\]/g, '').trim()
+        aiMessages = [...aiMessages, { role: 'assistant', content: cleanReply }]
+        for (const action of actions) {
+          const result = await executeAction(action, supabase, expandedSong, selectedProject)
+          if (result) aiMessages = [...aiMessages, { role: 'assistant', content: result, _system: true }]
+        }
       }
     } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
     aiLoading = false

@@ -10281,6 +10281,140 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /mozart-action — execute a Mozart tool_use action ──────────────────
+  if (req.method === 'POST' && req.url === '/mozart-action') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const { action, payload } = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        let result = ''
+
+        if (action === 'add_project_reference') {
+          // Import Spotify track → reference_tracks, then push URL to song or project
+          const importRes = await fetch('http://localhost:4242/agent-import-spotify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: payload.track, collection: 'reference_current', source: 'mozart' })
+          })
+          const imp = await importRes.json()
+          if (!imp.ok) { res.writeHead(200); res.end(JSON.stringify({ ok: false, result: '✗ Could not find track: ' + payload.track })); return }
+          const trackUrl = 'https://open.spotify.com/track/' + imp.spotify_id
+          const refEntry = { id: 'r' + Date.now(), url: trackUrl, name: imp.title, artist: imp.artist, source: 'mozart' }
+
+          if (payload.song_id) {
+            const songRes = await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${payload.song_id}&select=reference_links`, { headers: sbHeaders })
+            const [song] = await songRes.json()
+            const refs = Array.isArray(song?.reference_links) ? song.reference_links : []
+            if (!refs.find(r => (typeof r === 'string' ? r : r.url) === trackUrl)) {
+              refs.push(refEntry)
+              await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${payload.song_id}`, {
+                method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+                body: JSON.stringify({ reference_links: refs })
+              })
+            }
+            result = `✓ Added "${imp.title} — ${imp.artist}" to song references`
+          } else if (payload.project_id) {
+            const projRes = await fetch(`${SUPABASE_URL}/rest/v1/projects?id=eq.${payload.project_id}&select=project_meta`, { headers: sbHeaders })
+            const [proj] = await projRes.json()
+            const meta = proj?.project_meta || {}
+            const refs = Array.isArray(meta.reference_links) ? meta.reference_links : []
+            if (!refs.find(r => r.url === trackUrl)) {
+              refs.push(refEntry)
+              meta.reference_links = refs
+              await fetch(`${SUPABASE_URL}/rest/v1/projects?id=eq.${payload.project_id}`, {
+                method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+                body: JSON.stringify({ project_meta: meta })
+              })
+            }
+            result = `✓ Added "${imp.title} — ${imp.artist}" to project references`
+          } else {
+            result = '✗ No song_id or project_id provided'
+          }
+
+        } else if (action === 'add_brain_entry') {
+          const entry = {
+            category: payload.category || 'observation',
+            title: (payload.title || payload.content || '').slice(0, 80),
+            content: payload.content || payload.title,
+            entry_type_v2: 'observation',
+            confidence: payload.confidence || 'medium',
+            source_type: 'mozart',
+            active: true
+          }
+          await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+            method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify(entry)
+          })
+          result = `✓ Saved to brain (${entry.category}): "${entry.title}"`
+          setImmediate(() => rebuildBrainMaster())
+
+        } else if (action === 'add_inbox_task') {
+          await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+            method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({
+              type: 'task',
+              song_code: payload.song_code || null,
+              song_title: payload.song_title || null,
+              message: payload.message || payload.title,
+              read: false
+            })
+          })
+          result = `✓ Task added to inbox: "${payload.title || payload.message}"`
+
+        } else if (action === 'set_version_feedback') {
+          const songRes = await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${payload.song_id}&select=work_data`, { headers: sbHeaders })
+          const [song] = await songRes.json()
+          const wd = song?.work_data || {}
+          const versions = Array.isArray(wd.versions) ? wd.versions : []
+          const ver = versions.find(v => v.label === payload.version_label || v.version === payload.version_label)
+          if (ver) {
+            ver.feedback = payload.feedback
+            await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${payload.song_id}`, {
+              method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({ work_data: wd })
+            })
+            result = `✓ Feedback saved to version "${payload.version_label}"`
+          } else {
+            result = `✗ Version "${payload.version_label}" not found`
+          }
+
+        } else if (action === 'update_now_note') {
+          fs.writeFileSync(NOW_PATH, payload.content || '', 'utf8')
+          result = '✓ NOW note updated'
+
+        } else if (action === 'add_contact_note') {
+          const connRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/connections?name=ilike.${encodeURIComponent('%' + payload.name + '%')}&select=id,name,notes&limit=1`,
+            { headers: sbHeaders }
+          )
+          const conns = await connRes.json()
+          const conn = Array.isArray(conns) && conns[0]
+          if (conn) {
+            const existing = conn.notes ? conn.notes + '\n' : ''
+            const ts = new Date().toISOString().slice(0, 10)
+            const updated = existing + `[${ts}] ${payload.note}`
+            await fetch(`${SUPABASE_URL}/rest/v1/connections?id=eq.${conn.id}`, {
+              method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({ notes: updated })
+            })
+            result = `✓ Note added to contact "${conn.name}"`
+          } else {
+            result = `✗ Contact "${payload.name}" not found`
+          }
+
+        } else {
+          result = `✗ Unknown action: ${action}`
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, result }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   res.writeHead(404); res.end()
 })
 

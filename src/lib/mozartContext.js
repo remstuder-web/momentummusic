@@ -343,6 +343,26 @@ Only include actions when explicitly asked to perform them.`
   return context
 }
 
+export const mozartTools = [{
+  name: 'take_action',
+  description: 'Take an action in the Momentum system — add references, save brain entries, create tasks, set feedback, update notes, or log contact notes.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['add_project_reference', 'add_brain_entry', 'add_inbox_task', 'set_version_feedback', 'update_now_note', 'add_contact_note'],
+        description: 'The action to perform'
+      },
+      payload: {
+        type: 'object',
+        description: 'Action-specific fields. add_project_reference: {track, song_id?, project_id?}. add_brain_entry: {category, title, content, confidence?}. add_inbox_task: {title, message, song_code?, song_title?}. set_version_feedback: {song_id, version_label, feedback}. update_now_note: {content}. add_contact_note: {name, note}.'
+      }
+    },
+    required: ['action', 'payload']
+  }
+}]
+
 export function parseActions(text) {
   const actions = []
   const regex = /\[ACTION:\s*(\w+)\s*\|([^\]]+)\]/g

@@ -11,8 +11,19 @@
   $effect(() => { if (mixCurve != null) lastMixCurve = mixCurve })
   $effect(() => { if (refCurve != null) lastRefCurve = refCurve })
 
-  const displayMix = $derived(mixCurve ?? lastMixCurve)
-  const displayRef = $derived(refCurve ?? lastRefCurve)
+  // Normalize curve to {freq: dB} object — handles both array (Essentia) and object formats
+  function normalizeCurve(curve) {
+    if (!curve) return null
+    if (Array.isArray(curve)) {
+      const obj = {}
+      ISO_FREQS.forEach((f, i) => { if (i < curve.length && Number.isFinite(curve[i])) obj[String(f)] = curve[i] })
+      return obj
+    }
+    return curve
+  }
+
+  const displayMix = $derived(normalizeCurve(mixCurve ?? lastMixCurve))
+  const displayRef = $derived(normalizeCurve(refCurve ?? lastRefCurve))
 
   const ISO_FREQS = [
     20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160,

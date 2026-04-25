@@ -61,6 +61,9 @@
   let feedbackLoading = $state({}) // song.id -> bool
   let trendVelocity = $state(null)
   let trendLoading = $state(false)
+  let mozartAnalyzeOpen = $state({}) // song.id -> bool
+  let mozartTrackQuery = $state({}) // song.id -> string
+  let mozartAnalysis = $state({}) // song.id -> { loading, ok, error }
 
   function formatMinSec(sec) {
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60)
@@ -2234,6 +2237,65 @@
     }
   }
 
+  async function runMozartAnalysis(song) {
+    const sid = song.id
+    const query = (mozartTrackQuery[sid] || '').trim()
+    if (!query) return
+    mozartAnalysis[sid] = { loading: true }
+    mozartAnalysis = { ...mozartAnalysis }
+    const close = () => {
+      mozartAnalyzeOpen[sid] = false
+      mozartAnalyzeOpen = { ...mozartAnalyzeOpen }
+      mozartTrackQuery[sid] = ''
+      mozartTrackQuery = { ...mozartTrackQuery }
+    }
+    // Direct URL → pass straight to analyze
+    if (query.includes('spotify.com/track') || query.includes('youtu')) {
+      await addReferenceVocal(song, query, '')
+      close()
+      mozartAnalysis[sid] = { loading: false, ok: true }
+      mozartAnalysis = { ...mozartAnalysis }
+      return
+    }
+    // Text query → ask Claude for the Spotify URL
+    const apiKey = localStorage.getItem('mm_api_key')
+    if (!apiKey) {
+      mozartAnalysis[sid] = { loading: false, error: 'No API key set in Settings' }
+      mozartAnalysis = { ...mozartAnalysis }
+      return
+    }
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 150,
+          messages: [{ role: 'user', content: `Return ONLY the Spotify track URL for: "${query}". Format: https://open.spotify.com/track/ID — no other text.` }]
+        })
+      })
+      const json = await resp.json()
+      const spotifyUrl = (json.content?.[0]?.text || '').trim()
+      if (!spotifyUrl.includes('spotify.com/track/')) {
+        mozartAnalysis[sid] = { loading: false, error: 'Could not identify track — paste a Spotify URL directly' }
+        mozartAnalysis = { ...mozartAnalysis }
+        return
+      }
+      await addReferenceVocal(song, spotifyUrl, query)
+      close()
+      mozartAnalysis[sid] = { loading: false, ok: true }
+      mozartAnalysis = { ...mozartAnalysis }
+    } catch(e) {
+      mozartAnalysis[sid] = { loading: false, error: e.message }
+      mozartAnalysis = { ...mozartAnalysis }
+    }
+  }
+
   onDestroy(() => stopWorkTimer(true))
 
   if (typeof document !== 'undefined') {
@@ -3048,6 +3110,10 @@
                     {@const refLoading = vocalEqLoading[song.id]}
                     {@const ao = analyzerOpen[String(song.id)] || {}}
                     {@const latestA = (wd.versions||[]).filter(v=>v.analysis).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]?.analysis}
+                    {@const refLinks = new Set(wd.reference_links || [])}
+                    {@const projectRefs = refTrackOptions.filter(r => refLinks.has(String(r.id)))}
+                    {@const hitRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && ((r.popularity || 0) > 70 || r.collection_name === 'daily_chart' || r.collection_name === 'tiktok_trending'))}
+                    {@const libraryRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && (r.popularity || 0) <= 70 && r.collection_name !== 'daily_chart' && r.collection_name !== 'tiktok_trending')}
                     <div class="vocal-eq-body">
                       <!-- Stem selector -->
                       <div class="stem-tabs">
@@ -3059,10 +3125,6 @@
                         {/each}
                       </div>
                       <!-- Ref dropdown — always show, curves load when available -->
-                      {@const refLinks = new Set(wd.reference_links || [])}
-                      {@const projectRefs = refTrackOptions.filter(r => refLinks.has(String(r.id)))}
-                      {@const hitRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && ((r.popularity || 0) > 70 || r.collection_name === 'daily_chart' || r.collection_name === 'tiktok_trending'))}
-                      {@const libraryRefs = refTrackOptions.filter(r => !refLinks.has(String(r.id)) && (r.popularity || 0) <= 70 && r.collection_name !== 'daily_chart' && r.collection_name !== 'tiktok_trending')}
                       <div class="ref-select-row">
                         <span class="ref-select-label">Compare:</span>
                         <select class="ref-select"
@@ -3147,15 +3209,28 @@
                             </button>
                           {/if}
                         </div>
-                        <div class="vocal-ref-row">
-                          <input class="vocal-ref-inp" type="text"
-                            placeholder="Spotify / YouTube URL…"
-                            value={vocalRefUrl[song.id] || ''}
-                            oninput={e => { vocalRefUrl[song.id] = e.currentTarget.value; vocalRefUrl = { ...vocalRefUrl } }} />
-                          <button class="vocal-btn vocal-btn-ref" disabled={!!refLoading || !vocalRefUrl[song.id]}
-                            onclick={() => addReferenceVocal(song, vocalRefUrl[song.id], '')}>
-                            {refLoading === 'ref' ? 'Fetching…' : '+ Add Reference'}
+                        <div class="vocal-mozart-wrap">
+                          <button class="vocal-mozart-toggle {mozartAnalyzeOpen[song.id] ? 'active' : ''}"
+                            onclick={() => { mozartAnalyzeOpen[song.id] = !mozartAnalyzeOpen[song.id]; mozartAnalyzeOpen = { ...mozartAnalyzeOpen } }}>
+                            + Add Reference
                           </button>
+                          {#if mozartAnalyzeOpen[song.id]}
+                            <div class="vocal-mozart-panel">
+                              <input class="vocal-ref-inp" type="text"
+                                placeholder="Artist · Title or Spotify URL…"
+                                value={mozartTrackQuery[song.id] || ''}
+                                oninput={e => { mozartTrackQuery[song.id] = e.currentTarget.value; mozartTrackQuery = { ...mozartTrackQuery } }}
+                                onkeydown={e => e.key === 'Enter' && runMozartAnalysis(song)} />
+                              <button class="vocal-btn vocal-btn-ref"
+                                disabled={mozartAnalysis[song.id]?.loading || !!refLoading || !mozartTrackQuery[song.id]}
+                                onclick={() => runMozartAnalysis(song)}>
+                                {mozartAnalysis[song.id]?.loading ? 'Fetching…' : 'Analyze'}
+                              </button>
+                            </div>
+                            {#if mozartAnalysis[song.id]?.error}
+                              <div class="vocal-mozart-err">{mozartAnalysis[song.id].error}</div>
+                            {/if}
+                          {/if}
                         </div>
                       </div>
 
@@ -4127,6 +4202,11 @@
   .vocal-eq-body { padding: 6px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
   .vocal-eq-actions { display: flex; flex-direction: column; gap: 6px; }
   .vocal-ref-row { display: flex; gap: 6px; }
+  .vocal-mozart-wrap { display: flex; flex-direction: column; gap: 4px; }
+  .vocal-mozart-toggle { background: transparent; border: 1px solid #1c1c1c; color: #444; font-size: 10px; font-family: 'Space Mono', monospace; padding: 3px 8px; border-radius: 2px; cursor: pointer; text-align: left; }
+  .vocal-mozart-toggle:hover, .vocal-mozart-toggle.active { border-color: rgba(74,159,212,.3); color: #4a9fd4; }
+  .vocal-mozart-panel { display: flex; gap: 6px; }
+  .vocal-mozart-err { font-size: 9px; color: #c44; }
   .vocal-ref-inp { flex: 1; background: #111; border: 1px solid #1c1c1c; color: #f5f1ea; font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 5px 9px; border-radius: 3px; outline: none; min-width: 0; }
   .vocal-ref-inp:focus { border-color: rgba(201,168,76,.4); }
   .vocal-ref-inp::placeholder { color: #333; }

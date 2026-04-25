@@ -7823,6 +7823,11 @@ Respond ONLY in JSON:
 
           const savedCurves = []
           for (const [stemName, curve] of Object.entries(result.stems || {})) {
+            // Remove any prior mix curve for this stem before inserting the fresh one
+            await supabaseAdmin.from('vocal_eq_curves').delete()
+              .eq('song_id', String(song_id))
+              .eq('stem_type', stemName)
+              .eq('source_type', 'mix')
             const { data, error } = await supabaseAdmin
               .from('vocal_eq_curves')
               .insert({

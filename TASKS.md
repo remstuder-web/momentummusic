@@ -235,3 +235,48 @@ File: Supabase SQL + momentum-watcher.js
   ('business_finance','Category: business finance','Revenue, budgets, costs, royalties, financial planning for music','knowledge',true);
 - In /suggest-category: fetch asc LIMIT 1 + desc LIMIT 1 per category so seeded description row is always included as the category intent signal
 - Watcher fetches distinct categories fresh from DB at start of every suggest-category call
+
+## FUTURE BUILD — Library Intelligence (stem analysis expansion)
+Status: QUEUED — do not implement until explicitly requested
+Added: 2026-04-25
+
+After Demucs separation (in processLibraryTrackInBackground or extractAcapella),
+run additional per-stem analysis and save results to reference_tracks as jsonb columns.
+
+### 1. Chord progression
+- Stems: other + vocals (ignore drums)
+- Method: librosa.effects.harmonic() + chroma features
+- Output: ['Cm', 'Fm', 'Bb', 'Eb'] per 4-bar section
+- DB column: chord_progression jsonb
+
+### 2. Drum pattern grid
+- Stem: drums
+- 16-step grid showing kick/snare/hihat hits
+- Detect: straight vs swing, complexity score
+- DB column: drum_pattern jsonb
+
+### 3. Bass movement
+- Stem: bass
+- Root note per bar
+- Detect: static vs moving bass line
+- DB column: bass_movement jsonb
+
+### 4. Vocal melody contour
+- Stem: vocals
+- Pitch over time: rising/falling/static phrases
+- Detect: hooks vs verses by melodic range
+- DB column: vocal_contour jsonb
+
+### 5. Structure detection (full mix)
+- Intro/verse/chorus/bridge timestamps
+- Method: librosa.segment + self-similarity matrix
+- DB column: song_structure jsonb
+
+### UI
+- Show all above as additional panels in ANALYZER tab
+
+### Tooling to monitor monthly
+- AudioSep (text-based separation)
+- Moises.ai API availability
+- Demucs v5 updates
+- Telegram command: /check-audio-tools → check for updates on above tools

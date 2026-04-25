@@ -10117,6 +10117,35 @@ async function syncAppleNotesToObsidian() {
   return { synced, total: appleNotes.length }
 }
 
+// ── Apple Notes reconciliation — delete local files for notes removed in Mac ─
+async function reconcileNotes() {
+  if (!fs.existsSync(NOTES_PATH)) return { deleted: 0 }
+  const appleNotes = await getAppleNotes('Notes')
+  // Bail if Apple Notes returned nothing — could be an error, don't wipe files
+  if (!appleNotes.length) return { deleted: 0 }
+
+  const appleFilenames = new Set(appleNotes.map(n => noteToFilename(n.name)))
+  const localFiles = fs.readdirSync(NOTES_PATH).filter(f => f.endsWith('.md') && f !== 'NOW.md')
+
+  let deleted = 0
+  for (const filename of localFiles) {
+    if (appleFilenames.has(filename)) continue
+    const fp = path.join(NOTES_PATH, filename)
+    try {
+      const { fm } = parseFrontmatter(fs.readFileSync(fp, 'utf8'))
+      // Only remove files that originated from Apple Notes
+      // Leave momentum-created notes intact (they may not have synced to Apple yet)
+      if (fm.source === 'apple_notes') {
+        fs.unlinkSync(fp)
+        console.log('Notes reconcile: removed', filename, '(deleted from Apple Notes)')
+        deleted++
+      }
+    } catch(e) { console.warn('reconcileNotes: error processing', filename, e.message) }
+  }
+  if (deleted > 0) console.log(`✓ reconcileNotes: removed ${deleted} deleted note(s)`)
+  return { deleted }
+}
+
 // ── Contact enrichment — auto-find social profiles by artist name ────────────
 async function fetchCulturalTiming() {
   const results = { google_trends: [], reddit_sounds: [], release_timing: {} }
@@ -10828,13 +10857,13 @@ server.listen(PORT, '127.0.0.1', () => {
   // Apple Notes auto-sync every 5 minutes
   if (!fs.existsSync(NOTES_PATH)) fs.mkdirSync(NOTES_PATH, { recursive: true })
   setInterval(async () => {
-    try {
-      await syncAppleNotesToObsidian()
-    } catch(e) {
-      logError('apple-notes-sync', e.message)
-    }
+    try { await syncAppleNotesToObsidian() } catch(e) { logError('apple-notes-sync', e.message) }
+    try { await reconcileNotes() } catch(e) { logError('notes-reconcile', e.message) }
   }, 5 * 60 * 1000)
-  console.log('✓ Apple Notes auto-sync: every 5 minutes')
+  setTimeout(async () => {
+    try { await reconcileNotes() } catch(e) { logError('notes-reconcile', e.message) }
+  }, 10000)
+  console.log('✓ Apple Notes auto-sync + reconcile: every 5 minutes')
   // connectBrainEntries() — defined at module scope above (accessible via endpoint + scheduler)
 
   // Weekly brain review — Sunday 8am

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] ProjectsTab.svelte — DONE
+TASK: analyzer-mozart-insight-panel
+WHAT: Added Mozart Insight section below EQ chart. loadMozartInsight() calls Claude Haiku with song+ref context, returns JSON {strategic, creative, next_step}. Auto-fires when ref dropdown changes. Shows STRATEGIC CONTEXT / CREATIVE DIRECTION / NEXT STEP with gold section labels. Costs tracked via /track-cost. svelte-check 0 errors.
+RESULT: works — svelte-check 0 errors
+BLOCKERS: none (requires API key in localStorage)
+
 ## [2026-04-25] momentum-watcher.cjs + ProjectsTab.svelte — DONE
 TASK: error-handling-supabase-writes-refs-display
 WHAT: Added { error } destructuring + console.error to 21 unchecked Supabase write calls. Fixed REFERENCE LINKS display to merge song.work_data.reference_links (Mozart) + song.reference_links (manual) in one {#each}. normSongRef() now handles Mozart format (title/artist/spotify_id→url). removeSongRef() removes from both sources. Refresh after Mozart action now fetches both work_data and reference_links.

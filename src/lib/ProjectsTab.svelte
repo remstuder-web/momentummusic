@@ -66,6 +66,8 @@
   let mozartAnalyzeOpen = $state({}) // song.id -> bool
   let mozartTrackQuery = $state({}) // song.id -> string
   let mozartAnalysis = $state({}) // song.id -> { loading, ok, error }
+  let mozartInsight = $state({}) // song.id -> { strategic, creative, next_step }
+  let mozartInsightLoading = $state({}) // song.id -> bool
 
   function formatMinSec(sec) {
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60)
@@ -2170,6 +2172,45 @@
     }
   }
 
+  async function loadMozartInsight(songId, refTrack) {
+    if (!refTrack) return
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    if (!apiKey) return
+    mozartInsight = { ...mozartInsight, [songId]: null }
+    mozartInsightLoading = { ...mozartInsightLoading, [songId]: true }
+    const song = songs.find(s => s.id === songId)
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 500,
+          system: `You are Mozart, expert music producer advisor.
+Compare producer's current mix to the reference track.
+Return JSON only:
+{
+  "strategic": ["point 1", "point 2", "point 3"],
+  "creative": ["direction 1", "direction 2", "direction 3"],
+  "next_step": "one concrete next action"
+}`,
+          messages: [{
+            role: 'user',
+            content: 'My mix: ' + (song?.title || song?.code || 'current') +
+              '\nReference: ' + (refTrack.artist || 'Unknown') + ' — ' + refTrack.title +
+              '\nCompare and give strategic + creative direction.'
+          }]
+        })
+      })
+      const d = await r.json()
+      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/mozart-insight', model: 'claude-haiku-4-5-20251001', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.0000008) + (d.usage.output_tokens * 0.000004) }) }).catch(() => {})
+      const text = (d.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
+      try { mozartInsight = { ...mozartInsight, [songId]: JSON.parse(text) } }
+      catch(e) { mozartInsight = { ...mozartInsight, [songId]: { next_step: d.content?.[0]?.text || '' } } }
+    } catch(e) { mozartInsight = { ...mozartInsight, [songId]: { next_step: 'Error: ' + e.message } } }
+    mozartInsightLoading = { ...mozartInsightLoading, [songId]: false }
+  }
+
   async function loadSuccessMatch(song) {
     const sid = String(song.id)
     if (successMatch[sid]) return
@@ -3238,7 +3279,13 @@
                         <span class="ref-select-label">Compare:</span>
                         <select class="ref-select"
                           value={selectedRef}
-                          onchange={e => { selectedRefId[song.id] = e.currentTarget.value; selectedRefId = { ...selectedRefId }; loadVocalEq(song.id) }}>
+                          onchange={e => {
+                            selectedRefId[song.id] = e.currentTarget.value
+                            selectedRefId = { ...selectedRefId }
+                            loadVocalEq(song.id)
+                            const ref = refTrackOptions.find(r => String(r.id) === e.currentTarget.value)
+                            if (ref) loadMozartInsight(song.id, ref)
+                          }}>
                           <option value="">— no ref —</option>
                           {#if projectRefs.length}
                             <optgroup label="── PROJECT REFS ──">
@@ -3292,6 +3339,37 @@
                             <div class="credit-row">
                               <span class="credit-label">Mastered</span>
                               <span class="credit-val">{selectedRefTrack.credits.masterers.join(', ')}</span>
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
+
+                      <!-- Mozart Insight -->
+                      {#if mozartInsightLoading[song.id]}
+                        <div class="mz-loading">Mozart analyzing...</div>
+                      {:else if mozartInsight[song.id]}
+                        {@const mz = mozartInsight[song.id]}
+                        <div class="mz-insight">
+                          {#if mz.strategic?.length}
+                            <div class="mz-section">
+                              <div class="mz-label">STRATEGIC CONTEXT</div>
+                              {#each mz.strategic as point}
+                                <div class="mz-point">{point}</div>
+                              {/each}
+                            </div>
+                          {/if}
+                          {#if mz.creative?.length}
+                            <div class="mz-section">
+                              <div class="mz-label">CREATIVE DIRECTION</div>
+                              {#each mz.creative as point}
+                                <div class="mz-point">{point}</div>
+                              {/each}
+                            </div>
+                          {/if}
+                          {#if mz.next_step}
+                            <div class="mz-section">
+                              <div class="mz-label">NEXT STEP</div>
+                              <div class="mz-next">{mz.next_step}</div>
                             </div>
                           {/if}
                         </div>
@@ -4376,6 +4454,12 @@
   .vocal-status { font-family: 'Space Mono', monospace; font-size: 10px; color: #c9a84c; padding: 5px 0; animation: va-pulse 1.5s ease-in-out infinite; }
   .vocal-status.done { color: #4caf82; animation: none; }
   .vocal-status.err { color: #e05a4a; animation: none; }
+  .mz-insight { margin: 10px 0; border-top: 1px solid #1a1a1a; padding-top: 10px; }
+  .mz-section { margin-bottom: 10px; }
+  .mz-label { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: rgba(201,168,76,.5); letter-spacing: .12em; margin-bottom: 5px; }
+  .mz-point { font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 300; color: #9e9690; line-height: 1.6; padding: 3px 0; border-bottom: 1px solid #111; }
+  .mz-next { font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 400; color: #cec9c1; line-height: 1.6; }
+  .mz-loading { font-family: 'Space Mono', monospace; font-size: 9px; color: #333; padding: 8px 0; font-style: italic; }
   @keyframes va-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
   .stem-tabs { display: flex; gap: 4px; margin-bottom: 4px; }
   .stem-tab { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; padding: 3px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; letter-spacing: .06em; }

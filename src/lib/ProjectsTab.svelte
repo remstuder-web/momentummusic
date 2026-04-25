@@ -61,6 +61,8 @@
   let feedbackLoading = $state({}) // song.id -> bool
   let trendVelocity = $state(null)
   let trendLoading = $state(false)
+  let finishingChecklist = $state([])
+  let checkedItems = $state({})
   let mozartAnalyzeOpen = $state({}) // song.id -> bool
   let mozartTrackQuery = $state({}) // song.id -> string
   let mozartAnalysis = $state({}) // song.id -> { loading, ok, error }
@@ -2296,6 +2298,20 @@
     }
   }
 
+  async function loadFinishingChecklist() {
+    const { data } = await supabase
+      .from('brain_knowledge')
+      .select('content')
+      .eq('category', 'checklist_70')
+      .eq('title', 'Finishing Checklist — Latest')
+      .single()
+    if (data?.content) {
+      try { finishingChecklist = JSON.parse(data.content) } catch(e) {}
+    }
+  }
+
+  loadFinishingChecklist()
+
   onDestroy(() => stopWorkTimer(true))
 
   if (typeof document !== 'undefined') {
@@ -3497,6 +3513,26 @@
         <span class="right-arr {sanityOpen?'open':''}">▶</span>
       </button>
       {#if sanityOpen}
+        <div class="checklist-panel">
+          <div class="checklist-title">FINISHING QUESTIONS</div>
+          <div class="checklist-subtitle">Updated by Mozart · {finishingChecklist.length} questions</div>
+          {#each finishingChecklist as item, i}
+            <div class="checklist-item {checkedItems[i] ? 'checked' : ''}">
+              <input type="checkbox" checked={checkedItems[i] || false}
+                onchange={() => { checkedItems[i] = !checkedItems[i]; checkedItems = { ...checkedItems } }} />
+              <div class="checklist-content">
+                <div class="checklist-phase">{item.phase}</div>
+                <div class="checklist-question">{item.question}</div>
+                {#if item.why}
+                  <div class="checklist-why">{item.why}</div>
+                {/if}
+              </div>
+            </div>
+          {/each}
+          {#if finishingChecklist.length === 0}
+            <div class="checklist-empty">Run /rebuild-music-tips to generate questions</div>
+          {/if}
+        </div>
         <div class="sanity-list">
           {#each sanityItems as item (item.id)}
             <div class="sanity-row {sanityChecks[item.id]?'checked':''}">
@@ -4086,6 +4122,17 @@
   .right-arr { font-size: 10px; color: #555; transition: transform .2s; font-family: 'Space Mono', monospace; }
   .right-arr.open { transform: rotate(90deg); }
 
+  .checklist-panel { padding: 8px 14px 4px; border-bottom: 1px solid #1a1a1a; margin-bottom: 4px; }
+  .checklist-title { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: rgba(201,168,76,.75); letter-spacing: .1em; margin-bottom: 2px; }
+  .checklist-subtitle { font-family: 'DM Sans', sans-serif; font-size: 9px; color: #333; margin-bottom: 8px; }
+  .checklist-item { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1a1a1a; align-items: flex-start; }
+  .checklist-item.checked .checklist-question { color: #333; text-decoration: line-through; }
+  .checklist-item input[type=checkbox] { margin-top: 2px; accent-color: #c9a84c; flex-shrink: 0; }
+  .checklist-content { display: flex; flex-direction: column; gap: 2px; }
+  .checklist-phase { font-family: 'Space Mono', monospace; font-size: 7px; color: #c9a84c; letter-spacing: .08em; }
+  .checklist-question { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #cec9c1; line-height: 1.4; }
+  .checklist-why { font-family: 'DM Sans', sans-serif; font-size: 9px; color: #444; font-style: italic; }
+  .checklist-empty { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #333; font-style: italic; padding: 6px 0; }
   .sanity-list { padding: 10px 14px; display: flex; flex-direction: column; gap: 5px; max-height: 320px; overflow-y: auto; }
   .sanity-row { display: flex; align-items: flex-start; gap: 9px; padding: 5px 0; border-bottom: 1px solid #0f0f0f; }
   .sanity-row.checked { opacity: .35; }

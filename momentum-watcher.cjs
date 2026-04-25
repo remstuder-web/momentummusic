@@ -1684,6 +1684,133 @@ async function rebuildBrainMaster() {
   }
 }
 
+async function rebuildMusicTips() {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) { console.warn('rebuildMusicTips: no ANTHROPIC_API_KEY'); return }
+  try {
+    const [{ data: entries }, { data: tipEntries }] = await Promise.all([
+      supabase.from('brain_knowledge')
+        .select('title, content, category, confidence, priority, created_at')
+        .in('category', ['creative_process', 'mixing_technique', 'production_style', 'sound_design', 'observation', 'question'])
+        .eq('active', true)
+        .order('created_at', { ascending: false }),
+      supabase.from('brain_knowledge')
+        .select('title, content, confidence, priority')
+        .eq('source_type', 'music_tips')
+        .eq('active', true)
+    ])
+
+    const allContent = [...(tipEntries || []), ...(entries || [])]
+      .map(e => e.title + ': ' + (e.content || '')).join('\n\n')
+    if (!allContent.trim()) { console.warn('rebuildMusicTips: no content'); return }
+
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5-20251001',
+        max_tokens: 2000,
+        system: `You are maintaining a music producer's master knowledge file.
+Rules:
+- Keep the ORIGINAL structure and format of music tips
+- MERGE new insights into existing sections where they fit
+- Never duplicate — find the most concise way to express each idea
+- Group similar concepts together
+- Questions about finishing/genre/emotional response belong together
+- Shorter is better — every word must earn its place
+- Output clean markdown only, no commentary`,
+        messages: [{ role: 'user', content: `Here is all the knowledge to synthesize into one perfect Music Tips file:\n\n${allContent}\n\nCreate the best possible version — complete, concise, perfectly organized.` }]
+      })
+    })
+    const d = await r.json()
+    const synthesized = d.content?.[0]?.text || ''
+    if (!synthesized) { console.warn('rebuildMusicTips: no AI response', d.error?.message); return }
+
+    const header = [
+      '# 🎵 MUSIC TIPS — MASTER',
+      '> Living document. Auto-synthesized by Mozart. Do not edit manually.',
+      '> Last updated: ' + new Date().toLocaleString('de-CH'),
+      '',
+      '---',
+      ''
+    ].join('\n')
+
+    const tipsPath = '/Users/remo/ObsidianVault/Momentum/🎵 MUSIC TIPS MASTER.md'
+    require('fs').writeFileSync(tipsPath, header + synthesized, 'utf8')
+    console.log('✓ Music Tips master rebuilt')
+    setImmediate(() => rebuildFinishingChecklist().catch(e => console.warn('checklist rebuild failed:', e.message)))
+    return synthesized
+  } catch(e) {
+    console.error('rebuildMusicTips error:', e.message)
+  }
+}
+
+async function rebuildFinishingChecklist() {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) { console.warn('rebuildFinishingChecklist: no ANTHROPIC_API_KEY'); return [] }
+  try {
+    const tipsPath = '/Users/remo/ObsidianVault/Momentum/🎵 MUSIC TIPS MASTER.md'
+    let tipsContent = ''
+    try { tipsContent = require('fs').readFileSync(tipsPath, 'utf8') } catch(e) {}
+
+    const { data: questionEntries } = await supabase
+      .from('brain_knowledge')
+      .select('title, content, category')
+      .or('category.eq.question,title.ilike.%finish%,title.ilike.%genre%,content.ilike.%when is%,content.ilike.%how do i know%')
+      .eq('active', true)
+
+    const questionContext = (questionEntries || [])
+      .map(e => e.title + ': ' + (e.content || '')).join('\n')
+
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 800,
+        system: `You are building a finishing checklist for a music producer.
+Extract and organize the KEY QUESTIONS to ask when finishing a track.
+Format as JSON array of checklist items:
+[
+  { "phase": "PRODUCTION", "question": "...", "why": "brief reason" },
+  { "phase": "MIXING", "question": "...", "why": "brief reason" },
+  { "phase": "MASTERING", "question": "...", "why": "brief reason" },
+  { "phase": "RELEASE", "question": "...", "why": "brief reason" }
+]
+Max 20 questions total. Short, actionable, in order of importance.
+Include genre-specific considerations.
+Return JSON only.`,
+        messages: [{ role: 'user', content: tipsContent.slice(0, 3000) + '\n\nAdditional entries:\n' + questionContext }]
+      })
+    })
+    const d = await r.json()
+    let checklist = []
+    try {
+      checklist = JSON.parse((d.content?.[0]?.text || '[]').replace(/```json|```/g, '').trim())
+    } catch(e) { console.warn('rebuildFinishingChecklist: JSON parse failed') }
+
+    if (!checklist.length) { console.warn('rebuildFinishingChecklist: empty result'); return [] }
+
+    await supabase.from('brain_knowledge').upsert({
+      category: 'checklist_70',
+      title: 'Finishing Checklist — Latest',
+      content: JSON.stringify(checklist),
+      active: true,
+      confidence: 'locked',
+      priority: true
+    }, { onConflict: 'title' })
+
+    console.log('✓ Finishing checklist rebuilt:', checklist.length, 'questions')
+    return checklist
+  } catch(e) {
+    console.error('rebuildFinishingChecklist error:', e.message)
+    return []
+  }
+}
+
+// Startup: build music tips + finishing checklist (20s delay)
+setTimeout(rebuildMusicTips, 20000)
+
 async function getCrossChartTopics() {
   try {
     const [tiktokRes, spotifyRes] = await Promise.all([
@@ -2152,6 +2279,7 @@ async function buildStatusResponse() {
     'GET /get-env-keys', 'POST /save-env-key', 'POST /save-tasks',
     'GET /status', 'GET /system-status', 'GET /ping',
     'POST /cleanup-brain-dupes', 'POST /enrich-library-genres', 'POST /rebuild-brain-master',
+    'POST /rebuild-music-tips', 'POST /rebuild-finishing-checklist',
     'GET /find-whatsapp-db', 'POST /setup-whatsapp',
     'GET /whatsapp-contacts', 'POST /whatsapp-add-contact'
   ]
@@ -9429,6 +9557,29 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /rebuild-music-tips — synthesize Music Tips master + finishing checklist ─
+  if (req.method === 'POST' && req.url === '/rebuild-music-tips') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, message: 'Music Tips rebuild started in background' }))
+    setImmediate(() => rebuildMusicTips().catch(e => console.error('rebuild-music-tips error:', e.message)))
+    return
+  }
+
+  // ── POST /rebuild-finishing-checklist — extract finishing questions from tips ──
+  if (req.method === 'POST' && req.url === '/rebuild-finishing-checklist') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const checklist = await rebuildFinishingChecklist()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, count: checklist.length }))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /enrich-library-genres — fetch Spotify genres for tracks missing them ──
   if (req.method === 'POST' && req.url === '/enrich-library-genres') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -9840,6 +9991,10 @@ ${chatText.slice(0, 4000)}`
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, filepath }))
         setImmediate(() => rebuildBrainMaster().catch(() => {}))
+        const MUSIC_TIPS_CATS = new Set(['creative_process', 'mixing_technique', 'production_style', 'sound_design', 'observation', 'question'])
+        if (MUSIC_TIPS_CATS.has(entry.category)) {
+          setImmediate(() => rebuildMusicTips().catch(() => {}))
+        }
       } catch(e) {
         res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
       }

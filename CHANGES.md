@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] momentum-watcher.cjs + ProjectsTab.svelte — DONE
+TASK: music-tips-master-finishing-checklist-panel
+WHAT: BUILD1: rebuildMusicTips() fetches mixing/production/question brain entries + music_tips source entries, asks Claude Opus to synthesize into 🎵 MUSIC TIPS MASTER.md, triggers on save-brain-file for matching categories + startup 20s + POST /rebuild-music-tips. BUILD2: rebuildFinishingChecklist() reads tips file + question entries, asks Haiku for JSON checklist, upserts to brain_knowledge checklist_70 + POST /rebuild-finishing-checklist. BUILD3: CHECKLIST 70% panel wired — finishingChecklist loaded from Supabase on mount, displayed with phase labels, checkboxes, why notes.
+RESULT: svelte-check clean, both endpoints respond ok, watcher restarted
+BLOCKERS: claude-opus-4-5-20251001 model ID may need verification (user-specified)
+
 ## [2026-04-25] momentum-watcher.cjs + mozartContext.js — DONE
 TASK: brain-master-compact-format-mozart-priority-rules
 WHAT: FIX1: rebuildBrainMaster() rewritten — compact format, blockquote priority section, **Title** <small>date</small> per entry, content truncated to 300 chars, category entry count in header. FIX2: mozartContext.js fetches priority+locked entries, prepends ⚡ CORE RULES & PRIORITIES section before full context, system prompt updated to reference it.

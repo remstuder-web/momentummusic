@@ -1647,6 +1647,30 @@ setTimeout(async () => {
   } catch(e) { console.warn('bg-genres startup error:', e.message) }
 }, 45000)
 
+// Startup: ensure genres column exists on reference_tracks
+setImmediate(async () => {
+  try {
+    await supabaseAdmin.rpc('run_sql', { query: 'ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb' })
+    console.log('✓ genres column ready')
+  } catch(e) { /* column already exists or rpc unavailable — ignore */ }
+})
+
+// Startup + every 6h: system health check with Telegram alert on issues
+async function runHealthCheck() {
+  try {
+    const r = await fetch(`http://127.0.0.1:${PORT}/health`)
+    const h = await r.json()
+    if (h.issues?.length) {
+      const msg = '⚠️ Momentum health issues:\n' + h.issues.map(i => '• ' + i).join('\n')
+      sendTelegram(TELEGRAM_OWNER_ID, msg).catch(() => {})
+      console.warn('Health check issues:', h.issues)
+    } else {
+      console.log(`✓ Health check OK — brain:${h.brain_entries} refs:${h.reference_tracks} songs:${h.songs}`)
+    }
+  } catch(e) { console.warn('Health check error:', e.message) }
+}
+setTimeout(() => runHealthCheck().then(() => setInterval(runHealthCheck, 6 * 60 * 60 * 1000)), 30000)
+
 // Startup: rebuild brain master on boot
 setTimeout(rebuildBrainMaster, 8000)
 
@@ -1812,8 +1836,16 @@ async function rebuildFinishingChecklist() {
     const { data: questionEntries } = await supabase
       .from('brain_knowledge')
       .select('title, content, category')
-      .or('category.eq.question,title.ilike.%finish%,title.ilike.%genre%,content.ilike.%when is%,content.ilike.%how do i know%')
+      .or([
+        'category.eq.question',
+        'category.eq.creative_process',
+        'category.eq.mixing_technique',
+        'category.eq.production_style',
+        'priority.eq.true',
+        'confidence.eq.locked'
+      ].join(','))
       .eq('active', true)
+      .limit(50)
 
     const questionContext = (questionEntries || [])
       .map(e => e.title + ': ' + (e.content || '')).join('\n')
@@ -1823,27 +1855,33 @@ async function rebuildFinishingChecklist() {
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 800,
+        max_tokens: 2000,
         system: `You are building a finishing checklist for a music producer.
 Extract and organize the KEY QUESTIONS to ask when finishing a track.
-Format as JSON array of checklist items:
+Format as a JSON array. Return ONLY the JSON array, no markdown fences, no explanation:
 [
   { "phase": "PRODUCTION", "question": "...", "why": "brief reason" },
   { "phase": "MIXING", "question": "...", "why": "brief reason" },
   { "phase": "MASTERING", "question": "...", "why": "brief reason" },
   { "phase": "RELEASE", "question": "...", "why": "brief reason" }
 ]
-Max 20 questions total. Short, actionable, in order of importance.
-Include genre-specific considerations.
-Return JSON only.`,
+Max 15 questions total. Short, actionable. Return valid JSON only — no text before or after.`,
         messages: [{ role: 'user', content: tipsContent.slice(0, 3000) + '\n\nAdditional entries:\n' + questionContext }]
       })
     })
     const d = await r.json()
     let checklist = []
+    const rawText = d.content?.[0]?.text || ''
+    if (!rawText) { console.warn('rebuildFinishingChecklist: no AI response', d.error?.message); return [] }
     try {
-      checklist = JSON.parse((d.content?.[0]?.text || '[]').replace(/```json|```/g, '').trim())
-    } catch(e) { console.warn('rebuildFinishingChecklist: JSON parse failed') }
+      const cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+      const jsonMatch = cleaned.match(/\[[\s\S]*\]/)
+      const jsonStr = jsonMatch ? jsonMatch[0] : cleaned
+      checklist = JSON.parse(jsonStr)
+      if (!Array.isArray(checklist)) checklist = []
+    } catch(e) {
+      console.warn('rebuildFinishingChecklist: JSON parse failed, raw:', rawText.slice(0, 300))
+    }
 
     if (!checklist.length) { console.warn('rebuildFinishingChecklist: empty result'); return [] }
 
@@ -9155,6 +9193,67 @@ ${chatText.slice(0, 4000)}`
       logError('/status', e.message)
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: e.message }))
+    }
+    return
+  }
+
+  // ── GET /health — comprehensive system health check ──────────────────────
+  if (req.method === 'GET' && req.url === '/health') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const checks = {}
+      const issues = []
+
+      // Supabase connectivity
+      const { data: sbCheck, error: sbErr } = await supabase.from('brain_knowledge').select('id').limit(1)
+      checks.supabase = sbErr ? 'fail' : 'ok'
+      if (sbErr) issues.push('supabase: ' + sbErr.message)
+
+      // Brain entries count
+      const { count: brainCount } = await supabase.from('brain_knowledge').select('id', { count: 'exact', head: true }).eq('active', true)
+      checks.brain_entries = brainCount || 0
+      if (brainCount < 10) issues.push('brain_knowledge: only ' + brainCount + ' active entries')
+
+      // Songs count
+      const { count: songCount } = await supabase.from('songs').select('id', { count: 'exact', head: true })
+      checks.songs = songCount || 0
+
+      // Reference tracks
+      const { count: refCount } = await supabase.from('reference_tracks').select('id', { count: 'exact', head: true })
+      checks.reference_tracks = refCount || 0
+
+      // Unread inbox notifications
+      const { count: inboxCount } = await supabase.from('inbox_notifications').select('id', { count: 'exact', head: true }).eq('read', false)
+      checks.unread_inbox = inboxCount || 0
+
+      // Music Tips file
+      const tipsPath = '/Users/remo/ObsidianVault/Momentum/🎵 MUSIC TIPS MASTER.md'
+      const tipsExists = fs.existsSync(tipsPath)
+      checks.music_tips_file = tipsExists ? fs.statSync(tipsPath).size : 0
+      if (!tipsExists) issues.push('Music Tips MASTER.md missing — run /rebuild-music-tips')
+
+      // Obsidian vault accessible
+      checks.obsidian_vault = fs.existsSync(OBSIDIAN_VAULT_PATH) ? 'ok' : 'missing'
+      if (checks.obsidian_vault === 'missing') issues.push('Obsidian vault not found at ' + OBSIDIAN_VAULT_PATH)
+
+      // API keys present
+      checks.anthropic_key = !!process.env.ANTHROPIC_API_KEY
+      checks.spotify_credentials = !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET)
+      if (!checks.anthropic_key) issues.push('ANTHROPIC_API_KEY not set')
+
+      // Background queue size
+      checks.bg_queue = processingQueue.length
+
+      const healthy = issues.length === 0
+      checks.healthy = healthy
+      checks.issues = issues
+      checks.checked_at = new Date().toISOString()
+
+      res.writeHead(healthy ? 200 : 207, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(checks))
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ healthy: false, error: e.message }))
     }
     return
   }

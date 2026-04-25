@@ -1,21 +1,22 @@
 {
-  "updated": "2026-04-25T14:42:00Z",
-  "last_task": "analyzer-mozart-insight-panel",
+  "updated": "2026-04-25T16:30:00Z",
+  "last_task": "checklist-70-fix",
   "status": "done",
   "working": [
-    "loadMozartInsight(songId, refTrack): calls Claude Haiku, returns {strategic[], creative[], next_step}",
-    "Auto-fires when ref dropdown changes alongside loadVocalEq()",
-    "Mozart Insight panel renders below EQ chart + credits, above SUCCESS MATCH",
-    "STRATEGIC CONTEXT / CREATIVE DIRECTION / NEXT STEP sections with gold section labels",
-    "Cost tracked via /track-cost at Haiku rates",
-    "State: mozartInsight, mozartInsightLoading per song.id",
+    "loadFinishingChecklist(): now runs in onMount (was bare module-level call — fired before Supabase ready)",
+    "onMount imported from svelte",
+    "Query: category=checklist_70, title='Finishing Checklist — Latest', maybeSingle()",
+    "Empty state: 'Loading questions...' + retry button",
+    "Phase-grouped display with checklist-phase-group/checklist-phase-label",
+    "Reset all button uses reset-btn CSS class",
+    "No 'New item...' input",
     "svelte-check: 0 errors"
   ],
   "broken": [],
   "partial": [
-    "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase",
-    "genres column: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb;"
+    "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]'; — run in Supabase dashboard if not done",
+    "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
-  "next": "Run ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb; in Supabase, then POST /enrich-library-genres to backfill",
-  "notes": "Mozart insight requires API key in localStorage (mm_api_key). If key missing, function returns early silently. Panel only shows after ref is selected from dropdown."
+  "next": "Test checklist panel loads 14 questions. If still empty, check brain_knowledge row: category='checklist_70', title='Finishing Checklist — Latest'. Run /rebuild-finishing-checklist from watcher if row missing.",
+  "notes": "Root cause was loadFinishingChecklist() called bare at module scope — runs during SSR/initialization before Supabase client is ready. Moving into onMount fixes the timing."
 }

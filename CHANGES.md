@@ -1488,3 +1488,51 @@ TASK: speicherbox file storage endpoint + Brain tab UI + paste support
 WHAT: GET /speicherbox (brain_knowledge category=speicherbox, newest first); POST /save-speicherbox-file (base64 decode → Dropbox/!MOMENTUM MUSIC/Brain/speicherbox/TIMESTAMP_name, insert brain_knowledge with metadata{file_path,file_type,thumbnail}); POST /open-file (exec open "path"); BrainTab: loadSpeicherbox()/saveToSpeicherbox() with canvas thumbnail generation + Haiku text extraction for images; onMount loads speicherbox; paste and drop handlers save to speicherbox + extract text; SPEICHERBOX section below LIBRARY with grid of cards (thumbnail/icon, name, date, extracted text preview, delete); CSS for speicher-card/thumb/grid
 RESULT: works — file saved to disk, Supabase entry created, GET /speicherbox returns item; 8/8 tests passing
 BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs, ProjectsTab.svelte — DONE
+TASK: fix-mozart-refs-column
+WHAT: Mozart add_project_reference writes to reference_links column (not work_data). /fix-song-refs migrates + merges both sources. Frontend simplified to single source.
+RESULT: works — song 152 migrated 3 refs from work_data to column. svelte-check 0 errors.
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: three-urgent-fixes
+WHAT: Scout press/gear saves await with error log; Spotify 429 rate limit detection + retry in bg processor + fetchTrackGenres; mergeDupes 20% safety cap with two-pass collect-then-delete
+RESULT: works — clean startup, no parse errors on 429
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: health-check-and-finishing-fixes
+WHAT: /health endpoint (supabase+brain+songs+refs+inbox+files+keys), finishing checklist broadened query + 2000 token limit + robust JSON parser, genres column startup SQL, 6h health check with Telegram alert
+RESULT: works — health OK (598 brain, 36 refs, 15 songs), checklist 15 questions
+BLOCKERS: none
+
+## [2026-04-25] ProjectsTab.svelte — DONE
+TASK: fix-refs-display-formats
+WHAT: REFS tab handles both {url,name} (manual) and {title,artist,spotify_id} (Mozart) via inline {@const} derivation. removeSongRef matches url OR id. addSongRef saves spotify_id. normSongRef removed.
+RESULT: works — svelte-check 0 errors
+BLOCKERS: none
+
+## [2026-04-25] ProjectsTab.svelte — DONE
+TASK: checklist-70-panel-fix
+WHAT: loadFinishingChecklist uses maybeSingle(), phase-grouped display, checkedItems keyed by question, "New item..." input removed, new CSS classes
+RESULT: works — svelte-check 0 errors. Will show 15 questions when panel opens.
+BLOCKERS: none
+
+## [2026-04-25] +page.svelte, ProjectsTab.svelte — DONE
+TASK: persist-tab-and-song
+WHAT: setActiveTab() saves to localStorage; onMount restores momentum_active_tab. expandSong() writes/clears momentum_last_song; load() restores it after songs array populated.
+RESULT: works — svelte-check 0 errors
+BLOCKERS: none
+
+## [2026-04-25] ProjectsTab.svelte, momentum-watcher.cjs — DONE
+TASK: project-level-references
+WHAT: projectRefs() reads projects.reference_links column (with migration fallback). addRefLink/removeRefLink write to column. Mozart add_project_reference rewired to projects table with project_name resolution. removeProjectRef() added.
+RESULT: works — svelte-check 0 errors. Run ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]'; in Supabase first.
+BLOCKERS: Supabase SQL must be run manually before the column is available.
+
+## 2026-04-25 ProjectsTab.svelte — DONE
+TASK: checklist-70-fix
+WHAT: loadFinishingChecklist moved into onMount (was bare call at module init, ran before Supabase ready); removed checklist-title/subtitle; empty state now shows retry button; reset button renamed to reset-btn; removed New item input
+RESULT: works
+BLOCKERS: none

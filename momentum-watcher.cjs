@@ -1180,29 +1180,30 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
 
   const model = 'claude-haiku-4-5-20251001'
   const usage = claudeData.usage || {}
-  fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
-    method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ endpoint: '/agent-scout', model, input_tokens: usage.input_tokens||0, output_tokens: usage.output_tokens||0, cost_usd: ((usage.input_tokens||0)*0.000001)+((usage.output_tokens||0)*0.000005) })
-  }).catch(() => {})
+  const { error: usageErr } = await supabase.from('api_usage').insert({
+    endpoint: '/agent-scout', model,
+    input_tokens: usage.input_tokens||0,
+    output_tokens: usage.output_tokens||0,
+    cost_usd: ((usage.input_tokens||0)*0.000001)+((usage.output_tokens||0)*0.000005)
+  })
+  if (usageErr) console.error('scout usage insert error:', usageErr.message)
 
   // Save key insight from scout to brain_knowledge
   setImmediate(async () => {
     try {
       const insight = await extractInsight(scoutText, apiKey)
-      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
-        method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-        body: JSON.stringify({
-          category: 'market_knowledge',
-          title: `Scout ${today} — ${insight.slice(0, 60)}`,
-          content: insight,
-          entry_type_v2: 'observation',
-          confidence: 'medium',
-          source_type: 'scout_agent',
-          active: true,
-          metadata: { date: today }
-        })
+      const { error: brainErr } = await supabase.from('brain_knowledge').insert({
+        category: 'market_knowledge',
+        title: `Scout ${today} — ${insight.slice(0, 60)}`,
+        content: insight,
+        entry_type_v2: 'observation',
+        confidence: 'medium',
+        source_type: 'scout_agent',
+        active: true,
+        metadata: { date: today }
       })
-      saveBrainFile({ category: 'market_knowledge', title: `Scout ${today}`, content: insight, confidence: 'medium', source_type: 'scout_agent' }).catch(() => {})
+      if (brainErr) console.error('scout brain insert error:', brainErr.message)
+      await saveBrainFile({ category: 'market_knowledge', title: `Scout ${today}`, content: insight, confidence: 'medium', source_type: 'scout_agent' })
     } catch(e) { console.warn('scout brain save error:', e.message) }
   })
 

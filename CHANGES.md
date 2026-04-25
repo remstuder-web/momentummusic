@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: mozart-refs-refresh-dedup
+WHAT: FIX1: sendAI() refreshes song.work_data from Supabase after add_project_reference tool_use succeeds. FIX2: normalizeTrack dedup on save (strips non-alphanumeric, 30-char key), runs dedup on existing refs before pushing. POST /fix-song-refs endpoint: removes Test Artist entries + deduplicates. Ran on song 152: 4→3 refs.
+RESULT: works — svelte-check 0 errors, pm2 OK, fix-song-refs confirmed {before:4,after:3}
+BLOCKERS: none
+
 ## [2026-04-25] momentum-watcher.cjs — DONE
 TASK: unified-fetchSpotifyId-helper
 WHAT: Added fetchSpotifyId(title, artist) shared helper. add_project_reference now auto-enriches with Spotify before saving, also calls saveToCheckout(collection=project_reference). TikTok trend search replaced with fetchSpotifyId(). Duplicate check now also matches by spotify_id. 

@@ -2471,6 +2471,16 @@
         if (finalText) aiMessages = [...aiMessages, { role: 'assistant', content: finalText }]
         saveMozartSession(msg, finalText || toolResults.map(t => t.content).join(' '), expandedSong?.id, expandedSong?.title || expandedSong?.code)
 
+        // Refresh song work_data if a reference was added to the expanded song
+        const didAddRef = toolUseBlocks.some(b => b.input?.action === 'add_project_reference')
+        if (didAddRef && expandedSong) {
+          const { data: refreshed } = await supabase.from('songs').select('work_data').eq('id', expandedSong.id).single()
+          if (refreshed) {
+            expandedSong.work_data = refreshed.work_data
+            songs = songs.map(s => s.id === expandedSong.id ? { ...s, work_data: refreshed.work_data } : s)
+          }
+        }
+
       } else {
         // Normal text response — fall back to legacy regex actions if any
         let reply = (d.content || []).find(b => b.type === 'text')?.text || 'No response.'

@@ -1,9 +1,15 @@
 {
-  "updated": "2026-04-25T08:24:00Z",
-  "last_task": "fix-scout-supabase-catch",
+  "updated": "2026-04-25T08:57:00Z",
+  "last_task": "tiktok-top10-spotify5-youtube5",
   "status": "done",
   "working": [
-    "scout chart_history upsert: converted .catch() → async/await with error check",
+    "runAgentTikTokTrends: TikTok top 10 (fetchTikTokRealData().slice(0,10))",
+    "Spotify top 5: fetchKworbSpotify(), collection_name=spotify_chart",
+    "YouTube top 5: fetchKworbTrending(), collection_name=youtube_chart",
+    "All 20 saved to checkout with correct collection_name",
+    "Inbox message: raw 📱/🎵/▶ lists + Claude analysis",
+    "BrainTab checkout: source badge from collection_name (📱 tiktok / 🎵 spotify / ▶ youtube / ⬇ other)",
+    "Return shape: { ok, tiktok, spotify, youtube, tracks, trends, trend_tracks, source }",
     "Watcher restart OK, ping confirmed"
   ],
   "broken": [],
@@ -11,5 +17,5 @@
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
   "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables",
-  "notes": "Supabase query builder is thenable but not a full Promise — never chain .catch() directly on supabaseAdmin.from(...) calls. Always use async/await with destructured { error }."
+  "notes": "YouTube lines from kworb are 'artist · title · ...' format — split by ' · ' to extract title/artist."
 }

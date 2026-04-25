@@ -1899,7 +1899,7 @@ Return ONLY JSON (single item array):
       {:else}
         {#each checkoutRefs as track}
           <div class="ref-track-row checkout-row">
-            <span class="ref-source-dot checkout">⬇</span>
+            <span class="ref-source-dot checkout">{track.collection_name === 'tiktok_trending' ? '📱' : track.collection_name === 'spotify_chart' ? '🎵' : track.collection_name === 'youtube_chart' ? '▶' : '⬇'}</span>
             <span class="ref-title">{track.artist || 'Unknown'} — {track.title}</span>
             <span class="ref-stats">
               {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}

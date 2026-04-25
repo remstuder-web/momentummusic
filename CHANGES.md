@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] momentum-watcher.cjs + BrainTab.svelte — DONE
+TASK: tiktok-top10-spotify5-youtube5
+WHAT: Rewrote runAgentTikTokTrends() — TikTok top 10 (was all 20), Spotify top 5 via fetchKworbSpotify(), YouTube top 5 via fetchKworbTrending(). All 20 saved to checkout with collection_name per source (tiktok_trending/spotify_chart/youtube_chart). Inbox message prepends 📱/🎵/▶ raw lists before Claude analysis. BrainTab checkout shows source badge per track.
+RESULT: watcher restart OK, ping confirmed
+BLOCKERS: none
+
 ## [2026-04-25] momentum-watcher.cjs — DONE
 TASK: fix-scout-supabase-catch
 WHAT: Replaced supabaseAdmin.from('chart_history').upsert(...).catch() with async/await + error check — supabase query builder is thenable but not a full Promise so .catch() is not a function

@@ -1214,41 +1214,38 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     }, {})
   ).slice(0, 5)
   for (const item of pressToSave) {
-    fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
-      method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({
-        type: 'press',
-        song_code: null,
-        song_title: (item.title || '').slice(0, 120),
-        artist: null,
-        message: (item.body || '').slice(0, 300),
-        patch_name: item.source,
-        read: false,
-        metadata: { url: item.url, source: item.source }
-      })
-    }).catch(() => {})
+    const { error: pressErr } = await supabase.from('inbox_notifications').insert({
+      type: 'press',
+      song_code: null,
+      song_title: (item.title || '').slice(0, 120),
+      artist: null,
+      message: (item.body || '').slice(0, 300),
+      patch_name: item.source,
+      read: false,
+      metadata: { url: item.url, source: item.source }
+    })
+    if (pressErr) console.error('scout press insert error:', pressErr.message)
   }
 
   // Save Gear news items to brain_knowledge (deduplicated by title)
   if (gearThreads.length) {
-    const existingRes = await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?source_type=eq.gear_news&select=title`, { headers: sbHeaders })
-    const existing = await existingRes.json().catch(() => [])
-    const existingTitles = new Set((Array.isArray(existing) ? existing : []).map(r => r.title))
+    const { data: existingGear, error: gearFetchErr } = await supabase
+      .from('brain_knowledge').select('title').eq('source_type', 'gear_news')
+    if (gearFetchErr) console.error('scout gear fetch error:', gearFetchErr.message)
+    const existingTitles = new Set((existingGear || []).map(r => r.title))
     for (const t of gearThreads) {
       const brainTitle = 'GEAR: ' + t.title
       if (existingTitles.has(brainTitle)) continue
-      fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
-        method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-        body: JSON.stringify({
-          category: 'sound_design',
-          title: brainTitle,
-          content: t.title + ' (Gear News (BPB + CDM))',
-          entry_type_v2: 'observation',
-          source_type: 'gear_news',
-          confidence: 'weak',
-          active: true
-        })
-      }).catch(() => {})
+      const { error: gearErr } = await supabase.from('brain_knowledge').insert({
+        category: 'sound_design',
+        title: brainTitle,
+        content: t.title + ' (Gear News (BPB + CDM))',
+        entry_type_v2: 'observation',
+        source_type: 'gear_news',
+        confidence: 'weak',
+        active: true
+      })
+      if (gearErr) console.error('scout gear insert error:', brainTitle, gearErr.message)
     }
   }
 
@@ -1450,6 +1447,8 @@ async function saveToCheckout(track) {
   return true
 }
 
+function delay(ms) { return new Promise(r => setTimeout(r, ms)) }
+
 // ── Background library track processing queue ─────────────────────────────
 const ESSENTIA_PY = '/opt/homebrew/bin/python3.11'
 const ANALYZE_AUDIO_SCRIPT = path.join(__dirname, 'analyze_audio.py')
@@ -1470,7 +1469,14 @@ async function processLibraryTrackInBackground(refTrack) {
     if (refTrack.spotify_id) {
       try {
         const token = await getSpotifyToken()
-        const sr = await fetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id, { headers: { 'Authorization': 'Bearer ' + token } })
+        let sr = await fetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id, { headers: { 'Authorization': 'Bearer ' + token } })
+        if (sr.status === 429) {
+          const retryAfter = parseInt(sr.headers.get('Retry-After') || '30', 10)
+          console.warn('bg: Spotify rate limit — waiting', retryAfter, 's')
+          await delay(retryAfter * 1000)
+          sr = await fetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id, { headers: { 'Authorization': 'Bearer ' + token } })
+        }
+        if (!sr.ok) { console.warn('bg: Spotify track fetch failed:', sr.status, refTrack.title); return }
         const sd = await sr.json()
         if (!previewUrl) {
           previewUrl = sd?.preview_url || null
@@ -1558,17 +1564,25 @@ async function processLibraryTrackInBackground(refTrack) {
 
 async function fetchTrackGenres(spotifyId, token) {
   try {
-    const trackRes = await fetch(
-      'https://api.spotify.com/v1/tracks/' + spotifyId,
-      { headers: { 'Authorization': 'Bearer ' + token } }
-    )
+    let trackRes = await fetch('https://api.spotify.com/v1/tracks/' + spotifyId, { headers: { 'Authorization': 'Bearer ' + token } })
+    if (trackRes.status === 429) {
+      const retryAfter = parseInt(trackRes.headers.get('Retry-After') || '30', 10)
+      console.warn('fetchTrackGenres: rate limit — waiting', retryAfter, 's')
+      await delay(retryAfter * 1000)
+      trackRes = await fetch('https://api.spotify.com/v1/tracks/' + spotifyId, { headers: { 'Authorization': 'Bearer ' + token } })
+    }
+    if (!trackRes.ok) return []
     const track = await trackRes.json()
     const artistId = track.artists?.[0]?.id
     if (!artistId) return []
-    const artistRes = await fetch(
-      'https://api.spotify.com/v1/artists/' + artistId,
-      { headers: { 'Authorization': 'Bearer ' + token } }
-    )
+    let artistRes = await fetch('https://api.spotify.com/v1/artists/' + artistId, { headers: { 'Authorization': 'Bearer ' + token } })
+    if (artistRes.status === 429) {
+      const retryAfter = parseInt(artistRes.headers.get('Retry-After') || '30', 10)
+      console.warn('fetchTrackGenres: rate limit (artist) — waiting', retryAfter, 's')
+      await delay(retryAfter * 1000)
+      artistRes = await fetch('https://api.spotify.com/v1/artists/' + artistId, { headers: { 'Authorization': 'Bearer ' + token } })
+    }
+    if (!artistRes.ok) return []
     const artist = await artistRes.json()
     return artist.genres || []
   } catch(e) { return [] }
@@ -4765,6 +4779,9 @@ async function mergeDupes() {
     .order('created_at', { ascending: true })
   if (error) throw new Error('mergeDupes fetch error: ' + error.message)
 
+  const totalCount = (rows || []).length
+  const maxDelete = Math.floor(totalCount * 0.2)
+
   function normalizeTitle(t) {
     return (t || '').replace(/^(\d{4}-\d{2}-\d{2}_)+/, '').toLowerCase().trim().slice(0, 60)
   }
@@ -4778,7 +4795,9 @@ async function mergeDupes() {
     groups.get(key).push(row)
   }
 
-  let deleted = 0, merged = 0
+  // First pass: collect all IDs to delete + merge updates
+  const allDeleteIds = []
+  const mergeUpdates = [] // [{id, content}]
 
   for (const [, group] of groups) {
     if (group.length < 2) continue
@@ -4787,52 +4806,52 @@ async function mergeDupes() {
     const agentEntries     = group.filter(r => !isProtected(r))
 
     if (protectedEntries.length > 0) {
-      // Multiple protected entries with same title → leave for manual resolution
       if (agentEntries.length === 0) continue
-
-      // Merge unique agent content into the protected entry, then delete agents
       const keepEntry = protectedEntries[0]
-      const allContent = [keepEntry, ...agentEntries]
-        .map(r => (r.content || '').trim()).filter(Boolean)
+      const allContent = [keepEntry, ...agentEntries].map(r => (r.content || '').trim()).filter(Boolean)
       const uniqueSentences = [...new Set(
         allContent.flatMap(c => c.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 15))
       )]
       const mergedContent = uniqueSentences.slice(0, 6).join('. ')
-      if (mergedContent.length > (keepEntry.content || '').length) {
-        const { error: mgErr1 } = await supabaseAdmin.from('brain_knowledge').update({ content: mergedContent }).eq('id', keepEntry.id)
-        if (mgErr1) console.error('brain dedup merge failed:', keepEntry.id, mgErr1.message)
-        else merged++
-      }
-      const idsToDelete = agentEntries.map(r => r.id)
-      for (let i = 0; i < idsToDelete.length; i += 50) {
-        const { error: dlErr1 } = await supabaseAdmin.from('brain_knowledge').delete().in('id', idsToDelete.slice(i, i + 50))
-        if (dlErr1) console.error('brain dedup delete failed:', dlErr1.message)
-      }
-      deleted += idsToDelete.length
+      if (mergedContent.length > (keepEntry.content || '').length) mergeUpdates.push({ id: keepEntry.id, content: mergedContent })
+      allDeleteIds.push(...agentEntries.map(r => r.id))
     } else {
-      // All agent entries — keep oldest, merge content, delete rest
-      const keepEntry      = group[0]
-      const deleteEntries  = group.slice(1)
+      const keepEntry     = group[0]
+      const deleteEntries = group.slice(1)
       const allContent = group.map(r => (r.content || '').trim()).filter(Boolean)
       const uniqueSentences = [...new Set(
         allContent.flatMap(c => c.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 15))
       )]
       const mergedContent = uniqueSentences.slice(0, 6).join('. ')
-      if (mergedContent.length > (keepEntry.content || '').length) {
-        const { error: mgErr2 } = await supabaseAdmin.from('brain_knowledge').update({ content: mergedContent }).eq('id', keepEntry.id)
-        if (mgErr2) console.error('brain dedup merge2 failed:', keepEntry.id, mgErr2.message)
-        else merged++
-      }
-      const idsToDelete = deleteEntries.map(r => r.id)
-      for (let i = 0; i < idsToDelete.length; i += 50) {
-        const { error: dlErr2 } = await supabaseAdmin.from('brain_knowledge').delete().in('id', idsToDelete.slice(i, i + 50))
-        if (dlErr2) console.error('brain dedup delete2 failed:', dlErr2.message)
-      }
-      deleted += idsToDelete.length
+      if (mergedContent.length > (keepEntry.content || '').length) mergeUpdates.push({ id: keepEntry.id, content: mergedContent })
+      allDeleteIds.push(...deleteEntries.map(r => r.id))
     }
   }
 
-  return { deleted, merged }
+  // Safety cap: never delete more than 20% in one run
+  let toDelete = allDeleteIds
+  if (toDelete.length > maxDelete) {
+    console.warn(`mergeDupes safety: would delete ${toDelete.length} of ${totalCount} — capped at ${maxDelete}`)
+    toDelete = toDelete.slice(0, maxDelete)
+  }
+
+  // Apply merges
+  let merged = 0
+  for (const { id, content } of mergeUpdates) {
+    const { error: mgErr } = await supabaseAdmin.from('brain_knowledge').update({ content }).eq('id', id)
+    if (mgErr) console.error('brain dedup merge failed:', id, mgErr.message)
+    else merged++
+  }
+
+  // Apply deletes in batches
+  let deleted = 0
+  for (let i = 0; i < toDelete.length; i += 50) {
+    const { error: dlErr } = await supabaseAdmin.from('brain_knowledge').delete().in('id', toDelete.slice(i, i + 50))
+    if (dlErr) console.error('brain dedup delete failed:', dlErr.message)
+    else deleted += Math.min(50, toDelete.length - i)
+  }
+
+  return { deleted, merged, total: totalCount, capped: allDeleteIds.length > maxDelete }
 }
 
 // ── Brain category consolidation ─────────────────────────────────────────

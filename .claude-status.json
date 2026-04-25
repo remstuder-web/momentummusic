@@ -1,22 +1,21 @@
 {
-  "updated": "2026-04-25T00:00:00.000Z",
-  "last_task": "obsidian-backlinks-moc",
+  "updated": "2026-04-25T08:22:00Z",
+  "last_task": "brain-category-consolidation",
   "status": "done",
   "working": [
-    "_obsidianSyncDebounce set — prevents chokidar re-fire loops when patching files",
-    "syncObsidianFile: skips MOC/, INDEX.md, Notes/ at top",
-    "findRelatedVaultNotes(ownPath, title, category) — keyword scan of vault root + Brain/ subdirs",
-    "patchObsidianRelated(filePath, titles) — adds [[backlinks]] to Related section of new note",
-    "patchObsidianSeeAlso(filePath, title) — appends See also: [[title]] to related notes",
-    "updateCategoryMOC(category) — writes MOC/[category].md, entries newest-first, max 50",
-    "updateObsidianIndex() — prepends category counts + [[MOC/cat]] links to INDEX.md",
-    "Enrichment fires via setImmediate after INSERT path only (not updates)",
-    "8/8 tests passing"
+    "consolidateBrainCategories() — updates artist_breaking + emerging_artists_tracking → artist_strategy in batches of 50",
+    "POST /consolidate-brain-categories — ran migration, moved 12 entries",
+    "standardCats: artist_breaking removed",
+    "Agent chart prompt: artist_breaking → artist_strategy",
+    "suggest-category rule 6: artist_breaking removed",
+    "NOW note extraction enum: artist_breaking removed, artist_strategy kept",
+    "Overlap detection block removed (was artist_breaking/emerging_artists_tracking check)",
+    "Watcher restart OK, ping confirmed"
   ],
   "broken": [],
   "partial": [
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
   "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables",
-  "notes": "Backlinks enrich compounding wiki: every new Obsidian entry gets Related links, existing notes get See also, category MOC updated, INDEX.md updated. Debounce prevents infinite chokidar loops."
+  "notes": "artist_breaking and emerging_artists_tracking are fully retired. All 12 migrated entries now live under artist_strategy."
 }

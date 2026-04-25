@@ -1,5 +1,5 @@
 {
-  "run": "2026-04-24T23:27:16.401Z",
+  "run": "2026-04-25T00:07:42.357Z",
   "passed": 8,
   "total": 8,
   "results": [
@@ -7,7 +7,7 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: analyzer-project-refs-merge-my-refs"
+      "detail": "last_task: fix-brain-titles-tiktok"
     },
     {
       "n": 2,
@@ -37,19 +37,19 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Increase the punch and impact of the kick drum\""
+      "detail": "3 items: \"Increase kick punch and presence\""
     },
     {
       "n": 7,
       "label": "No brain duplicates",
       "ok": true,
-      "detail": "868 entries, 0 duplicates"
+      "detail": "696 entries, 0 duplicates"
     },
     {
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "e60e7db analyzer project refs priority + merge my-refs into library"
+      "detail": "2eaf0b8 tiktok trends: synthesize into one weekly brain entry per week"
     }
   ]
 }

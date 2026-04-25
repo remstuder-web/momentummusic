@@ -1,6 +1,60 @@
 # CHANGES
 
 ## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: brain-category-consolidation
+WHAT: Merged artist_breaking + emerging_artists_tracking → artist_strategy. Added consolidateBrainCategories() + POST /consolidate-brain-categories endpoint. Removed deprecated categories from standardCats, agent prompts, and NOW note extraction enum. Removed obsolete overlap detection check. Migration moved 12 entries.
+RESULT: works — moved 12 entries, watcher ping OK
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: brain-dedup-rewrite
+WHAT: Replaced naive /cleanup-brain-dupes (exact title match, delete all dupes) with mergeDupes(): groups by category+normalizeTitle (strips date prefix, lowercase, 60-char key); never touches confidence=locked or source_type=text entries; merges unique sentences (>15 chars) from agent dupes into kept entry; agent-only groups keep oldest, delete rest; batched deletes in 50s. 3am daily auto-run added to existing setInterval cron. First run: deleted 160, merged 37.
+RESULT: works — watcher ping OK, curl returned {ok:true, deleted:160, merged:37}
+BLOCKERS: none
+
+## [2026-04-25] src/lib/DailyTab.svelte — DONE
+TASK: remove-todo-after-year-tab
+WHAT: Removed ['general','TODO'] from plan sub-tabs array; removed getUpcomingItems 'general' early-return. The shared {:else} block for MONTH remains intact.
+RESULT: works — Vite hot-reloaded, no new errors
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: spotify-split-guards
+WHAT: Added ?. optional chaining to url.split('/track/')[1], url.split('/artist/')[1], and url.split('/playlist|artist/')[1] chains in analyzeVocalEqUrl, /agent-import-spotify track branch, artist watch branch, and playlist/artist branch. Prevents 'Cannot read properties of undefined (reading split)' on malformed Spotify URLs. /analyze-spotify-track was already guarded.
+RESULT: works — watcher restart OK
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: notes-reconcile-deleted
+WHAT: Added reconcileNotes() — fetches Apple Notes list, compares with NOTES_PATH files (source=apple_notes only), hard-deletes any .md file not present in Apple Notes. Runs 10s after startup and every 5min alongside syncAppleNotesToObsidian(). Bails safely if Apple Notes returns empty (unreachable). No frontend change needed (readNotesDir() naturally excludes deleted files).
+RESULT: works — watcher restart OK, ping confirmed
+BLOCKERS: none
+
+## [2026-04-25] src/lib/VocalEqChart.svelte — DONE
+TASK: izotope-2024-reference-curve
+WHAT: Added IZOTOPE_2024 30-point data, IZOTOPE_OFFSET=36.32 to align peak to 0dB, makeIzotopePath() and makeIzotopeRange() using existing xForFreq/yForDb helpers. SVG renders shaded hi/lo band (rgba white 0.025) + dashed avg line (rgba white 0.15) behind ref/mix curves, with clip-path. iZotope legend added at SVG right edge. Toggle button (iZ) below chart. Wrapped in .eq-wrap div.
+RESULT: works — Vite hot-reloaded cleanly, no compile errors
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: agent-brain-inbox-architecture
+WHAT: Added extractInsight()/todayStartISO()/deleteInboxToday() helpers. All 5 agents (Briefing, Scout, Pulse, Chart, TikTok) now: (1) delete-before-insert in inbox so only one clean entry/day; (2) extract key insight via Claude Haiku; (3) INSERT insight to brain_knowledge so brain accumulates real intelligence. Old verbose full-text brain saves replaced with distilled 200-char insights.
+RESULT: works — watcher restart OK
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: fix-duplicate-briefings
+WHAT: Morning briefing insert now deletes today's existing 'Morning Briefing' row before inserting fresh one; added POST /fix-inbox-dupes endpoint to deduplicate all briefings (keep latest per day); ran cleanup — deleted 1 duplicate
+RESULT: works — watcher ping OK, fix-inbox-dupes returned {ok:true,deleted:1}
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: telegram-auto-cleanup
+WHAT: sentMessages array tracks all bot message IDs; sendTelegram now stores message_id on success; runTelegramCleanup() deletes messages older than 24h via API; hourly setInterval fires cleanup automatically; /cleanup command triggers manual cleanup and reports count; /help updated
+RESULT: works — watcher restarted, ping OK
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
 TASK: obsidian-backlinks-moc
 WHAT: syncObsidianFile() now enriches NEW entries: (1) findRelatedVaultNotes() scans vault root + Brain/ subdirs for keyword-matched .md files; (2) patchObsidianRelated() adds [[backlinks]] to new note's Related section; (3) patchObsidianSeeAlso() appends "See also: [[newTitle]]" to each related note; (4) updateCategoryMOC() writes MOC/[category].md with all entries sorted newest first; (5) updateObsidianIndex() now prepends category counts + [[MOC/cat]] links at top of INDEX.md. _obsidianSyncDebounce set prevents chokidar loop when patching files. MOC/ and INDEX.md skip guard added to syncObsidianFile.
 RESULT: works — code verified, 8/8 tests passing. Enrichment fires via setImmediate after INSERT path only.

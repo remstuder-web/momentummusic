@@ -4427,6 +4427,31 @@ async function mergeDupes() {
   return { deleted, merged }
 }
 
+// ── Brain category consolidation ─────────────────────────────────────────
+async function consolidateBrainCategories() {
+  const deprecated = ['artist_breaking', 'emerging_artists_tracking']
+  const target = 'artist_strategy'
+  let moved = 0
+  for (const oldCat of deprecated) {
+    const { data: rows, error } = await supabaseAdmin
+      .from('brain_knowledge')
+      .select('id')
+      .eq('category', oldCat)
+    if (error) throw new Error(`consolidate fetch ${oldCat}: ` + error.message)
+    if (!rows || !rows.length) continue
+    const ids = rows.map(r => r.id)
+    for (let i = 0; i < ids.length; i += 50) {
+      const { error: upErr } = await supabaseAdmin
+        .from('brain_knowledge')
+        .update({ category: target })
+        .in('id', ids.slice(i, i + 50))
+      if (upErr) throw new Error(`consolidate update ${oldCat}: ` + upErr.message)
+    }
+    moved += ids.length
+  }
+  return { moved, target }
+}
+
 // ── Weekly system improvement review ─────────────────────────────────────
 async function weeklySystemReview() {
   try {
@@ -5527,10 +5552,7 @@ async function getBrainHealth() {
 
     const overlaps = []
     const cats = Object.keys(categoryCounts)
-    if (cats.includes('artist_breaking') && cats.includes('artist_strategy'))
-      overlaps.push('artist_breaking + artist_strategy overlap')
-    if (cats.includes('emerging_artists_tracking') && cats.includes('artist_breaking'))
-      overlaps.push('emerging_artists_tracking + artist_breaking overlap')
+    // artist_breaking + emerging_artists_tracking consolidated → artist_strategy
 
     const lines = []
     lines.push(`Brain: ${entries.length} entries across ${cats.length} categories`)
@@ -6667,7 +6689,7 @@ ${brainCtx ? `\n${brainCtx}` : ''}
 
 Return ONLY a JSON array, no markdown, no explanation:
 [{ "category": "...", "title": "...", "content": "..." }]
-Categories: genre_strategy, market_knowledge, production_style, artist_breaking
+Categories: genre_strategy, market_knowledge, production_style, artist_strategy
 Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
           })
         })
@@ -7437,7 +7459,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
           'goal', 'mixing_technique', 'production_style', 'market_knowledge', 'own_production',
           'contact_profile', 'collaboration', 'observation', 'creative_process', 'sound_design',
           'business', 'power_dynamics_principles', 'release_strategy', 'industry_insight',
-          'networking', 'artist_strategy', 'reference_current', 'question', 'artist_breaking',
+          'networking', 'artist_strategy', 'reference_current', 'question',
           'genre_strategy', 'correction'
         ]
         const cats = [...new Set([...dbCats, ...standardCats])].sort()
@@ -7494,7 +7516,7 @@ Rules:
 3. If nothing fits well, propose a new snake_case category name and ONE sentence describing what it should contain
 4. If text covers 2+ clearly separate topics, suggest split
 5. Never match on superficial keyword overlap
-6. Do not suggest artist_breaking, business, or market_knowledge unless the content is specifically about those topics
+6. Do not suggest business, or market_knowledge unless the content is specifically about those topics
 
 New text to categorize:
 ${text.slice(0, 1500)}
@@ -9126,6 +9148,22 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /consolidate-brain-categories — merge deprecated categories → artist_strategy ─
+  if (req.method === 'POST' && req.url === '/consolidate-brain-categories') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const result = await consolidateBrainCategories()
+      console.log(`✓ consolidate-brain-categories: moved ${result.moved} entries → ${result.target}`)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, ...result }))
+    } catch(e) {
+      console.error('consolidate-brain-categories error:', e.message)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /fix-inbox-dupes — keep only latest briefing per day ───────────────
   if (req.method === 'POST' && req.url === '/fix-inbox-dupes') {
     try {
@@ -10019,7 +10057,7 @@ async function extractNowEntries(content) {
 Extract distinct knowledge items worth saving to a brain database. Each item should be self-contained and actionable or insightful on its own.
 
 For each item return JSON:
-{"title":"short label max 8 words","content":"verbatim or concise summary","category":"one of: own_production,reference_current,reference_mixing,reference_inspiration,reference_sound,market_knowledge,genre_strategy,artist_breaking,production_style,correction,question,artist_strategy,mixing_technique,release_strategy,sound_design,industry_insight,social_media,networking,creative_process,business_finance","entry_type":"observation|pattern|rule|reference|question","confidence":"weak|medium|strong"}
+{"title":"short label max 8 words","content":"verbatim or concise summary","category":"one of: own_production,reference_current,reference_mixing,reference_inspiration,reference_sound,market_knowledge,genre_strategy,artist_strategy,production_style,correction,question,mixing_technique,release_strategy,sound_design,industry_insight,social_media,networking,creative_process,business_finance","entry_type":"observation|pattern|rule|reference|question","confidence":"weak|medium|strong"}
 
 Only extract items with clear informational value. Skip vague fragments, filler text, or incomplete thoughts.
 Return ONLY a JSON array. No explanation. No markdown. Start with [.

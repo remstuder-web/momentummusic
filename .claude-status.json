@@ -1,22 +1,23 @@
 {
-  "updated": "2026-04-25T15:52:00Z",
-  "last_task": "fix-scout-catch",
+  "updated": "2026-04-25T16:00:00Z",
+  "last_task": "spotify-playlist-import",
   "status": "done",
   "working": [
-    "runAgentScout api_usage: supabase.from('api_usage').insert() with error log",
-    "runAgentScout brain save: await supabase.from('brain_knowledge').insert() with error log",
-    "runAgentScout saveBrainFile: await (no .catch) inside try/catch",
-    "pm2 restart: ok, ping responding",
-    "svelte-check: 0 errors",
-    "checklist 70%: loadFinishingChecklist in onMount, loads from brain_knowledge",
-    "project refs: removeRefLink removes from both column + project_meta",
-    "project ref chips: play + name + delete, handles null url"
+    "POST /import-spotify-playlist: paginates playlist tracks, dedupes by spotify_id, fetches artist genres, inserts to reference_tracks",
+    "importSpotifyPlaylist(): saves genre_tag, playlist_name, genres[], popularity, approved=true",
+    "Startup SQL check warns if genre_tag/playlist_name columns missing",
+    "BrainTab library: Genre sort button added (date/artist/genre)",
+    "BrainTab library: libraryGenreFilter state + genre-filter-chips row",
+    "BrainTab library: filteredLibraryRefs filters by genre (genres[] OR genre_tag)",
+    "BrainTab library: track-genre-tag chip on each row",
+    "svelte-check: 0 errors, pm2: ok"
   ],
   "broken": [],
   "partial": [
-    "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]'; — run in Supabase dashboard if not done",
+    "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;",
+    "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]';",
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
-  "next": "Test checklist panel loads 14 questions. If still empty, check brain_knowledge has row with category='checklist_70', title='Finishing Checklist — Latest'. Run POST /rebuild-finishing-checklist if missing.",
-  "notes": "All .catch() chains in runAgentScout replaced with async/await + error logging."
+  "next": "Run the two ALTER TABLE statements in Supabase, then test: POST /import-spotify-playlist with a playlist URL to verify tracks save with genre_tag and appear in BrainTab Library with genre filter chips.",
+  "notes": "Playlist import rate-limits: 200ms after artist fetch, 300ms after each track insert. Skips duplicates by spotify_id."
 }

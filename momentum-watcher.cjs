@@ -1949,6 +1949,12 @@ Max 15 questions total. Short, actionable. Return valid JSON only — no text be
 
     if (!checklist.length) { console.warn('rebuildFinishingChecklist: empty result'); return [] }
 
+    // Clean up any wrongly-saved entries from previous runs
+    const { error: delErr } = await supabase.from('brain_knowledge')
+      .delete()
+      .in('title', ['2026-04-24_Song analysis checklist', 'Song analysis checklist', 'Finishing Checklist'])
+    if (delErr) console.warn('rebuildFinishingChecklist: cleanup delete error:', delErr.message)
+
     const { error: clErr } = await supabase.from('brain_knowledge').upsert({
       category: 'checklist_70',
       title: 'Finishing Checklist — Latest',

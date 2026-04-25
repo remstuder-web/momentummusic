@@ -1542,3 +1542,9 @@ TASK: fix-scout-catch
 WHAT: runAgentScout — replaced raw fetch(api_usage).catch(() => {}) with supabase.from('api_usage').insert() + error log; replaced saveBrainFile().catch(() => {}) with await + error log inside existing try/catch
 RESULT: works
 BLOCKERS: none
+
+## 2026-04-25 momentum-watcher.cjs + BrainTab.svelte — DONE
+TASK: spotify-playlist-import + library-sort-genre
+WHAT: Added POST /import-spotify-playlist endpoint + importSpotifyPlaylist() — paginates playlist, dedupes by spotify_id, fetches artist genres, saves to reference_tracks with genre_tag/playlist_name; startup SQL check for new columns; BrainTab library: added Genre sort button, libraryGenreFilter state, genre-filter-chips row, track-genre-tag per row, filteredLibraryRefs now filters by genre
+RESULT: works
+BLOCKERS: Run SQL manually: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;

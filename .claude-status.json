@@ -1,14 +1,15 @@
 {
-  "updated": "2026-04-25T22:31:00Z",
-  "last_task": "fix-spotify-user-token-playlist",
+  "updated": "2026-04-25T22:38:00Z",
+  "last_task": "fix-spotify-oauth-callback",
   "status": "done",
   "working": [
-    "spotifyFetch(): already used spotifyUserToken || getSpotifyToken() — confirmed",
-    "fetchSpotifyId(): now routes through spotifyFetch() instead of raw getSpotifyToken()",
-    "importSpotifyPlaylist(): already used spotifyFetch() throughout — no change needed",
-    "pulse-check parallel prefetch: now uses spotifyUserToken when available",
-    "All Spotify calls use user token first, client token as fallback",
-    "pm2 restart clean — watcher online"
+    "/spotify-callback: body.toString() for URLSearchParams (explicit string, not object passthrough)",
+    "/spotify-callback: logs full OAuth token response JSON for debugging",
+    "/spotify-callback: logs scope on success, logs error on failure",
+    "/spotify-callback: response HTML shows scope so user can verify playlist-read-private is included",
+    "spotifyFetch(): spotifyUserToken || getSpotifyToken() — confirmed unchanged",
+    "fetchSpotifyId(): routes through spotifyFetch() (fixed in previous task)",
+    "pm2 restart clean"
   ],
   "broken": [],
   "partial": [
@@ -16,8 +17,8 @@
     "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;",
     "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]';",
     "OPTIONAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS tonal_balance jsonb, ADD COLUMN IF NOT EXISTS stereo_width float, ADD COLUMN IF NOT EXISTS stereo_width_per_band jsonb, ADD COLUMN IF NOT EXISTS crest_factor_per_band jsonb;",
-    "Spotify user token is in-memory only — resets on watcher restart; re-authorize via http://localhost:4242/spotify-auth after restart"
+    "Spotify user token is in-memory only — resets on watcher restart; re-authorize via http://127.0.0.1:4242/spotify-auth after restart"
   ],
-  "next": "Run manual SQL for missing columns. Consider FULL MIX curve pipeline. FUTURE BUILD: Library Intelligence.",
-  "notes": "All Spotify API calls now prefer user OAuth token over client credentials — important for private playlist access."
+  "next": "Open http://127.0.0.1:4242/spotify-auth, complete OAuth, check pm2 logs for '✓ User OAuth token saved, scope:' — scope must include playlist-read-private. Then test private playlist import.",
+  "notes": "Key fix: URLSearchParams body was passed as object; now serialized with .toString() before sending to Spotify token endpoint. Credentials use hardcoded SPOTIFY_CLIENT_ID/SPOTIFY_CLIENT_SECRET constants (not process.env)."
 }

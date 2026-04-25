@@ -1078,7 +1078,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     fetch(`${SUPABASE_URL}/rest/v1/connections?select=name`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?order=tempo.desc&limit=5&select=title,artist,genre_tags,tempo,key`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/watched_artists?active=eq.true&select=*`, { headers: sbHeaders }),
-    getSpotifyToken().catch(() => null),
+    (spotifyUserToken ? Promise.resolve(spotifyUserToken) : getSpotifyToken().catch(() => null)),
     fetchRssWithBody('https://pitchfork.com/rss/news/feed.json', 3),
     fetchRssWithBody('https://www.factmag.com/feed/', 3),
     fetchRssWithBody('https://www.hypebot.com/feed', 3),
@@ -2401,11 +2401,9 @@ async function spotifyFetch(url, opts = {}) {
 async function fetchSpotifyId(title, artist) {
   if (!title) return null
   try {
-    const token = await getSpotifyToken()
     const q = encodeURIComponent((artist ? artist + ' ' : '') + title)
-    const r = await fetch(
-      `https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`,
-      { headers: { 'Authorization': 'Bearer ' + token } }
+    const r = await spotifyFetch(
+      `https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`
     )
     if (!r.ok) return null
     const d = await r.json()

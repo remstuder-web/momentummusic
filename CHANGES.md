@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-26] momentum-watcher.cjs — DONE
+TASK: fix-spotify-user-token-playlist
+WHAT: spotifyFetch() already used spotifyUserToken || getSpotifyToken(). Fixed fetchSpotifyId() to route through spotifyFetch() instead of raw getSpotifyToken(). Fixed pulse-check agent to prefer spotifyUserToken in parallel prefetch. importSpotifyPlaylist() already used spotifyFetch(). All Spotify calls now use user token when available.
+RESULT: works — pm2 restart clean
+BLOCKERS: none
+
 ## [2026-04-26] analyze_audio.py + src/lib/ProjectsTab.svelte — DONE
 TASK: tonal-balance-analyzer-tab
 WHAT: analyze_audio.py adds tonal_bands {low,high} split points to stereo_tonal output. ProjectsTab ANALYZER gets TONAL stem tab (6th tab). When active: shows TONAL BALANCE bars (4 bands, mix=gold/ref=dim white, stacked) + STEREO WIDTH bars (color-coded: gray=mono, gold=normal, green=wide). widthLabel() helper for width text. EQ chart hidden on TONAL tab. loadVocalEq selects tonal_balance/stereo_width/stereo_width_per_band from reference_tracks.

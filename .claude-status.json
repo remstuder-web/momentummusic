@@ -1,23 +1,32 @@
 {
-  "updated": "2026-04-26T09:10:00Z",
-  "last_task": "stereo-tonal-analysis",
+  "updated": "2026-04-25T00:00:00Z",
+  "last_task": "tonal-balance-tab",
   "status": "done",
   "working": [
-    "analyze_audio.py: analyze_stereo_and_tonal() appended before final print",
-    "stereo_width: 0.0-1.0 ratio (side_rms / mid_rms) — tested: 0.1324 on mix WAV",
-    "tonal_balance: {bass, low_mid, high_mid, air} as fraction of total FFT energy",
-    "stereo_width_per_band: M/S ratio per frequency band",
-    "crest_factor_per_band: peak/RMS per band (dynamics indicator)",
-    "Wrapped in try/except — all 4 fields null on failure, error to stderr",
-    "Tested on 26041401_LUCA DURAN_KUMBIAA_MIX_v05.wav — all fields correct"
+    "analyze_audio.py: analyze_stereo_and_tonal() returns stereo_width, tonal_balance, tonal_bands, stereo_width_per_band, crest_factor_per_band",
+    "ANALYZER: TONAL tab (6th) in ProjectsTab — 4-band rows with Hz labels (20–200, 200–2k, 2k–8k, 8k–20k)",
+    "Tonal bars: mix=gold, ref=dim white, stacked side by side",
+    "Stereo width bars: gray if <0.1 (mono), green if >0.5 (wide), widthLabel() helper",
+    "VocalEqChart: isMixTab prop gates iZotope rendering + dbRange inclusion",
+    "VocalEqChart: iZotope normalized via IZOTOPE_PEAK_DB (peak at 0dB)",
+    "ANALYZER defaults to FULL MIX tab",
+    "Ref dropdown includes project/song refs with _section markers",
+    "Acapella extractor: saves to Desktop, cleans up all temp files, original untouched",
+    "DailyTab: acapella extractor in Helpers tab below Normalizer",
+    "WorkTab: acapella drop zone in right column",
+    "Startup sweep cleans all /tmp/ref_*, /tmp/acapella_*, /tmp/demucs_*, etc.",
+    "processLibraryTrackInBackground: cleans /tmp/demucs_* and /tmp/stem_eq_* after each run",
+    "DailyTab inbox: briefing/scout/pulse_check/chart only visible in ROUTINE section",
+    "Agent buttons + todayBriefing wrapped in {#if activeSection === 'routine'}"
   ],
   "broken": [],
   "partial": [
-    "New fields not yet in reference_tracks schema — add columns if storing: stereo_width float, tonal_balance jsonb, stereo_width_per_band jsonb, crest_factor_per_band jsonb",
+    "FULL MIX tab has no curve yet — analyze-vocal-eq only creates 4 stem curves (vocals/drums/bass/other). A separate pipeline step is needed to generate a null-stem_type curve for the full mix.",
     "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;",
     "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]';",
+    "OPTIONAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS tonal_balance jsonb, ADD COLUMN IF NOT EXISTS stereo_width float, ADD COLUMN IF NOT EXISTS stereo_width_per_band jsonb, ADD COLUMN IF NOT EXISTS crest_factor_per_band jsonb;",
     "Spotify user token is in-memory only — resets on watcher restart; re-authorize via http://localhost:4242/spotify-auth after restart"
   ],
-  "next": "Add new columns to reference_tracks if you want to store the new fields. Update analyze-audio-features endpoint in watcher to save them.",
-  "notes": "scipy.fft used for FFT (not librosa) — scipy already available in the python3.11 env via essentia dependencies."
+  "next": "Run manual SQL for missing columns. Consider adding FULL MIX curve pipeline (analyze mix WAV directly, save with stem_type=null). FUTURE BUILD: Library Intelligence (chord/drum/bass/vocal/structure analysis).",
+  "notes": "tonal_balance and stereo_width columns may not exist in reference_tracks yet — UI is null-safe and shows gracefully without them. scipy.fft used for FFT in analyze_audio.py."
 }

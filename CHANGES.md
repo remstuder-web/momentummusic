@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-26] momentum-watcher.cjs — DONE
+TASK: fix-spotify-oauth-callback
+WHAT: /spotify-callback: use body.toString() for URLSearchParams (not object passthrough), add OAuth token response logging with scope, show scope in response HTML. fetchSpotifyId() already fixed to route through spotifyFetch(). Hardcoded SPOTIFY_CLIENT_ID/SECRET constants used (not process.env).
+RESULT: works — pm2 restart clean
+BLOCKERS: none
+
+## [2026-04-26] momentum-watcher.cjs — DONE
 TASK: fix-spotify-user-token-playlist
 WHAT: spotifyFetch() already used spotifyUserToken || getSpotifyToken(). Fixed fetchSpotifyId() to route through spotifyFetch() instead of raw getSpotifyToken(). Fixed pulse-check agent to prefer spotifyUserToken in parallel prefetch. importSpotifyPlaylist() already used spotifyFetch(). All Spotify calls now use user token when available.
 RESULT: works — pm2 restart clean

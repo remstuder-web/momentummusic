@@ -1,32 +1,23 @@
 {
-  "updated": "2026-04-25T00:00:00Z",
-  "last_task": "tonal-balance-tab",
+  "updated": "2026-04-25T22:31:00Z",
+  "last_task": "fix-spotify-user-token-playlist",
   "status": "done",
   "working": [
-    "analyze_audio.py: analyze_stereo_and_tonal() returns stereo_width, tonal_balance, tonal_bands, stereo_width_per_band, crest_factor_per_band",
-    "ANALYZER: TONAL tab (6th) in ProjectsTab — 4-band rows with Hz labels (20–200, 200–2k, 2k–8k, 8k–20k)",
-    "Tonal bars: mix=gold, ref=dim white, stacked side by side",
-    "Stereo width bars: gray if <0.1 (mono), green if >0.5 (wide), widthLabel() helper",
-    "VocalEqChart: isMixTab prop gates iZotope rendering + dbRange inclusion",
-    "VocalEqChart: iZotope normalized via IZOTOPE_PEAK_DB (peak at 0dB)",
-    "ANALYZER defaults to FULL MIX tab",
-    "Ref dropdown includes project/song refs with _section markers",
-    "Acapella extractor: saves to Desktop, cleans up all temp files, original untouched",
-    "DailyTab: acapella extractor in Helpers tab below Normalizer",
-    "WorkTab: acapella drop zone in right column",
-    "Startup sweep cleans all /tmp/ref_*, /tmp/acapella_*, /tmp/demucs_*, etc.",
-    "processLibraryTrackInBackground: cleans /tmp/demucs_* and /tmp/stem_eq_* after each run",
-    "DailyTab inbox: briefing/scout/pulse_check/chart only visible in ROUTINE section",
-    "Agent buttons + todayBriefing wrapped in {#if activeSection === 'routine'}"
+    "spotifyFetch(): already used spotifyUserToken || getSpotifyToken() — confirmed",
+    "fetchSpotifyId(): now routes through spotifyFetch() instead of raw getSpotifyToken()",
+    "importSpotifyPlaylist(): already used spotifyFetch() throughout — no change needed",
+    "pulse-check parallel prefetch: now uses spotifyUserToken when available",
+    "All Spotify calls use user token first, client token as fallback",
+    "pm2 restart clean — watcher online"
   ],
   "broken": [],
   "partial": [
-    "FULL MIX tab has no curve yet — analyze-vocal-eq only creates 4 stem curves (vocals/drums/bass/other). A separate pipeline step is needed to generate a null-stem_type curve for the full mix.",
+    "FULL MIX tab has no curve yet — analyze-vocal-eq only creates 4 stem curves (vocals/drums/bass/other)",
     "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;",
     "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]';",
     "OPTIONAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS tonal_balance jsonb, ADD COLUMN IF NOT EXISTS stereo_width float, ADD COLUMN IF NOT EXISTS stereo_width_per_band jsonb, ADD COLUMN IF NOT EXISTS crest_factor_per_band jsonb;",
     "Spotify user token is in-memory only — resets on watcher restart; re-authorize via http://localhost:4242/spotify-auth after restart"
   ],
-  "next": "Run manual SQL for missing columns. Consider adding FULL MIX curve pipeline (analyze mix WAV directly, save with stem_type=null). FUTURE BUILD: Library Intelligence (chord/drum/bass/vocal/structure analysis).",
-  "notes": "tonal_balance and stereo_width columns may not exist in reference_tracks yet — UI is null-safe and shows gracefully without them. scipy.fft used for FFT in analyze_audio.py."
+  "next": "Run manual SQL for missing columns. Consider FULL MIX curve pipeline. FUTURE BUILD: Library Intelligence.",
+  "notes": "All Spotify API calls now prefer user OAuth token over client credentials — important for private playlist access."
 }

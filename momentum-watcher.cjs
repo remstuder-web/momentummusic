@@ -9826,33 +9826,39 @@ ${chatText.slice(0, 4000)}`
   // ── GET /spotify-callback — exchange code for user token ─────────────────
   if (req.method === 'GET' && req.url.startsWith('/spotify-callback')) {
     try {
-      const code = new URL('http://localhost' + req.url).searchParams.get('code')
+      const code = new URL('http://x' + req.url).searchParams.get('code')
       if (!code) { res.writeHead(400); res.end('Missing code'); return }
-      const creds = Buffer.from(SPOTIFY_CLIENT_ID + ':' + SPOTIFY_CLIENT_SECRET).toString('base64')
+
+      const body = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: 'http://127.0.0.1:4242/spotify-callback'
+      })
+
       const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': 'Basic ' + creds
+          'Authorization': 'Basic ' + Buffer.from(
+            SPOTIFY_CLIENT_ID + ':' + SPOTIFY_CLIENT_SECRET
+          ).toString('base64')
         },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          code,
-          redirect_uri: 'http://127.0.0.1:4242/spotify-callback'
-        })
+        body: body.toString()
       })
+
       const tokenData = await tokenRes.json()
-      if (!tokenData.access_token) {
-        console.error('Spotify OAuth error:', JSON.stringify(tokenData))
-        res.writeHead(400)
-        res.end('<html><body>OAuth failed: ' + JSON.stringify(tokenData) + '</body></html>')
-        return
+      console.log('OAuth token response:', JSON.stringify(tokenData))
+
+      if (tokenData.access_token) {
+        spotifyUserToken = tokenData.access_token
+        spotifyUserRefresh = tokenData.refresh_token || null
+        console.log('✓ User OAuth token saved, scope:', tokenData.scope)
+      } else {
+        console.error('✗ OAuth token exchange failed:', tokenData)
       }
-      spotifyUserToken = tokenData.access_token
-      spotifyUserRefresh = tokenData.refresh_token || null
-      console.log('✓ Spotify user token obtained (expires in', tokenData.expires_in, 's)')
+
       res.writeHead(200, { 'Content-Type': 'text/html' })
-      res.end('<html><body style="font-family:sans-serif;padding:40px;background:#0a0a0a;color:#f5f1ea"><h2 style="color:#c9a84c">✓ Spotify connected!</h2><p>Private playlists now accessible. You can close this tab.</p></body></html>')
+      res.end('<html><body style="background:#0a0a0a;color:#c9a84c;font-family:monospace;padding:40px">✓ Spotify connected! Scope: ' + (tokenData.scope || 'none') + '<br>Close this tab.</body></html>')
     } catch(e) {
       console.error('spotify-callback error:', e.message)
       res.writeHead(500)

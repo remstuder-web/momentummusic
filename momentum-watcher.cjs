@@ -1019,7 +1019,7 @@ async function extractTracksFromText(text, apiKey) {
 
 // ── importSpotifyPlaylist — import all tracks from a playlist URL ─────────
 async function importSpotifyPlaylist(playlistUrl, genreTag) {
-  const token = await getSpotifyToken()
+  const token = spotifyUserToken || await getSpotifyToken()
   const playlistId = playlistUrl.split('/playlist/')[1]?.split('?')[0]
   if (!playlistId) throw new Error('invalid playlist URL')
 
@@ -1519,9 +1519,16 @@ const ANALYZE_AUDIO_SCRIPT = path.join(__dirname, 'analyze_audio.py')
 const ANALYZE_EQ_SCRIPT = path.join(__dirname, 'analyze_vocal_eq.py')
 let processingQueue = []
 let isProcessing = false
+let spotifyRateLimitUntil = 0
 
 async function processLibraryTrackInBackground(refTrack) {
   try {
+    // Skip if Spotify is rate limited
+    if (spotifyRateLimitUntil && Date.now() < spotifyRateLimitUntil) {
+      console.log('bg: Spotify rate limited, skipping')
+      return
+    }
+
     // Skip if already processed
     const { data: existing } = await supabase.from('vocal_eq_curves').select('id').eq('reference_track_id', String(refTrack.id)).limit(1)
     if (existing?.length) { console.log('bg: skip processed:', refTrack.artist, '—', refTrack.title); return }
@@ -1532,13 +1539,13 @@ async function processLibraryTrackInBackground(refTrack) {
     let previewUrl = refTrack.preview_url || null
     if (refTrack.spotify_id) {
       try {
-        const token = await getSpotifyToken()
+        const token = spotifyUserToken || await getSpotifyToken()
         let sr = await fetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id, { headers: { 'Authorization': 'Bearer ' + token } })
         if (sr.status === 429) {
           const retryAfter = parseInt(sr.headers.get('Retry-After') || '30', 10)
-          console.warn('bg: Spotify rate limit — waiting', retryAfter, 's')
-          await delay(retryAfter * 1000)
-          sr = await fetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id, { headers: { 'Authorization': 'Bearer ' + token } })
+          spotifyRateLimitUntil = Date.now() + (retryAfter * 1000)
+          console.warn('bg: Spotify rate limit — pausing queue for', retryAfter, 's')
+          return
         }
         if (!sr.ok) { console.warn('bg: Spotify track fetch failed:', sr.status, refTrack.title); return }
         const sd = await sr.json()
@@ -1631,9 +1638,9 @@ async function fetchTrackGenres(spotifyId, token) {
     let trackRes = await fetch('https://api.spotify.com/v1/tracks/' + spotifyId, { headers: { 'Authorization': 'Bearer ' + token } })
     if (trackRes.status === 429) {
       const retryAfter = parseInt(trackRes.headers.get('Retry-After') || '30', 10)
-      console.warn('fetchTrackGenres: rate limit — waiting', retryAfter, 's')
-      await delay(retryAfter * 1000)
-      trackRes = await fetch('https://api.spotify.com/v1/tracks/' + spotifyId, { headers: { 'Authorization': 'Bearer ' + token } })
+      spotifyRateLimitUntil = Date.now() + (retryAfter * 1000)
+      console.warn('fetchTrackGenres: rate limit — pausing queue for', retryAfter, 's')
+      return []
     }
     if (!trackRes.ok) return []
     const track = await trackRes.json()
@@ -1642,9 +1649,9 @@ async function fetchTrackGenres(spotifyId, token) {
     let artistRes = await fetch('https://api.spotify.com/v1/artists/' + artistId, { headers: { 'Authorization': 'Bearer ' + token } })
     if (artistRes.status === 429) {
       const retryAfter = parseInt(artistRes.headers.get('Retry-After') || '30', 10)
-      console.warn('fetchTrackGenres: rate limit (artist) — waiting', retryAfter, 's')
-      await delay(retryAfter * 1000)
-      artistRes = await fetch('https://api.spotify.com/v1/artists/' + artistId, { headers: { 'Authorization': 'Bearer ' + token } })
+      spotifyRateLimitUntil = Date.now() + (retryAfter * 1000)
+      console.warn('fetchTrackGenres: rate limit (artist) — pausing queue for', retryAfter, 's')
+      return []
     }
     if (!artistRes.ok) return []
     const artist = await artistRes.json()
@@ -1949,22 +1956,24 @@ Max 15 questions total. Short, actionable. Return valid JSON only — no text be
 
     if (!checklist.length) { console.warn('rebuildFinishingChecklist: empty result'); return [] }
 
-    // Clean up any wrongly-saved entries from previous runs
-    const { error: delErr } = await supabase.from('brain_knowledge')
+    // Delete existing checklist entry
+    await supabase.from('brain_knowledge')
       .delete()
-      .in('title', ['2026-04-24_Song analysis checklist', 'Song analysis checklist', 'Finishing Checklist'])
-    if (delErr) console.warn('rebuildFinishingChecklist: cleanup delete error:', delErr.message)
+      .eq('category', 'checklist_70')
+      .eq('title', 'Finishing Checklist — Latest')
 
-    const { error: clErr } = await supabase.from('brain_knowledge').upsert({
+    // Insert fresh
+    const { error } = await supabase.from('brain_knowledge').insert({
       category: 'checklist_70',
       title: 'Finishing Checklist — Latest',
       content: JSON.stringify(checklist),
       active: true,
       confidence: 'locked',
       priority: true
-    }, { onConflict: 'title' })
-    if (clErr) console.error('rebuildFinishingChecklist: upsert failed:', clErr.message)
-    else console.log('✓ Finishing checklist rebuilt:', checklist.length, 'questions')
+    })
+
+    if (error) console.error('checklist save error:', error.message)
+    else console.log('✓ checklist saved:', checklist.length, 'questions')
     return checklist
   } catch(e) {
     console.error('rebuildFinishingChecklist error:', e.message)
@@ -2353,6 +2362,10 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
 
 console.log('Spotify ID:', SPOTIFY_CLIENT_ID ? 'set' : 'EMPTY')
 console.log('Spotify Secret:', SPOTIFY_CLIENT_SECRET ? 'set' : 'EMPTY')
+
+// Spotify user OAuth tokens (set after /spotify-auth flow)
+let spotifyUserToken = null
+let spotifyUserRefresh = null
 
 async function getSpotifyToken() {
   if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
@@ -7133,8 +7146,8 @@ ${context}` }]
         if (!isPlaylist && !isArtist) throw new Error('URL must be a Spotify playlist, artist, or track link')
         const id = url.split(isPlaylist ? '/playlist/' : '/artist/')[1]?.split('?')[0]?.split('/')[0]
 
-        // 2. Spotify token
-        const spotifyToken = await getSpotifyToken()
+        // 2. Spotify token — prefer user token for private playlist access
+        const spotifyToken = spotifyUserToken || await getSpotifyToken()
         const spHeaders = { 'Authorization': `Bearer ${spotifyToken}` }
 
         // 3/4. Collect track IDs and artist IDs
@@ -9700,6 +9713,58 @@ ${chatText.slice(0, 4000)}`
       res.end(JSON.stringify({ ok: true, ...data }))
     } catch(e) {
       res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── GET /spotify-auth — redirect to Spotify OAuth consent page ──────────
+  if (req.method === 'GET' && req.url === '/spotify-auth') {
+    console.log('DEBUG: spotify-auth hit')
+    const scopes = 'playlist-read-private playlist-read-collaborative'
+    const authUrl = 'https://accounts.spotify.com/authorize?' +
+      'client_id=' + SPOTIFY_CLIENT_ID +
+      '&response_type=code' +
+      '&redirect_uri=' + encodeURIComponent('http://127.0.0.1:4242/spotify-callback') +
+      '&scope=' + encodeURIComponent(scopes)
+    res.writeHead(302, { Location: authUrl })
+    res.end()
+    return
+  }
+
+  // ── GET /spotify-callback — exchange code for user token ─────────────────
+  if (req.method === 'GET' && req.url.startsWith('/spotify-callback')) {
+    try {
+      const code = new URL('http://localhost' + req.url).searchParams.get('code')
+      if (!code) { res.writeHead(400); res.end('Missing code'); return }
+      const creds = Buffer.from(SPOTIFY_CLIENT_ID + ':' + SPOTIFY_CLIENT_SECRET).toString('base64')
+      const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': 'Basic ' + creds
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://127.0.0.1:4242/spotify-callback'
+        })
+      })
+      const tokenData = await tokenRes.json()
+      if (!tokenData.access_token) {
+        console.error('Spotify OAuth error:', JSON.stringify(tokenData))
+        res.writeHead(400)
+        res.end('<html><body>OAuth failed: ' + JSON.stringify(tokenData) + '</body></html>')
+        return
+      }
+      spotifyUserToken = tokenData.access_token
+      spotifyUserRefresh = tokenData.refresh_token || null
+      console.log('✓ Spotify user token obtained (expires in', tokenData.expires_in, 's)')
+      res.writeHead(200, { 'Content-Type': 'text/html' })
+      res.end('<html><body style="font-family:sans-serif;padding:40px;background:#0a0a0a;color:#f5f1ea"><h2 style="color:#c9a84c">✓ Spotify connected!</h2><p>Private playlists now accessible. You can close this tab.</p></body></html>')
+    } catch(e) {
+      console.error('spotify-callback error:', e.message)
+      res.writeHead(500)
+      res.end('Error: ' + e.message)
     }
     return
   }

@@ -1955,8 +1955,13 @@ Return ONLY JSON (single item array):
             <span class="ref-source-dot">○</span>
             <div class="ref-title-col">
               <span class="ref-title">{track.artist || 'Unknown'} — {track.title}</span>
-              {#if track.genre_tag || track.genres?.[0]}
-                <span class="track-genre-tag">{track.genre_tag || track.genres[0]}</span>
+              {#if track.playlist_name}
+                <span class="playlist-tag">{track.playlist_name}</span>
+              {/if}
+              {#if track.genres?.[0]}
+                <span class="track-genre-tag">{track.genres[0]}</span>
+              {:else if !track.playlist_name && track.genre_tag}
+                <span class="track-genre-tag">{track.genre_tag}</span>
               {/if}
             </div>
             <span class="ref-stats">
@@ -3002,6 +3007,7 @@ Return ONLY JSON (single item array):
   .genre-filter-chip { font-family: 'Space Mono', monospace; font-size: 7px; background: transparent; border: 1px solid #1a1a1a; color: #333; padding: 1px 6px; border-radius: 2px; cursor: pointer; white-space: nowrap; }
   .genre-filter-chip.active { border-color: #c9a84c; color: #c9a84c; }
   .track-genre-tag { font-family: 'Space Mono', monospace; font-size: 7px; color: #444; border: 1px solid #1a1a1a; padding: 1px 5px; border-radius: 2px; align-self: flex-start; }
+  .playlist-tag { font-family: 'Space Mono', monospace; font-size: 7px; color: #c9a84c; border: 1px solid rgba(201,168,76,.3); padding: 1px 5px; border-radius: 2px; align-self: flex-start; }
   .category-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 6px; }
   .cat-chip { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #252525; color: #555; padding: 2px 8px; border-radius: 2px; cursor: pointer; white-space: nowrap; }
   .cat-chip:hover { border-color: #444; color: #9e9690; }

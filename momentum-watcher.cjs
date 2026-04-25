@@ -1110,15 +1110,21 @@ async function importAllUserPlaylists() {
     // Derive genre tag from playlist name (the user's own label)
     const genreTag = playlist.name.toLowerCase().trim()
 
-    let tracksUrl = 'https://api.spotify.com/v1/playlists/' + playlist.id + '/tracks?limit=50'
+    // Use items.href from the playlist object (Spotify returns {href, total} under 'items', not 'tracks')
+    // Both /playlists/{id}/items and /playlists/{id}/tracks return 403 — requires Spotify Extended Access
+    const tracksHref = playlist.items?.href || playlist.tracks?.href
+    if (!tracksHref) { console.warn('Skip playlist (no href):', playlist.name); continue }
+
+    let tracksUrl = tracksHref + (tracksHref.includes('?') ? '&' : '?') + 'limit=50'
     while (tracksUrl) {
       const tr = await fetch(tracksUrl, { headers: { 'Authorization': 'Bearer ' + token } })
       if (!tr.ok) {
-        console.warn('Skip playlist', playlist.name, 'status:', tr.status)
+        console.log('Skip playlist', playlist.name, 'status:', tr.status)
         break
       }
       const td = await tr.json()
-      const tracks = (td.items || []).map(i => i.track).filter(t => t?.id)
+      // /items endpoint uses i.item (not i.track like /tracks endpoint)
+      const tracks = (td.items || []).map(i => i.item || i.track).filter(t => t?.id)
 
       for (const track of tracks) {
         const { data: existing } = await supabase

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-26] momentum-watcher.cjs + src/lib/BrainTab.svelte — DONE
+TASK: import-all-user-playlists-v2
+WHAT: importAllUserPlaylists(): use playlist.items.href (not playlist.tracks.href — that field is null in API response). Use /playlists/{id}/items endpoint (not /tracks). Map i.item (not i.track — different field name in /items response). genre_tag = playlist name lowercased. genres = Spotify artist genres (cached per session). BrainTab library display: playlist_name shown in gold .playlist-tag, genres[0] shown in dim .track-genre-tag. Followed playlists (not owned) skip cleanly with 403.
+RESULT: WORKS — 434 tracks saved from 21 user-owned playlists (ELECTRONIC EDM: 29, ELECTRONIC INDIE: 69, POP INDIE: 45, RAP: 8, etc.). 2 followed playlists skip 403 (expected).
+BLOCKERS: none
+
 ## [2026-04-26] momentum-watcher.cjs — PARTIAL
 TASK: import-all-user-playlists
 WHAT: Added importAllUserPlaylists() — fetches /me/playlists (works), then /playlists/{id}/tracks per playlist. genre_tag derived from playlist name (user's own Spotify label, e.g. "ELECTRONIC EDM" → "electronic edm"). Per-session artist genre cache avoids redundant API calls. POST /import-all-my-playlists endpoint added. Tested: 22 playlists found, all tracks skipped (403 on /tracks endpoint — Spotify app quota restriction).

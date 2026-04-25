@@ -1929,6 +1929,105 @@ async function buildStatusResponse() {
 }
 
 // ── Obsidian sync ─────────────────────────────────────────────────────────
+
+// Files we just patched — debounce so chokidar re-fires don't recurse
+const _obsidianSyncDebounce = new Set()
+
+function obsidianKeywords(text) {
+  const STOP = new Set(['with','this','that','from','have','been','will','what','when','where','which','your','our','how','not','are','was','were','its','all','but','for','the','and','to','in','of','a','is','it','be','at','on','an','by','as','or','if','do','up','so','no','we','me','my','he','she','they','us','can','has','had','his','her','did','get','got','let','put','run','set','try','use','way','per','now','new','old','two','one','any','may','say','see','give','take','make','come','each','such','both','then','than','very','just','also','well','much','some'])
+  return [...new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 3 && !STOP.has(w)))]
+}
+
+function findRelatedVaultNotes(ownPath, title, category) {
+  const keywords = new Set(obsidianKeywords(title))
+  if (!keywords.size) return []
+  const SKIP = new Set(['INDEX', 'Hit Benchmark', 'Active Goals', 'My Productions', 'Music Tips', 'Reference Tracks', 'Market Intelligence', 'Contact Directory', 'NOW', 'Networking'])
+  const candidates = []
+
+  function scanDir(dir) {
+    if (!fs.existsSync(dir)) return
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.endsWith('.md')) continue
+      const fp = path.join(dir, f)
+      if (fp === ownPath) continue
+      const bt = f.slice(0, -3).replace(/^(\d{4}-\d{2}-\d{2}_)+/, '')
+      if (SKIP.has(bt)) continue
+      const score = [...keywords].filter(k => bt.toLowerCase().includes(k)).length
+      if (score > 0) candidates.push({ filePath: fp, bareTitle: bt, score })
+    }
+  }
+
+  scanDir(OBSIDIAN_VAULT_PATH)
+  const brainDir = path.join(OBSIDIAN_VAULT_PATH, 'Brain')
+  if (fs.existsSync(brainDir)) {
+    try {
+      for (const sub of fs.readdirSync(brainDir)) {
+        const subPath = path.join(brainDir, sub)
+        if (fs.statSync(subPath).isDirectory()) scanDir(subPath)
+      }
+    } catch(e) {}
+  }
+
+  return candidates.sort((a, b) => b.score - a.score).slice(0, 5)
+}
+
+function patchObsidianRelated(filePath, titlesToAdd) {
+  if (!titlesToAdd.length || !fs.existsSync(filePath)) return
+  let content = fs.readFileSync(filePath, 'utf8')
+  const existingLinks = new Set((content.match(/\[\[([^\]]+)\]\]/g) || []).map(l => l.slice(2, -2)))
+  const toAdd = titlesToAdd.filter(t => !existingLinks.has(t))
+  if (!toAdd.length) return
+  const linkStr = toAdd.map(t => `[[${t}]]`).join(', ')
+  if (content.includes('\n## Related\n')) {
+    content = content.replace('\n## Related\n', `\n## Related\n${linkStr}, `)
+  } else {
+    content = content.trimEnd() + `\n\n## Related\n${linkStr}`
+  }
+  _obsidianSyncDebounce.add(filePath)
+  setTimeout(() => _obsidianSyncDebounce.delete(filePath), 8000)
+  fs.writeFileSync(filePath, content, 'utf8')
+}
+
+function patchObsidianSeeAlso(filePath, newTitle) {
+  if (!fs.existsSync(filePath)) return
+  const content = fs.readFileSync(filePath, 'utf8')
+  if (content.includes(`[[${newTitle}]]`)) return
+  _obsidianSyncDebounce.add(filePath)
+  setTimeout(() => _obsidianSyncDebounce.delete(filePath), 8000)
+  fs.writeFileSync(filePath, content.trimEnd() + `\n\nSee also: [[${newTitle}]]`, 'utf8')
+}
+
+async function updateCategoryMOC(category) {
+  try {
+    const { data: entries } = await supabase
+      .from('brain_knowledge')
+      .select('title, content, created_at')
+      .eq('category', category)
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (!entries?.length) return
+
+    const mocDir = path.join(OBSIDIAN_VAULT_PATH, 'MOC')
+    fs.mkdirSync(mocDir, { recursive: true })
+    const safeCat = category.replace(/[\/\\:*?"<>|]/g, '-')
+    const mocPath = path.join(mocDir, safeCat + '.md')
+    const label = category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+
+    const lines = [
+      `# ${label} — Map of Content`,
+      `Updated: ${new Date().toLocaleDateString('de-CH')}`,
+      '',
+      `## Entries (${entries.length})`,
+      ...entries.map(e => `- [[${e.title}]] — ${(e.content || '').replace(/\n/g, ' ').slice(0, 80)}`)
+    ]
+
+    _obsidianSyncDebounce.add(mocPath)
+    setTimeout(() => _obsidianSyncDebounce.delete(mocPath), 8000)
+    fs.writeFileSync(mocPath, lines.join('\n'), 'utf8')
+  } catch(e) { console.warn('updateCategoryMOC error:', e.message) }
+}
+
 function parseObsidianFrontmatter(content) {
   const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/m)
   if (!match) return { frontmatter: {}, body: content }
@@ -1949,8 +2048,14 @@ function parseObsidianFrontmatter(content) {
 
 async function syncObsidianFile(filePath) {
   if (!filePath.endsWith('.md')) return
-  // Notes/ subfolder is managed by Apple Notes sync — skip brain sync
+  // Skip files we just wrote (backlinks/MOC/index) to prevent chokidar loops
+  if (_obsidianSyncDebounce.has(filePath)) return
+  // Notes/ managed by Apple Notes sync — skip
   if (filePath.startsWith(NOTES_PATH + path.sep) || filePath.startsWith(NOTES_PATH + '/')) return
+  // Skip MOC files and INDEX
+  const mocDir = path.join(OBSIDIAN_VAULT_PATH, 'MOC')
+  if (filePath.startsWith(mocDir + path.sep) || filePath.startsWith(mocDir + '/')) return
+  if (path.basename(filePath) === 'INDEX.md') return
   try {
     const content = fs.readFileSync(filePath, 'utf8')
     const stat = fs.statSync(filePath)
@@ -2003,6 +2108,21 @@ async function syncObsidianFile(filePath) {
         method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' }, body: JSON.stringify(row)
       })
       console.log(`✓ Obsidian sync (new): ${filename}`)
+
+      // Enrich new entry: backlinks + See also + MOC update
+      setImmediate(async () => {
+        try {
+          const related = findRelatedVaultNotes(filePath, bareFilename, category)
+          if (related.length) {
+            patchObsidianRelated(filePath, related.map(r => r.bareTitle))
+            for (const rel of related) {
+              patchObsidianSeeAlso(rel.filePath, bareFilename)
+            }
+          }
+          await updateCategoryMOC(category)
+          await updateObsidianIndex()
+        } catch(e) { console.warn('Obsidian enrichment error:', e.message) }
+      })
     }
   } catch(e) { console.warn('Obsidian sync error:', e.message) }
 }
@@ -4014,6 +4134,19 @@ async function updateObsidianIndex() {
       .limit(200)
     if (!entries?.length) return
 
+    // Category counts for MOC section
+    const catCounts = {}
+    for (const e of entries) {
+      if (e.category) catCounts[e.category] = (catCounts[e.category] || 0) + 1
+    }
+    const mocDir = path.join(OBSIDIAN_VAULT_PATH, 'MOC')
+    const mocLines = ['## Categories']
+    for (const [cat, count] of Object.entries(catCounts).sort((a, b) => b[1] - a[1])) {
+      const safeCat = cat.replace(/[\/\\:*?"<>|]/g, '-')
+      const hasMoc = fs.existsSync(path.join(mocDir, safeCat + '.md'))
+      mocLines.push(`- ${hasMoc ? `[[MOC/${safeCat}]]` : cat.replace(/_/g, ' ')} (${count})`)
+    }
+
     const sections = {}
     for (const e of entries) {
       const folder = getSmartFolder(e) || '🧠 KNOWLEDGE'
@@ -4021,7 +4154,14 @@ async function updateObsidianIndex() {
       if (sections[folder].length < 10) sections[folder].push(e)
     }
 
-    const lines = ['# Momentum Brain Index', '', `*Auto-generated ${new Date().toLocaleDateString('de-CH')}*`, '']
+    const lines = [
+      '# Momentum Brain Index',
+      '',
+      `*Auto-generated ${new Date().toLocaleDateString('de-CH')} · ${entries.length} entries*`,
+      '',
+      ...mocLines,
+      ''
+    ]
     for (const [folder, items] of Object.entries(sections)) {
       lines.push('## ' + folder)
       for (const e of items) {
@@ -4032,6 +4172,8 @@ async function updateObsidianIndex() {
     }
 
     const indexPath = path.join(OBSIDIAN_VAULT_PATH, 'INDEX.md')
+    _obsidianSyncDebounce.add(indexPath)
+    setTimeout(() => _obsidianSyncDebounce.delete(indexPath), 8000)
     fs.writeFileSync(indexPath, lines.join('\n'), 'utf8')
     console.log('✓ Obsidian INDEX.md updated')
   } catch(e) { console.error('updateObsidianIndex error:', e.message) }

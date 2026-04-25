@@ -1,15 +1,16 @@
 {
   "updated": "2026-04-25T00:00:00.000Z",
-  "last_task": "fix-brain-titles-tiktok",
+  "last_task": "obsidian-backlinks-moc",
   "status": "done",
   "working": [
-    "cleanTitle() helper strips ^(YYYY-MM-DD_)+ from any title",
-    "saveBrainFile: file heading uses cleanTitle, safeTitle uses cleanTitle",
-    "syncObsidianFile: stores bareFilename (no date prefix) as Supabase title",
-    "connectBrainEntries: entryTitles use cleanTitle per source entry",
-    "POST /fix-brain-titles: cleaned 478 triple-prefixed entries, revealed+deduped 185 dupes",
-    "TikTok tracks: reference_tracks checkout only — brain_knowledge insert removed",
-    "696 brain entries, 0 duplicates, 0 double-date-prefix entries",
+    "_obsidianSyncDebounce set — prevents chokidar re-fire loops when patching files",
+    "syncObsidianFile: skips MOC/, INDEX.md, Notes/ at top",
+    "findRelatedVaultNotes(ownPath, title, category) — keyword scan of vault root + Brain/ subdirs",
+    "patchObsidianRelated(filePath, titles) — adds [[backlinks]] to Related section of new note",
+    "patchObsidianSeeAlso(filePath, title) — appends See also: [[title]] to related notes",
+    "updateCategoryMOC(category) — writes MOC/[category].md, entries newest-first, max 50",
+    "updateObsidianIndex() — prepends category counts + [[MOC/cat]] links to INDEX.md",
+    "Enrichment fires via setImmediate after INSERT path only (not updates)",
     "8/8 tests passing"
   ],
   "broken": [],
@@ -17,5 +18,5 @@
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
   "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables",
-  "notes": "Root cause of triple prefix: backfill (on watcher restart) calls saveBrainFile on existing dated-title entries, which triggered Obsidian sync to insert new entries with current-day prefix. Fixed by storing clean (no-date) title in Supabase; Obsidian files keep date prefix in filename only."
+  "notes": "Backlinks enrich compounding wiki: every new Obsidian entry gets Related links, existing notes get See also, category MOC updated, INDEX.md updated. Debounce prevents infinite chokidar loops."
 }

@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: obsidian-backlinks-moc
+WHAT: syncObsidianFile() now enriches NEW entries: (1) findRelatedVaultNotes() scans vault root + Brain/ subdirs for keyword-matched .md files; (2) patchObsidianRelated() adds [[backlinks]] to new note's Related section; (3) patchObsidianSeeAlso() appends "See also: [[newTitle]]" to each related note; (4) updateCategoryMOC() writes MOC/[category].md with all entries sorted newest first; (5) updateObsidianIndex() now prepends category counts + [[MOC/cat]] links at top of INDEX.md. _obsidianSyncDebounce set prevents chokidar loop when patching files. MOC/ and INDEX.md skip guard added to syncObsidianFile.
+RESULT: works — code verified, 8/8 tests passing. Enrichment fires via setImmediate after INSERT path only.
+BLOCKERS: none
+
+## [2026-04-25] momentum-watcher.cjs — DONE
 TASK: fix-triple-date-prefix, tiktok-tracks-to-checkout-only
 WHAT: FIX 1: added cleanTitle() helper (strips all leading YYYY-MM-DD_ patterns); applied in saveBrainFile heading, syncObsidianFile now stores bareFilename as Supabase title, connectBrainEntries uses cleanTitle on entry titles. POST /fix-brain-titles endpoint cleans existing corrupted entries — ran immediately, fixed 478 entries + deduplicated 185 duplicates revealed by cleanup. FIX 2: removed brain_knowledge insert from runAgentTikTokTrends — tracks go to reference_tracks (checkout) only; brain only gets Claude's market_knowledge insight via inbox.
 RESULT: works — 8/8 tests, 696 clean entries, 0 double-prefix entries, 0 duplicates

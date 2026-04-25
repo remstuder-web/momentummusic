@@ -43,7 +43,7 @@
   let processing = $state(false)
   let imageExtracting = $state(false)
   let speicherboxItems = $state([])
-  let speicherboxExpanded = $state(true)
+  let speicherboxExpanded = $state(false)
   let speicherboxSaving = $state(false)
   let capturing = $state(false)
   let captureResult = $state(null)
@@ -2940,12 +2940,12 @@ Return ONLY JSON (single item array):
   .refs-section-header { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; padding: 8px 0 4px; border-bottom: 1px solid #1c1c1c; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
   .refs-section-header.refs-curated { color: rgba(201,168,76,.75); }
   .refs-section-header.refs-curated:hover { color: rgba(201,168,76,1); }
-  .refs-section-header.refs-checkout { color: #9e9690; cursor: default; }
-  .refs-section-header.refs-library { color: #444; }
-  .refs-section-header.refs-library:hover { color: #666; }
+  .refs-section-header.refs-checkout { color: #c9a84c; cursor: default; }
+  .refs-section-header.refs-library { color: #c9a84c; }
+  .refs-section-header.refs-library:hover { color: rgba(201,168,76,1); }
   .speicher-section { margin-top: 8px; }
-  .speicher-hdr { color: rgba(201,168,76,.5); }
-  .speicher-hdr:hover { color: rgba(201,168,76,.8); }
+  .speicher-hdr { color: #c9a84c; }
+  .speicher-hdr:hover { color: rgba(201,168,76,1); }
   .speicher-grid { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
   .speicher-card { display: flex; align-items: flex-start; gap: 8px; background: #131313; border: 1px solid #222; border-radius: 3px; padding: 6px 8px; cursor: default; }
   .speicher-card:hover { border-color: #2a2a2a; }

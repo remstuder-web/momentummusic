@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] BrainTab.svelte — DONE
+TASK: brain-section-titles-gold-speicherbox-collapsed-library-search
+WHAT: LIBRARY, CHECKOUT, SPEICHERBOX headers → gold (#c9a84c); speicherboxExpanded defaults to false; librarySearch + filteredLibraryRefs already implemented (no-op)
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-25] VocalEqChart.svelte + ProjectsTab.svelte — DONE
 TASK: chart-clip-id-collision-ref-dropdown-always-show
 WHAT: FIX1: unique clipId per chart instance (Math.random) — prevents shared chart-clip ID collision when multiple songs open simultaneously. FIX2: ref dropdown always shows (removed length guard); source list adds 'promoted', limit→200, spotify_id added; "no EQ curve yet" message when ref selected but no curve found.

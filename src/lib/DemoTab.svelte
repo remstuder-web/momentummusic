@@ -87,7 +87,6 @@
   let submissionBrief = $state('')
   let submissionResults = $state(null)
   let submissionLoading = $state(false)
-  const patchBriefs = {}
   let newPatchName = $state('')
   let newPatchArtist = $state('')
   let newPatchArtistId = $state('')  // selected artist connection id (second picker)
@@ -572,10 +571,11 @@
     }
   }
 
-  async function analyzeBrief() {
+  async function analyzeBrief(contactId = null) {
     submissionLoading = true
     try {
-      const contactName = connections.find(c => c.id == newPatchContact)?.name || 'Unknown'
+      const id = contactId ?? newPatchContact
+      const contactName = connections.find(c => c.id == id)?.name || 'Unknown'
       const r = await fetch('http://localhost:4242/analyze-submission-brief', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -607,13 +607,10 @@
       .insert({ name: fullName, artist: artistConn?.name || null, contact_id: contact?.id || null, status: 'open' })
       .select().single()
     patches = [{ ...data, songs: [] }, ...patches]
-    if (submissionBrief) patchBriefs[data.id] = { brief: submissionBrief, results: submissionResults }
     newPatchName = ''
     newPatchArtist = ''
     newPatchArtistId = ''
     newPatchContact = ''
-    submissionBrief = ''
-    submissionResults = null
     showPatchContactPicker = false
     showPatchArtistPicker = false
     showPatchModal = false
@@ -718,14 +715,14 @@
       songs = songs.map(s => songIds.includes(s.id) ? { ...s, status: 'sent' } : s)
       patches = [...patches]
 
-      const saved = patchBriefs[patch.id]
-      if (saved?.brief && result.folderPath) {
+      if (submissionBrief && result.folderPath) {
         fetch('http://localhost:4242/save-submission-brief', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder: result.folderPath, brief: saved.brief, results: saved.results })
+          body: JSON.stringify({ folder: result.folderPath, brief: submissionBrief, results: submissionResults })
         }).catch(() => {})
-        delete patchBriefs[patch.id]
+        submissionBrief = ''
+        submissionResults = null
       }
 
       alert(`✓ Submission sent!\nDropbox link copied to clipboard.${result.missing?.length ? '\n⚠ Missing: ' + result.missing.join(', ') : ''}`)
@@ -1275,6 +1272,62 @@
               {/if}
 
               {#if patch.status !== 'sent'}
+                <div class="submission-brief-section">
+                  <div class="sub-label">BRIEF / REQUEST INFO (optional)</div>
+                  <textarea
+                    class="brief-input"
+                    placeholder="Paste the label brief here... e.g. 'Looking for dark R&B, 90-100bpm, emotional but club-ready, ref: Summer Walker'"
+                    bind:value={submissionBrief}
+                    rows="3"
+                  ></textarea>
+                  {#if submissionBrief.trim().length > 10}
+                    <button
+                      class="analyze-brief-btn"
+                      disabled={submissionLoading}
+                      onclick={() => analyzeBrief(patch.contact_id)}>
+                      {submissionLoading ? '⏳ Analyzing...' : '🔍 Find Matches'}
+                    </button>
+                  {/if}
+                  {#if submissionResults}
+                    <div class="brief-results">
+                      <div class="result-section">
+                        <div class="result-title">REFERENCE TRACKS FOR THIS BRIEF</div>
+                        <div class="result-subtitle">{submissionResults.reference_tracks?.length || 0} tracks matching the genre/style</div>
+                        {#each (submissionResults.reference_tracks || []) as track}
+                          <div class="result-track">
+                            <span class="track-name">{track.artist} — {track.title}</span>
+                            {#if track.spotify_id}
+                              <a href="https://open.spotify.com/track/{track.spotify_id}" class="listen-link" target="_blank">▶ listen</a>
+                            {/if}
+                            {#if track.tempo}
+                              <span class="track-meta">{Math.round(track.tempo)}bpm{track.key ? ' · ' + track.key : ''}{track.camelot ? ' · ' + track.camelot : ''}</span>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                      <div class="result-section" style="margin-top:8px">
+                        <div class="result-title">YOUR DEMOS THAT MATCH</div>
+                        <div class="result-subtitle">Best fits from your catalog</div>
+                        {#each (submissionResults.matching_demos || []) as demo}
+                          <div class="result-track">
+                            <span class="track-name">{demo.title || demo.code}</span>
+                            <span class="match-score" style="color:{demo.match_score > 75 ? '#4caf82' : demo.match_score > 50 ? '#e8a838' : '#9e9690'}">{demo.match_score}% match</span>
+                            {#if demo.reasons?.[0]}
+                              <span class="match-reason">{demo.reasons[0]}</span>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                      {#if submissionResults.analysis}
+                        <div class="result-section" style="margin-top:8px">
+                          <div class="result-title">MOZART'S TAKE</div>
+                          <div class="brief-analysis">{submissionResults.analysis}</div>
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+
                 <div class="patch-footer">
                   {#if patch.contact_id}
                     <button class="btn-send" onclick={() => sendPatch(patch)}>→ Send Submission ({patch.songs.length} songs)</button>
@@ -1433,67 +1486,8 @@
         {/each}
       </div>
 
-      <div class="submission-brief-section">
-        <div class="sub-label">BRIEF / REQUEST INFO</div>
-        <textarea
-          class="brief-input"
-          placeholder="Paste the brief here... e.g. 'Looking for dark R&B, female vocals, 90-100bpm, emotional but club-ready, ref: Summer Walker, SZA'"
-          bind:value={submissionBrief}
-          rows="4"
-        ></textarea>
-        {#if submissionBrief.trim().length > 10}
-          <button
-            class="analyze-brief-btn"
-            disabled={submissionLoading}
-            onclick={() => analyzeBrief()}>
-            {submissionLoading ? '⏳ Finding matches...' : '🔍 Find Matches'}
-          </button>
-        {/if}
-      </div>
-
-      {#if submissionResults}
-        <div class="brief-results">
-          <div class="result-section">
-            <div class="result-title">REFERENCE TRACKS FOR THIS BRIEF</div>
-            <div class="result-subtitle">{submissionResults.reference_tracks?.length || 0} tracks matching the genre/style</div>
-            {#each (submissionResults.reference_tracks || []) as track}
-              <div class="result-track">
-                <span class="track-name">{track.artist} — {track.title}</span>
-                {#if track.spotify_id}
-                  <a href="https://open.spotify.com/track/{track.spotify_id}" class="listen-link" target="_blank">▶ listen</a>
-                {/if}
-                {#if track.tempo}
-                  <span class="track-meta">{Math.round(track.tempo)}bpm{track.key ? ' · ' + track.key : ''}{track.camelot ? ' · ' + track.camelot : ''}</span>
-                {/if}
-              </div>
-            {/each}
-          </div>
-
-          <div class="result-section" style="margin-top:8px">
-            <div class="result-title">YOUR DEMOS THAT MATCH</div>
-            <div class="result-subtitle">Best fits from your catalog</div>
-            {#each (submissionResults.matching_demos || []) as demo}
-              <div class="result-track">
-                <span class="track-name">{demo.title || demo.code}</span>
-                <span class="match-score" style="color:{demo.match_score > 75 ? '#4caf82' : demo.match_score > 50 ? '#e8a838' : '#9e9690'}">{demo.match_score}% match</span>
-                {#if demo.reasons?.[0]}
-                  <span class="match-reason">{demo.reasons[0]}</span>
-                {/if}
-              </div>
-            {/each}
-          </div>
-
-          {#if submissionResults.analysis}
-            <div class="result-section" style="margin-top:8px">
-              <div class="result-title">MOZART'S TAKE</div>
-              <div class="brief-analysis">{submissionResults.analysis}</div>
-            </div>
-          {/if}
-        </div>
-      {/if}
-
       <button class="btn-gold-full" style="margin-top:10px" onclick={createPatch}>Create Submission</button>
-      <button class="modal-cancel" onclick={() => { showPatchModal = false; showPatchContactPicker = false; showPatchArtistPicker = false; submissionBrief = ''; submissionResults = null }}>Cancel</button>
+      <button class="modal-cancel" onclick={() => { showPatchModal = false; showPatchContactPicker = false; showPatchArtistPicker = false }}>Cancel</button>
     </div>
   </div>
 {/if}

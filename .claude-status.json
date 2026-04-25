@@ -1,21 +1,20 @@
 {
-  "updated": "2026-04-25T08:57:00Z",
-  "last_task": "tiktok-top10-spotify5-youtube5",
+  "updated": "2026-04-25T09:15:00Z",
+  "last_task": "submission-brief-move-to-main-flow",
   "status": "done",
   "working": [
-    "runAgentTikTokTrends: TikTok top 10 (fetchTikTokRealData().slice(0,10))",
-    "Spotify top 5: fetchKworbSpotify(), collection_name=spotify_chart",
-    "YouTube top 5: fetchKworbTrending(), collection_name=youtube_chart",
-    "All 20 saved to checkout with correct collection_name",
-    "Inbox message: raw 📱/🎵/▶ lists + Claude analysis",
-    "BrainTab checkout: source badge from collection_name (📱 tiktok / 🎵 spotify / ▶ youtube / ⬇ other)",
-    "Return shape: { ok, tiktok, spotify, youtube, tracks, trends, trend_tracks, source }",
-    "Watcher restart OK, ping confirmed"
+    "Brief section removed from patch modal",
+    "Brief section added to expanded patch card body (before Send button)",
+    "analyzeBrief(contactId) accepts optional contactId — expanded view passes patch.contact_id",
+    "sendPatch() uses submissionBrief/submissionResults directly, clears both after save",
+    "patchBriefs map removed (was used to bridge modal→send, now unnecessary)",
+    "Modal cancel no longer resets submissionBrief/submissionResults",
+    "svelte-check clean"
   ],
   "broken": [],
   "partial": [
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
   "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables",
-  "notes": "YouTube lines from kworb are 'artist · title · ...' format — split by ' · ' to extract title/artist."
+  "notes": "submissionBrief is global state — works because only one patch is expanded at a time. Brief clears on successful send."
 }

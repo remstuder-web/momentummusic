@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] DemoTab.svelte — DONE
+TASK: submission-brief-move-to-main-flow
+WHAT: Moved BRIEF / REQUEST INFO section from patch modal to expanded patch card body (before Send button). analyzeBrief() now accepts optional contactId param. sendPatch() uses submissionBrief/submissionResults directly and clears them after send. Removed patchBriefs map (unused). Modal cancel no longer resets brief state.
+RESULT: works — svelte-check clean
+BLOCKERS: none
+
 ## [2026-04-25] momentum-watcher.cjs + BrainTab.svelte — DONE
 TASK: tiktok-top10-spotify5-youtube5
 WHAT: Rewrote runAgentTikTokTrends() — TikTok top 10 (was all 20), Spotify top 5 via fetchKworbSpotify(), YouTube top 5 via fetchKworbTrending(). All 20 saved to checkout with collection_name per source (tiktok_trending/spotify_chart/youtube_chart). Inbox message prepends 📱/🎵/▶ raw lists before Claude analysis. BrainTab checkout shows source badge per track.

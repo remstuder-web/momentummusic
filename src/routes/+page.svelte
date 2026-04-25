@@ -15,12 +15,20 @@
   let listenSessionId = $state(null) // set when ?s= param detected
   let originalOpen = null
 
+  function setActiveTab(tab) {
+    activeTab = tab
+    localStorage.setItem('momentum_active_tab', tab)
+  }
+
   onMount(() => {
     // Detect listen session — ?s=XXXX means show public listen page, not admin app
     const s = new URLSearchParams(window.location.search).get('s')
     if (s) { listenSessionId = s; return }
 
-    const handler = e => { activeTab = e.detail }
+    const saved = localStorage.getItem('momentum_active_tab')
+    if (saved) activeTab = saved
+
+    const handler = e => { setActiveTab(e.detail) }
     document.addEventListener('mm-switch-tab', handler)
 
     const POPUP_FEATURES = 'width=900,height=700,left=200,top=100,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=yes'
@@ -362,7 +370,7 @@
     {#each tabs as tab}
       <button
         class="tab {activeTab === tab.id ? 'active' : ''}"
-        onclick={() => activeTab = tab.id}
+        onclick={() => setActiveTab(tab.id)}
       >
         {tab.label}
       </button>

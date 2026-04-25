@@ -785,6 +785,8 @@
       ])
       projects = projRes.data || []
       songs = songsRes.data || []
+      const lastSong = localStorage.getItem('momentum_last_song')
+      if (lastSong) expandedSongId = Number(lastSong)
       audioTick++
       sanityItems = sanityRes.data || []
       sanityText = sanityItems.map(i => i.item).join('\n')
@@ -2380,6 +2382,8 @@ Return JSON only:
       songWorkLogs = []
     }
     expandedSongId = isExpanding ? song.id : null
+    if (isExpanding) localStorage.setItem('momentum_last_song', String(song.id))
+    else localStorage.removeItem('momentum_last_song')
     if (!isExpanding) return
     const wd = workData(song)
     const latestWithAnalysis = (wd.versions || []).filter(v => v.analysis)

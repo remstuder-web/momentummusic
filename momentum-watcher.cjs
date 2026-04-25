@@ -1017,6 +1017,69 @@ async function extractTracksFromText(text, apiKey) {
   }
 }
 
+// ── importSpotifyPlaylist — import all tracks from a playlist URL ─────────
+async function importSpotifyPlaylist(playlistUrl, genreTag) {
+  const token = await getSpotifyToken()
+  const playlistId = playlistUrl.split('/playlist/')[1]?.split('?')[0]
+  if (!playlistId) throw new Error('invalid playlist URL')
+
+  // Fetch all tracks (paginated)
+  let tracks = []
+  let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50&fields=items(track(id,name,artists,popularity,preview_url,album)),next`
+  while (url) {
+    const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
+    const d = await r.json()
+    tracks.push(...(d.items || []).map(i => i.track).filter(Boolean))
+    url = d.next || null
+  }
+
+  // Fetch playlist name
+  const plRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,description`, { headers: { 'Authorization': 'Bearer ' + token } })
+  const plData = await plRes.json()
+  const playlistName = plData.name || 'Imported Playlist'
+
+  let saved = 0
+  let skipped = 0
+
+  for (const track of tracks) {
+    if (!track?.id) continue
+
+    const { data: existing } = await supabase.from('reference_tracks').select('id').eq('spotify_id', track.id).maybeSingle()
+    if (existing) { skipped++; continue }
+
+    const artistId = track.artists?.[0]?.id
+    let genres = []
+    if (artistId) {
+      try {
+        const ar = await fetch(`https://api.spotify.com/v1/artists/${artistId}`, { headers: { 'Authorization': 'Bearer ' + token } })
+        const ad = await ar.json()
+        genres = ad.genres || []
+      } catch(e) {}
+      await new Promise(r => setTimeout(r, 200))
+    }
+
+    const { error: insErr } = await supabase.from('reference_tracks').insert({
+      spotify_id: track.id,
+      title: track.name,
+      artist: track.artists.map(a => a.name).join(', '),
+      source: 'agent',
+      collection_name: 'playlist_import',
+      playlist_name: playlistName,
+      genres: genres.length ? genres : (genreTag ? [genreTag] : []),
+      genre_tag: genreTag || genres[0] || null,
+      popularity: track.popularity || null,
+      approved: true
+    })
+    if (insErr) console.error('playlist import insert error:', track.name, insErr.message)
+    else saved++
+
+    await new Promise(r => setTimeout(r, 300))
+  }
+
+  console.log(`Playlist import: ${playlistName} — saved: ${saved}, skipped: ${skipped}`)
+  return { saved, skipped, playlist: playlistName, total: tracks.length }
+}
+
 async function runAgentScout(apiKey, sharedBrainRows) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today = new Date().toISOString().slice(0, 10)
@@ -2388,7 +2451,7 @@ async function buildStatusResponse() {
     'POST /delete-release-folder', 'POST /copy-to-release',
     'POST /save-audio', 'POST /save-stems-zip', 'GET /test-dropbox',
     'POST /get-share-links', 'POST /morning-briefing', 'POST /agent-scout',
-    'POST /agent-demo-match', 'POST /agent-feedback', 'POST /analyze-spotify-track',
+    'POST /agent-demo-match', 'POST /agent-feedback', 'POST /analyze-spotify-track', 'POST /import-spotify-playlist',
     'POST /agent-import-spotify', 'GET /get-page-title', 'POST /create-submission',
     'POST /save-instrumental', 'POST /get-instrumental-link', 'POST /analyze-audio',
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
@@ -6522,6 +6585,26 @@ ${context}` }]
         logError('agent-feedback', err.message)
         console.error('✗ Agent Feedback error:', err.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: err.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /import-spotify-playlist — import playlist tracks to reference library ──
+  if (req.method === 'POST' && req.url === '/import-spotify-playlist') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', async () => {
+      try {
+        const { playlist_url, genre_tag } = JSON.parse(body)
+        if (!playlist_url) { res.writeHead(400); res.end(JSON.stringify({ error: 'playlist_url required' })); return }
+        const result = await importSpotifyPlaylist(playlist_url, genre_tag || null)
+        res.end(JSON.stringify({ ok: true, ...result }))
+      } catch(err) {
+        console.error('import-spotify-playlist error:', err.message)
+        res.writeHead(500)
         res.end(JSON.stringify({ ok: false, error: err.message }))
       }
     })
@@ -12114,6 +12197,9 @@ Max 150 words. Be specific and actionable.` }]
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=credits&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing credits/emotional_arc — run SQL:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS credits jsonb, ADD COLUMN IF NOT EXISTS emotional_arc jsonb;') })
+    .catch(() => {})
+  fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=genre_tag,playlist_name&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing genre_tag/playlist_name — run SQL:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;') })
     .catch(() => {})
 })
 

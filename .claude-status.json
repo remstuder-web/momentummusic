@@ -1,22 +1,22 @@
 {
-  "updated": "2026-04-25T16:30:00Z",
-  "last_task": "checklist-70-fix",
+  "updated": "2026-04-25T15:52:00Z",
+  "last_task": "fix-scout-catch",
   "status": "done",
   "working": [
-    "loadFinishingChecklist(): now runs in onMount (was bare module-level call — fired before Supabase ready)",
-    "onMount imported from svelte",
-    "Query: category=checklist_70, title='Finishing Checklist — Latest', maybeSingle()",
-    "Empty state: 'Loading questions...' + retry button",
-    "Phase-grouped display with checklist-phase-group/checklist-phase-label",
-    "Reset all button uses reset-btn CSS class",
-    "No 'New item...' input",
-    "svelte-check: 0 errors"
+    "runAgentScout api_usage: supabase.from('api_usage').insert() with error log",
+    "runAgentScout brain save: await supabase.from('brain_knowledge').insert() with error log",
+    "runAgentScout saveBrainFile: await (no .catch) inside try/catch",
+    "pm2 restart: ok, ping responding",
+    "svelte-check: 0 errors",
+    "checklist 70%: loadFinishingChecklist in onMount, loads from brain_knowledge",
+    "project refs: removeRefLink removes from both column + project_meta",
+    "project ref chips: play + name + delete, handles null url"
   ],
   "broken": [],
   "partial": [
     "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]'; — run in Supabase dashboard if not done",
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
-  "next": "Test checklist panel loads 14 questions. If still empty, check brain_knowledge row: category='checklist_70', title='Finishing Checklist — Latest'. Run /rebuild-finishing-checklist from watcher if row missing.",
-  "notes": "Root cause was loadFinishingChecklist() called bare at module scope — runs during SSR/initialization before Supabase client is ready. Moving into onMount fixes the timing."
+  "next": "Test checklist panel loads 14 questions. If still empty, check brain_knowledge has row with category='checklist_70', title='Finishing Checklist — Latest'. Run POST /rebuild-finishing-checklist if missing.",
+  "notes": "All .catch() chains in runAgentScout replaced with async/await + error logging."
 }

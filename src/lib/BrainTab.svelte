@@ -59,6 +59,7 @@
   let checkoutExpanded = $state(true)
   let librarySearch = $state('')
   let librarySort = $state('date')
+  let libraryGenreFilter = $state('')
 
   // Preview audio player
   let previewAudio = null
@@ -157,13 +158,18 @@
   )
   const filteredLibraryRefs = $derived(
     libraryRefs
-      .filter(t =>
-        !librarySearch ||
-        (t.title || '').toLowerCase().includes(librarySearch.toLowerCase()) ||
-        (t.artist || '').toLowerCase().includes(librarySearch.toLowerCase())
-      )
+      .filter(t => {
+        const matchSearch = !librarySearch ||
+          (t.title || '').toLowerCase().includes(librarySearch.toLowerCase()) ||
+          (t.artist || '').toLowerCase().includes(librarySearch.toLowerCase())
+        const matchGenre = !libraryGenreFilter ||
+          (t.genres || []).includes(libraryGenreFilter) ||
+          t.genre_tag === libraryGenreFilter
+        return matchSearch && matchGenre
+      })
       .sort((a, b) => {
         if (librarySort === 'artist') return (a.artist || '').localeCompare(b.artist || '')
+        if (librarySort === 'genre') return (a.genre_tag || a.genres?.[0] || 'z').localeCompare(b.genre_tag || b.genres?.[0] || 'z')
         return new Date(b.created_at || 0) - new Date(a.created_at || 0)
       })
   )
@@ -1932,19 +1938,25 @@ Return ONLY JSON (single item array):
         <div class="library-sort-btns">
           <button class="sort-btn {librarySort === 'date' ? 'active' : ''}" onclick={() => librarySort = 'date'}>↓ Date</button>
           <button class="sort-btn {librarySort === 'artist' ? 'active' : ''}" onclick={() => librarySort = 'artist'}>A–Z</button>
+          <button class="sort-btn {librarySort === 'genre' ? 'active' : ''}" onclick={() => librarySort = 'genre'}>Genre</button>
         </div>
+        {@const allGenres = [...new Set(libraryRefs.flatMap(t => t.genres || (t.genre_tag ? [t.genre_tag] : [])))].sort()}
+        {#if allGenres.length}
+          <div class="genre-filter-chips">
+            <button class="genre-filter-chip {libraryGenreFilter === '' ? 'active' : ''}" onclick={() => libraryGenreFilter = ''}>All</button>
+            {#each allGenres as g}
+              <button class="genre-filter-chip {libraryGenreFilter === g ? 'active' : ''}" onclick={() => libraryGenreFilter = g}>{g}</button>
+            {/each}
+          </div>
+        {/if}
         <input class="library-search" placeholder="Search library..." bind:value={librarySearch} />
         {#each filteredLibraryRefs as track}
           <div class="ref-track-row library">
             <span class="ref-source-dot">○</span>
             <div class="ref-title-col">
               <span class="ref-title">{track.artist || 'Unknown'} — {track.title}</span>
-              {#if track.genres?.length}
-                <div class="genre-chips">
-                  {#each (track.genres || []).slice(0, 3) as g}
-                    <span class="genre-chip">{g}</span>
-                  {/each}
-                </div>
+              {#if track.genre_tag || track.genres?.[0]}
+                <span class="track-genre-tag">{track.genre_tag || track.genres[0]}</span>
               {/if}
             </div>
             <span class="ref-stats">
@@ -1952,15 +1964,13 @@ Return ONLY JSON (single item array):
               {track.camelot ? ' · ' + track.camelot : (track.key ? ' · ' + track.key : '')}
             </span>
             <div class="ref-checkout-btns">
-              <button class="track-play-btn"
-                onclick={() => playPreview(track)}
-              >{playingId === track.id ? '■' : '▶'}</button>
+              <button class="track-play-btn" onclick={() => playPreview(track)}>{playingId === track.id ? '■' : '▶'}</button>
               <button class="track-del-btn" onclick={() => deleteRef(track.id)}>×</button>
             </div>
           </div>
         {/each}
         {#if !filteredLibraryRefs.length}
-          <p class="brain-empty" style="font-size:11px;padding:6px 0">{librarySearch ? 'No matches.' : 'Library empty.'}</p>
+          <p class="brain-empty" style="font-size:11px;padding:6px 0">{librarySearch || libraryGenreFilter ? 'No matches.' : 'Library empty.'}</p>
         {/if}
       {/if}
     </div>
@@ -2988,6 +2998,10 @@ Return ONLY JSON (single item array):
   .library-sort-btns { display: flex; gap: 4px; margin-bottom: 6px; }
   .sort-btn { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; background: transparent; border: 1px solid #252525; color: #444; padding: 2px 8px; border-radius: 2px; cursor: pointer; letter-spacing: .06em; }
   .sort-btn.active { border-color: #c9a84c; color: #c9a84c; background: rgba(201,168,76,.06); }
+  .genre-filter-chips { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+  .genre-filter-chip { font-family: 'Space Mono', monospace; font-size: 7px; background: transparent; border: 1px solid #1a1a1a; color: #333; padding: 1px 6px; border-radius: 2px; cursor: pointer; white-space: nowrap; }
+  .genre-filter-chip.active { border-color: #c9a84c; color: #c9a84c; }
+  .track-genre-tag { font-family: 'Space Mono', monospace; font-size: 7px; color: #444; border: 1px solid #1a1a1a; padding: 1px 5px; border-radius: 2px; align-self: flex-start; }
   .category-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 6px; }
   .cat-chip { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #252525; color: #555; padding: 2px 8px; border-radius: 2px; cursor: pointer; white-space: nowrap; }
   .cat-chip:hover { border-color: #444; color: #9e9690; }

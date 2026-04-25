@@ -1536,3 +1536,9 @@ TASK: checklist-70-fix
 WHAT: loadFinishingChecklist moved into onMount (was bare call at module init, ran before Supabase ready); removed checklist-title/subtitle; empty state now shows retry button; reset button renamed to reset-btn; removed New item input
 RESULT: works
 BLOCKERS: none
+
+## 2026-04-25 momentum-watcher.cjs — DONE
+TASK: fix-scout-catch
+WHAT: runAgentScout — replaced raw fetch(api_usage).catch(() => {}) with supabase.from('api_usage').insert() + error log; replaced saveBrainFile().catch(() => {}) with await + error log inside existing try/catch
+RESULT: works
+BLOCKERS: none

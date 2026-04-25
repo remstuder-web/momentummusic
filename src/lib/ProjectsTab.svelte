@@ -2118,18 +2118,14 @@
     vocalEqCurves = { ...vocalEqCurves }
     vocalEqCache.set(songId, allCurves)
 
-    // Load ref tracks that have been processed (have curves via reference_track_id)
-    const refIds = [...new Set((globalRefCurves || []).map(c => c.reference_track_id).filter(Boolean))]
-    if (refIds.length) {
-      const { data: rts } = await supabase
-        .from('reference_tracks')
-        .select('id, title, artist, source, credits, popularity, collection_name')
-        .in('id', refIds)
-        .order('artist', { ascending: true })
-      refTrackOptions = rts || []
-    } else {
-      refTrackOptions = []
-    }
+    // Load all library tracks for ref dropdown (not limited to those with EQ curves)
+    const { data: libraryTracks } = await supabase
+      .from('reference_tracks')
+      .select('id, title, artist, source, credits, popularity, collection_name')
+      .in('source', ['user', 'agent', 'mozart'])
+      .order('artist', { ascending: true })
+      .limit(100)
+    refTrackOptions = libraryTracks || []
 
     // Auto-compare: latest mix vs selected or first ref for current stem
     const stemKey = activeStem[songId] || 'vocals'
@@ -2153,6 +2149,7 @@
 
   async function loadSuccessMatch(song) {
     const sid = String(song.id)
+    if (successMatch[sid]) return
     successMatchLoading = { ...successMatchLoading, [sid]: true }
     try {
       const r = await fetch('http://localhost:4242/analyze-success-match', {

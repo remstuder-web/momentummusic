@@ -1,14 +1,14 @@
 {
-  "updated": "2026-04-25T09:15:00Z",
-  "last_task": "submission-brief-move-to-main-flow",
+  "updated": "2026-04-25T09:35:00Z",
+  "last_task": "analyzer-chart-autoscale-izotope-successmatch-trenddropdown",
   "status": "done",
   "working": [
-    "Brief section removed from patch modal",
-    "Brief section added to expanded patch card body (before Send button)",
-    "analyzeBrief(contactId) accepts optional contactId — expanded view passes patch.contact_id",
-    "sendPatch() uses submissionBrief/submissionResults directly, clears both after save",
-    "patchBriefs map removed (was used to bridge modal→send, now unnecessary)",
-    "Modal cancel no longer resets submissionBrief/submissionResults",
+    "VocalEqChart: DB_MIN/DB_MAX now $derived from mix+ref+iZotope avg values, clamped to [-60, +30]",
+    "VocalEqChart: gridDbs now $derived, auto-generates 5dB steps for visible range",
+    "VocalEqChart: IZOTOPE_OFFSET computed as -Math.max(avg values) instead of hardcoded 36.32",
+    "VocalEqChart: iZotope band fill opacity 0.025 → 0.04",
+    "ProjectsTab: loadSuccessMatch guard — returns early if already loaded for that song",
+    "ProjectsTab: refTrackOptions loads ALL library tracks (source IN user/agent/mozart) not just those with vocal EQ curves",
     "svelte-check clean"
   ],
   "broken": [],
@@ -16,5 +16,5 @@
     "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
   ],
   "next": "Run SQL in Supabase dashboard for feedback_patterns and chart_history tables",
-  "notes": "submissionBrief is global state — works because only one patch is expanded at a time. Brief clears on successful send."
+  "notes": "iZotope avg range after offset: 0dB at peak (54Hz) down to ~-50dB at 20kHz. Auto-scale will expand chart to show this. Mix curves (±20dB range) will appear in upper portion."
 }

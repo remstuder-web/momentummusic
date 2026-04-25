@@ -24,7 +24,6 @@
   const PAD_L = 44, PAD_T = 16, PAD_R = 16, PAD_B = 32
   const CHART_W = W - PAD_L - PAD_R
   const CHART_H = H - PAD_T - PAD_B
-  const DB_MIN = -20, DB_MAX = 20
 
   function xForFreq(f) {
     const logMin = Math.log10(20), logMax = Math.log10(16000)
@@ -54,15 +53,36 @@
     return `${first},${baseline} ${points} ${last},${baseline}`
   }
 
-  const gridDbs = [-15, -10, -5, 0, 5, 10, 15]
   const labelFreqs = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 16000]
   const labelText = { 20: '20', 50: '50', 100: '100', 200: '200', 500: '500', 1000: '1k', 2000: '2k', 5000: '5k', 10000: '10k', 16000: '16k' }
 
   // iZotope 2024 Mastering Trends — Top 40 commercial average
   // [freq_hz, avg_dB, hi_dB, lo_dB]
   const IZOTOPE_2024 = [[22,-41.06,-31.69,-63.51],[22,-41.06,-31.69,-63.51],[32,-38.46,-29.12,-60.83],[43,-36.85,-28.1,-58.43],[54,-36.32,-28.02,-56.42],[65,-36.48,-28.43,-54.95],[86,-37.52,-29.71,-53.07],[108,-38.74,-31.04,-52.26],[129,-39.98,-32.4,-51.89],[172,-42.08,-35.14,-52.14],[215,-43.34,-36.38,-52.64],[280,-44.73,-37.8,-53.51],[345,-46.53,-39.7,-55.01],[441,-48.51,-41.65,-57.08],[560,-49.76,-42.78,-58.88],[711,-51.63,-44.65,-60.43],[904,-53.92,-47.15,-62.43],[1152,-56.29,-49.86,-64.5],[1453,-58.11,-52.06,-65.71],[1852,-59.79,-54.06,-66.96],[2347,-61.93,-56.57,-69.01],[2972,-63.81,-58.84,-70.83],[3779,-65.68,-60.91,-72.74],[4791,-67.84,-63.21,-74.85],[6083,-69.25,-64.23,-77.87],[7709,-69.88,-64.89,-79.4],[9787,-70.93,-65.97,-81.2],[12425,-75.17,-69.68,-84.64],[15762,-81.16,-75.32,-88.3],[20004,-86.22,-81.27,-91.21]]
-  // Shift up so the peak (~54Hz avg = -36.32dB) aligns with 0dB on the relative chart
-  const IZOTOPE_OFFSET = 36.32
+  // Normalize so avg peak aligns to 0dB on the relative chart
+  const IZOTOPE_OFFSET = -Math.max(...IZOTOPE_2024.map(p => p[1]))
+
+  // Dynamic Y-axis: fit mix, ref, and iZotope avg values
+  const dbRange = $derived((() => {
+    const mixVals = displayMix ? ISO_FREQS.filter(f => displayMix[String(f)] !== undefined).map(f => displayMix[String(f)]) : []
+    const refVals = displayRef ? ISO_FREQS.filter(f => displayRef[String(f)] !== undefined).map(f => displayRef[String(f)]) : []
+    const izVals = IZOTOPE_2024.map(([,avg]) => avg + IZOTOPE_OFFSET)
+    const all = [...mixVals, ...refVals, ...izVals].filter(v => isFinite(v))
+    if (!all.length) return { min: -20, max: 20 }
+    const dataMin = Math.min(...all)
+    const dataMax = Math.max(...all)
+    return {
+      min: Math.max(Math.floor((dataMin - 3) / 5) * 5, -60),
+      max: Math.min(Math.ceil((dataMax + 3) / 5) * 5, 30)
+    }
+  })())
+
+  const DB_MIN = $derived(dbRange.min)
+  const DB_MAX = $derived(dbRange.max)
+
+  const gridDbs = $derived(
+    Array.from({ length: Math.round((DB_MAX - DB_MIN) / 5) + 1 }, (_, i) => DB_MIN + i * 5)
+  )
 
   let showIzotope = $state(true)
 
@@ -117,7 +137,7 @@
 
     <!-- iZotope range band + avg line (behind all curves) -->
     {#if showIzotope}
-      <path d={makeIzotopeRange()} fill="rgba(255,255,255,0.025)" stroke="none" clip-path="url(#chart-clip)" />
+      <path d={makeIzotopeRange()} fill="rgba(255,255,255,0.04)" stroke="none" clip-path="url(#chart-clip)" />
       <path d={makeIzotopePath()} fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,4" clip-path="url(#chart-clip)" />
     {/if}
 

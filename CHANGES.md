@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] VocalEqChart.svelte + ProjectsTab.svelte — DONE
+TASK: analyzer-chart-autoscale-izotope-successmatch-trenddropdown
+WHAT: FIX1: Y-axis auto-scales from actual curve data (DB_MIN/DB_MAX derived, gridDbs derived) — clip-path already existed. FIX2: IZOTOPE_OFFSET computed dynamically (-Math.max avg) instead of hardcoded 36.32; band fill more visible (0.04). FIX3: loadSuccessMatch guard (skip if already loaded); refTrackOptions loads ALL library tracks (source IN user/agent/mozart, limit 100) not just those with EQ curves.
+RESULT: svelte-check clean
+BLOCKERS: none
+
 ## [2026-04-25] DemoTab.svelte — DONE
 TASK: submission-brief-move-to-main-flow
 WHAT: Moved BRIEF / REQUEST INFO section from patch modal to expanded patch card body (before Send button). analyzeBrief() now accepts optional contactId param. sendPatch() uses submissionBrief/submissionResults directly and clears them after send. Removed patchBriefs map (unused). Modal cancel no longer resets brief state.

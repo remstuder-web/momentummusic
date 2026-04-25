@@ -2668,16 +2668,12 @@ Return JSON only:
                 {#each refs as ref}
                   {@const refUrl = ref.url || (ref.spotify_id ? 'https://open.spotify.com/track/' + ref.spotify_id : null)}
                   {@const refName = ref.name || ref.title ? (ref.artist ? ref.artist + ' — ' + (ref.title||'') : ref.title||'') : (refUrl && refUrl.length>40 ? '…'+refUrl.slice(-36) : refUrl||'unknown')}
-                  {@const isSpotify = refUrl ? refUrl.includes('spotify') : false}
                   <span class="ref-chip">
-                    {#if isSpotify}
-                      <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(refUrl); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
-                      <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>{refPlayingUrl === refUrl ? '■' : '▶'}</button>
-                    {:else if refUrl}
-                      <a href={refUrl} target="_blank" class="ref-link-btn">{linkLabel(refUrl)}</a>
-                    {/if}
+                    <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>
+                      {refPlayingUrl === refUrl ? '■' : '▶'}
+                    </button>
                     <span class="ref-chip-name">{refName}</span>
-                    <button class="ref-del" onclick={() => removeRefLink(selectedProject, ref.id)}>×</button>
+                    <button class="tag-del" onclick={() => removeProjectRef(selectedProject, ref.id || ref.url)}>×</button>
                   </span>
                 {/each}
               </div>
@@ -3958,7 +3954,7 @@ Return JSON only:
   .ref-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #111; border: 1px solid #1c1c1c; border-radius: 3px; }
   .ref-link-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: #4a9fd4; background: transparent; border: none; cursor: pointer; padding: 0; flex-shrink: 0; white-space: nowrap; }
   .ref-link-btn:hover { text-decoration: underline; }
-  .refs-inline { display: flex; flex-wrap: wrap; gap: 6px; }
+  .refs-inline { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .ref-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; }
   .ref-chip-name { font-size: 13px; color: #cec9c1; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ref-name-txt { font-size: 13px; color: #cec9c1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -4016,7 +4012,7 @@ Return JSON only:
   .tag-genre-select:focus { border-color: rgba(201,168,76,.4); }
   .tag-genre-select option[disabled] { font-weight: 700; color: rgba(201,168,76,.75); background: #1c1c1c; }
   .tag-genre-select option:not([disabled]) { background: #141414; color: #cec9c1; }
-  .refs-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .refs-wrap { display: flex; flex-direction: column; gap: 6px; overflow: visible; }
   .ref-row { display: flex; align-items: center; gap: 8px; }
   .ref-link { font-family: 'Space Mono', monospace; font-size: 12px; color: #4a9fd4; text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ref-link:hover { text-decoration: underline; }

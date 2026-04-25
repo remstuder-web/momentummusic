@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] momentum-watcher.cjs + mozartContext.js — DONE
+TASK: brain-master-compact-format-mozart-priority-rules
+WHAT: FIX1: rebuildBrainMaster() rewritten — compact format, blockquote priority section, **Title** <small>date</small> per entry, content truncated to 300 chars, category entry count in header. FIX2: mozartContext.js fetches priority+locked entries, prepends ⚡ CORE RULES & PRIORITIES section before full context, system prompt updated to reference it.
+RESULT: svelte-check clean, rebuild endpoint ok:true, file regenerated
+BLOCKERS: none
+
 ## [2026-04-25] momentum-watcher.cjs — DONE
 TASK: brain-dump-master-obsidian-core
 WHAT: rebuildBrainMaster() writes /ObsidianVault/Momentum/⚡CORE/BRAIN DUMP MASTER.md — all user text + locked entries grouped by category. Triggered on every /save-brain-file call + POST /rebuild-brain-master endpoint + startup at 8s. Creates CORE dir if missing.

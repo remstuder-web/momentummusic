@@ -7,7 +7,8 @@ export async function buildMozartContext(supabase, options = {}) {
     { data: projectSongs }, { data: demoSongs },
     { data: pendingInbox }, { data: marketNews },
     { data: watchedArtists }, { data: activeProjects },
-    { data: mixingHistories }, { data: recentReleases }
+    { data: mixingHistories }, { data: recentReleases },
+    { data: priorityRules }
   ] = await Promise.all([
     supabase.from('reference_tracks').select('*').eq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(5),
     supabase.from('reference_tracks').select('*').neq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(20),
@@ -22,7 +23,8 @@ export async function buildMozartContext(supabase, options = {}) {
     supabase.from('watched_artists').select('artist_name,genres').eq('active', true).limit(5),
     supabase.from('projects').select('name,artist,status,deadlines').eq('status', 'active').limit(5),
     supabase.from('brain_knowledge').select('title,content').eq('category', 'own_production').eq('source_type', 'version_history').order('created_at', { ascending: false }).limit(5),
-    supabase.from('releases').select('song_code,song_title,artist,release_date,label,spotify_streams,revenue_eur,invoice_sent,payment_received').order('release_date', { ascending: false }).limit(8)
+    supabase.from('releases').select('song_code,song_title,artist,release_date,label,spotify_streams,revenue_eur,invoice_sent,payment_received').order('release_date', { ascending: false }).limit(8),
+    supabase.from('brain_knowledge').select('title,content,category').or('priority.eq.true,confidence.eq.locked').eq('active', true).order('created_at', { ascending: false }).limit(30)
   ])
 
   let targetContacts = []
@@ -99,6 +101,8 @@ export async function buildMozartContext(supabase, options = {}) {
 
   let context = `You are Mozart, a co-intelligence music production advisor for Remo.
 Assess tracks the way Spotify's algorithm does — using signal data to find gaps.
+
+PRIORITY RULES: The section "⚡ CORE RULES & PRIORITIES" contains the user's most important personal rules and goals. These ALWAYS take precedence. Reference them when relevant. If a rule says "remind me when fit" — do so proactively when the conversation touches that topic.
 
 FORMATTING RULES — always follow these:
 - Use ## for section headers
@@ -323,6 +327,18 @@ Available actions:
 
 Always include the action AFTER your normal response text.
 Only include actions when explicitly asked to perform them.`
+
+  // Prepend priority/locked rules before everything else so Claude sees them first
+  if (priorityRules?.length) {
+    const rulesBlock = '## ⚡ CORE RULES & PRIORITIES (always apply)\n' +
+      priorityRules.map(r =>
+        '• ' + r.title +
+        (r.content && r.content.trim() !== r.title.trim()
+          ? ': ' + r.content.slice(0, 150).replace(/\n/g, ' ')
+          : '')
+      ).join('\n') + '\n\n'
+    context = rulesBlock + context
+  }
 
   return context
 }

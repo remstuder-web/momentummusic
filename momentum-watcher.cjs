@@ -1621,11 +1621,9 @@ async function rebuildBrainMaster() {
     }
 
     const lines = [
-      '# BRAIN DUMP MASTER',
-      '> Every insight you personally entered — by category, newest first.',
-      '> Auto-updated. Do not edit manually.',
-      '',
-      'Updated: ' + new Date().toLocaleDateString('de-CH') + ' ' + new Date().toLocaleTimeString('de-CH'),
+      '# 🧠 BRAIN DUMP MASTER',
+      '> Personal knowledge entries — auto-updated, do not edit.',
+      '> Last updated: ' + new Date().toLocaleString('de-CH'),
       '',
       '---',
       ''
@@ -1633,12 +1631,13 @@ async function rebuildBrainMaster() {
 
     const priorityEntries = entries.filter(e => e.priority || e.confidence === 'locked')
     if (priorityEntries.length) {
-      lines.push('## ⚡ LOCKED / HIGH PRIORITY')
+      lines.push('## ⚡ LOCKED & HIGH PRIORITY')
       lines.push('')
       for (const e of priorityEntries) {
-        lines.push('**' + e.title + '**')
-        if (e.content) lines.push(e.content)
-        lines.push('`' + (e.category || '') + '`')
+        lines.push('> **' + e.title + '**')
+        if (e.content && e.content.trim() !== e.title.trim()) {
+          lines.push('> ' + e.content.replace(/\n/g, ' ').trim())
+        }
         lines.push('')
       }
       lines.push('---')
@@ -1657,14 +1656,18 @@ async function rebuildBrainMaster() {
 
     for (const [cat, catEntries] of Object.entries(byCategory)) {
       const emoji = categoryEmojis[cat] || '📌'
-      lines.push('## ' + emoji + ' ' + cat.toUpperCase().replace(/_/g, ' '))
+      const catLabel = cat.toUpperCase().replace(/_/g, ' ')
+      lines.push('## ' + emoji + ' ' + catLabel + '  (' + catEntries.length + ')')
       lines.push('')
       for (const e of catEntries) {
         const lock = e.confidence === 'locked' ? ' 🔒' : ''
         const prio = e.priority ? ' ⚡' : ''
-        lines.push('### ' + e.title + lock + prio)
-        if (e.content && e.content !== e.title) lines.push(e.content)
-        lines.push('_' + new Date(e.created_at).toLocaleDateString('de-CH') + '_')
+        const date = new Date(e.created_at).toLocaleDateString('de-CH')
+        lines.push('**' + e.title + '**' + lock + prio + '  <small>' + date + '</small>')
+        if (e.content && e.content.trim() && e.content.trim() !== e.title.trim()) {
+          const c = e.content.replace(/\n+/g, ' ').trim()
+          lines.push(c.length > 300 ? c.slice(0, 297) + '...' : c)
+        }
         lines.push('')
       }
       lines.push('---')

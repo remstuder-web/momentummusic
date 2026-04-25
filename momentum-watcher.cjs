@@ -10625,114 +10625,106 @@ ${chatText.slice(0, 4000)}`
         let result = ''
 
         if (action === 'add_project_reference') {
-          let songId = payload.song_id
-
-          // Resolve project_name → song_id
-          if (!songId && payload.project_name) {
-            const { data: found } = await supabase
-              .from('songs')
-              .select('id, title')
-              .ilike('title', '%' + payload.project_name + '%')
-              .order('created_at', { ascending: false })
-              .limit(1)
-            if (found?.length) {
-              songId = found[0].id
-              console.log('[mozart] found song', songId, 'for project_name', payload.project_name)
-            } else {
-              const { data: latest } = await supabase
-                .from('songs')
-                .select('id, title')
-                .order('created_at', { ascending: false })
-                .limit(1)
-              if (latest?.length) songId = latest[0].id
-              console.log('[mozart] fallback to latest song', songId)
+          // Auto-enrich with Spotify if no spotify_id yet
+          if (!payload.spotify_id && payload.title) {
+            const sp = await fetchSpotifyId(payload.title, payload.artist)
+            if (sp) {
+              payload.spotify_id = sp.spotify_id
+              payload.title      = sp.title
+              payload.artist     = sp.artist
+              payload.popularity = sp.popularity
+              console.log('[mozart] Spotify enriched:', payload.title, payload.spotify_id)
             }
           }
 
-          if (!songId) {
-            console.error('[mozart] add_project_reference: no song_id resolved, payload:', JSON.stringify(payload))
-            result = '✗ No song found — provide song_id or project_name'
+          // Save to reference_tracks checkout
+          if (payload.spotify_id) {
+            saveToCheckout({
+              spotify_id: payload.spotify_id,
+              title: payload.title,
+              artist: payload.artist,
+              collection_name: 'project_reference',
+              approved: true,
+              popularity: payload.popularity || null
+            }).catch(() => {})
+          }
+
+          // Resolve project by name, payload.project_id, or most recent
+          let proj = null
+          if (payload.project_name) {
+            const { data: found } = await supabase
+              .from('projects')
+              .select('id, name, reference_links')
+              .ilike('name', '%' + payload.project_name + '%')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+            proj = found
+          }
+          if (!proj && payload.project_id) {
+            const { data: byId } = await supabase
+              .from('projects')
+              .select('id, name, reference_links')
+              .eq('id', payload.project_id)
+              .maybeSingle()
+            proj = byId
+          }
+          if (!proj) {
+            const { data: latest } = await supabase
+              .from('projects')
+              .select('id, name, reference_links')
+              .neq('status', 'archived')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+            proj = latest
+            if (proj) console.log('[mozart] fallback to latest project:', proj.name)
+          }
+
+          if (!proj) {
+            console.error('[mozart] add_project_reference: no project found, payload:', JSON.stringify(payload))
+            result = '✗ No project found — provide project_id or project_name'
           } else {
-            const { data: song, error: fetchErr } = await supabase
-              .from('songs')
-              .select('reference_links, work_data')
-              .eq('id', songId)
-              .single()
+            const normTrack = (t, a) =>
+              ((a || '') + (t || '')).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30)
 
-            if (fetchErr) {
-              console.error('[mozart] fetch song error:', fetchErr.message)
-              result = '✗ DB error: ' + fetchErr.message
+            let refs = Array.isArray(proj.reference_links) ? proj.reference_links : []
+            const newKey = normTrack(payload.title, payload.artist)
+            const alreadyExists = refs.find(r =>
+              (payload.spotify_id && r.spotify_id === payload.spotify_id) ||
+              normTrack(r.title, r.artist) === newKey
+            )
+
+            if (alreadyExists) {
+              console.log('[mozart] duplicate reference skipped:', payload.title)
+              result = `✓ "${payload.title} — ${payload.artist}" already in project references`
             } else {
-              // Auto-enrich with Spotify if no spotify_id yet
-              if (!payload.spotify_id && payload.title) {
-                const sp = await fetchSpotifyId(payload.title, payload.artist)
-                if (sp) {
-                  payload.spotify_id = sp.spotify_id
-                  payload.title     = sp.title
-                  payload.artist    = sp.artist
-                  payload.popularity = sp.popularity
-                  console.log('[mozart] Spotify enriched:', payload.title, payload.spotify_id)
-                }
-              }
+              const refId = (payload.artist + '_' + payload.title).replace(/\s+/g, '_').toLowerCase()
+              refs.push({
+                id: refId,
+                title: payload.title,
+                artist: payload.artist,
+                spotify_id: payload.spotify_id || null,
+                ref_type: payload.ref_type || 'music',
+                added_by: 'mozart',
+                added_at: new Date().toISOString(),
+                url: payload.spotify_id
+                  ? 'https://open.spotify.com/track/' + payload.spotify_id
+                  : null,
+                name: (payload.artist || '') + ' — ' + (payload.title || '')
+              })
 
-              // Save to reference_tracks checkout when we have a spotify_id
-              if (payload.spotify_id) {
-                saveToCheckout({
-                  spotify_id: payload.spotify_id,
-                  title: payload.title,
-                  artist: payload.artist,
-                  collection_name: 'project_reference',
-                  approved: true,
-                  popularity: payload.popularity || null
-                }).catch(() => {})
-              }
+              const { error: updateErr } = await supabase
+                .from('projects')
+                .update({ reference_links: refs })
+                .eq('id', proj.id)
 
-              const normTrack = (t, a) =>
-                ((a || '') + (t || '')).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30)
-
-              // Read reference_links column (not work_data)
-              let refs = Array.isArray(song.reference_links) ? song.reference_links : []
-
-              const newKey = normTrack(payload.title, payload.artist)
-              const alreadyExists = refs.find(r =>
-                (payload.spotify_id && r.spotify_id === payload.spotify_id) ||
-                normTrack(r.title, r.artist) === newKey
-              )
-
-              if (alreadyExists) {
-                console.log('[mozart] duplicate reference skipped:', payload.title)
-                result = `✓ "${payload.title} — ${payload.artist}" already in references`
+              if (updateErr) {
+                console.error('[mozart] project ref update error:', updateErr.message)
+                result = '✗ DB write failed: ' + updateErr.message
               } else {
-                const refId = payload.reference_track_id ||
-                  (payload.artist + '_' + payload.title).replace(/\s+/g, '_').toLowerCase()
-                refs.push({
-                  // Mozart format
-                  id: refId,
-                  title: payload.title,
-                  artist: payload.artist,
-                  spotify_id: payload.spotify_id || null,
-                  ref_type: payload.ref_type || 'music',
-                  added_by: 'mozart',
-                  added_at: new Date().toISOString(),
-                  // Legacy format (UI display)
-                  url: payload.spotify_id
-                    ? 'https://open.spotify.com/track/' + payload.spotify_id
-                    : null,
-                  name: payload.artist + ' — ' + payload.title
-                })
-
-                const { error: updateErr } = await supabase
-                  .from('songs')
-                  .update({ reference_links: refs })
-                  .eq('id', songId)
-
-                if (updateErr) {
-                  console.error('[mozart] update error:', updateErr.message)
-                  result = '✗ DB write failed: ' + updateErr.message
-                } else {
-                  console.log('[mozart] ✓ added reference', payload.title, 'to song', songId)
-                  result = `✓ Added "${payload.title} — ${payload.artist}" to song references`
-                }
+                console.log('[mozart] ✓ added reference', payload.title, 'to project', proj.name)
+                result = `✓ Added "${payload.title} — ${payload.artist}" to project "${proj.name}"`
               }
             }
           }

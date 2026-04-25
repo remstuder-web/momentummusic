@@ -775,7 +775,7 @@
   async function load() {
     try {
       const [projRes, songsRes, sanityRes, tipsRes, cardsRes, releasesRes, refRes] = await Promise.all([
-        supabase.from('projects').select('*').neq('status','archived').order('position'),
+        supabase.from('projects').select('*, reference_links').neq('status','archived').order('position'),
         supabase.from('songs').select('id,title,code,project_id,work_data,position,key,tempo,tags,reference_links,audio_path,notes,feedback,status,release_date,spotify_url').not('project_id','is',null).order('position'),
         supabase.from('work_checklist').select('*').eq('stage_num',6).order('position'),
         supabase.from('work_tip_sections').select('*, work_tips(*)').order('stage_num').order('position'),
@@ -994,10 +994,12 @@
   let refsOpen = $state({})    // project.id -> bool
 
   function projectRefs(p) {
+    // New: dedicated column
+    if (Array.isArray(p.reference_links) && p.reference_links.length) return p.reference_links
+    // Migration fallback: project_meta.reference_links
     const m = p.project_meta || {}
-    const raw = m.reference_links
-    if (Array.isArray(raw)) return raw
-    // migrate from old plain-text general_references
+    if (Array.isArray(m.reference_links) && m.reference_links.length) return m.reference_links
+    // Legacy: plain-text general_references
     if (p.general_references) {
       return p.general_references.split('\n').filter(Boolean).map(url => ({ id: 'r'+Date.now()+Math.random(), url: url.trim(), label: '' }))
     }
@@ -1013,8 +1015,13 @@
         if (r.ok) { const d = await r.json(); name = d.title || '' }
       } catch(e) {}
     }
-    const refs = [...projectRefs(p), { id: 'r'+Date.now(), url: url.trim(), name }]
-    await updateMeta(p, 'reference_links', refs)
+    const spotifyId = url.includes('spotify.com/track/') ? url.split('/track/')[1].split('?')[0] : null
+    const newRef = { id: 'r'+Date.now(), url: url.trim(), name, spotify_id: spotifyId, added_at: new Date().toISOString() }
+    const refs = [...projectRefs(p), newRef]
+    const { error } = await supabase.from('projects').update({ reference_links: refs }).eq('id', p.id)
+    if (error) { console.error('addRefLink error:', error.message); return }
+    p.reference_links = refs
+    projects = projects.map(proj => proj.id === p.id ? { ...proj, reference_links: refs } : proj)
     refLinkInput[p.id] = ''
     refsOpen[p.id] = true
     refsOpen = {...refsOpen}
@@ -1059,7 +1066,14 @@
 
   async function removeRefLink(p, id) {
     const refs = projectRefs(p).filter(r => r.id !== id)
-    await updateMeta(p, 'reference_links', refs)
+    const { error } = await supabase.from('projects').update({ reference_links: refs }).eq('id', p.id)
+    if (error) { console.error('removeRefLink error:', error.message); return }
+    p.reference_links = refs
+    projects = projects.map(proj => proj.id === p.id ? { ...proj, reference_links: refs } : proj)
+  }
+
+  async function removeProjectRef(project, refId) {
+    return removeRefLink(project, refId)
   }
 
   function linkLabel(url) {

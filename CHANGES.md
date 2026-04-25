@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] momentum-watcher.cjs + BrainTab.svelte + mozartContext.js — DONE
+TASK: reference-tracks-spotify-genres-library-chips-mozart-fingerprint
+WHAT: fetchTrackGenres() fetches Spotify artist genres; processLibraryTrackInBackground saves to genres column; startup enriches missing tracks (45s delay, 3s between); POST /enrich-library-genres endpoint; genre chips in BrainTab library rows; genre fingerprint section in Mozart context and suggest-category prompt
+RESULT: svelte-check clean, watcher restarted
+BLOCKERS: Requires SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb;
+
 ## [2026-04-25] BrainTab.svelte — DONE
 TASK: brain-section-titles-gold-speicherbox-collapsed-library-search
 WHAT: LIBRARY, CHECKOUT, SPEICHERBOX headers → gold (#c9a84c); speicherboxExpanded defaults to false; librarySearch + filteredLibraryRefs already implemented (no-op)

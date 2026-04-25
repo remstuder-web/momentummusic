@@ -1937,7 +1937,16 @@ Return ONLY JSON (single item array):
         {#each filteredLibraryRefs as track}
           <div class="ref-track-row library">
             <span class="ref-source-dot">○</span>
-            <span class="ref-title">{track.artist || 'Unknown'} — {track.title}</span>
+            <div class="ref-title-col">
+              <span class="ref-title">{track.artist || 'Unknown'} — {track.title}</span>
+              {#if track.genres?.length}
+                <div class="genre-chips">
+                  {#each (track.genres || []).slice(0, 3) as g}
+                    <span class="genre-chip">{g}</span>
+                  {/each}
+                </div>
+              {/if}
+            </div>
             <span class="ref-stats">
               {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
               {track.camelot ? ' · ' + track.camelot : (track.key ? ' · ' + track.key : '')}
@@ -2968,7 +2977,10 @@ Return ONLY JSON (single item array):
   .ref-source-dot { font-size: 9px; flex-shrink: 0; color: #555; }
   .ref-source-dot.user { color: #c9a84c; }
   .ref-source-dot.checkout { color: #9e9690; font-size: 8px; }
-  .ref-title { color: #cec9c1; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .ref-title { color: #cec9c1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .ref-title-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .genre-chips { display: flex; gap: 3px; flex-wrap: wrap; }
+  .genre-chip { font-family: 'Space Mono', monospace; font-size: 7px; color: #555; border: 1px solid #252525; padding: 1px 5px; border-radius: 2px; }
   .ref-stats { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; white-space: nowrap; flex-shrink: 0; }
   .ref-checkout-btns { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
   .library-search { background: #1c1c1c; border: 1px solid #252525; color: #9e9690; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 4px 8px; border-radius: 3px; width: 100%; margin-bottom: 6px; outline: none; box-sizing: border-box; }

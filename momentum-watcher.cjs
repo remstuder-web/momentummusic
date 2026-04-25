@@ -1438,15 +1438,25 @@ async function processLibraryTrackInBackground(refTrack) {
 
     console.log('bg: processing:', refTrack.artist, '—', refTrack.title)
 
-    // Step 1: Get preview URL
+    // Step 1: Get preview URL + genres
     let previewUrl = refTrack.preview_url || null
-    if (!previewUrl && refTrack.spotify_id) {
+    if (refTrack.spotify_id) {
       try {
         const token = await getSpotifyToken()
         const sr = await fetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id, { headers: { 'Authorization': 'Bearer ' + token } })
         const sd = await sr.json()
-        previewUrl = sd?.preview_url || null
-        if (previewUrl) await supabase.from('reference_tracks').update({ preview_url: previewUrl }).eq('id', refTrack.id)
+        if (!previewUrl) {
+          previewUrl = sd?.preview_url || null
+          if (previewUrl) await supabase.from('reference_tracks').update({ preview_url: previewUrl }).eq('id', refTrack.id)
+        }
+        // Fetch and save genres if not already set
+        if (!refTrack.genres?.length) {
+          const genres = await fetchTrackGenres(refTrack.spotify_id, token)
+          if (genres.length) {
+            await supabase.from('reference_tracks').update({ genres }).eq('id', refTrack.id)
+            console.log('bg: ✓ genres for:', refTrack.title, genres.slice(0, 3).join(', '))
+          }
+        }
       } catch(e) { console.warn('bg: spotify fetch failed:', e.message) }
     }
     if (!previewUrl) { console.log('bg: no preview URL for:', refTrack.title); return }
@@ -1512,6 +1522,24 @@ async function processLibraryTrackInBackground(refTrack) {
   }
 }
 
+async function fetchTrackGenres(spotifyId, token) {
+  try {
+    const trackRes = await fetch(
+      'https://api.spotify.com/v1/tracks/' + spotifyId,
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    )
+    const track = await trackRes.json()
+    const artistId = track.artists?.[0]?.id
+    if (!artistId) return []
+    const artistRes = await fetch(
+      'https://api.spotify.com/v1/artists/' + artistId,
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    )
+    const artist = await artistRes.json()
+    return artist.genres || []
+  } catch(e) { return [] }
+}
+
 async function runBackgroundQueue() {
   if (isProcessing || processingQueue.length === 0) return
   isProcessing = true
@@ -1545,6 +1573,30 @@ setTimeout(async () => {
     runBackgroundQueue()
   } catch(e) { console.warn('bg: startup queue error:', e.message) }
 }, 15000)
+
+// Startup: enrich library tracks missing genres (45s delay, after EQ queue settles)
+setTimeout(async () => {
+  try {
+    const { data: tracks } = await supabase
+      .from('reference_tracks')
+      .select('id, spotify_id, artist, title, genres')
+      .not('spotify_id', 'is', null)
+      .in('source', ['user', 'agent', 'mozart', 'promoted'])
+      .order('created_at', { ascending: false }).limit(200)
+    const missing = (tracks || []).filter(t => !t.genres?.length)
+    if (!missing.length) return
+    console.log('bg-genres: enriching', missing.length, 'tracks')
+    const token = await getSpotifyToken()
+    for (const track of missing) {
+      const genres = await fetchTrackGenres(track.spotify_id, token)
+      if (genres.length) {
+        await supabase.from('reference_tracks').update({ genres }).eq('id', track.id)
+      }
+      await new Promise(r => setTimeout(r, 3000))
+    }
+    console.log('bg-genres: done')
+  } catch(e) { console.warn('bg-genres startup error:', e.message) }
+}, 45000)
 
 async function getCrossChartTopics() {
   try {
@@ -2013,7 +2065,7 @@ async function buildStatusResponse() {
     'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
     'GET /get-env-keys', 'POST /save-env-key', 'POST /save-tasks',
     'GET /status', 'GET /system-status', 'GET /ping',
-    'POST /cleanup-brain-dupes',
+    'POST /cleanup-brain-dupes', 'POST /enrich-library-genres',
     'GET /find-whatsapp-db', 'POST /setup-whatsapp',
     'GET /whatsapp-contacts', 'POST /whatsapp-add-contact'
   ]
@@ -7517,6 +7569,26 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         ]
         const cats = [...new Set([...dbCats, ...standardCats])].sort()
 
+        // Build genre fingerprint from library tracks
+        let genreFingerprint = ''
+        try {
+          const libRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/reference_tracks?select=genres,genre_tags&not.spotify_id=is.null`,
+            { headers: sbHeaders }
+          ).catch(() => null)
+          const libTracks = libRes ? await libRes.json().catch(() => []) : []
+          const genreCounts = {}
+          for (const t of (Array.isArray(libTracks) ? libTracks : [])) {
+            for (const g of [...(t.genres || []), ...(t.genre_tags || [])]) {
+              genreCounts[g] = (genreCounts[g] || 0) + 1
+            }
+          }
+          const topGenres = Object.entries(genreCounts)
+            .sort((a, b) => b[1] - a[1]).slice(0, 8)
+            .map(([g, c]) => g + '(' + c + ')')
+          if (topGenres.length) genreFingerprint = '\n\nProducer genre fingerprint (from reference library): ' + topGenres.join(', ')
+        } catch(e) {}
+
         let prompt
 
         if (cats.length < 3) {
@@ -7534,7 +7606,7 @@ Respond only in JSON:
 }
 
 New text:
-${text.slice(0, 1500)}`
+${text.slice(0, 1500)}${genreFingerprint}`
         } else {
           // Fetch seed/description row (oldest) + newest real entry per category
           // so Claude sees both the category intent AND real usage
@@ -7572,7 +7644,7 @@ Rules:
 6. Do not suggest business, or market_knowledge unless the content is specifically about those topics
 
 New text to categorize:
-${text.slice(0, 1500)}
+${text.slice(0, 1500)}${genreFingerprint}
 
 Respond ONLY in JSON:
 {
@@ -9254,6 +9326,40 @@ ${chatText.slice(0, 4000)}`
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))
     }
+    return
+  }
+
+  // ── POST /enrich-library-genres — fetch Spotify genres for tracks missing them ──
+  if (req.method === 'POST' && req.url === '/enrich-library-genres') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, message: 'Genre enrichment started in background' }))
+    setImmediate(async () => {
+      try {
+        const { data: tracks } = await supabaseAdmin
+          .from('reference_tracks')
+          .select('id, spotify_id, artist, title, genres')
+          .not('spotify_id', 'is', null)
+          .in('source', ['user', 'agent', 'mozart', 'promoted'])
+          .order('created_at', { ascending: false })
+          .limit(200)
+        if (!tracks?.length) return
+        const missing = tracks.filter(t => !t.genres?.length)
+        console.log(`enrich-library-genres: ${missing.length} tracks missing genres`)
+        let enriched = 0
+        const token = await getSpotifyToken()
+        for (const track of missing) {
+          const genres = await fetchTrackGenres(track.spotify_id, token)
+          if (genres.length) {
+            await supabaseAdmin.from('reference_tracks').update({ genres }).eq('id', track.id)
+            console.log('  ✓', track.artist, '—', track.title, ':', genres.slice(0, 3).join(', '))
+            enriched++
+          }
+          await new Promise(r => setTimeout(r, 3000))
+        }
+        console.log(`enrich-library-genres: done — ${enriched}/${missing.length} enriched`)
+      } catch(e) { console.error('enrich-library-genres error:', e.message) }
+    })
     return
   }
 

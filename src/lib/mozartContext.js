@@ -125,6 +125,21 @@ FORMATTING RULES — always follow these:
 - Never write: 'Point 1. Point 2. Point 3.' on one line
 - Always write each point on a separate line with a - prefix\n\n`
 
+  // Genre fingerprint across all library tracks
+  const genreCounts = {}
+  const allLibraryTracks = [...(ownProds || []), ...(allRefs || [])]
+  allLibraryTracks.forEach(t => {
+    for (const g of [...(t.genres || []), ...(t.genre_tags || [])]) {
+      genreCounts[g] = (genreCounts[g] || 0) + 1
+    }
+  })
+  const topGenres = Object.entries(genreCounts)
+    .sort((a, b) => b[1] - a[1]).slice(0, 8)
+    .map(([g, c]) => g + '(' + c + ')')
+  if (topGenres.length) {
+    context += `## YOUR GENRE FINGERPRINT\n${topGenres.join(', ')}\n\n`
+  }
+
   if (hitBenchmark) context +=
     `## HIT BENCHMARK (avg of ${benchmarkRefs.length} ref tracks${userRefs.length < 2 ? ' — add personal refs for better accuracy' : ''})\n` +
     `${hitBenchmark.avg_bpm}bpm · ` +

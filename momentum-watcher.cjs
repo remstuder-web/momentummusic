@@ -386,6 +386,34 @@ Label your assessments:
 [NEW] = something the brain doesn't know yet`
 }
 
+// ── Agent helpers ─────────────────────────────────────────────────────────────
+async function extractInsight(text, apiKey) {
+  if (!apiKey || !text) return text.slice(0, 200)
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001', max_tokens: 80,
+        messages: [{ role: 'user', content: 'Extract the single most important actionable insight from this report. Max 200 chars. No fluff.\n\n' + text.slice(0, 2000) }]
+      })
+    })
+    const d = await r.json()
+    return ((d.content?.[0]?.text || '').trim() || text.slice(0, 200)).slice(0, 200)
+  } catch(e) { return text.slice(0, 200) }
+}
+
+function todayStartISO() {
+  const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString()
+}
+
+async function deleteInboxToday(songTitle) {
+  return fetch(
+    `${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.briefing&song_title=eq.${encodeURIComponent(songTitle)}&created_at=gte.${todayStartISO()}`,
+    { method: 'DELETE', headers: { ...sbHeaders, 'Prefer': 'return=minimal' } }
+  ).catch(() => {})
+}
+
 // ── Pulse check — compare fresh RSS headlines against brain knowledge ─────────
 async function runPulseCheck(apiKey, sharedBrainRows) {
   const sites = [
@@ -485,6 +513,8 @@ ${brainSummary}` }]
   const pulse = cd.content?.[0]?.text || ''
 
   if (!pulse.includes('NO_UPDATES') && pulse.trim()) {
+    const pulseToday = new Date().toISOString().slice(0, 10)
+    await deleteInboxToday('Pulse Check')
     await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
       method: 'POST',
       headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
@@ -492,9 +522,26 @@ ${brainSummary}` }]
         type: 'briefing',
         song_title: 'Pulse Check',
         message: pulse,
-        patch_name: `Pulse ${new Date().toISOString().slice(0, 10)}`,
+        patch_name: `Pulse ${pulseToday}`,
         read: false
       })
+    })
+    setImmediate(async () => {
+      try {
+        const insight = await extractInsight(pulse, apiKey)
+        await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+          method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            category: 'observation',
+            title: `Pulse ${pulseToday} — ${insight.slice(0, 60)}`,
+            content: insight,
+            entry_type_v2: 'observation',
+            confidence: 'medium',
+            source_type: 'pulse_agent',
+            active: true
+          })
+        })
+      } catch(e) { console.warn('pulse brain save error:', e.message) }
     })
     console.log('⚡ Pulse update sent to inbox')
   } else {
@@ -700,24 +747,31 @@ async function runAgentChartAnalysis(apiKey) {
     } catch(e) { console.warn('Chart analysis Claude call failed:', e.message) }
   }
 
-  // 6. Save assessment to brain_knowledge
+  // 6. Save key insight from chart assessment to brain_knowledge
   if (assessment) {
     const today = new Date().toISOString().slice(0, 10)
-    await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
-      method: 'POST',
-      headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({
-        category: 'market_knowledge',
-        title: `Chart Analysis ${today}`,
-        content: assessment,
-        entry_type: 'FACT',
-        active: true
-      })
+    setImmediate(async () => {
+      try {
+        const insight = await extractInsight(assessment, apiKey)
+        await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+          method: 'POST',
+          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            category: 'market_knowledge',
+            title: `Charts ${today} — ${insight.slice(0, 60)}`,
+            content: insight,
+            entry_type_v2: 'observation',
+            confidence: 'medium',
+            source_type: 'chart_agent',
+            active: true
+          })
+        })
+        saveBrainFile({ category: 'market_knowledge', title: `Charts ${today}`, content: insight, confidence: 'medium', source_type: 'chart_agent' }).catch(() => {})
+      } catch(e) { console.warn('chart brain save error:', e.message) }
     })
-    setImmediate(() => saveBrainFile({ category: 'market_knowledge', title: `Chart Analysis ${today}`, content: assessment, confidence: 'medium', source_type: 'chart_agent' }).catch(() => {}))
   }
 
-  // Save to inbox with structured tracks encoded
+  // Save to inbox (delete today's first, then insert fresh with structured tracks)
   if (assessment) {
     const today = new Date().toISOString().slice(0, 10)
     const structuredTracks = analyzedTracks.map(t => ({
@@ -727,6 +781,7 @@ async function runAgentChartAnalysis(apiKey) {
       energy: t.energy, source: 'spotify_chart'
     }))
     const tracksJson = structuredTracks.length ? `\n<!--TRACKS:${JSON.stringify(structuredTracks)}-->` : ''
+    await deleteInboxToday('Chart Analysis')
     await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
       method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
       body: JSON.stringify({
@@ -1103,13 +1158,26 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     body: JSON.stringify({ endpoint: '/agent-scout', model, input_tokens: usage.input_tokens||0, output_tokens: usage.output_tokens||0, cost_usd: ((usage.input_tokens||0)*0.000001)+((usage.output_tokens||0)*0.000005) })
   }).catch(() => {})
 
-  // Save scout report to brain_knowledge with source metadata
-  const _scoutEntry = { category: 'market_knowledge', title: `Scout Report ${today}`, content: scoutText, confidence: 'weak', source_type: 'scout_agent' }
-  fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
-    method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ ..._scoutEntry, entry_type: 'observation', active: true, metadata: { source_type: 'scout_agent', sources: sourcesUsed, date: today } })
-  }).catch(() => {})
-  setImmediate(() => saveBrainFile(_scoutEntry).catch(() => {}))
+  // Save key insight from scout to brain_knowledge
+  setImmediate(async () => {
+    try {
+      const insight = await extractInsight(scoutText, apiKey)
+      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+        method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          category: 'market_knowledge',
+          title: `Scout ${today} — ${insight.slice(0, 60)}`,
+          content: insight,
+          entry_type_v2: 'observation',
+          confidence: 'medium',
+          source_type: 'scout_agent',
+          active: true,
+          metadata: { date: today }
+        })
+      })
+      saveBrainFile({ category: 'market_knowledge', title: `Scout ${today}`, content: insight, confidence: 'medium', source_type: 'scout_agent' }).catch(() => {})
+    } catch(e) { console.warn('scout brain save error:', e.message) }
+  })
 
   // Save press articles to inbox as type='press' (top 1 per source, max 5)
   const pressToSave = Object.values(
@@ -1178,6 +1246,7 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   const allTracks = [...kworbTracks, ...kworbYTTracks].slice(0, 10)
   const tracksJson = allTracks.length ? `\n<!--TRACKS:${JSON.stringify(allTracks)}-->` : ''
 
+  await deleteInboxToday('Artist Scout')
   await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
     method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
     body: JSON.stringify({ type: 'briefing', song_code: null, song_title: 'Artist Scout', artist: null, message: scoutText + tracksJson, patch_name: `Scout ${today}`, read: false })
@@ -1774,9 +1843,28 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   }).catch(() => {})
 
   const tracksJson = analyzedTrends.length ? `\n<!--TRACKS:${JSON.stringify(analyzedTrends)}-->` : ''
+  await deleteInboxToday('TikTok Trends')
   await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
     method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
     body: JSON.stringify({ type: 'briefing', song_code: null, song_title: 'TikTok Trends', artist: null, message: trendsText + tracksJson, patch_name: `Trends ${today}`, read: false })
+  })
+  setImmediate(async () => {
+    try {
+      const insight = await extractInsight(trendsText, apiKey)
+      await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+        method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          category: 'market_knowledge',
+          title: `TikTok ${today} — ${insight.slice(0, 60)}`,
+          content: insight,
+          entry_type_v2: 'observation',
+          confidence: 'medium',
+          source_type: 'tiktok_agent',
+          active: true
+        })
+      })
+      saveBrainFile({ category: 'market_knowledge', title: `TikTok ${today}`, content: insight, confidence: 'medium', source_type: 'tiktok_agent' }).catch(() => {})
+    } catch(e) { console.warn('tiktok brain save error:', e.message) }
   })
   console.log(`✓ Agent TikTok Trends: ${analyzedTrends.length} tracks analyzed, saved to inbox`)
   return { ok: true, tracks: realTrends, trends: trendsText, trend_tracks: analyzedTrends, source: realTrends.length ? 'real' : 'fallback' }
@@ -5564,7 +5652,25 @@ ${context}` }]
             read: false
           })
         })
-        setImmediate(() => saveBrainFile({ category: 'observation', title: `Morning Briefing ${todayISO}`, content: briefingText, confidence: 'medium', source_type: 'morning_briefing' }).catch(() => {}))
+        setImmediate(async () => {
+          try {
+            const insight = await extractInsight(briefingText, apiKey)
+            await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+              method: 'POST',
+              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({
+                category: 'market_knowledge',
+                title: `Briefing ${todayISO} — ${insight.slice(0, 60)}`,
+                content: insight,
+                entry_type_v2: 'observation',
+                confidence: 'medium',
+                source_type: 'morning_briefing',
+                active: true
+              })
+            })
+            saveBrainFile({ category: 'market_knowledge', title: `Briefing ${todayISO}`, content: insight, confidence: 'medium', source_type: 'morning_briefing' }).catch(() => {})
+          } catch(e) { console.warn('briefing brain save error:', e.message) }
+        })
 
         if (TELEGRAM_TOKEN) {
           sendTelegram(TELEGRAM_OWNER_ID, '🌅 Morning Briefing\n\n' + briefingText.slice(0, 3000)).catch(() => {})

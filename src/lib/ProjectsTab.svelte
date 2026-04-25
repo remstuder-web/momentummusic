@@ -2347,14 +2347,15 @@ Return JSON only:
   }
 
   async function loadFinishingChecklist() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('brain_knowledge')
-      .select('content')
+      .select('content, created_at')
       .eq('category', 'checklist_70')
       .eq('title', 'Finishing Checklist — Latest')
-      .single()
+      .maybeSingle()
+    if (error) { console.error('checklist load error:', error.message); return }
     if (data?.content) {
-      try { finishingChecklist = JSON.parse(data.content) } catch(e) {}
+      try { finishingChecklist = JSON.parse(data.content) } catch(e) { console.error('checklist parse error:', e.message) }
     }
   }
 
@@ -3677,56 +3678,30 @@ Return JSON only:
       {#if sanityOpen}
         <div class="checklist-panel">
           <div class="checklist-title">FINISHING QUESTIONS</div>
-          <div class="checklist-subtitle">Updated by Mozart · {finishingChecklist.length} questions</div>
-          {#each finishingChecklist as item, i}
-            <div class="checklist-item {checkedItems[i] ? 'checked' : ''}">
-              <input type="checkbox" checked={checkedItems[i] || false}
-                onchange={() => { checkedItems[i] = !checkedItems[i]; checkedItems = { ...checkedItems } }} />
-              <div class="checklist-content">
-                <div class="checklist-phase">{item.phase}</div>
-                <div class="checklist-question">{item.question}</div>
-                {#if item.why}
-                  <div class="checklist-why">{item.why}</div>
-                {/if}
-              </div>
-            </div>
-          {/each}
+          <div class="checklist-subtitle">Mozart-generated · {finishingChecklist.length} questions</div>
           {#if finishingChecklist.length === 0}
-            <div class="checklist-empty">Run /rebuild-music-tips to generate questions</div>
-          {/if}
-        </div>
-        <div class="sanity-list">
-          {#each sanityItems as item (item.id)}
-            <div class="sanity-row {sanityChecks[item.id]?'checked':''}">
-              <button class="ckb-sm" onclick={() => {sanityChecks[item.id]=!sanityChecks[item.id];sanityChecks={...sanityChecks}}}>{sanityChecks[item.id]?'✓':''}</button>
-              <span class="sanity-text">{item.item}</span>
-              <button class="del" style="margin-left:auto;flex-shrink:0" onclick={async () => {
-                await supabase.from('work_checklist').delete().eq('id', item.id)
-                sanityItems = sanityItems.filter(i => i.id !== item.id)
-              }}>×</button>
-            </div>
-          {/each}
-          <div class="sanity-add-row">
-            <input class="inp-sm" style="flex:1" placeholder="New item..." id="sanity-new-input"
-              onkeydown={async e => {
-                if (e.key !== 'Enter') return
-                const val = e.target.value.trim()
-                if (!val) return
-                const { data } = await supabase.from('work_checklist').insert({ item: val, position: sanityItems.length, stage_num: 6 }).select().single()
-                if (data) sanityItems = [...sanityItems, data]
-                e.target.value = ''
-              }} />
-            <button class="add-btn" onclick={async () => {
-              const inp = document.getElementById('sanity-new-input')
-              const val = inp?.value?.trim()
-              if (!val) return
-              const { data } = await supabase.from('work_checklist').insert({ item: val, position: sanityItems.length, stage_num: 6 }).select().single()
-              if (data) sanityItems = [...sanityItems, data]
-              if (inp) inp.value = ''
-            }}>+</button>
-          </div>
-          {#if Object.values(sanityChecks).some(Boolean)}
-            <button class="reset-sanity" onclick={() => sanityChecks={}}>Reset checks</button>
+            <div class="checklist-empty">Run /rebuild-finishing-checklist to generate</div>
+          {:else}
+            {@const phases = [...new Set(finishingChecklist.map(i => i.phase))]}
+            {#each phases as phase}
+              <div class="checklist-phase-group">
+                <div class="checklist-phase-label">{phase}</div>
+                {#each finishingChecklist.filter(i => i.phase === phase) as item}
+                  <div class="checklist-item {checkedItems[item.question] ? 'done' : ''}">
+                    <input type="checkbox"
+                      checked={checkedItems[item.question] || false}
+                      onchange={() => { checkedItems[item.question] = !checkedItems[item.question]; checkedItems = { ...checkedItems } }} />
+                    <div class="checklist-content">
+                      <div class="checklist-q">{item.question}</div>
+                      {#if item.why}
+                        <div class="checklist-why">{item.why}</div>
+                      {/if}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/each}
+            <button class="reset-checklist-btn" onclick={() => checkedItems = {}}>Reset</button>
           {/if}
         </div>
       {/if}
@@ -4284,17 +4259,20 @@ Return JSON only:
   .right-arr { font-size: 10px; color: #555; transition: transform .2s; font-family: 'Space Mono', monospace; }
   .right-arr.open { transform: rotate(90deg); }
 
-  .checklist-panel { padding: 8px 14px 4px; border-bottom: 1px solid #1a1a1a; margin-bottom: 4px; }
+  .checklist-panel { padding: 8px 14px 10px; border-bottom: 1px solid #1a1a1a; margin-bottom: 4px; }
   .checklist-title { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: rgba(201,168,76,.75); letter-spacing: .1em; margin-bottom: 2px; }
   .checklist-subtitle { font-family: 'DM Sans', sans-serif; font-size: 9px; color: #333; margin-bottom: 8px; }
-  .checklist-item { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1a1a1a; align-items: flex-start; }
-  .checklist-item.checked .checklist-question { color: #333; text-decoration: line-through; }
-  .checklist-item input[type=checkbox] { margin-top: 2px; accent-color: #c9a84c; flex-shrink: 0; }
+  .checklist-phase-group { margin-bottom: 10px; }
+  .checklist-phase-label { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: rgba(201,168,76,.5); letter-spacing: .12em; margin-bottom: 5px; padding-bottom: 3px; border-bottom: 1px solid #1a1a1a; }
+  .checklist-item { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid #111; align-items: flex-start; }
+  .checklist-item.done .checklist-q { color: #333; text-decoration: line-through; }
+  .checklist-item input[type=checkbox] { margin-top: 3px; accent-color: #c9a84c; flex-shrink: 0; }
   .checklist-content { display: flex; flex-direction: column; gap: 2px; }
-  .checklist-phase { font-family: 'Space Mono', monospace; font-size: 7px; color: #c9a84c; letter-spacing: .08em; }
-  .checklist-question { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #cec9c1; line-height: 1.4; }
-  .checklist-why { font-family: 'DM Sans', sans-serif; font-size: 9px; color: #444; font-style: italic; }
+  .checklist-q { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #cec9c1; line-height: 1.5; }
+  .checklist-why { font-family: 'DM Sans', sans-serif; font-size: 9px; color: #444; font-style: italic; margin-top: 2px; }
   .checklist-empty { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #333; font-style: italic; padding: 6px 0; }
+  .reset-checklist-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #1a1a1a; color: #333; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 8px; }
+  .reset-checklist-btn:hover { color: #555; border-color: #252525; }
   .sanity-list { padding: 10px 14px; display: flex; flex-direction: column; gap: 5px; max-height: 320px; overflow-y: auto; }
   .sanity-row { display: flex; align-items: flex-start; gap: 9px; padding: 5px 0; border-bottom: 1px solid #0f0f0f; }
   .sanity-row.checked { opacity: .35; }

@@ -4510,7 +4510,8 @@ async function analyzeVocalEqUrl(url, songId, label) {
   let audioReady = false
 
   if (url.includes('spotify.com/track/')) {
-    const trackId = url.split('/track/')[1].split('?')[0].split('/')[0]
+    const trackId = url.split('/track/')[1]?.split('?')[0]?.split('/')[0]
+    if (!trackId) return
     try {
       const token = await getSpotifyToken()
       const trackRes = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, { headers: { 'Authorization': 'Bearer ' + token } })
@@ -6312,7 +6313,7 @@ ${context}` }]
 
         // ── SINGLE TRACK ──────────────────────────────────────────────
         if (url.includes('/track/')) {
-          const trackId = url.split('/track/')[1].split('?')[0].split('/')[0]
+          const trackId = url.split('/track/')[1]?.split('?')[0]?.split('/')[0]
           const token = await getSpotifyToken()
           const spH = { 'Authorization': `Bearer ${token}` }
 
@@ -6439,7 +6440,7 @@ ${context}` }]
 
         // ── ARTIST WATCH ──────────────────────────────────────────────
         if (url.includes('/artist/') && body.watch) {
-          const artistId = url.split('/artist/')[1].split('?')[0].split('/')[0]
+          const artistId = url.split('/artist/')[1]?.split('?')[0]?.split('/')[0]
           const token = await getSpotifyToken()
           const spH = { 'Authorization': `Bearer ${token}` }
 
@@ -6479,7 +6480,7 @@ ${context}` }]
         const isPlaylist = url.includes('/playlist/')
         const isArtist   = url.includes('/artist/')
         if (!isPlaylist && !isArtist) throw new Error('URL must be a Spotify playlist, artist, or track link')
-        const id = url.split(isPlaylist ? '/playlist/' : '/artist/')[1].split('?')[0].split('/')[0]
+        const id = url.split(isPlaylist ? '/playlist/' : '/artist/')[1]?.split('?')[0]?.split('/')[0]
 
         // 2. Spotify token
         const spotifyToken = await getSpotifyToken()

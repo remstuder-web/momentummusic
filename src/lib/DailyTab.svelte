@@ -1856,37 +1856,39 @@ ${mozartContext}`
         </div>
       {/if}
 
-      <!-- Agent buttons row -->
-      <div class="agent-row">
-        <div class="agent-btn-wrap">
-          <button class="briefing-btn agent-brief {generatingBriefing?'loading':''}" onclick={() => generateBriefing()}>
-            {generatingBriefing ? '✦ Generating...' : '✦ Morning Briefing'}
-          </button>
-          {#if agentLastRun.briefing}<div class="agent-last-run">{timeAgo(agentLastRun.briefing)}</div>{/if}
-        </div>
-        <div class="agent-btn-wrap">
-          <button class="briefing-btn agent-scout {scoutingArtists?'loading':''}" onclick={() => scoutArtists()}>
-            {scoutingArtists ? '✦ Scouting...' : '✦ Scout'}
-          </button>
-          {#if agentLastRun.scout}<div class="agent-last-run">{timeAgo(agentLastRun.scout)}</div>{/if}
-        </div>
-      </div>
-
-      <!-- Today's briefing — auto-expanded at top -->
-      {#if todayBriefing}
-        <div class="today-briefing-block">
-          <div class="today-briefing-header">
-            <button class="inbox-del-btn" onclick={() => deleteInboxItem(todayBriefing.id)}>×</button>
-            <span class="inbox-type-badge br">✦ AI</span>
-            <span class="today-briefing-label">TODAY'S BRIEFING</span>
-            {#if todayBriefing.message}
-              <button class="inbox-speak-btn {speakingId === todayBriefing.id ? 'playing' : ''}" onclick={() => speakText(todayBriefing.id, todayBriefing.message)} title={speakingId === todayBriefing.id ? 'Stop' : 'Read aloud'}>
-                {speakingId === todayBriefing.id ? '■' : '▶'}
-              </button>
-            {/if}
+      {#if activeSection === 'routine'}
+        <!-- Agent buttons row -->
+        <div class="agent-row">
+          <div class="agent-btn-wrap">
+            <button class="briefing-btn agent-brief {generatingBriefing?'loading':''}" onclick={() => generateBriefing()}>
+              {generatingBriefing ? '✦ Generating...' : '✦ Morning Briefing'}
+            </button>
+            {#if agentLastRun.briefing}<div class="agent-last-run">{timeAgo(agentLastRun.briefing)}</div>{/if}
           </div>
-          <div class="agent-output">{@html parseAgentOutput(todayBriefing.message)}</div>
+          <div class="agent-btn-wrap">
+            <button class="briefing-btn agent-scout {scoutingArtists?'loading':''}" onclick={() => scoutArtists()}>
+              {scoutingArtists ? '✦ Scouting...' : '✦ Scout'}
+            </button>
+            {#if agentLastRun.scout}<div class="agent-last-run">{timeAgo(agentLastRun.scout)}</div>{/if}
+          </div>
         </div>
+
+        <!-- Today's briefing — auto-expanded at top -->
+        {#if todayBriefing}
+          <div class="today-briefing-block">
+            <div class="today-briefing-header">
+              <button class="inbox-del-btn" onclick={() => deleteInboxItem(todayBriefing.id)}>×</button>
+              <span class="inbox-type-badge br">✦ AI</span>
+              <span class="today-briefing-label">TODAY'S BRIEFING</span>
+              {#if todayBriefing.message}
+                <button class="inbox-speak-btn {speakingId === todayBriefing.id ? 'playing' : ''}" onclick={() => speakText(todayBriefing.id, todayBriefing.message)} title={speakingId === todayBriefing.id ? 'Stop' : 'Read aloud'}>
+                  {speakingId === todayBriefing.id ? '■' : '▶'}
+                </button>
+              {/if}
+            </div>
+            <div class="agent-output">{@html parseAgentOutput(todayBriefing.message)}</div>
+          </div>
+        {/if}
       {/if}
 
       <!-- Aktuelle Refs -->

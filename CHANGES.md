@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-25] src/lib/DailyTab.svelte — DONE
+TASK: agent-buttons-routine-only
+WHAT: Agent buttons row (Morning Briefing + Scout) and todayBriefing block wrapped in {#if activeSection === 'routine'}. They no longer appear in PRIVATE or HELPERS sections. visibleInbox $derived confirmed active in all 3 inbox stream filter positions.
+RESULT: works — svelte-check 0 errors
+BLOCKERS: none
+
+## [2026-04-25] src/lib/DailyTab.svelte — DONE
 TASK: inbox-section-filter
 WHAT: briefing/scout/pulse_check/chart inbox types now only visible in ROUTINE section. Added routineOnlyTypes const + visibleInbox $derived that filters by activeSection. Inbox stream uses visibleInbox instead of inboxItems in all 3 filter expressions.
 RESULT: works — svelte-check 0 errors

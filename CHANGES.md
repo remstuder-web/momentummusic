@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-26] analyze_audio.py — DONE
+TASK: stereo-tonal-analysis
+WHAT: Added analyze_stereo_and_tonal() function. Uses es.AudioLoader for stereo read, scipy.fft for band FFT. Outputs: stereo_width (0=mono, 1=wide), tonal_balance {bass/low_mid/high_mid/air as % of total energy}, stereo_width_per_band (M/S ratio per band), crest_factor_per_band (peak/RMS per band). Wrapped in try/except — fields null on failure.
+RESULT: works — tested on real WAV, all 4 fields output correctly
+BLOCKERS: none
+
 ## [2026-04-25] src/lib/VocalEqChart.svelte + src/lib/ProjectsTab.svelte — DONE
 TASK: analyzer-four-fixes
 WHAT:

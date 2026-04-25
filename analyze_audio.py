@@ -319,4 +319,112 @@ except Exception as e:
     results['arc_contrast'] = None
     results['arc_peak_segment'] = None
 
+# Tonal balance + stereo analysis
+def analyze_stereo_and_tonal(audio_path):
+    res = {}
+
+    loader = es.AudioLoader(filename=audio_path)
+    audio_stereo, sr, nch, _, _, _ = loader()
+
+    if nch < 2:
+        res['stereo_width'] = 0
+        res['stereo_width_per_band'] = {}
+        left = audio_stereo[:, 0] if len(audio_stereo.shape) > 1 else audio_stereo
+        right = left
+    else:
+        left = audio_stereo[:, 0]
+        right = audio_stereo[:, 1]
+
+    mid = (left + right) / 2
+    side = (left - right) / 2
+
+    mid_rms = float(np.sqrt(np.mean(mid**2)))
+    side_rms = float(np.sqrt(np.mean(side**2)))
+    res['stereo_width'] = round(side_rms / (mid_rms + 1e-9), 4)
+
+    bands = {
+        'bass':     (20, 200),
+        'low_mid':  (200, 2000),
+        'high_mid': (2000, 8000),
+        'air':      (8000, 20000)
+    }
+
+    from scipy.fft import rfft, rfftfreq
+
+    chunk_size = 65536
+    n_chunks = max(1, len(mid) // chunk_size)
+    band_energies = {b: [] for b in bands}
+
+    for i in range(n_chunks):
+        chunk = mid[i*chunk_size:(i+1)*chunk_size]
+        if len(chunk) < 1024:
+            continue
+        fft_mag = np.abs(rfft(chunk))
+        freqs = rfftfreq(len(chunk), 1/sr)
+        total_energy = np.sum(fft_mag**2) + 1e-9
+        for band_name, (f_low, f_high) in bands.items():
+            mask = (freqs >= f_low) & (freqs < f_high)
+            energy = np.sum(fft_mag[mask]**2) / total_energy
+            band_energies[band_name].append(float(energy))
+
+    res['tonal_balance'] = {
+        b: round(float(np.mean(v)), 4)
+        for b, v in band_energies.items()
+    }
+
+    if nch >= 2:
+        width_per_band = {}
+        for band_name, (f_low, f_high) in bands.items():
+            band_widths = []
+            for i in range(n_chunks):
+                cl = left[i*chunk_size:(i+1)*chunk_size]
+                cr = right[i*chunk_size:(i+1)*chunk_size]
+                if len(cl) < 1024:
+                    continue
+                fl_mag = np.abs(rfft(cl))
+                fr_mag = np.abs(rfft(cr))
+                freqs = rfftfreq(len(cl), 1/sr)
+                mask = (freqs >= f_low) & (freqs < f_high)
+                m = (fl_mag[mask] + fr_mag[mask]) / 2
+                s = (fl_mag[mask] - fr_mag[mask]) / 2
+                m_e = np.sum(m**2) + 1e-9
+                s_e = np.sum(s**2)
+                band_widths.append(s_e / m_e)
+            width_per_band[band_name] = round(
+                float(np.mean(band_widths)) if band_widths else 0, 4
+            )
+        res['stereo_width_per_band'] = width_per_band
+
+    crest_per_band = {}
+    for band_name, (f_low, f_high) in bands.items():
+        crests = []
+        for i in range(n_chunks):
+            chunk = mid[i*chunk_size:(i+1)*chunk_size]
+            if len(chunk) < 1024:
+                continue
+            fft_mag = np.abs(rfft(chunk))
+            freqs = rfftfreq(len(chunk), 1/sr)
+            mask = (freqs >= f_low) & (freqs < f_high)
+            if np.any(mask):
+                band_fft = fft_mag[mask]
+                peak = np.max(band_fft)
+                rms = np.sqrt(np.mean(band_fft**2)) + 1e-9
+                crests.append(float(peak / rms))
+        crest_per_band[band_name] = round(
+            float(np.mean(crests)) if crests else 0, 2
+        )
+    res['crest_factor_per_band'] = crest_per_band
+
+    return res
+
+try:
+    stereo_tonal = analyze_stereo_and_tonal(audio_file)
+    results.update(stereo_tonal)
+except Exception as e:
+    results['stereo_width'] = None
+    results['tonal_balance'] = None
+    results['stereo_width_per_band'] = None
+    results['crest_factor_per_band'] = None
+    print('stereo/tonal error:', str(e), file=sys.stderr)
+
 print(json.dumps(results))

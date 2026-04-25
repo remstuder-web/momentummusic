@@ -4353,6 +4353,80 @@ async function saveBrainFile(entry) {
   }
 }
 
+// ── Brain dedup: protect locked+text entries, merge agent content ────────────
+async function mergeDupes() {
+  const { data: rows, error } = await supabaseAdmin
+    .from('brain_knowledge')
+    .select('id, category, title, content, source_type, confidence, created_at')
+    .order('created_at', { ascending: true })
+  if (error) throw new Error('mergeDupes fetch error: ' + error.message)
+
+  function normalizeTitle(t) {
+    return (t || '').replace(/^(\d{4}-\d{2}-\d{2}_)+/, '').toLowerCase().trim().slice(0, 60)
+  }
+
+  const isProtected = r => r.confidence === 'locked' || r.source_type === 'text'
+
+  const groups = new Map()
+  for (const row of (rows || [])) {
+    const key = row.category + '||' + normalizeTitle(row.title)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(row)
+  }
+
+  let deleted = 0, merged = 0
+
+  for (const [, group] of groups) {
+    if (group.length < 2) continue
+
+    const protectedEntries = group.filter(isProtected)
+    const agentEntries     = group.filter(r => !isProtected(r))
+
+    if (protectedEntries.length > 0) {
+      // Multiple protected entries with same title → leave for manual resolution
+      if (agentEntries.length === 0) continue
+
+      // Merge unique agent content into the protected entry, then delete agents
+      const keepEntry = protectedEntries[0]
+      const allContent = [keepEntry, ...agentEntries]
+        .map(r => (r.content || '').trim()).filter(Boolean)
+      const uniqueSentences = [...new Set(
+        allContent.flatMap(c => c.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 15))
+      )]
+      const mergedContent = uniqueSentences.slice(0, 6).join('. ')
+      if (mergedContent.length > (keepEntry.content || '').length) {
+        await supabaseAdmin.from('brain_knowledge').update({ content: mergedContent }).eq('id', keepEntry.id)
+        merged++
+      }
+      const idsToDelete = agentEntries.map(r => r.id)
+      for (let i = 0; i < idsToDelete.length; i += 50) {
+        await supabaseAdmin.from('brain_knowledge').delete().in('id', idsToDelete.slice(i, i + 50))
+      }
+      deleted += idsToDelete.length
+    } else {
+      // All agent entries — keep oldest, merge content, delete rest
+      const keepEntry      = group[0]
+      const deleteEntries  = group.slice(1)
+      const allContent = group.map(r => (r.content || '').trim()).filter(Boolean)
+      const uniqueSentences = [...new Set(
+        allContent.flatMap(c => c.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 15))
+      )]
+      const mergedContent = uniqueSentences.slice(0, 6).join('. ')
+      if (mergedContent.length > (keepEntry.content || '').length) {
+        await supabaseAdmin.from('brain_knowledge').update({ content: mergedContent }).eq('id', keepEntry.id)
+        merged++
+      }
+      const idsToDelete = deleteEntries.map(r => r.id)
+      for (let i = 0; i < idsToDelete.length; i += 50) {
+        await supabaseAdmin.from('brain_knowledge').delete().in('id', idsToDelete.slice(i, i + 50))
+      }
+      deleted += idsToDelete.length
+    }
+  }
+
+  return { deleted, merged }
+}
+
 // ── Weekly system improvement review ─────────────────────────────────────
 async function weeklySystemReview() {
   try {
@@ -9036,40 +9110,14 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
-  // ── POST /cleanup-brain-dupes — delete duplicate brain_knowledge rows ─────
+  // ── POST /cleanup-brain-dupes — smart dedup: protect locked+text, merge agents ─
   if (req.method === 'POST' && req.url === '/cleanup-brain-dupes') {
     res.setHeader('Access-Control-Allow-Origin', '*')
     try {
-      // Fetch all brain_knowledge rows ordered by id so we keep the earliest (MIN id) per category+title
-      const { data: rows, error: fetchErr } = await supabaseAdmin
-        .from('brain_knowledge').select('id,category,title').order('id', { ascending: true })
-      if (fetchErr) throw new Error('Failed to fetch brain_knowledge: ' + fetchErr.message)
-      const seen = new Map()
-      const toDelete = []
-      for (const row of rows || []) {
-        const key = `${row.category}||${row.title}`
-        if (seen.has(key)) {
-          toDelete.push(row.id)
-        } else {
-          seen.set(key, row.id)
-        }
-      }
-      if (toDelete.length === 0) {
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, deleted: 0 }))
-        return
-      }
-      // Delete in batches of 50
-      let deleted = 0
-      for (let i = 0; i < toDelete.length; i += 50) {
-        const batch = toDelete.slice(i, i + 50)
-        const { error: delErr } = await supabaseAdmin.from('brain_knowledge').delete().in('id', batch)
-        if (!delErr) deleted += batch.length
-        else console.error('cleanup-brain-dupes delete error:', delErr.message)
-      }
-      console.log(`✓ cleanup-brain-dupes: deleted ${deleted} duplicate(s)`)
+      const result = await mergeDupes()
+      console.log(`✓ cleanup-brain-dupes: deleted ${result.deleted}, merged ${result.merged}`)
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, deleted }))
+      res.end(JSON.stringify({ ok: true, ...result }))
     } catch(e) {
       console.error('cleanup-brain-dupes error:', e.message)
       res.writeHead(500, { 'Content-Type': 'application/json' })
@@ -10922,6 +10970,12 @@ Max 150 words. Be specific and actionable.` }]
       weeklyBrainReview()
       weeklySystemReview()
       connectBrainEntries()
+    }
+    // 3am daily — brain dedup
+    if (now.getHours() === 3 && now.getMinutes() < 5) {
+      mergeDupes().then(r =>
+        console.log('Auto brain dedup 3am: deleted', r.deleted, 'merged', r.merged)
+      ).catch(e => console.error('Auto brain dedup error:', e.message))
     }
     // 9am daily — TikTok trends
     if (now.getHours() === 9 && now.getMinutes() === 0) {

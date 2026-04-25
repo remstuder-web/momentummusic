@@ -994,11 +994,12 @@
   let refsOpen = $state({})    // project.id -> bool
 
   function projectRefs(p) {
-    // New: dedicated column
-    if (Array.isArray(p.reference_links) && p.reference_links.length) return p.reference_links
-    // Migration fallback: project_meta.reference_links
-    const m = p.project_meta || {}
-    if (Array.isArray(m.reference_links) && m.reference_links.length) return m.reference_links
+    const colRefs  = Array.isArray(p.reference_links) ? p.reference_links : []
+    const metaRefs = Array.isArray(p.project_meta?.reference_links) ? p.project_meta.reference_links : []
+    // Merge, dedup by id — column wins over meta
+    const seen = new Set(colRefs.map(r => r.id))
+    const merged = [...colRefs, ...metaRefs.filter(r => !seen.has(r.id))]
+    if (merged.length) return merged
     // Legacy: plain-text general_references
     if (p.general_references) {
       return p.general_references.split('\n').filter(Boolean).map(url => ({ id: 'r'+Date.now()+Math.random(), url: url.trim(), label: '' }))
@@ -1065,11 +1066,14 @@
   }
 
   async function removeRefLink(p, id) {
-    const refs = projectRefs(p).filter(r => r.id !== id)
-    const { error } = await supabase.from('projects').update({ reference_links: refs }).eq('id', p.id)
+    const newColRefs  = (p.reference_links || []).filter(r => r.id !== id && r.url !== id)
+    const newMetaRefs = (p.project_meta?.reference_links || []).filter(r => r.id !== id && r.url !== id)
+    const pm = { ...(p.project_meta || {}), reference_links: newMetaRefs }
+    const { error } = await supabase.from('projects').update({ reference_links: newColRefs, project_meta: pm }).eq('id', p.id)
     if (error) { console.error('removeRefLink error:', error.message); return }
-    p.reference_links = refs
-    projects = projects.map(proj => proj.id === p.id ? { ...proj, reference_links: refs } : proj)
+    p.reference_links = newColRefs
+    if (p.project_meta) p.project_meta.reference_links = newMetaRefs
+    projects = projects.map(proj => proj.id === p.id ? { ...proj, reference_links: newColRefs, project_meta: pm } : proj)
   }
 
   async function removeProjectRef(project, refId) {
@@ -2662,15 +2666,17 @@ Return JSON only:
             {#if refs.length}
               <div class="refs-inline">
                 {#each refs as ref}
-                  {@const isSpotify = ref.url.includes('spotify')}
+                  {@const refUrl = ref.url || (ref.spotify_id ? 'https://open.spotify.com/track/' + ref.spotify_id : null)}
+                  {@const refName = ref.name || ref.title ? (ref.artist ? ref.artist + ' — ' + (ref.title||'') : ref.title||'') : (refUrl && refUrl.length>40 ? '…'+refUrl.slice(-36) : refUrl||'unknown')}
+                  {@const isSpotify = refUrl ? refUrl.includes('spotify') : false}
                   <span class="ref-chip">
                     {#if isSpotify}
-                      <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(ref.url); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
-                      <button class="spotify-play-btn-sm" onclick={() => playRefUrl(ref.url)}>{refPlayingUrl === ref.url ? '■' : '▶'}</button>
-                    {:else}
-                      <a href={ref.url} target="_blank" class="ref-link-btn">{linkLabel(ref.url)}</a>
+                      <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(refUrl); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
+                      <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>{refPlayingUrl === refUrl ? '■' : '▶'}</button>
+                    {:else if refUrl}
+                      <a href={refUrl} target="_blank" class="ref-link-btn">{linkLabel(refUrl)}</a>
                     {/if}
-                    <span class="ref-chip-name">{ref.name || (ref.url.length>40?'…'+ref.url.slice(-36):ref.url)}</span>
+                    <span class="ref-chip-name">{refName}</span>
                     <button class="ref-del" onclick={() => removeRefLink(selectedProject, ref.id)}>×</button>
                   </span>
                 {/each}

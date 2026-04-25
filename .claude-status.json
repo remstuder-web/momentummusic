@@ -1,12 +1,14 @@
 {
-  "updated": "2026-04-25T14:28:00Z",
-  "last_task": "mozart-refs-refresh-dedup",
+  "updated": "2026-04-25T14:37:00Z",
+  "last_task": "error-handling-supabase-writes-refs-display",
   "status": "done",
   "working": [
-    "sendAI() refreshes song.work_data after add_project_reference success (updates songs state + expandedSong.work_data)",
-    "normalizeTrack dedup on every add_project_reference save (prefer entry with spotify_id when deduping existing refs)",
-    "POST /fix-song-refs: removes Test Artist entries, deduplicates by normalized key, prefers spotify_id entries",
-    "Song 152 cleaned: 4→3 refs (Test Artist removed)",
+    "21 Supabase writes now have { error } destructuring + console.error logging",
+    "Critical writes also log success (reference_tracks credits, speicherbox, Essentia, EQ curves)",
+    "REFERENCE LINKS display merges work_data.reference_links (Mozart) + reference_links (manual)",
+    "normSongRef() handles Mozart format: {title,artist,spotify_id} → {url, name}",
+    "removeSongRef() removes from both columns atomically",
+    "Refresh after Mozart action fetches both work_data and reference_links columns",
     "svelte-check: 0 errors, pm2 OK"
   ],
   "broken": [],
@@ -15,5 +17,5 @@
     "genres column: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb;"
   ],
   "next": "Run ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb; in Supabase, then POST /enrich-library-genres to backfill",
-  "notes": "Song 152 still has two 'Morgen' entries: Apache (no spotify_id) and Apache 207 (has spotify_id) — kept both since they normalize differently. If user wants to merge, run fix-song-refs again after confirming they're the same track."
+  "notes": "Mozart refs (work_data.reference_links) now visible in the REFERENCE LINKS block. The two sources are distinct: work_data has title/artist/spotify_id, top-level has url/name. normSongRef bridges them for display."
 }

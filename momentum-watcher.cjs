@@ -1447,14 +1447,18 @@ async function processLibraryTrackInBackground(refTrack) {
         const sd = await sr.json()
         if (!previewUrl) {
           previewUrl = sd?.preview_url || null
-          if (previewUrl) await supabase.from('reference_tracks').update({ preview_url: previewUrl }).eq('id', refTrack.id)
+          if (previewUrl) {
+            const { error: pvErr } = await supabase.from('reference_tracks').update({ preview_url: previewUrl }).eq('id', refTrack.id)
+            if (pvErr) console.error('bg: preview_url update failed:', refTrack.title, pvErr.message)
+          }
         }
         // Fetch and save genres if not already set
         if (!refTrack.genres?.length) {
           const genres = await fetchTrackGenres(refTrack.spotify_id, token)
           if (genres.length) {
-            await supabase.from('reference_tracks').update({ genres }).eq('id', refTrack.id)
-            console.log('bg: ✓ genres for:', refTrack.title, genres.slice(0, 3).join(', '))
+            const { error: gnErr } = await supabase.from('reference_tracks').update({ genres }).eq('id', refTrack.id)
+            if (gnErr) console.error('bg: genres update failed:', refTrack.title, gnErr.message)
+            else console.log('bg: ✓ genres for:', refTrack.title, genres.slice(0, 3).join(', '))
           }
         }
       } catch(e) { console.warn('bg: spotify fetch failed:', e.message) }
@@ -1483,8 +1487,9 @@ async function processLibraryTrackInBackground(refTrack) {
         if (es.valence != null) upd.valence = es.valence
         if (es.brightness != null) upd.brightness = es.brightness
         if (es.bass_energy != null) upd.bass_energy = es.bass_energy
-        await supabase.from('reference_tracks').update(upd).eq('id', refTrack.id)
-        console.log('bg: ✓ Essentia for:', refTrack.title)
+        const { error: esErr } = await supabase.from('reference_tracks').update(upd).eq('id', refTrack.id)
+        if (esErr) console.error('bg: Essentia update failed:', refTrack.title, esErr.message)
+        else console.log('bg: ✓ Essentia for:', refTrack.title)
       }
     } catch(e) { console.warn('bg: Essentia failed for:', refTrack.title, e.message.slice(0, 60)) }
 
@@ -1494,13 +1499,14 @@ async function processLibraryTrackInBackground(refTrack) {
       const eqResult = JSON.parse(eqOut)
       if (eqResult.ok && eqResult.stems) {
         for (const [stemName, curve] of Object.entries(eqResult.stems)) {
-          await supabase.from('vocal_eq_curves').insert({
+          const { error: eqInsErr } = await supabase.from('vocal_eq_curves').insert({
             label: (refTrack.artist || '') + ' — ' + (refTrack.title || '') + ' (' + stemName + ')',
             reference_track_id: String(refTrack.id),
             stem_type: stemName,
             source_type: 'reference',
             curve
           })
+          if (eqInsErr) console.error('bg: EQ curve insert failed:', stemName, refTrack.title, eqInsErr.message)
         }
         console.log('bg: ✓ EQ curves for:', refTrack.title)
       }
@@ -1510,8 +1516,9 @@ async function processLibraryTrackInBackground(refTrack) {
     try {
       const credits = await fetchGeniusCredits(refTrack.artist, refTrack.title)
       if (credits && (credits.producers.length || credits.mixers.length || credits.masterers.length)) {
-        await supabase.from('reference_tracks').update({ credits }).eq('id', refTrack.id)
-        console.log('bg: ✓ Credits for:', refTrack.title, '| prod:', credits.producers.join(', '))
+        const { error: crErr } = await supabase.from('reference_tracks').update({ credits }).eq('id', refTrack.id)
+        if (crErr) console.error('bg: credits update failed:', refTrack.title, crErr.message)
+        else console.log('bg: ✓ Credits for:', refTrack.title, '| prod:', credits.producers.join(', '))
       }
       await new Promise(r => setTimeout(r, 2000)) // polite delay for Genius
     } catch(e) { console.warn('bg: credits failed for:', refTrack.title, e.message.slice(0, 60)) }
@@ -1590,7 +1597,8 @@ setTimeout(async () => {
     for (const track of missing) {
       const genres = await fetchTrackGenres(track.spotify_id, token)
       if (genres.length) {
-        await supabase.from('reference_tracks').update({ genres }).eq('id', track.id)
+        const { error: bgGnErr } = await supabase.from('reference_tracks').update({ genres }).eq('id', track.id)
+        if (bgGnErr) console.error('bg-genres: update failed:', track.title, bgGnErr.message)
       }
       await new Promise(r => setTimeout(r, 3000))
     }
@@ -1791,7 +1799,7 @@ Return JSON only.`,
 
     if (!checklist.length) { console.warn('rebuildFinishingChecklist: empty result'); return [] }
 
-    await supabase.from('brain_knowledge').upsert({
+    const { error: clErr } = await supabase.from('brain_knowledge').upsert({
       category: 'checklist_70',
       title: 'Finishing Checklist — Latest',
       content: JSON.stringify(checklist),
@@ -1799,8 +1807,8 @@ Return JSON only.`,
       confidence: 'locked',
       priority: true
     }, { onConflict: 'title' })
-
-    console.log('✓ Finishing checklist rebuilt:', checklist.length, 'questions')
+    if (clErr) console.error('rebuildFinishingChecklist: upsert failed:', clErr.message)
+    else console.log('✓ Finishing checklist rebuilt:', checklist.length, 'questions')
     return checklist
   } catch(e) {
     console.error('rebuildFinishingChecklist error:', e.message)
@@ -1852,7 +1860,8 @@ async function buildSuccessPattern(refsOverride) {
     warmth_avg: avg('warmth'), harmonic_complexity_avg: avg('harmonic_complexity'), dynamic_complexity_avg: avg('dynamic_complexity'),
     sample_count: refs.length, updated_at: new Date().toISOString()
   }
-  await supabaseAdmin.from('user_settings').upsert({ key: 'success_pattern', value: JSON.stringify(pattern) }, { onConflict: 'key' })
+  const { error: spErr } = await supabaseAdmin.from('user_settings').upsert({ key: 'success_pattern', value: JSON.stringify(pattern) }, { onConflict: 'key' })
+  if (spErr) console.error('user_settings upsert failed:', spErr.message)
   return pattern
 }
 
@@ -2078,7 +2087,7 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
       const synthData = await synthRes.json()
       const trendSummary = (synthData.content?.[0]?.text || '').trim().slice(0, 150)
       if (trendSummary) {
-        await supabase.from('brain_knowledge').upsert({
+        const { error: ttErr } = await supabase.from('brain_knowledge').upsert({
           category: 'market_knowledge',
           title: 'TikTok Trends Week ' + weekLabel,
           content: trendSummary,
@@ -2086,6 +2095,7 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
           confidence: 'medium',
           source_type: 'tiktok_agent'
         }, { onConflict: 'title' })
+        if (ttErr) console.error('tiktok brain upsert failed:', ttErr.message)
         console.log(`  ✓ Weekly trend brain insight saved (week of ${weekLabel})`)
       }
     } catch(e) { console.warn('  TikTok brain synthesis error:', e.message) }
@@ -4739,12 +4749,14 @@ async function mergeDupes() {
       )]
       const mergedContent = uniqueSentences.slice(0, 6).join('. ')
       if (mergedContent.length > (keepEntry.content || '').length) {
-        await supabaseAdmin.from('brain_knowledge').update({ content: mergedContent }).eq('id', keepEntry.id)
-        merged++
+        const { error: mgErr1 } = await supabaseAdmin.from('brain_knowledge').update({ content: mergedContent }).eq('id', keepEntry.id)
+        if (mgErr1) console.error('brain dedup merge failed:', keepEntry.id, mgErr1.message)
+        else merged++
       }
       const idsToDelete = agentEntries.map(r => r.id)
       for (let i = 0; i < idsToDelete.length; i += 50) {
-        await supabaseAdmin.from('brain_knowledge').delete().in('id', idsToDelete.slice(i, i + 50))
+        const { error: dlErr1 } = await supabaseAdmin.from('brain_knowledge').delete().in('id', idsToDelete.slice(i, i + 50))
+        if (dlErr1) console.error('brain dedup delete failed:', dlErr1.message)
       }
       deleted += idsToDelete.length
     } else {
@@ -4757,12 +4769,14 @@ async function mergeDupes() {
       )]
       const mergedContent = uniqueSentences.slice(0, 6).join('. ')
       if (mergedContent.length > (keepEntry.content || '').length) {
-        await supabaseAdmin.from('brain_knowledge').update({ content: mergedContent }).eq('id', keepEntry.id)
-        merged++
+        const { error: mgErr2 } = await supabaseAdmin.from('brain_knowledge').update({ content: mergedContent }).eq('id', keepEntry.id)
+        if (mgErr2) console.error('brain dedup merge2 failed:', keepEntry.id, mgErr2.message)
+        else merged++
       }
       const idsToDelete = deleteEntries.map(r => r.id)
       for (let i = 0; i < idsToDelete.length; i += 50) {
-        await supabaseAdmin.from('brain_knowledge').delete().in('id', idsToDelete.slice(i, i + 50))
+        const { error: dlErr2 } = await supabaseAdmin.from('brain_knowledge').delete().in('id', idsToDelete.slice(i, i + 50))
+        if (dlErr2) console.error('brain dedup delete2 failed:', dlErr2.message)
       }
       deleted += idsToDelete.length
     }
@@ -7371,7 +7385,10 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
           feedback_type: classifyFeedback(text),
           analysis: analysis || {}
         }))
-        if (rows.length) await supabaseAdmin.from('feedback_patterns').insert(rows)
+        if (rows.length) {
+          const { error: fpErr } = await supabaseAdmin.from('feedback_patterns').insert(rows)
+          if (fpErr) console.error('feedback_patterns insert failed:', fpErr.message)
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, logged: rows.length }))
       } catch(e) {
@@ -7438,7 +7455,9 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         ])
         const credits = { ...geniusCredits, collaborators, enriched_at: new Date().toISOString() }
         if (reference_track_id) {
-          await supabaseAdmin.from('reference_tracks').update({ credits }).eq('id', reference_track_id)
+          const { error: rtCrErr } = await supabaseAdmin.from('reference_tracks').update({ credits }).eq('id', reference_track_id)
+          if (rtCrErr) console.error('reference_tracks credits update failed:', reference_track_id, rtCrErr.message)
+          else console.log('✓ credits saved for track', reference_track_id)
         }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, credits }))
@@ -8135,10 +8154,11 @@ Respond ONLY in JSON:
           const savedCurves = []
           for (const [stemName, curve] of Object.entries(result.stems || {})) {
             // Remove any prior mix curve for this stem before inserting the fresh one
-            await supabaseAdmin.from('vocal_eq_curves').delete()
+            const { error: eqDelErr } = await supabaseAdmin.from('vocal_eq_curves').delete()
               .eq('song_id', String(song_id))
               .eq('stem_type', stemName)
               .eq('source_type', 'mix')
+            if (eqDelErr) console.error('vocal_eq_curves delete failed:', stemName, eqDelErr.message)
             const { data, error } = await supabaseAdmin
               .from('vocal_eq_curves')
               .insert({
@@ -9462,7 +9482,9 @@ ${chatText.slice(0, 4000)}`
         if (!title || !artist) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'title and artist required' })); return }
         const credits = await fetchGeniusCredits(artist, title)
         if (credits && reference_track_id) {
-          await supabase.from('reference_tracks').update({ credits }).eq('id', reference_track_id)
+          const { error: gcErr } = await supabase.from('reference_tracks').update({ credits }).eq('id', reference_track_id)
+          if (gcErr) console.error('genius-credits update failed:', reference_track_id, gcErr.message)
+          else console.log('✓ genius credits saved for track', reference_track_id)
         }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, credits }))
@@ -9487,8 +9509,9 @@ ${chatText.slice(0, 4000)}`
       for (const row of rows || []) {
         const cleaned = (row.title || '').replace(/^(\d{4}-\d{2}-\d{2}_)+/, '').trim()
         if (cleaned !== row.title) {
-          await supabaseAdmin.from('brain_knowledge').update({ title: cleaned }).eq('id', row.id)
-          fixed++
+          const { error: ftErr } = await supabaseAdmin.from('brain_knowledge').update({ title: cleaned }).eq('id', row.id)
+          if (ftErr) console.error('fix-brain-titles update failed:', row.id, ftErr.message)
+          else fixed++
         }
       }
       console.log(`✓ fix-brain-titles: ${fixed} entries fixed`)
@@ -9627,9 +9650,9 @@ ${chatText.slice(0, 4000)}`
         for (const track of missing) {
           const genres = await fetchTrackGenres(track.spotify_id, token)
           if (genres.length) {
-            await supabaseAdmin.from('reference_tracks').update({ genres }).eq('id', track.id)
-            console.log('  ✓', track.artist, '—', track.title, ':', genres.slice(0, 3).join(', '))
-            enriched++
+            const { error: elGnErr } = await supabaseAdmin.from('reference_tracks').update({ genres }).eq('id', track.id)
+            if (elGnErr) console.error('enrich-library-genres update failed:', track.title, elGnErr.message)
+            else { console.log('  ✓', track.artist, '—', track.title, ':', genres.slice(0, 3).join(', ')); enriched++ }
           }
           await new Promise(r => setTimeout(r, 3000))
         }
@@ -10063,7 +10086,7 @@ ${chatText.slice(0, 4000)}`
         const filePath = path.join(speicherboxDir, filename)
         const buffer = Buffer.from(data.fileData, 'base64')
         fs.writeFileSync(filePath, buffer)
-        await supabase.from('brain_knowledge').insert({
+        const { error: spbErr } = await supabase.from('brain_knowledge').insert({
           category: 'speicherbox',
           title: (data.originalName || 'file') + ' — ' + new Date().toLocaleDateString('de-CH'),
           content: data.extractedText || '',
@@ -10076,6 +10099,8 @@ ${chatText.slice(0, 4000)}`
             thumbnail: data.thumbnail || null
           })
         })
+        if (spbErr) console.error('speicherbox brain insert failed:', data.originalName, spbErr.message)
+        else console.log('✓ speicherbox saved:', filename)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, stored: filename, path: filePath }))
       } catch(e) {
@@ -10461,7 +10486,8 @@ ${chatText.slice(0, 4000)}`
                 // Still save deduped refs if they changed
                 if (deduped.length !== (song.work_data?.reference_links?.length || 0)) {
                   wd.reference_links = refs
-                  await supabase.from('songs').update({ work_data: wd }).eq('id', songId)
+                  const { error: ddErr } = await supabase.from('songs').update({ work_data: wd }).eq('id', songId)
+                  if (ddErr) console.error('[mozart] dedup save failed:', songId, ddErr.message)
                 }
               } else {
                 refs.push({

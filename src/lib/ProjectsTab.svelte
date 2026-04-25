@@ -1114,12 +1114,30 @@
     await updateSongField(song, 'reference_links', reference_links)
   }
 
-  function removeSongRef(song, url) {
+  async function removeSongRef(song, url) {
+    // Remove from top-level reference_links
     const reference_links = (song.reference_links||[]).filter(r => (typeof r==='string'?r:r.url) !== url)
     updateSongField(song, 'reference_links', reference_links)
+    // Also remove from work_data.reference_links (Mozart refs keyed by spotify_id in url)
+    const wd = song.work_data || {}
+    const wdRefs = Array.isArray(wd.reference_links) ? wd.reference_links : []
+    const trackId = url.match(/track\/([A-Za-z0-9]+)/)?.[1]
+    const filtered = wdRefs.filter(r => !trackId || r.spotify_id !== trackId)
+    if (filtered.length !== wdRefs.length) {
+      wd.reference_links = filtered
+      await supabase.from('songs').update({ work_data: wd }).eq('id', song.id)
+      songs = songs.map(s => s.id === song.id ? { ...s, work_data: wd } : s)
+    }
   }
 
-  function normSongRef(r) { return typeof r === 'string' ? { url: r, name: '' } : r }
+  function normSongRef(r) {
+    if (typeof r === 'string') return { url: r, name: '' }
+    if (r.url) return r
+    // Mozart format: {title, artist, spotify_id} — construct URL
+    const url = r.spotify_id ? 'https://open.spotify.com/track/' + r.spotify_id : ''
+    const name = (r.title || '') + (r.artist ? ' — ' + r.artist : '')
+    return { ...r, url, name }
+  }
   function openSpotifySong(url) { playRefUrl(url) }
 
   async function analyzeVocalStyle(spotifyUrl) {
@@ -2471,13 +2489,14 @@
         if (finalText) aiMessages = [...aiMessages, { role: 'assistant', content: finalText }]
         saveMozartSession(msg, finalText || toolResults.map(t => t.content).join(' '), expandedSong?.id, expandedSong?.title || expandedSong?.code)
 
-        // Refresh song work_data if a reference was added to the expanded song
+        // Refresh song data if a reference was added to the expanded song
         const didAddRef = toolUseBlocks.some(b => b.input?.action === 'add_project_reference')
         if (didAddRef && expandedSong) {
-          const { data: refreshed } = await supabase.from('songs').select('work_data').eq('id', expandedSong.id).single()
+          const { data: refreshed } = await supabase.from('songs').select('work_data, reference_links').eq('id', expandedSong.id).single()
           if (refreshed) {
             expandedSong.work_data = refreshed.work_data
-            songs = songs.map(s => s.id === expandedSong.id ? { ...s, work_data: refreshed.work_data } : s)
+            expandedSong.reference_links = refreshed.reference_links
+            songs = songs.map(s => s.id === expandedSong.id ? { ...s, work_data: refreshed.work_data, reference_links: refreshed.reference_links } : s)
           }
         }
 
@@ -2849,7 +2868,7 @@
                     <label>REFERENCE LINKS</label>
                     <div class="refs-wrap">
                       <div class="refs-inline">
-                        {#each (song.reference_links||[]) as ref}
+                        {#each [...(song.work_data?.reference_links||[]), ...(song.reference_links||[])] as ref}
                           {@const r = normSongRef(ref)}
                           {@const isSpotify = r.url.includes('spotify')}
                           <span class="ref-chip">

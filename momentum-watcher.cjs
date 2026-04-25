@@ -1083,6 +1083,97 @@ async function importSpotifyPlaylist(playlistUrl, genreTag) {
   return { saved, skipped, playlist: playlistName, total: tracks.length }
 }
 
+// ── importAllUserPlaylists — import all user playlists via /me/playlists ──
+async function importAllUserPlaylists() {
+  if (!spotifyUserToken) throw new Error('User OAuth token required — authorize via /spotify-auth')
+  const token = spotifyUserToken
+
+  // Fetch all user playlists
+  let playlists = []
+  let url = 'https://api.spotify.com/v1/me/playlists?limit=50'
+  while (url) {
+    const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
+    if (!r.ok) throw new Error('Failed to fetch user playlists: ' + r.status)
+    const d = await r.json()
+    playlists.push(...(d.items || []))
+    url = d.next || null
+  }
+  console.log('Found', playlists.length, 'user playlists')
+
+  // Per-session artist genre cache to avoid redundant API calls
+  const artistGenreCache = {}
+
+  let totalSaved = 0
+  let totalSkipped = 0
+
+  for (const playlist of playlists) {
+    // Derive genre tag from playlist name (the user's own label)
+    const genreTag = playlist.name.toLowerCase().trim()
+
+    let tracksUrl = 'https://api.spotify.com/v1/playlists/' + playlist.id + '/tracks?limit=50'
+    while (tracksUrl) {
+      const tr = await fetch(tracksUrl, { headers: { 'Authorization': 'Bearer ' + token } })
+      if (!tr.ok) {
+        console.warn('Skip playlist', playlist.name, 'status:', tr.status)
+        break
+      }
+      const td = await tr.json()
+      const tracks = (td.items || []).map(i => i.track).filter(t => t?.id)
+
+      for (const track of tracks) {
+        const { data: existing } = await supabase
+          .from('reference_tracks').select('id').eq('spotify_id', track.id).maybeSingle()
+        if (existing) { totalSkipped++; continue }
+
+        // Artist genres — cached per session
+        const artistId = track.artists?.[0]?.id
+        let artistGenres = []
+        if (artistId) {
+          if (artistGenreCache[artistId]) {
+            artistGenres = artistGenreCache[artistId]
+          } else {
+            try {
+              const ar = await fetch(
+                `https://api.spotify.com/v1/artists/${artistId}`,
+                { headers: { 'Authorization': 'Bearer ' + token } }
+              )
+              if (ar.ok) {
+                const ad = await ar.json()
+                artistGenres = ad.genres || []
+                artistGenreCache[artistId] = artistGenres
+              }
+            } catch(e) {}
+            await new Promise(r => setTimeout(r, 150))
+          }
+        }
+
+        const { error: insErr } = await supabase.from('reference_tracks').insert({
+          spotify_id: track.id,
+          title: track.name,
+          artist: track.artists?.map(a => a.name).join(', '),
+          source: 'agent',
+          collection_name: 'playlist_import',
+          playlist_name: playlist.name,
+          genres: artistGenres.length ? artistGenres : [genreTag],
+          genre_tag: genreTag,
+          popularity: track.popularity || null,
+          approved: true
+        })
+        if (insErr) console.error('insert error:', track.name, insErr.message)
+        else totalSaved++
+        await new Promise(r => setTimeout(r, 200))
+      }
+
+      tracksUrl = td.next || null
+    }
+
+    console.log('✓', playlist.name, '— running total:', totalSaved, 'saved')
+    await new Promise(r => setTimeout(r, 500))
+  }
+
+  return { saved: totalSaved, skipped: totalSkipped, playlists: playlists.length }
+}
+
 async function runAgentScout(apiKey, sharedBrainRows) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today = new Date().toISOString().slice(0, 10)
@@ -2551,7 +2642,7 @@ async function buildStatusResponse() {
     'POST /delete-release-folder', 'POST /copy-to-release',
     'POST /save-audio', 'POST /save-stems-zip', 'GET /test-dropbox',
     'POST /get-share-links', 'POST /morning-briefing', 'POST /agent-scout',
-    'POST /agent-demo-match', 'POST /agent-feedback', 'POST /analyze-spotify-track', 'POST /import-spotify-playlist',
+    'POST /agent-demo-match', 'POST /agent-feedback', 'POST /analyze-spotify-track', 'POST /import-spotify-playlist', 'POST /import-all-my-playlists',
     'POST /agent-import-spotify', 'GET /get-page-title', 'POST /create-submission',
     'POST /save-instrumental', 'POST /get-instrumental-link', 'POST /analyze-audio',
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
@@ -6771,6 +6862,20 @@ ${context}` }]
         res.end(JSON.stringify({ ok: false, error: err.message }))
       }
     })
+    return
+  }
+
+  // ── POST /import-all-my-playlists — import all user Spotify playlists ────────
+  if (req.method === 'POST' && req.url === '/import-all-my-playlists') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    try {
+      const result = await importAllUserPlaylists()
+      res.end(JSON.stringify({ ok: true, ...result }))
+    } catch(err) {
+      console.error('import-all-my-playlists error:', err.message)
+      res.end(JSON.stringify({ ok: false, error: err.message }))
+    }
     return
   }
 

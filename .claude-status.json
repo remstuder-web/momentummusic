@@ -1,23 +1,25 @@
 {
-  "updated": "2026-04-25T22:55:00Z",
-  "last_task": "persist-spotify-oauth-token",
-  "status": "done",
+  "updated": "2026-04-25T23:10:00Z",
+  "last_task": "fix-playlist-import-fields-param",
+  "status": "partial",
   "working": [
-    "loadSpotifyToken(): reads .spotify-token.json on startup, sets spotifyUserToken if not expired, auto-refreshes if refresh_token present",
-    "saveSpotifyToken(): writes token + refresh_token + expires_at to .spotify-token.json",
-    "refreshSpotifyToken(): uses refresh_token to get new access_token, saves to disk",
-    "saveSpotifyToken() called in /spotify-callback after successful OAuth exchange",
-    "loadSpotifyToken() called in server.listen startup callback",
-    "pm2 restart clean — watcher online"
+    "fields param removed from /playlists/{id}/tracks URL",
+    "playlist name fetch moved before tracks loop",
+    "USER_OAUTH token confirmed loading from disk on startup",
+    "/me endpoint works (valid user token)",
+    "/me/playlists works (playlist-read-private scope confirmed)",
+    "/playlists/{id} metadata works with user OAuth token"
   ],
-  "broken": [],
+  "broken": [
+    "/playlists/{id}/tracks returns 403 for ALL playlists with BOTH client_credentials and user OAuth tokens",
+    "This is a Spotify API quota restriction — NOT a code bug"
+  ],
   "partial": [
-    ".spotify-token.json does not exist yet — need one OAuth round to seed it",
-    "Once seeded: token survives all future pm2 restarts via auto-refresh",
+    "Playlist import blocked by Spotify API-level 403 on /tracks endpoint",
+    "Root cause: Spotify app likely needs Extended Access (quota mode) — go to https://developer.spotify.com/dashboard → your app → Settings → Request Extended Access",
     "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;",
-    "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]';",
-    "OPTIONAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS tonal_balance jsonb, ADD COLUMN IF NOT EXISTS stereo_width float, ADD COLUMN IF NOT EXISTS stereo_width_per_band jsonb, ADD COLUMN IF NOT EXISTS crest_factor_per_band jsonb;"
+    "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]';"
   ],
-  "next": "Open http://127.0.0.1:4242/spotify-auth ONE TIME to seed .spotify-token.json. After that, all restarts will auto-load the token. Check pm2 logs for '✓ Spotify token saved to disk' after OAuth.",
-  "notes": "Token file at momentum-watcher directory root (.spotify-token.json). 1-minute expiry buffer built in. refresh_token is persisted so expired tokens auto-refresh without user interaction."
+  "next": "Check Spotify Developer Dashboard for the app (client ID: 45bb7c8c0553458ca79e0848ea805559) → Settings → verify quota mode. May need to request Extended Access to use /playlists/{id}/tracks. Alternatively, use /me/playlists to list and iterate through user's own playlists (those tracks ARE accessible).",
+  "notes": "Confirmed via direct curl: /playlists/{id}/tracks returns 403 regardless of token type or market param. /playlists/{id} metadata returns 200. /me/playlists returns 200 with 22 playlists. The tracks restriction is at the Spotify app permissions level."
 }

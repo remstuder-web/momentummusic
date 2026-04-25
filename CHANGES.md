@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-26] momentum-watcher.cjs — PARTIAL
+TASK: import-all-user-playlists
+WHAT: Added importAllUserPlaylists() — fetches /me/playlists (works), then /playlists/{id}/tracks per playlist. genre_tag derived from playlist name (user's own Spotify label, e.g. "ELECTRONIC EDM" → "electronic edm"). Per-session artist genre cache avoids redundant API calls. POST /import-all-my-playlists endpoint added. Tested: 22 playlists found, all tracks skipped (403 on /tracks endpoint — Spotify app quota restriction).
+RESULT: partial — endpoint works and found 22 playlists. /tracks returns 403 on ALL playlists. Needs Spotify Extended Access.
+BLOCKERS: Go to developer.spotify.com → your app (45bb7c8c0553458ca79e0848ea805559) → Settings → Request Extended Access for /playlists/{id}/tracks
+
+## [2026-04-26] momentum-watcher.cjs — PARTIAL
 TASK: fix-playlist-import-fields-param
 WHAT: importSpotifyPlaylist(): removed fields filter from /tracks URL, fetches full response. Moved playlist name fetch before tracks loop. Both fetches use direct token (no spotifyFetch wrapper).
 RESULT: fields param removed — but /playlists/{id}/tracks returns 403 for ALL playlists with BOTH client_credentials and user OAuth tokens. /playlists/{id} metadata works, /me/playlists works. Confirmed: this is a Spotify API-level restriction (app quota/extended access), not a code bug.

@@ -10703,15 +10703,22 @@ ${chatText.slice(0, 4000)}`
                 console.log('[mozart] duplicate reference skipped:', payload.title)
                 result = `✓ "${payload.title} — ${payload.artist}" already in references`
               } else {
+                const refId = payload.reference_track_id ||
+                  (payload.artist + '_' + payload.title).replace(/\s+/g, '_').toLowerCase()
                 refs.push({
-                  id: payload.reference_track_id ||
-                      (payload.artist + '_' + payload.title).replace(/\s+/g, '_').toLowerCase(),
+                  // Mozart format
+                  id: refId,
                   title: payload.title,
                   artist: payload.artist,
                   spotify_id: payload.spotify_id || null,
                   ref_type: payload.ref_type || 'music',
                   added_by: 'mozart',
-                  added_at: new Date().toISOString()
+                  added_at: new Date().toISOString(),
+                  // Legacy format (UI display)
+                  url: payload.spotify_id
+                    ? 'https://open.spotify.com/track/' + payload.spotify_id
+                    : null,
+                  name: payload.artist + ' — ' + payload.title
                 })
 
                 const { error: updateErr } = await supabase

@@ -2349,6 +2349,38 @@
     await sendAI(autoMsg)
   }
 
+  function saveMozartSession(userMsg, mozartResponse, songId, songTitle) {
+    const keyInsight = mozartResponse.slice(0, 300).replace(/\n+/g, ' ').trim()
+    const urls = (userMsg.match(/https?:\/\/[^\s]+/g) || [])
+    fetch('http://localhost:4242/save-brain-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: 'mozart_session',
+        title: 'Mozart · ' + (songTitle || 'session') + ' · ' + new Date().toLocaleDateString('de-CH'),
+        content: keyInsight,
+        source_type: 'mozart',
+        metadata: {
+          song_id: songId || null,
+          user_message: userMsg.slice(0, 200),
+          full_response: mozartResponse.slice(0, 1000),
+          urls
+        }
+      })
+    }).catch(() => {})
+
+    // Auto-import any Spotify track URLs pasted by the user
+    const spotifyMatches = userMsg.match(/spotify\.com\/track\/([a-zA-Z0-9]+)/g) || []
+    for (const link of spotifyMatches) {
+      const trackId = link.split('/').pop().split('?')[0]
+      fetch('http://localhost:4242/save-brain-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_spotify_ref', spotify_id: trackId, song_id: songId || null, source: 'mozart_chat' })
+      }).catch(() => {})
+    }
+  }
+
   async function sendAI(overrideMsg = null) {
     const msg = (typeof overrideMsg === 'string' && overrideMsg.trim()) ? overrideMsg.trim() : aiInput.trim()
     if (!msg || aiLoading) return
@@ -2437,6 +2469,7 @@
         for (const tr of toolResults) aiMessages = [...aiMessages, { role: 'assistant', content: tr.content, _system: true }]
         const finalText = (d2.content || []).find(b => b.type === 'text')?.text || ''
         if (finalText) aiMessages = [...aiMessages, { role: 'assistant', content: finalText }]
+        saveMozartSession(msg, finalText || toolResults.map(t => t.content).join(' '), expandedSong?.id, expandedSong?.title || expandedSong?.code)
 
       } else {
         // Normal text response — fall back to legacy regex actions if any
@@ -2451,6 +2484,7 @@
           const result = await executeAction(action, supabase, expandedSong, selectedProject)
           if (result) aiMessages = [...aiMessages, { role: 'assistant', content: result, _system: true }]
         }
+        saveMozartSession(msg, cleanReply, expandedSong?.id, expandedSong?.title || expandedSong?.code)
       }
     } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
     aiLoading = false

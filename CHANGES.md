@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] momentum-watcher.cjs + mozartContext.js + ProjectsTab.svelte — DONE
+TASK: mozart-session-autosave
+WHAT: Every Mozart exchange auto-saved to brain_knowledge (category=mozart_session). POST /save-brain-entry added for direct brain inserts + Spotify track import (action=save_spotify_ref). mozartContext includes last 10 sessions so Mozart remembers prior conversations. Spotify links pasted in chat auto-imported to reference_tracks.
+RESULT: works — tested /save-brain-entry, svelte-check 0 errors, pm2 restart OK
+BLOCKERS: none
+
 ## [2026-04-25] momentum-watcher.cjs + ProjectsTab.svelte — DONE
 TASK: music-tips-master-finishing-checklist-panel
 WHAT: BUILD1: rebuildMusicTips() fetches mixing/production/question brain entries + music_tips source entries, asks Claude Opus to synthesize into 🎵 MUSIC TIPS MASTER.md, triggers on save-brain-file for matching categories + startup 20s + POST /rebuild-music-tips. BUILD2: rebuildFinishingChecklist() reads tips file + question entries, asks Haiku for JSON checklist, upserts to brain_knowledge checklist_70 + POST /rebuild-finishing-checklist. BUILD3: CHECKLIST 70% panel wired — finishingChecklist loaded from Supabase on mount, displayed with phase labels, checkboxes, why notes.

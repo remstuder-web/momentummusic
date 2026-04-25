@@ -8,7 +8,8 @@ export async function buildMozartContext(supabase, options = {}) {
     { data: pendingInbox }, { data: marketNews },
     { data: watchedArtists }, { data: activeProjects },
     { data: mixingHistories }, { data: recentReleases },
-    { data: priorityRules }
+    { data: priorityRules },
+    { data: sessions }
   ] = await Promise.all([
     supabase.from('reference_tracks').select('*').eq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(5),
     supabase.from('reference_tracks').select('*').neq('collection_name', 'my_productions').order('created_at', { ascending: false }).limit(20),
@@ -24,7 +25,8 @@ export async function buildMozartContext(supabase, options = {}) {
     supabase.from('projects').select('name,artist,status,deadlines').eq('status', 'active').limit(5),
     supabase.from('brain_knowledge').select('title,content').eq('category', 'own_production').eq('source_type', 'version_history').order('created_at', { ascending: false }).limit(5),
     supabase.from('releases').select('song_code,song_title,artist,release_date,label,spotify_streams,revenue_eur,invoice_sent,payment_received').order('release_date', { ascending: false }).limit(8),
-    supabase.from('brain_knowledge').select('title,content,category').or('priority.eq.true,confidence.eq.locked').eq('active', true).order('created_at', { ascending: false }).limit(30)
+    supabase.from('brain_knowledge').select('title,content,category').or('priority.eq.true,confidence.eq.locked').eq('active', true).order('created_at', { ascending: false }).limit(30),
+    supabase.from('brain_knowledge').select('title,content,metadata,created_at').eq('category', 'mozart_session').order('created_at', { ascending: false }).limit(10)
   ])
 
   let targetContacts = []
@@ -313,6 +315,16 @@ FORMATTING RULES — always follow these:
     context += targetContacts.map(c =>
       c.name + (c.group_types?.length ? ' (' + c.group_types.slice(0, 2).join(', ') + ')' : '')
     ).join('\n')
+  }
+
+  if (sessions?.length) {
+    context += '\n\n## RECENT MOZART SESSIONS (your conversation history)\n'
+    context += sessions.map(s => {
+      const meta = typeof s.metadata === 'string' ? JSON.parse(s.metadata || '{}') : (s.metadata || {})
+      return s.title +
+        (meta.user_message ? '\nYou asked: ' + meta.user_message : '') +
+        '\nKey insight: ' + s.content
+    }).join('\n\n')
   }
 
   context += `\n\n## ACTION COMMANDS

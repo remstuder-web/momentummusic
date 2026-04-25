@@ -1,14 +1,14 @@
 {
-  "updated": "2026-04-25T14:04:00Z",
-  "last_task": "mozart-tool-use-actions",
+  "updated": "2026-04-25T14:10:00Z",
+  "last_task": "mozart-session-autosave",
   "status": "done",
   "working": [
-    "POST /mozart-action endpoint: 6 actions — add_project_reference, add_brain_entry, add_inbox_task, set_version_feedback, update_now_note, add_contact_note",
-    "mozartTools exported from mozartContext.js — Anthropic tool_use API definition for take_action",
-    "sendAI() upgraded to tool_use API: tools:[mozartTools] passed, stop_reason=tool_use handled, /mozart-action called, tool_result continuation, final text displayed",
-    "Legacy [ACTION:] regex parsing retained as fallback for normal text responses",
+    "POST /save-brain-entry: inserts brain_knowledge row directly, handles action=save_spotify_ref (imports via /agent-import-spotify), triggers rebuildBrainMaster if source_type=text",
+    "saveMozartSession(): fires after every Mozart response (both tool_use + text paths), saves to mozart_session category with metadata (song_id, user_message, full_response, urls)",
+    "Spotify link detection: spotify.com/track URLs in user messages auto-imported to reference_tracks via /save-brain-entry",
+    "mozartContext.js: last 10 mozart_session entries fetched in Promise.all, shown as ## RECENT MOZART SESSIONS with user_message + key insight",
     "svelte-check: 0 errors",
-    "pm2 restart successful, /ping OK"
+    "pm2 restart OK, /save-brain-entry tested returning {ok:true, id}"
   ],
   "broken": [],
   "partial": [
@@ -16,5 +16,5 @@
     "genres column: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb;"
   ],
   "next": "Run ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb; in Supabase, then POST /enrich-library-genres to backfill",
-  "notes": "Mozart now uses tool_use API natively. When Claude returns stop_reason=tool_use, the action executes server-side via /mozart-action, then a continuation call gets the confirmation text. add_project_reference still calls /agent-import-spotify internally."
+  "notes": "mozart_session entries don't trigger rebuildBrainMaster (source_type=mozart, not text). Session memory loads 10 most recent sessions. Spotify auto-import is fire-and-forget (no UI feedback)."
 }

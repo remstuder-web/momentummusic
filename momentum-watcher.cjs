@@ -10281,6 +10281,59 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /save-brain-entry — insert a brain_knowledge row directly ──────────
+  if (req.method === 'POST' && req.url === '/save-brain-entry') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+
+        // Special case: import a Spotify track to reference_tracks checkout
+        if (body.action === 'save_spotify_ref') {
+          const { spotify_id, song_id, source } = body
+          if (!spotify_id) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing spotify_id' })); return }
+          const importRes = await fetch('http://localhost:4242/agent-import-spotify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: 'spotify:track:' + spotify_id, collection: 'reference_current', source: source || 'mozart_chat' })
+          })
+          const imp = await importRes.json()
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: imp.ok, id: imp.id, title: imp.title, artist: imp.artist }))
+          return
+        }
+
+        // Standard brain_knowledge insert
+        const entry = {
+          category: body.category || 'observation',
+          title: (body.title || body.content || '').slice(0, 120),
+          content: body.content || body.title || '',
+          entry_type_v2: body.entry_type_v2 || 'observation',
+          confidence: body.confidence || 'medium',
+          source_type: body.source_type || 'text',
+          active: body.active !== false,
+          metadata: body.metadata || {}
+        }
+        const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
+          method: 'POST',
+          headers: { ...sbHeaders, 'Prefer': 'return=representation' },
+          body: JSON.stringify(entry)
+        })
+        const rows = await insertRes.json()
+        const id = Array.isArray(rows) && rows[0]?.id
+
+        if (entry.source_type === 'text') setImmediate(() => rebuildBrainMaster())
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, id }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /mozart-action — execute a Mozart tool_use action ──────────────────
   if (req.method === 'POST' && req.url === '/mozart-action') {
     const chunks = []; req.on('data', c => chunks.push(c))

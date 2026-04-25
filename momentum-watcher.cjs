@@ -5545,7 +5545,12 @@ ${context}` }]
           }).catch(() => {})
         }
 
-        // Insert into inbox_notifications
+        // Delete any existing Morning Briefing for today, then insert fresh one
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.briefing&song_title=eq.Morning%20Briefing&created_at=gte.${todayStart.toISOString()}`,
+          { method: 'DELETE', headers: { ...sbHeaders, 'Prefer': 'return=minimal' } }
+        ).catch(() => {})
         await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
           method: 'POST',
           headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
@@ -8960,6 +8965,41 @@ ${chatText.slice(0, 4000)}`
       res.end(JSON.stringify({ ok: true, deleted }))
     } catch(e) {
       console.error('cleanup-brain-dupes error:', e.message)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /fix-inbox-dupes — keep only latest briefing per day ───────────────
+  if (req.method === 'POST' && req.url === '/fix-inbox-dupes') {
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.briefing&select=id,created_at&order=created_at.desc`,
+        { headers: sbHeaders }
+      )
+      const briefings = await r.json()
+      const seen = new Set()
+      const toDelete = []
+      for (const b of (Array.isArray(briefings) ? briefings : [])) {
+        const day = (b.created_at || '').slice(0, 10)
+        if (seen.has(day)) {
+          toDelete.push(b.id)
+        } else {
+          seen.add(day)
+        }
+      }
+      if (toDelete.length) {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/inbox_notifications?id=in.(${toDelete.join(',')})`,
+          { method: 'DELETE', headers: { ...sbHeaders, 'Prefer': 'return=minimal' } }
+        )
+      }
+      console.log(`✓ fix-inbox-dupes: deleted ${toDelete.length} duplicate briefing(s)`)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, deleted: toDelete.length }))
+    } catch(e) {
+      console.error('fix-inbox-dupes error:', e.message)
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))
     }

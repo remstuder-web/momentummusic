@@ -1,14 +1,13 @@
 {
-  "updated": "2026-04-25T14:10:00Z",
-  "last_task": "mozart-session-autosave",
+  "updated": "2026-04-25T14:19:00Z",
+  "last_task": "mozart-actions-refs-untitled-projects",
   "status": "done",
   "working": [
-    "POST /save-brain-entry: inserts brain_knowledge row directly, handles action=save_spotify_ref (imports via /agent-import-spotify), triggers rebuildBrainMaster if source_type=text",
-    "saveMozartSession(): fires after every Mozart response (both tool_use + text paths), saves to mozart_session category with metadata (song_id, user_message, full_response, urls)",
-    "Spotify link detection: spotify.com/track URLs in user messages auto-imported to reference_tracks via /save-brain-entry",
-    "mozartContext.js: last 10 mozart_session entries fetched in Promise.all, shown as ## RECENT MOZART SESSIONS with user_message + key insight",
+    "Song REFERENCE LINKS block: always visible regardless of stage or existing links",
+    "Add form always shown (removed production-stage gate)",
+    "/mozart-action add_project_reference: resolves project_name → song_id via ilike title search, falls back to most recent null-title song if no title match",
     "svelte-check: 0 errors",
-    "pm2 restart OK, /save-brain-entry tested returning {ok:true, id}"
+    "pm2 restart OK"
   ],
   "broken": [],
   "partial": [
@@ -16,5 +15,5 @@
     "genres column: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb;"
   ],
   "next": "Run ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genres jsonb; in Supabase, then POST /enrich-library-genres to backfill",
-  "notes": "mozart_session entries don't trigger rebuildBrainMaster (source_type=mozart, not text). Session memory loads 10 most recent sessions. Spotify auto-import is fire-and-forget (no UI feedback)."
+  "notes": "project_name fallback: tries ilike match first, then null-title fallback. Does NOT filter by project_id — assumes Mozart is working in the context of the active project."
 }

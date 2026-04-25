@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: mozart-actions-refs-untitled-projects
+WHAT: Song-level REFERENCE LINKS block now always visible (removed {#if} guard on stage/links count). Add form also always shown. /mozart-action add_project_reference resolves project_name → song_id via ilike title match, falls back to most recent null-title song.
+RESULT: works — svelte-check 0 errors, pm2 restart OK
+BLOCKERS: none
+
 ## [2026-04-25] momentum-watcher.cjs + mozartContext.js + ProjectsTab.svelte — DONE
 TASK: mozart-session-autosave
 WHAT: Every Mozart exchange auto-saved to brain_knowledge (category=mozart_session). POST /save-brain-entry added for direct brain inserts + Spotify track import (action=save_spotify_ref). mozartContext includes last 10 sessions so Mozart remembers prior conversations. Spotify links pasted in chat auto-imported to reference_tracks.

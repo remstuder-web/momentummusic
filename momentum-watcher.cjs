@@ -10343,6 +10343,24 @@ ${chatText.slice(0, 4000)}`
         let result = ''
 
         if (action === 'add_project_reference') {
+          // Resolve project_name → song_id if no song_id provided
+          if (!payload.song_id && payload.project_name) {
+            const term = encodeURIComponent('%' + payload.project_name + '%')
+            let songRes = await fetch(
+              `${SUPABASE_URL}/rest/v1/songs?select=id,title&title=ilike.${term}&order=created_at.desc&limit=1`,
+              { headers: sbHeaders }
+            )
+            let found = await songRes.json()
+            if (!Array.isArray(found) || !found[0]) {
+              songRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/songs?select=id,title&title=is.null&order=created_at.desc&limit=1`,
+                { headers: sbHeaders }
+              )
+              found = await songRes.json()
+            }
+            if (Array.isArray(found) && found[0]) payload.song_id = found[0].id
+          }
+
           // Import Spotify track → reference_tracks, then push URL to song or project
           const importRes = await fetch('http://localhost:4242/agent-import-spotify', {
             method: 'POST',

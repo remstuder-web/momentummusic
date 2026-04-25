@@ -2833,8 +2833,7 @@
                 </div>
                 {/if}
 
-                <!-- Reference links — visible in all stages, add only in production -->
-                {#if (song.reference_links||[]).length || wd.current_stage === 'production'}
+                <!-- Reference links — always visible -->
                 <div class="song-meta-block" style="margin-top:-8px">
                   <div class="field">
                     <label>REFERENCE LINKS</label>
@@ -2856,16 +2855,13 @@
                           </span>
                         {/each}
                       </div>
-                      {#if wd.current_stage === 'production'}
                       <div class="ref-add-row">
                         <input class="inp-sm" placeholder="Spotify / YouTube URL..." bind:value={songRefInput[song.id]} onkeydown={e => e.key==='Enter' && addSongRef(song)} />
                         <button class="btn-ghost-sm" onclick={() => addSongRef(song)}>+ Add</button>
                       </div>
-                      {/if}
                     </div>
                   </div>
                 </div>
-                {/if}
 
                 <div class="field" style="margin-top:-8px">
                   <label>SONG NOTES / BRIEF</label>

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-26] analyze_audio.py + src/lib/ProjectsTab.svelte — DONE
+TASK: tonal-balance-analyzer-tab
+WHAT: analyze_audio.py adds tonal_bands {low,high} split points to stereo_tonal output. ProjectsTab ANALYZER gets TONAL stem tab (6th tab). When active: shows TONAL BALANCE bars (4 bands, mix=gold/ref=dim white, stacked) + STEREO WIDTH bars (color-coded: gray=mono, gold=normal, green=wide). widthLabel() helper for width text. EQ chart hidden on TONAL tab. loadVocalEq selects tonal_balance/stereo_width/stereo_width_per_band from reference_tracks.
+RESULT: works — svelte-check 0 errors
+BLOCKERS: tonal_balance/stereo_width columns may not exist yet in reference_tracks — null-safe, shows gracefully
+
 ## [2026-04-26] analyze_audio.py — DONE
 TASK: stereo-tonal-analysis
 WHAT: Added analyze_stereo_and_tonal() function. Uses es.AudioLoader for stereo read, scipy.fft for band FFT. Outputs: stereo_width (0=mono, 1=wide), tonal_balance {bass/low_mid/high_mid/air as % of total energy}, stereo_width_per_band (M/S ratio per band), crest_factor_per_band (peak/RMS per band). Wrapped in try/except — fields null on failure.

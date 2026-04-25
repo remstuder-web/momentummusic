@@ -371,6 +371,7 @@ def analyze_stereo_and_tonal(audio_path):
         b: round(float(np.mean(v)), 4)
         for b, v in band_energies.items()
     }
+    res['tonal_bands'] = {b: {'low': lo, 'high': hi} for b, (lo, hi) in bands.items()}
 
     if nch >= 2:
         width_per_band = {}

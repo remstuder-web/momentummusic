@@ -2186,7 +2186,7 @@
     // Load all library tracks for ref dropdown
     const { data: libraryTracks } = await supabase
       .from('reference_tracks')
-      .select('id, title, artist, source, credits, popularity, collection_name, spotify_id, genre_tag')
+      .select('id, title, artist, source, credits, popularity, collection_name, spotify_id, genre_tag, tonal_balance, stereo_width, stereo_width_per_band')
       .in('source', ['user', 'agent', 'mozart', 'promoted'])
       .order('artist', { ascending: true })
       .limit(200)
@@ -2215,6 +2215,14 @@
         vocalComparison = { ...vocalComparison }
       }
     }
+  }
+
+  function widthLabel(w) {
+    if (w < 0.05) return 'mono'
+    if (w < 0.15) return 'narrow'
+    if (w < 0.35) return 'moderate'
+    if (w < 0.6)  return 'wide'
+    return 'very wide'
   }
 
   async function loadMozartInsight(songId, refTrack) {
@@ -3318,9 +3326,9 @@ Return JSON only:
                     <div class="vocal-eq-body">
                       <!-- Stem selector -->
                       <div class="stem-tabs">
-                        {#each ['mix', 'vocals', 'drums', 'bass', 'other'] as stem}
+                        {#each ['mix', 'vocals', 'drums', 'bass', 'other', 'tonal'] as stem}
                           <button class="stem-tab {stemKey === stem ? 'active' : ''}"
-                            onclick={() => { activeStem[song.id] = stem; activeStem = { ...activeStem }; loadVocalEq(song.id) }}>
+                            onclick={() => { activeStem[song.id] = stem; activeStem = { ...activeStem }; if (stem !== 'tonal') loadVocalEq(song.id) }}>
                             {stem === 'mix' ? 'FULL MIX' : stem.toUpperCase()}
                           </button>
                         {/each}
@@ -3368,17 +3376,98 @@ Return JSON only:
                           {/if}
                         </select>
                       </div>
-                      {#if selectedRef && !refCurveData}
-                        <div class="no-curve-msg">No EQ curve yet for this track — background analysis pending</div>
+                      {#if stemKey !== 'tonal'}
+                        {#if selectedRef && !refCurveData}
+                          <div class="no-curve-msg">No EQ curve yet for this track — background analysis pending</div>
+                        {/if}
+                        <!-- EQ Chart -->
+                        <VocalEqChart
+                          mixCurve={mixCurve}
+                          refCurve={refCurve}
+                          mixLabel={mixCurveData?.label ?? ''}
+                          refLabel={refCurveData?.label ?? ''}
+                          isMixTab={isMixTab}
+                        />
+                      {:else}
+                        <!-- TONAL BALANCE + STEREO WIDTH panel -->
+                        {@const mixTonal = latestA?.tonal_balance}
+                        {@const mixWidth = latestA?.stereo_width_per_band}
+                        {@const refTonal = selectedRefTrack?.tonal_balance}
+                        {@const refWidth = selectedRefTrack?.stereo_width_per_band}
+                        {@const bands = [
+                          { key: 'bass',     label: 'BASS',     hz: '20–200 Hz'  },
+                          { key: 'low_mid',  label: 'LOW MID',  hz: '200–2k Hz'  },
+                          { key: 'high_mid', label: 'HIGH MID', hz: '2k–8k Hz'   },
+                          { key: 'air',      label: 'AIR',      hz: '8k–20k Hz'  }
+                        ]}
+                        {#if mixTonal || refTonal}
+                          <div class="tonal-section-title">TONAL BALANCE</div>
+                          <div class="tonal-panel">
+                            {#each bands as b}
+                              {@const mixPct = mixTonal ? Math.round((mixTonal[b.key] || 0) * 100) : null}
+                              {@const refPct = refTonal ? Math.round((refTonal[b.key] || 0) * 100) : null}
+                              <div class="band-row">
+                                <div class="band-label">
+                                  <span class="band-name">{b.label}</span>
+                                  <span class="band-hz">{b.hz}</span>
+                                </div>
+                                <div class="band-bars-col">
+                                  {#if mixPct !== null}
+                                    <div class="band-bar-wrap" title="Mix: {mixPct}%">
+                                      <div class="band-bar mix" style="width:{mixPct}%"></div>
+                                    </div>
+                                  {/if}
+                                  {#if refPct !== null}
+                                    <div class="band-bar-wrap" title="Ref: {refPct}%">
+                                      <div class="band-bar ref" style="width:{refPct}%"></div>
+                                    </div>
+                                  {/if}
+                                </div>
+                                <span class="band-pct">
+                                  {#if mixPct !== null}{mixPct}%{/if}
+                                  {#if refPct !== null}<span class="band-pct-ref"> / {refPct}%</span>{/if}
+                                </span>
+                              </div>
+                            {/each}
+                          </div>
+                        {:else}
+                          <div class="no-curve-msg">No tonal data — run analysis on a version first</div>
+                        {/if}
+
+                        {#if mixWidth || refWidth}
+                          <div class="tonal-section-title" style="margin-top:10px">STEREO WIDTH</div>
+                          <div class="tonal-panel">
+                            {#each bands as b}
+                              {@const mw = mixWidth ? (mixWidth[b.key] || 0) : null}
+                              {@const rw = refWidth ? (refWidth[b.key] || 0) : null}
+                              <div class="band-row">
+                                <div class="band-label">
+                                  <span class="band-name">{b.label}</span>
+                                  <span class="band-hz">{b.hz}</span>
+                                </div>
+                                <div class="band-bars-col">
+                                  {#if mw !== null}
+                                    {@const wPct = Math.min(100, Math.round(mw * 100))}
+                                    <div class="band-bar-wrap" title="Mix: {widthLabel(mw)}">
+                                      <div class="band-bar mix {mw < 0.1 ? 'mono' : mw > 0.5 ? 'wide' : ''}" style="width:{wPct}%"></div>
+                                    </div>
+                                  {/if}
+                                  {#if rw !== null}
+                                    {@const wPct = Math.min(100, Math.round(rw * 100))}
+                                    <div class="band-bar-wrap" title="Ref: {widthLabel(rw)}">
+                                      <div class="band-bar ref {rw < 0.1 ? 'mono' : rw > 0.5 ? 'wide' : ''}" style="width:{wPct}%"></div>
+                                    </div>
+                                  {/if}
+                                </div>
+                                <span class="band-pct">
+                                  {#if mw !== null}{widthLabel(mw)}{/if}
+                                  {#if rw !== null}<span class="band-pct-ref"> / {widthLabel(rw)}</span>{/if}
+                                </span>
+                              </div>
+                            {/each}
+                          </div>
+                        {/if}
                       {/if}
-                      <!-- Chart -->
-                      <VocalEqChart
-                        mixCurve={mixCurve}
-                        refCurve={refCurve}
-                        mixLabel={mixCurveData?.label ?? ''}
-                        refLabel={refCurveData?.label ?? ''}
-                        isMixTab={isMixTab}
-                      />
                       <!-- Credits (when a ref track is selected and has credits) -->
                       {#if selectedRefTrack?.credits}
                         <div class="ref-credits">
@@ -4510,6 +4599,23 @@ Return JSON only:
   .ref-select-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; white-space: nowrap; }
   .ref-select { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 11px; padding: 4px 8px; border-radius: 2px; outline: none; }
   .no-curve-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #444; font-style: italic; padding: 2px 0 4px; }
+  .tonal-section-title { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: rgba(201,168,76,.6); padding: 6px 0 4px; text-transform: uppercase; }
+  .tonal-panel { display: flex; flex-direction: column; }
+  .band-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #111; }
+  .band-row:last-child { border-bottom: none; }
+  .band-label { display: flex; flex-direction: column; width: 72px; flex-shrink: 0; }
+  .band-name { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: #c9a84c; letter-spacing: .08em; }
+  .band-hz { font-family: 'Space Mono', monospace; font-size: 8px; color: #333; margin-top: 1px; }
+  .band-bars-col { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+  .band-bar-wrap { height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
+  .band-bar { height: 100%; border-radius: 3px; transition: width .3s ease; }
+  .band-bar.mix { background: #c9a84c; }
+  .band-bar.ref { background: rgba(255,255,255,0.22); }
+  .band-bar.mono { background: #3a3a3a; }
+  .band-bar.wide { background: #4caf82; }
+  .band-bar.ref.wide { background: rgba(76,175,130,0.35); }
+  .band-pct { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; width: 80px; text-align: right; flex-shrink: 0; line-height: 1.4; }
+  .band-pct-ref { color: #333; }
   .ref-credits { margin: 4px 0; padding: 6px 8px; background: #111; border-radius: 3px; border-left: 2px solid #252525; }
   .credit-row { display: flex; gap: 8px; padding: 2px 0; font-family: 'DM Sans', sans-serif; font-size: 11px; }
   .credit-label { font-family: 'Space Mono', monospace; font-size: 8px; color: #555; width: 55px; flex-shrink: 0; padding-top: 2px; text-transform: uppercase; }

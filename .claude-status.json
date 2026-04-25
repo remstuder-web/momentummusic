@@ -1,24 +1,23 @@
 {
-  "updated": "2026-04-25T16:24:00Z",
-  "last_task": "fix-rate-limit-queue-and-user-token",
+  "updated": "2026-04-26T09:10:00Z",
+  "last_task": "stereo-tonal-analysis",
   "status": "done",
   "working": [
-    "spotifyRateLimitUntil: module-level flag, set on any 429 in bg queue or fetchTrackGenres",
-    "processLibraryTrackInBackground: skips immediately if rate limited (no more log flood)",
-    "fetchTrackGenres: sets flag + returns [] on 429 (no blocking delay)",
-    "bg queue token: uses spotifyUserToken || getSpotifyToken()",
-    "/agent-import-spotify playlist fetch: uses spotifyUserToken || getSpotifyToken()",
-    "importSpotifyPlaylist: already uses spotifyUserToken || getSpotifyToken()",
-    "GET /spotify-auth + GET /spotify-callback: redirect_uri uses 127.0.0.1",
-    "pm2 restart: ok, ping responding"
+    "analyze_audio.py: analyze_stereo_and_tonal() appended before final print",
+    "stereo_width: 0.0-1.0 ratio (side_rms / mid_rms) — tested: 0.1324 on mix WAV",
+    "tonal_balance: {bass, low_mid, high_mid, air} as fraction of total FFT energy",
+    "stereo_width_per_band: M/S ratio per frequency band",
+    "crest_factor_per_band: peak/RMS per band (dynamics indicator)",
+    "Wrapped in try/except — all 4 fields null on failure, error to stderr",
+    "Tested on 26041401_LUCA DURAN_KUMBIAA_MIX_v05.wav — all fields correct"
   ],
   "broken": [],
   "partial": [
+    "New fields not yet in reference_tracks schema — add columns if storing: stereo_width float, tonal_balance jsonb, stereo_width_per_band jsonb, crest_factor_per_band jsonb",
     "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;",
     "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]';",
-    "Spotify user token is in-memory only — resets on watcher restart; OAuth flow must be re-run after each restart",
-    "BUILD 2/3: feedback_patterns and chart_history tables still need SQL in Supabase"
+    "Spotify user token is in-memory only — resets on watcher restart; re-authorize via http://localhost:4242/spotify-auth after restart"
   ],
-  "next": "1. Run ALTER TABLE SQL in Supabase. 2. Open http://localhost:4242/spotify-auth to authorize private playlists. 3. Test POST /import-spotify-playlist with a private playlist URL.",
-  "notes": "Rate limit flag persists in memory — bg queue will self-resume once Date.now() > spotifyRateLimitUntil on the next queue iteration."
+  "next": "Add new columns to reference_tracks if you want to store the new fields. Update analyze-audio-features endpoint in watcher to save them.",
+  "notes": "scipy.fft used for FFT (not librosa) — scipy already available in the python3.11 env via essentia dependencies."
 }

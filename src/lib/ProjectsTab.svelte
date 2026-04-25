@@ -1112,23 +1112,23 @@
         if (r.ok) { const d = await r.json(); name = d.title || '' }
       } catch(e) {}
     }
-    const reference_links = [...(song.reference_links||[]), { url: val, name }]
+    const newRef = {
+      url: val,
+      name: name || val,
+      spotify_id: val.includes('spotify.com/track/') ? val.split('/track/')[1].split('?')[0] : null,
+      added_at: new Date().toISOString()
+    }
+    const reference_links = [...(song.reference_links||[]), newRef]
     await updateSongField(song, 'reference_links', reference_links)
   }
 
-  async function removeSongRef(song, url) {
-    const reference_links = (song.reference_links||[]).filter(r => (typeof r==='string'?r:r.url) !== url)
-    updateSongField(song, 'reference_links', reference_links)
+  async function removeSongRef(song, urlOrId) {
+    const reference_links = (song.reference_links||[]).filter(r =>
+      r.url !== urlOrId && r.id !== urlOrId
+    )
+    await updateSongField(song, 'reference_links', reference_links)
   }
 
-  function normSongRef(r) {
-    if (typeof r === 'string') return { url: r, name: '' }
-    if (r.url) return r
-    // Mozart format: {title, artist, spotify_id} — construct URL
-    const url = r.spotify_id ? 'https://open.spotify.com/track/' + r.spotify_id : ''
-    const name = (r.title || '') + (r.artist ? ' — ' + r.artist : '')
-    return { ...r, url, name }
-  }
   function openSpotifySong(url) { playRefUrl(url) }
 
   async function analyzeVocalStyle(spotifyUrl) {
@@ -2898,18 +2898,21 @@ Return JSON only:
                     <div class="refs-wrap">
                       <div class="refs-inline">
                         {#each (song.reference_links||[]) as ref}
-                          {@const r = normSongRef(ref)}
-                          {@const isSpotify = r.url.includes('spotify')}
+                          {@const refUrl = ref.url || (ref.spotify_id ? 'https://open.spotify.com/track/' + ref.spotify_id : null)}
+                          {@const refName = ref.name || (ref.artist ? ref.artist + ' — ' + ref.title : ref.title || ref.url || '')}
+                          {@const isSpotify = refUrl?.includes('spotify')}
                           <span class="ref-chip">
-                            {#if isSpotify}
-                              <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(r.url); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
-                              <button class="spotify-play-btn-sm" onclick={() => playRefUrl(r.url)}>{refPlayingUrl === r.url ? '■' : '▶'}</button>
-                              <button class="vocal-btn" onclick={() => analyzeVocalStyle(r.url)} title="Analyze vocal style">🎤</button>
-                            {:else}
-                              <a href={r.url} target="_blank" class="ref-link-btn">↗</a>
+                            {#if refUrl}
+                              {#if isSpotify}
+                                <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(refUrl); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
+                                <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>{refPlayingUrl === refUrl ? '■' : '▶'}</button>
+                                <button class="vocal-btn" onclick={() => analyzeVocalStyle(refUrl)} title="Analyze vocal style">🎤</button>
+                              {:else}
+                                <a href={refUrl} target="_blank" class="ref-link-btn">↗</a>
+                              {/if}
                             {/if}
-                            <span class="ref-chip-name">{r.name || (r.url.length>40?'…'+r.url.slice(-36):r.url)}</span>
-                            <button class="tag-del" onclick={() => removeSongRef(song, r.url)}>×</button>
+                            <span class="ref-chip-name">{refName.length > 40 ? '…' + refName.slice(-36) : refName}</span>
+                            <button class="tag-del" onclick={() => removeSongRef(song, ref.url || ref.id)}>×</button>
                           </span>
                         {/each}
                       </div>

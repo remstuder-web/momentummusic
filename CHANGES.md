@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-25] src/lib/DailyTab.svelte — DONE
+TASK: inbox-section-filter
+WHAT: briefing/scout/pulse_check/chart inbox types now only visible in ROUTINE section. Added routineOnlyTypes const + visibleInbox $derived that filters by activeSection. Inbox stream uses visibleInbox instead of inboxItems in all 3 filter expressions.
+RESULT: works — svelte-check 0 errors
+BLOCKERS: none
+
+## [2026-04-25] src/lib/DailyTab.svelte — DONE
 TASK: acapella-extractor-dailytab
 WHAT: Added Acapella Extractor section to Helpers tab directly below Normalizer. Drop zone, loading state, result panel (filename/BPM/key/vocal-in). State vars: acapellaFile, acapellaLoading, acapellaResult, acapellaDragging. Functions: handleAcapellaDrop(), runAcapellaExtract() (FileReader base64 → POST /extract-acapella). Full CSS matching palette.
 RESULT: works — svelte-check 0 errors

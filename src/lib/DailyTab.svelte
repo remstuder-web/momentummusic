@@ -756,6 +756,11 @@
   let todayBriefing = $derived(inboxItems.find(n => n.type === 'briefing' && n.created_at?.slice(0,10) === todayISO))
   let pressItems = $derived(inboxItems.filter(n => n.type === 'press' && n.created_at?.slice(0,10) === todayISO).slice(0, 3))
   let whatsappItems = $derived(inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp'))
+
+  const routineOnlyTypes = ['briefing', 'scout', 'pulse_check', 'chart']
+  let visibleInbox = $derived(
+    inboxItems.filter(n => routineOnlyTypes.includes(n.type) ? activeSection === 'routine' : true)
+  )
   let pinnedTask = $derived((state.tasks || []).find(t => t.pinned))
   let scoutingArtists = $state(false)
   let whatsappName = $state('')
@@ -1939,11 +1944,11 @@ ${mozartContext}`
       {/each}
 
       <!-- Inbox stream -->
-      {#if !inboxItems.filter(n => n.metadata?.platform !== 'whatsapp').length}
+      {#if !visibleInbox.filter(n => n.metadata?.platform !== 'whatsapp').length}
         <p class="empty-sm" style="padding:10px 0;color:#333">No notifications yet. Run an agent or send a listen link.</p>
       {:else}
-        {@const todayInbox = inboxItems.filter(n => n.metadata?.platform !== 'whatsapp' && n.type !== 'reference' && n.created_at?.slice(0,10) === todayISO && !(n.type === 'briefing' && n.id === todayBriefing?.id))}
-        {@const olderInbox = inboxItems.filter(n => n.metadata?.platform !== 'whatsapp' && n.type !== 'reference' && n.created_at?.slice(0,10) !== todayISO)}
+        {@const todayInbox = visibleInbox.filter(n => n.metadata?.platform !== 'whatsapp' && n.type !== 'reference' && n.created_at?.slice(0,10) === todayISO && !(n.type === 'briefing' && n.id === todayBriefing?.id))}
+        {@const olderInbox = visibleInbox.filter(n => n.metadata?.platform !== 'whatsapp' && n.type !== 'reference' && n.created_at?.slice(0,10) !== todayISO)}
         <div class="inbox-scroll">
           {#if todayInbox.length}
             <div class="year-today-sep">TODAY</div>

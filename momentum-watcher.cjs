@@ -2347,6 +2347,64 @@ console.log('Spotify Secret:', SPOTIFY_CLIENT_SECRET ? 'set' : 'EMPTY')
 let spotifyUserToken = null
 let spotifyUserRefresh = null
 
+const SPOTIFY_TOKEN_FILE = path.join(__dirname, '.spotify-token.json')
+
+function loadSpotifyToken() {
+  try {
+    if (fs.existsSync(SPOTIFY_TOKEN_FILE)) {
+      const data = JSON.parse(fs.readFileSync(SPOTIFY_TOKEN_FILE, 'utf8'))
+      if (data.access_token && data.expires_at > Date.now()) {
+        spotifyUserToken = data.access_token
+        spotifyUserRefresh = data.refresh_token
+        console.log('✓ Spotify user token loaded from disk, expires in',
+          Math.round((data.expires_at - Date.now()) / 60000), 'min')
+      } else if (data.refresh_token) {
+        spotifyUserRefresh = data.refresh_token
+        refreshSpotifyToken()
+      }
+    }
+  } catch(e) { console.warn('Could not load Spotify token:', e.message) }
+}
+
+function saveSpotifyToken(accessToken, refreshToken, expiresIn) {
+  try {
+    fs.writeFileSync(SPOTIFY_TOKEN_FILE, JSON.stringify({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: Date.now() + (expiresIn * 1000) - 60000
+    }), 'utf8')
+    console.log('✓ Spotify token saved to disk')
+  } catch(e) { console.warn('Could not save Spotify token:', e.message) }
+}
+
+async function refreshSpotifyToken() {
+  if (!spotifyUserRefresh) return
+  try {
+    const r = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': 'Basic ' + Buffer.from(
+          SPOTIFY_CLIENT_ID + ':' + SPOTIFY_CLIENT_SECRET
+        ).toString('base64')
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: spotifyUserRefresh
+      }).toString()
+    })
+    const data = await r.json()
+    if (data.access_token) {
+      spotifyUserToken = data.access_token
+      if (data.refresh_token) spotifyUserRefresh = data.refresh_token
+      saveSpotifyToken(data.access_token, spotifyUserRefresh, data.expires_in || 3600)
+      console.log('✓ Spotify token refreshed')
+    } else {
+      console.error('✗ Spotify token refresh failed:', JSON.stringify(data))
+    }
+  } catch(e) { console.warn('Spotify token refresh error:', e.message) }
+}
+
 // Spotify rate limit tracking
 let spotifyCallCount = 0
 let spotifyCallWindowStart = Date.now()
@@ -9866,6 +9924,7 @@ ${chatText.slice(0, 4000)}`
       if (tokenData.access_token) {
         spotifyUserToken = tokenData.access_token
         spotifyUserRefresh = tokenData.refresh_token || null
+        saveSpotifyToken(tokenData.access_token, tokenData.refresh_token || null, tokenData.expires_in || 3600)
         console.log('✓ User OAuth token saved, scope:', tokenData.scope)
       } else {
         console.error('✗ OAuth token exchange failed:', tokenData)
@@ -12197,6 +12256,7 @@ server.listen(PORT, '127.0.0.1', () => {
   server.timeout = 0          // no timeout — needed for large audio file streams
   server.keepAliveTimeout = 0
   exec('rm -rf /tmp/ref_preview_* /tmp/ref_bg_* /tmp/tiktok_* /tmp/sp_preview_* /tmp/vocal_* /tmp/mm_qimport_* /tmp/mm_preview_* /tmp/yt_* /tmp/acapella_* /tmp/demucs_* /tmp/stem_eq_* /tmp/onset_* 2>/dev/null')
+  loadSpotifyToken()
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   console.log('  Momentum Watcher + Audio Server')
   console.log('  Watch:       ', WATCH_DIR)

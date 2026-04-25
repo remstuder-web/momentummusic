@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-26] momentum-watcher.cjs — DONE
+TASK: persist-spotify-oauth-token
+WHAT: Added SPOTIFY_TOKEN_FILE (.spotify-token.json), loadSpotifyToken() (reads on startup, auto-refreshes if expired), saveSpotifyToken() (writes after OAuth + refresh), refreshSpotifyToken() (uses refresh_token to get new access_token). loadSpotifyToken() called in server.listen on startup. saveSpotifyToken() called in /spotify-callback after successful exchange. Token survives pm2 restarts.
+RESULT: works — pm2 restart clean; no token file yet (need one OAuth round to seed it)
+BLOCKERS: first-time auth still needed; subsequent restarts will load from disk automatically
+
+## [2026-04-26] momentum-watcher.cjs — DONE
 TASK: fix-playlist-import-token
 WHAT: importSpotifyPlaylist(): capture token at start (spotifyUserToken || getSpotifyToken()), log token type (USER_OAUTH vs CLIENT_CREDS), bypass spotifyFetch wrapper and use direct fetch with captured token for tracks + playlist name requests, log 403 body on failure. Debug confirmed: CLIENT_CREDS causes 403 on private playlists — must authorize via /spotify-auth first.
 RESULT: works — 403 correctly logged when user token absent; will succeed once OAuth token set

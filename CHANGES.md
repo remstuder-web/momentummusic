@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-25] momentum-watcher.cjs — DONE
+TASK: acapella-output-cleanup
+WHAT: extractAcapella() saves output to /Users/remo/Desktop (not Stems). Demucs temp folder cleaned with exec('rm -rf tmpDir'). Base64 temp input cleaned in endpoint after call. Original file_path never touched. Response includes saved_to:'Desktop', original_untouched:true.
+RESULT: works — pm2 restart ok, ping ok
+BLOCKERS: none
+
 ## [2026-04-25] ProjectsTab.svelte — DONE
 TASK: analyzer-mozart-insight-panel
 WHAT: Added Mozart Insight section below EQ chart. loadMozartInsight() calls Claude Haiku with song+ref context, returns JSON {strategic, creative, next_step}. Auto-fires when ref dropdown changes. Shows STRATEGIC CONTEXT / CREATIVE DIRECTION / NEXT STEP with gold section labels. Costs tracked via /track-cost. svelte-check 0 errors.
@@ -1553,4 +1559,10 @@ BLOCKERS: Run SQL manually: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXIST
 TASK: fix-rate-limit-queue + fix-playlist-user-token
 WHAT: FIX 1 — spotifyRateLimitUntil var; bg queue skips immediately when rate limited instead of blocking; fetchTrackGenres sets flag on 429 instead of waiting; FIX 2 — /agent-import-spotify playlist fetch uses spotifyUserToken || getSpotifyToken(); importSpotifyPlaylist already had this fix; Spotify OAuth endpoints use 127.0.0.1 for redirect_uri
 RESULT: works
+BLOCKERS: none
+
+## 2026-04-25 momentum-watcher.cjs — DONE
+TASK: spotify-rate-limit-protection
+WHAT: Added spotifyFetch() wrapper — handles Bearer token, 30-call/30s throttle, 429 → sets spotifyRateLimitUntil + Telegram alert, 403 throws; replaced all 32 raw Spotify API fetch() calls; runBackgroundQueue checks rate limit flag + retries in 60s, 3s between tracks; GET /spotify-status endpoint; removed all orphaned token/spH vars
+RESULT: works — spotify-status returns correct JSON, ping ok
 BLOCKERS: none

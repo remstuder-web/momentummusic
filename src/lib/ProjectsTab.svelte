@@ -56,6 +56,8 @@
   let refTrackOptions = $state([]) // ref tracks that have EQ curves available
   let refSearch = $state({}) // song.id -> search string
   let refPickerOpen = $state({}) // song.id -> bool
+  let notesOpen = $state({}) // song.id -> bool
+  let addingRef = $state({}) // song.id -> bool
   let analyzerOpen = $state({}) // song.id -> { track, match, arc, feedback, trend }
   let successMatch = $state({}) // song.id -> result from /analyze-success-match
   let successMatchLoading = $state({}) // song.id -> bool
@@ -2992,7 +2994,6 @@ Return JSON only:
                 <!-- Reference links — always visible -->
                 <div class="song-meta-block" style="margin-top:-8px">
                   <div class="field">
-                    <label>REFERENCE LINKS</label>
                     <div class="refs-wrap">
                       <div class="refs-inline">
                         {#each (song.reference_links||[]) as ref}
@@ -3014,17 +3015,34 @@ Return JSON only:
                           </span>
                         {/each}
                       </div>
-                      <div class="ref-add-row">
-                        <input class="inp-sm" placeholder="Spotify / YouTube URL..." bind:value={songRefInput[song.id]} onkeydown={e => e.key==='Enter' && addSongRef(song)} />
-                        <button class="btn-ghost-sm" onclick={() => addSongRef(song)}>+ Add</button>
-                      </div>
+                      {#if addingRef[song.id]}
+                        <div class="ref-add-row">
+                          <input class="inp-sm" placeholder="Spotify / YouTube URL..."
+                            bind:value={songRefInput[song.id]}
+                            onkeydown={e => e.key === 'Enter' && addSongRef(song)}
+                            autofocus />
+                          <button class="btn-ghost-sm" onclick={() => addSongRef(song)}>+ Add</button>
+                          <button class="btn-ghost-sm" onclick={() => { addingRef[song.id] = false; addingRef = { ...addingRef } }}>cancel</button>
+                        </div>
+                      {:else}
+                        <button class="add-ref-toggle"
+                          onclick={() => { addingRef[song.id] = true; addingRef = { ...addingRef } }}>
+                          + add ref
+                        </button>
+                      {/if}
                     </div>
                   </div>
                 </div>
 
                 <div class="field" style="margin-top:-8px">
-                  <label>SONG NOTES / BRIEF</label>
-                  <textarea class="ta ta-auto" placeholder="Song-specific vision, references..." value={wd.project_info} use:autoResize oninput={e => saveProjectInfo(song, e.target.value)}></textarea>
+                  <div class="notes-toggle-row"
+                    onclick={() => { notesOpen[song.id] = !(notesOpen[song.id] ?? !!wd.project_info?.trim()); notesOpen = { ...notesOpen } }}>
+                    <span class="notes-label">SONG NOTES / BRIEF</span>
+                    <span class="notes-toggle-arrow">{(notesOpen[song.id] ?? !!wd.project_info?.trim()) ? '▾' : '▸'}</span>
+                  </div>
+                  {#if (notesOpen[song.id] ?? !!wd.project_info?.trim())}
+                    <textarea class="ta ta-auto" placeholder="Song-specific vision, references..." value={wd.project_info} use:autoResize oninput={e => saveProjectInfo(song, e.target.value)}></textarea>
+                  {/if}
                 </div>
                 <!-- Production sub-steps: Lyrics, Vocal Rec, Vocal Prep -->
                 {#if wd.current_stage === 'production'}
@@ -3059,7 +3077,7 @@ Return JSON only:
                   <div class="dual-drop-row">
                     <!-- Left: production audio -->
                     <div class="dual-drop-col">
-                      <div class="dual-drop-label">VERSION</div>
+                      <div class="dual-drop-label">YOUR MIX</div>
                       <div class="stage-audio-drop dual-drop {song._prodDrag?'drag-over':''}"
                         ondragover={e => { e.preventDefault(); song._prodDrag=true; songs=[...songs] }}
                         ondragleave={() => { song._prodDrag=false; songs=[...songs] }}
@@ -4379,7 +4397,7 @@ Return JSON only:
   .dual-drop-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; align-items: start; }
   .dual-drop-col { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
   .dual-send-row-inner { display: flex; flex-direction: row; align-items: center; gap: 5px; min-width: 0; }
-  .dual-drop-label { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.45); }
+  .dual-drop-label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: #9e9690; }
   .stage-audio-drop.dual-drop { min-height: 72px; flex-direction: column; align-items: flex-start; justify-content: center; padding: 10px 14px; box-sizing: border-box; }
   .dual-send-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
   .dual-send-col { display: flex; flex-direction: column; gap: 5px; }
@@ -4696,6 +4714,12 @@ Return JSON only:
   .ref-item-bpm { font-family: 'Space Mono', monospace; font-size: 7px; color: #333; white-space: nowrap; }
   .proq-btn { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.3); color: #c9a84c; padding: 4px 12px; border-radius: 2px; cursor: pointer; margin-top: 6px; }
   .proq-btn:hover { background: rgba(201,168,76,.15); }
+  .notes-toggle-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 4px 0; user-select: none; }
+  .notes-toggle-row:hover .notes-label { color: #cec9c1; }
+  .notes-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; color: rgba(201,168,76,.6); text-transform: uppercase; }
+  .notes-toggle-arrow { font-size: 10px; color: #444; }
+  .add-ref-toggle { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px dashed #252525; color: #333; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 4px; }
+  .add-ref-toggle:hover { border-color: #444; color: #555; }
   .no-curve-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #444; font-style: italic; padding: 2px 0 4px; }
   .tonal-section-title { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: rgba(201,168,76,.6); padding: 6px 0 4px; text-transform: uppercase; }
   .tonal-panel { display: flex; flex-direction: column; }

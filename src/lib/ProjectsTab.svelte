@@ -3606,6 +3606,77 @@ Return JSON only:
                             ⌀ Avg refs
                           </button>
                         </div>
+                        <!-- Tonal balance + stereo width for non-tonal stems -->
+                        {#if latestA?.tonal_balance || selectedRefTrack?.tonal_balance}
+                          {@const bands = [
+                            { key: 'bass',     label: 'BASS',     hz: '20–200 Hz'  },
+                            { key: 'low_mid',  label: 'LOW MID',  hz: '200–2k Hz'  },
+                            { key: 'high_mid', label: 'HIGH MID', hz: '2k–8k Hz'   },
+                            { key: 'air',      label: 'AIR',      hz: '8k–20k Hz'  }
+                          ]}
+                          <div class="tonal-section-title" style="margin-top:10px">TONAL BALANCE</div>
+                          <div class="tonal-panel">
+                            {#each bands as b}
+                              {@const mixPct = latestA?.tonal_balance ? Math.round((latestA.tonal_balance[b.key] || 0) * 100) : null}
+                              {@const refPct = selectedRefTrack?.tonal_balance ? Math.round((selectedRefTrack.tonal_balance[b.key] || 0) * 100) : null}
+                              <div class="band-row">
+                                <div class="band-label">
+                                  <span class="band-name">{b.label}</span>
+                                  <span class="band-hz">{b.hz}</span>
+                                </div>
+                                <div class="band-bars-col">
+                                  {#if mixPct !== null}
+                                    <div class="band-bar-wrap" title="Mix: {mixPct}%">
+                                      <div class="band-bar mix" style="width:{mixPct}%"></div>
+                                    </div>
+                                  {/if}
+                                  {#if refPct !== null}
+                                    <div class="band-bar-wrap" title="Ref: {refPct}%">
+                                      <div class="band-bar ref" style="width:{refPct}%"></div>
+                                    </div>
+                                  {/if}
+                                </div>
+                                <span class="band-pct">
+                                  {#if mixPct !== null}{mixPct}%{/if}
+                                  {#if refPct !== null}<span class="band-pct-ref"> / {refPct}%</span>{/if}
+                                </span>
+                              </div>
+                            {/each}
+                          </div>
+                          {#if latestA?.stereo_width_per_band || selectedRefTrack?.stereo_width_per_band}
+                            <div class="tonal-section-title" style="margin-top:8px">STEREO WIDTH</div>
+                            <div class="tonal-panel">
+                              {#each bands as b}
+                                {@const mw = latestA?.stereo_width_per_band ? (latestA.stereo_width_per_band[b.key] || 0) : null}
+                                {@const rw = selectedRefTrack?.stereo_width_per_band ? (selectedRefTrack.stereo_width_per_band[b.key] || 0) : null}
+                                <div class="band-row">
+                                  <div class="band-label">
+                                    <span class="band-name">{b.label}</span>
+                                    <span class="band-hz">{b.hz}</span>
+                                  </div>
+                                  <div class="band-bars-col">
+                                    {#if mw !== null}
+                                      {@const wPct = Math.min(100, Math.round(mw * 100))}
+                                      <div class="band-bar-wrap" title="Mix: {widthLabel(mw)}">
+                                        <div class="band-bar mix {mw < 0.1 ? 'mono' : mw > 0.5 ? 'wide' : ''}" style="width:{wPct}%"></div>
+                                      </div>
+                                    {/if}
+                                    {#if rw !== null}
+                                      {@const wPct = Math.min(100, Math.round(rw * 100))}
+                                      <div class="band-bar-wrap" title="Ref: {widthLabel(rw)}">
+                                        <div class="band-bar ref {rw < 0.1 ? 'mono' : rw > 0.5 ? 'wide' : ''}" style="width:{wPct}%"></div>
+                                      </div>
+                                    {/if}
+                                  </div>
+                                  <span class="band-pct">
+                                    {#if mw !== null}{widthLabel(mw)}{/if}
+                                    {#if rw !== null}<span class="band-pct-ref"> / {widthLabel(rw)}</span>{/if}
+                                  </span>
+                                </div>
+                              {/each}
+                            </div>
+                          {/if}
+                        {/if}
                       {:else}
                         <!-- TONAL BALANCE + STEREO WIDTH panel -->
                         {@const mixTonal = latestA?.tonal_balance}

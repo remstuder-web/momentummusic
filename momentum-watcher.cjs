@@ -6179,7 +6179,10 @@ async function restore(input) {
                 loudness_lufs: feat.loudness_lufs, brightness: feat.brightness,
                 spectral_centroid: feat.spectral_centroid || null,
                 spectral_contrast: feat.spectral_contrast || null,
-                bass_energy: feat.bass_energy, duration_seconds: feat.duration_seconds
+                bass_energy: feat.bass_energy, duration_seconds: feat.duration_seconds,
+                tonal_balance: feat.tonal_balance || null,
+                stereo_width: feat.stereo_width ?? null,
+                stereo_width_per_band: feat.stereo_width_per_band || null
               }
               console.log(`  ✓ Essentia (bg): ${fname} → ${bpm}bpm ${esKey} (${feat.camelot}) nrg:${feat.energy}`)
 

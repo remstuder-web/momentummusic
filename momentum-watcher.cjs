@@ -894,13 +894,23 @@ async function fetchRssWithBody(url, count = 3) {
     if (url.endsWith('.json') || text.trimStart().startsWith('{')) {
       const data = JSON.parse(text)
       const feedItems = data.items || data.feed?.items || []
-      items = feedItems.slice(0, count).map(i => ({ title: i.title || i.headline || '', url: i.url || i.link || '' }))
+      items = feedItems.slice(0, count).map(i => ({
+        title: i.title || i.headline || '',
+        url: i.url || i.link || '',
+        pubDate: i.date_published || i.date_modified || i.pubDate || null
+      }))
     } else {
       const titleMatches = [...text.matchAll(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/gs)]
       const linkMatches = [...text.matchAll(/<link>([^<]+)<\/link>/gs)]
+      const pubDateMatches = [...text.matchAll(/<pubDate>([^<]+)<\/pubDate>/gs)]
       const titles = titleMatches.slice(1).map(m => m[1].trim())
       const links = linkMatches.slice(1).map(m => m[1].trim())
-      items = titles.slice(0, count).map((t, i) => ({ title: t, url: links[i] || '' }))
+      const pubDates = pubDateMatches.map(m => m[1].trim())
+      items = titles.slice(0, count).map((t, i) => ({
+        title: t,
+        url: links[i] || '',
+        pubDate: pubDates[i] || null
+      }))
     }
     const withBodies = await Promise.allSettled(items.map(async item => {
       if (!item.url) return item
@@ -6403,16 +6413,20 @@ async function getBrainHealth() {
           fetchCulturalTiming().catch(() => null)
         ])
         const countHeaders = { ...sbHeaders, 'Prefer': 'count=exact' }
-        const [songsRes, inboxRes, connectionsRes, brainKnowRes, goalsRes, demoCountRes, projectSongCountRes] = await Promise.all([
+        const [songsRes, inboxRes, connectionsRes, brainKnowRes, goalsRes, demoCountRes, projectSongCountRes, tiktokTracksRes, tiktokBrainRes] = await Promise.all([
           fetch(`${SUPABASE_URL}/rest/v1/songs?select=title,code,work_data,project_id&not.project_id=is.null`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?read=eq.false&order=created_at.desc&limit=20`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/connections?select=name,genre,group_types,last_contact,notes,status`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&select=category,title,content&order=created_at.desc&limit=10`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&category=eq.goal&select=title,content&order=created_at.desc&limit=10`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/songs?project_id=is.null&select=id`, { headers: countHeaders }),
-          fetch(`${SUPABASE_URL}/rest/v1/songs?not.project_id=is.null&select=id`, { headers: countHeaders })
+          fetch(`${SUPABASE_URL}/rest/v1/songs?not.project_id=is.null&select=id`, { headers: countHeaders }),
+          fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?collection_name=eq.tiktok_trending&select=title,artist,created_at&order=created_at.desc&limit=10`, { headers: sbHeaders }),
+          fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&title=like.TikTok Trends Week*&select=title,content&order=created_at.desc&limit=3`, { headers: sbHeaders })
         ])
         const [songs, inbox, brain, brainKnow, goals] = await Promise.all([songsRes.json(), inboxRes.json(), connectionsRes.json(), brainKnowRes.json(), goalsRes.json()])
+        const tiktokTracks = await tiktokTracksRes.json().catch(() => [])
+        const tiktokBrain = await tiktokBrainRes.json().catch(() => [])
         const demoCount = parseInt(demoCountRes.headers.get('content-range')?.split('/')[1] || '0')
         const projectSongCount = parseInt(projectSongCountRes.headers.get('content-range')?.split('/')[1] || '0')
 
@@ -6454,8 +6468,20 @@ async function getBrainHealth() {
           catch { return `- ${g.title}` }
         }).join('\n')
 
-        const gearBriefingBlock = gearThreadsBriefing.length
-          ? gearThreadsBriefing.map((t, i) => `${i+1}. ${t.title}`).join('\n')
+        const NOW_MS = Date.now()
+        const H48_MS = 48 * 3600000
+        const H24_MS = 24 * 3600000
+        const freshGear = gearThreadsBriefing.filter(item => {
+          if (!item.pubDate) return true
+          const age = NOW_MS - new Date(item.pubDate).getTime()
+          return age < H48_MS
+        })
+        const gearBriefingBlock = freshGear.length
+          ? freshGear.map((t, i) => {
+              const age = t.pubDate ? NOW_MS - new Date(t.pubDate).getTime() : 0
+              const ageLabel = age > H24_MS ? '[OUTDATED] ' : ''
+              return `${i+1}. ${ageLabel}${t.title}`
+            }).join('\n')
           : ''
 
         let culturalBlock = ''
@@ -6471,6 +6497,22 @@ async function getBrainHealth() {
           if (cultural.release_timing?.tip) culturalBlock += `Release timing: ${cultural.release_timing.tip}`
         }
 
+        let tiktokBlock = ''
+        if (Array.isArray(tiktokTracks) && tiktokTracks.length) {
+          tiktokBlock += '\nTIKTOK TRENDING TRACKS (recent):\n'
+          tiktokTracks.slice(0, 8).forEach(t => { tiktokBlock += `· ${t.artist} — ${t.title}\n` })
+        }
+        if (Array.isArray(tiktokBrain) && tiktokBrain.length) {
+          const latest = tiktokBrain[0]
+          try {
+            const d = JSON.parse(latest.content)
+            if (d.summary) tiktokBlock += `TikTok synthesis (${latest.title}): ${d.summary}\n`
+            else tiktokBlock += `TikTok synthesis (${latest.title}): ${latest.content.slice(0, 200)}\n`
+          } catch {
+            tiktokBlock += `TikTok synthesis (${latest.title}): ${latest.content.slice(0, 200)}\n`
+          }
+        }
+
         const context = [
           `Today: ${todayISO}`,
           `Songs by stage: ${Object.entries(stageCounts).map(([k,v]) => `${k}(${v})`).join(', ') || 'none'}`,
@@ -6479,6 +6521,7 @@ async function getBrainHealth() {
           `Unread feedback: ${unreadFeedback.join('; ') || 'none'}`,
           `Artists to follow up (30+ days no contact): ${overdueArtists.slice(0,5).join('; ') || 'none'}`,
           activeGoals ? `\nACTIVE GOALS:\n${activeGoals}` : '',
+          tiktokBlock ? `\n${tiktokBlock}` : '',
           gearBriefingBlock ? `\nTECH — NEW GEAR & PLUGINS:\n${gearBriefingBlock}` : '',
           culturalBlock ? `\n${culturalBlock}` : '',
           brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]` : ''
@@ -6502,6 +6545,7 @@ Sections to include:
 ## Today's Focus
 ## Pipeline Status
 ## Watch Out
+## TikTok (only if TikTok trending tracks data present — 2-3 bullets on what sounds/genres are blowing up)
 ## Tech (only if gear news data present — summarize new gear relevant to mixing/recording/plugins/hardware, 3-4 bullets max)
 ## Next Step
 

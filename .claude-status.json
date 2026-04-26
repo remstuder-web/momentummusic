@@ -1,25 +1,26 @@
 {
-  "updated": "2026-04-26T06:25:00Z",
-  "last_task": "analyzer-five-fixes",
+  "updated": "2026-04-26T06:38:00Z",
+  "last_task": "song-detail-ui-4-changes",
   "status": "done",
   "working": [
-    "FIX 1: VocalEqChart — getCurveArray() handles array/object/numeric-key/stems formats; normalizePeak() aligns both curves to 0dB peak before display; debug console.log on refCurve",
-    "BUILD 2: save-audio passes song_id from ProjectsTab, watcher uses it as primary lookup (fallback: code prefix) for work_data analysis save",
-    "BUILD 3: ref dropdown replaced with searchable picker — text input filters by artist/title/genre/playlist, shows BPM + tags, per-song open state, click-outside closes",
-    "BUILD 4: loadVocalEq auto-selects first project/song ref when ANALYZER opens if none selected",
-    "BUILD 5: POST /generate-proq4-preset endpoint writes .ffp XML to Desktop; Pro-Q 4 button in ANALYZER shown when mix+ref curves both present",
-    "Briefing gear staleness filter: items >48h removed, 24-48h labeled [OUTDATED]",
-    "TikTok tracks + brain synthesis in morning briefing",
-    "Tier 1 (auto): Spotify preview+genres → Essentia BPM/key/energy/tonal_balance/stereo_width",
-    "Tier 2 (on-demand): POST /analyze-stems with Demucs"
+    "SONG NOTES collapsed by default; auto-opens if wd.project_info has content",
+    "REFERENCE LINKS label removed from song detail",
+    "URL input hidden behind '+ add ref' toggle button with cancel",
+    "YOUR MIX / INSTRUMENTAL drop zone labels: 11px, color #9e9690",
+    "FIX 1: VocalEqChart normalizePeak() aligns both curves to 0dB peak",
+    "BUILD 3: ref searchable picker in ANALYZER",
+    "BUILD 4: auto-select first project/song ref on ANALYZER expand",
+    "BUILD 5: POST /generate-proq4-preset endpoint + button in ANALYZER",
+    "Briefing gear staleness filter + TikTok data in morning briefing",
+    "Tier 1 auto-analysis queue (449 tracks, paused for Spotify rate limit)"
   ],
   "broken": [],
   "partial": [
-    "Spotify rate limited until ~2026-04-26T20:13 UTC — Tier 1 queue paused",
-    "Pro-Q 4 .ffp format: XML format is plausible but untested against actual FabFilter parser — test by importing preset in Pro-Q 4",
+    "Spotify rate limit until ~2026-04-26T20:13 UTC — Tier 1 queue paused, auto-resumes",
+    "Pro-Q 4 .ffp format: XML format untested against actual FabFilter parser",
     "OPTIONAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS tonal_balance jsonb, stereo_width float, stereo_width_per_band jsonb, crest_factor_per_band jsonb",
     "OPTIONAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text"
   ],
-  "next": "Test Pro-Q 4 preset import in FabFilter. Check ANALYZER: open a song, verify ref picker search works, confirm auto-select fires, verify EQ curves align correctly (peak at 0dB). Wait for Spotify rate limit to clear then queue will auto-process.",
-  "notes": "refCurve debug console.log is intentionally left in for now — remove after format confirmed. Pro-Q 4 .ffp format may need adjustment if FabFilter uses binary chunk format instead of XML."
+  "next": "Test UI in browser: notes toggle, + add ref button, drop zone labels. Test Pro-Q 4 preset import in FabFilter. Monitor Spotify queue after rate limit clears (~14h from 06:13 UTC).",
+  "notes": "Song notes open state derived from wd.project_info existence — no extra DB field needed. addingRef state is per-song. Both new state dicts use spread-to-trigger reactivity pattern."
 }

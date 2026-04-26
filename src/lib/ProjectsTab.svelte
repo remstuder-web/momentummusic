@@ -3190,6 +3190,21 @@ Return JSON only:
                       </button>
                     {/if}
                   </div>
+                  <!-- Release checklist -->
+                  {@const checklist = wd.release_checklist || {}}
+                  {@const doneCount = RELEASE_CHECKLIST.filter(i => checklist[i.id]).length}
+                  <div class="release-checklist">
+                    <div class="rl-title">RELEASE CHECKLIST
+                      <span class="rl-progress">{doneCount}/{RELEASE_CHECKLIST.length}</span>
+                    </div>
+                    {#each RELEASE_CHECKLIST as item}
+                      <label class="rl-item {checklist[item.id] ? 'done' : ''}">
+                        <input type="checkbox" checked={!!checklist[item.id]}
+                          onchange={e => toggleReleaseCheck(song, item.id, e.currentTarget.checked)} />
+                        <span>{item.label}</span>
+                      </label>
+                    {/each}
+                  </div>
                 {/if}
 
                 <!-- Versions — production / mixing only -->
@@ -3846,8 +3861,8 @@ Return JSON only:
                   {/if}
                 </div>
 
-                <!-- Release checklist -->
-                {#if releasedSongIds.includes(song.id) || releasedSongIds.includes(song.code) || wd.current_stage === 'mastering' || wd.current_stage === 'stems'}
+                <!-- Release checklist — for released songs not in stems stage -->
+                {#if (releasedSongIds.includes(song.id) || releasedSongIds.includes(song.code)) && wd.current_stage !== 'stems'}
                   {@const checklist = wd.release_checklist || {}}
                   {@const doneCount = RELEASE_CHECKLIST.filter(i => checklist[i.id]).length}
                   <div class="release-checklist">

@@ -9,21 +9,47 @@
   let lastRefCurve = $state(null)
 
   $effect(() => { if (mixCurve != null) lastMixCurve = mixCurve })
-  $effect(() => { if (refCurve != null) lastRefCurve = refCurve })
-
-  // Normalize curve to {freq: dB} object — handles both array (Essentia) and object formats
-  function normalizeCurve(curve) {
-    if (!curve) return null
-    if (Array.isArray(curve)) {
-      const obj = {}
-      ISO_FREQS.forEach((f, i) => { if (i < curve.length && Number.isFinite(curve[i])) obj[String(f)] = curve[i] })
-      return obj
+  $effect(() => {
+    if (refCurve != null) {
+      console.log('refCurve data:', JSON.stringify(refCurve)?.slice(0, 200))
+      lastRefCurve = refCurve
     }
-    return curve
+  })
+
+  // Convert any curve format to array of dB values
+  function getCurveArray(curve) {
+    if (!curve) return []
+    if (Array.isArray(curve)) return curve.filter(v => v !== null && isFinite(v))
+    if (typeof curve === 'object') {
+      const vals = Object.keys(curve)
+        .filter(k => !isNaN(k))
+        .sort((a, b) => Number(a) - Number(b))
+        .map(k => curve[k])
+        .filter(v => v !== null && isFinite(v))
+      if (vals.length) return vals
+      if (curve.stems) return getCurveArray(curve.stems)
+    }
+    return []
   }
 
-  const displayMix = $derived(normalizeCurve(mixCurve ?? lastMixCurve))
-  const displayRef = $derived(normalizeCurve(refCurve ?? lastRefCurve))
+  // Normalize array so peak = 0dB (relative comparison)
+  function normalizePeak(arr) {
+    if (!arr.length) return arr
+    const peak = Math.max(...arr.filter(isFinite))
+    if (!isFinite(peak) || peak === 0) return arr
+    return arr.map(v => isFinite(v) ? v - peak : v)
+  }
+
+  // Convert normalized array to {freq: dB} object for chart rendering
+  function arrayToFreqObj(arr) {
+    if (!arr.length) return null
+    const obj = {}
+    ISO_FREQS.forEach((f, i) => { if (i < arr.length && isFinite(arr[i])) obj[String(f)] = arr[i] })
+    return Object.keys(obj).length ? obj : null
+  }
+
+  const displayMix = $derived(arrayToFreqObj(normalizePeak(getCurveArray(mixCurve ?? lastMixCurve))))
+  const displayRef = $derived(arrayToFreqObj(normalizePeak(getCurveArray(refCurve ?? lastRefCurve))))
 
   const ISO_FREQS = [
     20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160,

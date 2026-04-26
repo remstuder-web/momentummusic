@@ -6141,6 +6141,7 @@ async function restore(input) {
     const dir    = u.searchParams.get('dir')
     const fname  = u.searchParams.get('filename')
     const oldfile = u.searchParams.get('oldfile') || ''
+    const songIdParam = u.searchParams.get('song_id') || ''
     const targetDir = dir === 'mixing' ? MIXING_DIR : dir === 'demo' ? DEMOS_DIR : PRODUCTION_DIR
     if (!fname) { res.writeHead(400); res.end('missing filename'); return }
 
@@ -6182,28 +6183,36 @@ async function restore(input) {
               }
               console.log(`  ✓ Essentia (bg): ${fname} → ${bpm}bpm ${esKey} (${feat.camelot}) nrg:${feat.energy}`)
 
-              // Find song by code prefix and update work_data
-              const code = fname.split('_')[0]
-              if (code) {
-                const songRes = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=id,code,work_data&code=eq.${encodeURIComponent(code)}&limit=1`, { headers: sbHeaders })
-                const songs = await songRes.json()
-                const song = Array.isArray(songs) ? songs[0] : null
-                if (song) {
-                  const wd = song.work_data || {}
-                  const versions = wd.versions || []
-                  const vIdx = versions.findIndex(v => v.name === fname || (v.audio_path || '').endsWith(fname))
-                  if (vIdx >= 0) {
-                    versions[vIdx] = { ...versions[vIdx], analysis }
-                  } else if (versions.length > 0) {
-                    versions[versions.length - 1] = { ...versions[versions.length - 1], analysis }
-                  }
-                  wd.versions = versions
-                  await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, {
-                    method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-                    body: JSON.stringify({ work_data: wd })
-                  })
-                  console.log(`  ✓ Essentia (bg): updated work_data for song ${code}`)
+              // Find song by song_id param (preferred) or code prefix
+              let song = null
+              if (songIdParam) {
+                const songRes = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=id,code,work_data&id=eq.${encodeURIComponent(songIdParam)}&limit=1`, { headers: sbHeaders })
+                const rows = await songRes.json()
+                song = Array.isArray(rows) ? rows[0] : null
+              }
+              if (!song) {
+                const code = fname.split('_')[0]
+                if (code) {
+                  const songRes = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=id,code,work_data&code=eq.${encodeURIComponent(code)}&limit=1`, { headers: sbHeaders })
+                  const rows = await songRes.json()
+                  song = Array.isArray(rows) ? rows[0] : null
                 }
+              }
+              if (song) {
+                const wd = song.work_data || {}
+                const versions = wd.versions || []
+                const vIdx = versions.findIndex(v => v.name === fname || (v.audio_path || '').endsWith(fname))
+                if (vIdx >= 0) {
+                  versions[vIdx] = { ...versions[vIdx], analysis }
+                } else if (versions.length > 0) {
+                  versions[versions.length - 1] = { ...versions[versions.length - 1], analysis }
+                }
+                wd.versions = versions
+                await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, {
+                  method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+                  body: JSON.stringify({ work_data: wd })
+                })
+                console.log(`  ✓ Essentia (bg): updated work_data for song ${song.code || song.id}`)
               }
 
               // Save to brain_knowledge as own_production if not yet stored
@@ -8766,6 +8775,92 @@ Respond ONLY in JSON:
         runStemAnalysis(track).catch(e => console.error('analyze-stems error:', e.message))
       } catch(e) {
         res.writeHead(500)
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /generate-proq4-preset — generate FabFilter Pro-Q 4 .ffp preset ──────
+  if (req.method === 'POST' && req.url === '/generate-proq4-preset') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', async () => {
+      try {
+        const { song_id, reference_track_id, stem_type } = JSON.parse(body)
+        const stemKey = stem_type || 'vocals'
+
+        const { data: mixRow } = await supabaseAdmin.from('vocal_eq_curves')
+          .select('curve').eq('song_id', String(song_id)).eq('stem_type', stemKey).eq('source_type', 'mix')
+          .order('created_at', { ascending: false }).limit(1).single()
+
+        const { data: refRow } = await supabaseAdmin.from('vocal_eq_curves')
+          .select('curve').eq('reference_track_id', String(reference_track_id)).eq('stem_type', stemKey)
+          .limit(1).single()
+
+        if (!mixRow?.curve || !refRow?.curve) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Missing curves — analyze stems first (mix: ' + !!mixRow?.curve + ', ref: ' + !!refRow?.curve + ')' }))
+          return
+        }
+
+        const ISO_FREQS_PQ = [20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000]
+
+        function toCurveArr(curve) {
+          if (!curve) return []
+          if (Array.isArray(curve)) return curve.map(v => isFinite(v) ? v : 0)
+          const vals = Object.keys(curve).filter(k => !isNaN(k)).sort((a,b)=>Number(a)-Number(b)).map(k=>curve[k])
+          return vals.length ? vals.map(v => isFinite(v) ? v : 0) : []
+        }
+        function normPeak(arr) {
+          if (!arr.length) return arr
+          const peak = Math.max(...arr.filter(isFinite))
+          if (!isFinite(peak) || peak === 0) return arr
+          return arr.map(v => v - peak)
+        }
+
+        const mixArr = normPeak(toCurveArr(mixRow.curve))
+        const refArr = normPeak(toCurveArr(refRow.curve))
+        const len = Math.min(mixArr.length, refArr.length, ISO_FREQS_PQ.length)
+        const diff = Array.from({ length: len }, (_, i) => refArr[i] - mixArr[i])
+
+        const bands = []
+        for (let i = 0; i < diff.length; i++) {
+          const gain = diff[i]
+          if (Math.abs(gain) < 1.5) continue
+          const prev = diff[i-1] || 0, next = diff[i+1] || 0
+          if (Math.abs(gain) >= Math.abs(prev) && Math.abs(gain) >= Math.abs(next)) {
+            bands.push({ freq: ISO_FREQS_PQ[i], gain: Math.max(-12, Math.min(12, gain)), q: 1.41 })
+          }
+        }
+        bands.sort((a, b) => a.freq - b.freq)
+        const activeBands = bands.slice(0, 24)
+
+        const presetName = stemKey + '_match_' + new Date().toISOString().slice(0, 10)
+        let xml = '<?xml version="1.0" encoding="utf-8"?>\n<PresetChunkXML>\n  <Preset name="' + presetName + '" plugin="Pro-Q 4">\n    <Parameters>\n'
+        activeBands.forEach((band, i) => {
+          const n = i + 1
+          xml += '      <Band' + n + 'Enabled>1</Band' + n + 'Enabled>\n'
+          xml += '      <Band' + n + 'Frequency>' + band.freq.toFixed(2) + '</Band' + n + 'Frequency>\n'
+          xml += '      <Band' + n + 'Gain>' + band.gain.toFixed(2) + '</Band' + n + 'Gain>\n'
+          xml += '      <Band' + n + 'Q>' + band.q.toFixed(2) + '</Band' + n + 'Q>\n'
+          xml += '      <Band' + n + 'Shape>Bell</Band' + n + 'Shape>\n'
+        })
+        for (let i = activeBands.length + 1; i <= 24; i++) {
+          xml += '      <Band' + i + 'Enabled>0</Band' + i + 'Enabled>\n'
+        }
+        xml += '    </Parameters>\n  </Preset>\n</PresetChunkXML>\n'
+
+        const filename = presetName + '.ffp'
+        const outputPath = '/Users/remo/Desktop/' + filename
+        fs.writeFileSync(outputPath, xml, 'utf8')
+        console.log('✓ Pro-Q 4 preset saved:', outputPath, '(' + activeBands.length + ' bands)')
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, filename, path: outputPath, bands: activeBands.length }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: e.message }))
       }
     })

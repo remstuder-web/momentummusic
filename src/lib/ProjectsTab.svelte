@@ -54,6 +54,8 @@
   let activeStem = $state({}) // song.id -> 'vocals' | 'drums' | 'bass' | 'other'
   let selectedRefId = $state({}) // song.id -> reference_track_id (string)
   let refTrackOptions = $state([]) // ref tracks that have EQ curves available
+  let refSearch = $state({}) // song.id -> search string
+  let refPickerOpen = $state({}) // song.id -> bool
   let analyzerOpen = $state({}) // song.id -> { track, match, arc, feedback, trend }
   let successMatch = $state({}) // song.id -> result from /analyze-success-match
   let successMatchLoading = $state({}) // song.id -> bool
@@ -171,7 +173,7 @@
         pushUndo('Overwrote ' + filename + ' on ' + (song.title || song.code), song.id, JSON.parse(JSON.stringify(wd)), filename)
         const buf = await file.arrayBuffer()
         const res = await fetch(
-          `http://localhost:4242/save-audio?dir=${dir}&filename=${encodeURIComponent(filename)}&oldfile=${encodeURIComponent(oldFilename)}`,
+          `http://localhost:4242/save-audio?dir=${dir}&filename=${encodeURIComponent(filename)}&oldfile=${encodeURIComponent(oldFilename)}&song_id=${encodeURIComponent(song.id)}`,
           { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf }
         )
         const result = await res.json()
@@ -217,7 +219,7 @@
 
     const buf = await file.arrayBuffer()
     const res = await fetch(
-      `http://localhost:4242/save-audio?dir=${dir}&filename=${encodeURIComponent(filename)}&oldfile=${encodeURIComponent(oldfile)}`,
+      `http://localhost:4242/save-audio?dir=${dir}&filename=${encodeURIComponent(filename)}&oldfile=${encodeURIComponent(oldfile)}&song_id=${encodeURIComponent(song.id)}`,
       { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf }
     )
     const result = await res.json()
@@ -2197,6 +2199,16 @@
       ...(libraryTracks || []).filter(r => !priorityIds.has(r.id)).map(r => ({ ...r, _section: 'LIBRARY', _rt_id: r.id }))
     ]
 
+    // Auto-select first project/song ref if none selected yet
+    if (!selectedRefId[songId] && refTrackOptions.length) {
+      const firstPriority = refTrackOptions.find(r => r._section === 'PROJECT' || r._section === 'SONG')
+      if (firstPriority) {
+        selectedRefId[songId] = String(firstPriority._rt_id ?? firstPriority.id)
+        selectedRefId = { ...selectedRefId }
+        loadMozartInsight(songId, firstPriority)
+      }
+    }
+
     // Auto-compare: latest mix vs selected or first ref for current stem
     const stemKey = activeStem[songId] || 'vocals'
     const latestMix = allCurves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)
@@ -2306,6 +2318,24 @@ Return JSON only:
     if (opening && section === 'match') loadSuccessMatch({ id: songId })
     if (opening && section === 'feedback') loadFeedbackInsights({ id: songId })
     if (opening && section === 'trend') loadTrendVelocity()
+  }
+
+  async function generateProQ4Preset(songId, refId, stem) {
+    try {
+      const r = await fetch('http://localhost:4242/generate-proq4-preset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ song_id: songId, reference_track_id: refId, stem_type: stem })
+      })
+      const d = await r.json()
+      if (d.ok) {
+        alert('✓ ' + d.filename + ' saved to Desktop (' + d.bands + ' bands)')
+      } else {
+        alert('Error: ' + (d.error || 'unknown error'))
+      }
+    } catch(e) {
+      alert('Pro-Q 4 preset failed: ' + e.message)
+    }
   }
 
   async function analyzeMyVocal(song) {
@@ -2618,7 +2648,10 @@ Return JSON only:
   load()
 </script>
 
-<svelte:window onkeydown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && !e.target.closest('input, textarea')) { e.preventDefault(); undo() } }} />
+<svelte:window
+  onkeydown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && !e.target.closest('input, textarea')) { e.preventDefault(); undo() } }}
+  onclick={e => { if (!e.target.closest('.ref-picker-wrap')) refPickerOpen = {} }}
+/>
 
 {#if loading}
   <p class="empty">Loading...</p>
@@ -3333,48 +3366,92 @@ Return JSON only:
                           </button>
                         {/each}
                       </div>
-                      <!-- Ref dropdown — always show, curves load when available -->
-                      <div class="ref-select-row">
-                        <span class="ref-select-label">Compare:</span>
-                        <select class="ref-select"
-                          value={selectedRef}
-                          onchange={e => {
-                            selectedRefId[song.id] = e.currentTarget.value
-                            selectedRefId = { ...selectedRefId }
-                            loadVocalEq(song.id)
-                            const ref = refTrackOptions.find(r => String(r._rt_id ?? r.id) === e.currentTarget.value)
-                            if (ref) loadMozartInsight(song.id, ref)
-                          }}>
-                          <option value="">— no ref —</option>
-                          {#if projectRefs.length}
-                            <optgroup label="── PROJECT REFS ──">
-                              {#each projectRefs as ref}
-                                <option value={String(ref._rt_id)}>{ref.artist} — {ref.title}</option>
-                              {/each}
-                            </optgroup>
+                      <!-- Ref picker — searchable dropdown -->
+                      <div class="ref-picker-wrap">
+                        <div class="ref-picker-input-row">
+                          <input
+                            class="ref-search-input"
+                            placeholder="Search references..."
+                            value={refSearch[song.id] || ''}
+                            oninput={e => { refSearch[song.id] = e.currentTarget.value; refSearch = { ...refSearch } }}
+                            onfocus={() => { refPickerOpen[song.id] = true; refPickerOpen = { ...refPickerOpen } }}
+                          />
+                          {#if selectedRef}
+                            {@const sel = refTrackOptions.find(r => String(r._rt_id ?? r.id) === selectedRef)}
+                            {#if sel}
+                              <span class="ref-selected-badge">
+                                {sel.artist} — {sel.title || sel.name}
+                                <button onclick={() => {
+                                  selectedRefId[song.id] = ''
+                                  selectedRefId = { ...selectedRefId }
+                                  refSearch[song.id] = ''
+                                  refSearch = { ...refSearch }
+                                }}>×</button>
+                              </span>
+                            {/if}
                           {/if}
-                          {#if songRefs.length}
-                            <optgroup label="── SONG REFS ──">
-                              {#each songRefs as ref}
-                                <option value={String(ref._rt_id)}>{ref.artist} — {ref.title}</option>
+                        </div>
+                        {#if refPickerOpen[song.id]}
+                          {@const q = (refSearch[song.id] || '').toLowerCase()}
+                          {@const filteredLibrary = refTrackOptions.filter(r => r._section === 'LIBRARY' && (!q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q) || (r.genre_tag||'').toLowerCase().includes(q) || (r.playlist_name||'').toLowerCase().includes(q))).slice(0, 30)}
+                          <div class="ref-picker-list">
+                            {#if projectRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)).length}
+                              <div class="ref-picker-section">PROJECT REFS</div>
+                              {#each projectRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)) as r}
+                                <div class="ref-picker-item" onclick={() => {
+                                  selectedRefId[song.id] = String(r._rt_id ?? r.id)
+                                  selectedRefId = { ...selectedRefId }
+                                  refPickerOpen[song.id] = false
+                                  refPickerOpen = { ...refPickerOpen }
+                                  refSearch[song.id] = ''
+                                  refSearch = { ...refSearch }
+                                  loadVocalEq(song.id)
+                                  loadMozartInsight(song.id, r)
+                                }}>
+                                  <span class="ref-item-name">{r.artist} — {r.title || r.name}</span>
+                                  {#if r.playlist_name}<span class="ref-item-tag gold">{r.playlist_name}</span>{/if}
+                                </div>
                               {/each}
-                            </optgroup>
-                          {/if}
-                          {#if hitRefs.length}
-                            <optgroup label="── HIT SONGS ──">
-                              {#each hitRefs as ref}
-                                <option value={String(ref._rt_id ?? ref.id)}>{ref.artist || 'Unknown'} — {ref.title}</option>
+                            {/if}
+                            {#if songRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)).length}
+                              <div class="ref-picker-section">SONG REFS</div>
+                              {#each songRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)) as r}
+                                <div class="ref-picker-item" onclick={() => {
+                                  selectedRefId[song.id] = String(r._rt_id ?? r.id)
+                                  selectedRefId = { ...selectedRefId }
+                                  refPickerOpen[song.id] = false
+                                  refPickerOpen = { ...refPickerOpen }
+                                  refSearch[song.id] = ''
+                                  refSearch = { ...refSearch }
+                                  loadVocalEq(song.id)
+                                  loadMozartInsight(song.id, r)
+                                }}>
+                                  <span class="ref-item-name">{r.artist} — {r.title || r.name}</span>
+                                </div>
                               {/each}
-                            </optgroup>
-                          {/if}
-                          {#if libraryRefs.length}
-                            <optgroup label="── LIBRARY ──">
-                              {#each libraryRefs as ref}
-                                <option value={String(ref._rt_id ?? ref.id)}>{ref.artist || 'Unknown'} — {ref.title}{ref.genre_tag ? ' (' + ref.genre_tag + ')' : ''}</option>
-                              {/each}
-                            </optgroup>
-                          {/if}
-                        </select>
+                            {/if}
+                            <div class="ref-picker-section">LIBRARY ({filteredLibrary.length})</div>
+                            {#each filteredLibrary as r}
+                              <div class="ref-picker-item" onclick={() => {
+                                selectedRefId[song.id] = String(r._rt_id ?? r.id)
+                                selectedRefId = { ...selectedRefId }
+                                refPickerOpen[song.id] = false
+                                refPickerOpen = { ...refPickerOpen }
+                                refSearch[song.id] = ''
+                                refSearch = { ...refSearch }
+                                loadVocalEq(song.id)
+                                loadMozartInsight(song.id, r)
+                              }}>
+                                <span class="ref-item-name">{r.artist || 'Unknown'} — {r.title}</span>
+                                <div class="ref-item-meta">
+                                  {#if r.playlist_name}<span class="ref-item-tag gold">{r.playlist_name}</span>{/if}
+                                  {#if r.genres?.[0]}<span class="ref-item-tag">{r.genres[0]}</span>{:else if r.genre_tag}<span class="ref-item-tag">{r.genre_tag}</span>{/if}
+                                  {#if r.tempo}<span class="ref-item-bpm">{Math.round(r.tempo)}bpm</span>{/if}
+                                </div>
+                              </div>
+                            {/each}
+                          </div>
+                        {/if}
                       </div>
                       {#if stemKey !== 'tonal'}
                         {#if selectedRef && !refCurveData}
@@ -3388,6 +3465,11 @@ Return JSON only:
                           refLabel={refCurveData?.label ?? ''}
                           isMixTab={isMixTab}
                         />
+                        {#if mixCurve && refCurve && selectedRef}
+                          <button class="proq-btn" onclick={() => generateProQ4Preset(song.id, selectedRef, stemKey)}>
+                            ↓ Pro-Q 4 preset
+                          </button>
+                        {/if}
                       {:else}
                         <!-- TONAL BALANCE + STEREO WIDTH panel -->
                         {@const mixTonal = latestA?.tonal_balance}
@@ -4595,9 +4677,25 @@ Return JSON only:
   .stem-tab { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; padding: 3px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; letter-spacing: .06em; }
   .stem-tab.active { border-color: #c9a84c; color: #c9a84c; background: rgba(201,168,76,.08); }
   .stem-tab:hover:not(.active) { border-color: #333; color: #666; }
-  .ref-select-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-  .ref-select-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; white-space: nowrap; }
-  .ref-select { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 11px; padding: 4px 8px; border-radius: 2px; outline: none; }
+  .ref-picker-wrap { position: relative; margin: 0 0 4px; }
+  .ref-picker-input-row { display: flex; gap: 6px; align-items: center; }
+  .ref-search-input { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 5px 9px; border-radius: 3px; outline: none; min-width: 0; }
+  .ref-search-input:focus { border-color: #c9a84c; }
+  .ref-search-input::placeholder { color: #333; }
+  .ref-selected-badge { font-family: 'Space Mono', monospace; font-size: 8px; color: #c9a84c; border: 1px solid rgba(201,168,76,.3); padding: 2px 7px; border-radius: 2px; display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+  .ref-selected-badge button { background: none; border: none; color: #c9a84c; cursor: pointer; padding: 0; font-size: 12px; line-height: 1; flex-shrink: 0; }
+  .ref-picker-list { position: absolute; top: 100%; left: 0; right: 0; background: #1a1a1a; border: 1px solid #303030; border-radius: 3px; max-height: 280px; overflow-y: auto; z-index: 100; margin-top: 2px; }
+  .ref-picker-section { font-family: 'Space Mono', monospace; font-size: 8px; color: rgba(201,168,76,.5); padding: 5px 10px 3px; letter-spacing: .1em; border-top: 1px solid #252525; position: sticky; top: 0; background: #1a1a1a; }
+  .ref-picker-section:first-child { border-top: none; }
+  .ref-picker-item { padding: 5px 10px; cursor: pointer; border-bottom: 1px solid #111; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .ref-picker-item:hover { background: #222; }
+  .ref-item-name { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #cec9c1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref-item-meta { display: flex; gap: 3px; align-items: center; flex-shrink: 0; }
+  .ref-item-tag { font-family: 'Space Mono', monospace; font-size: 7px; color: #444; border: 1px solid #252525; padding: 1px 4px; border-radius: 2px; white-space: nowrap; }
+  .ref-item-tag.gold { color: #c9a84c; border-color: rgba(201,168,76,.3); }
+  .ref-item-bpm { font-family: 'Space Mono', monospace; font-size: 7px; color: #333; white-space: nowrap; }
+  .proq-btn { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.3); color: #c9a84c; padding: 4px 12px; border-radius: 2px; cursor: pointer; margin-top: 6px; }
+  .proq-btn:hover { background: rgba(201,168,76,.15); }
   .no-curve-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #444; font-style: italic; padding: 2px 0 4px; }
   .tonal-section-title { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: rgba(201,168,76,.6); padding: 6px 0 4px; text-transform: uppercase; }
   .tonal-panel { display: flex; flex-direction: column; }

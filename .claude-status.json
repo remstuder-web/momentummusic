@@ -1,23 +1,24 @@
 {
-  "updated": "2026-04-25T23:30:00Z",
-  "last_task": "import-all-user-playlists-v2",
+  "updated": "2026-04-26T05:50:00Z",
+  "last_task": "briefing-tiktok-staleness",
   "status": "done",
   "working": [
-    "importAllUserPlaylists(): 434 tracks saved from 21 user-owned playlists",
-    "playlist.items.href used (not tracks.href — that field is null in API response)",
-    "/playlists/{id}/items endpoint works for user-owned playlists (not /tracks)",
-    "i.item field used (not i.track — /items endpoint uses different field name)",
-    "genre_tag = playlist name lowercase (ELECTRONIC EDM → 'electronic edm')",
-    "genres = Spotify artist genres per track (cached per artist per session)",
-    "BrainTab: playlist_name shown gold (.playlist-tag), genres[0] shown dim (.track-genre-tag)",
-    "2 followed playlists (not owned) correctly skip with 403 — expected behavior"
+    "Gear news staleness filter: items >48h removed, items 24-48h labeled [OUTDATED]",
+    "pubDate extracted from RSS XML (pubDate tag) and JSON feeds (date_published/date_modified)",
+    "TikTok trending tracks in briefing: fetched from reference_tracks (collection_name=tiktok_trending)",
+    "TikTok synthesis in briefing: fetched from brain_knowledge (title like 'TikTok Trends Week%')",
+    "Briefing Claude prompt updated with ## TikTok section",
+    "Tier 1 (auto): Spotify preview+genres → Essentia BPM/key/energy/tonal_balance/stereo_width → Genius credits",
+    "Tier 2 (on-demand): runStemAnalysis() with Demucs, triggered by POST /analyze-stems {reference_track_id}",
+    "POST /analyze-stems endpoint live",
+    "434 tracks imported from 21 user-owned Spotify playlists with genre_tag from playlist name"
   ],
   "broken": [],
   "partial": [
-    "artist genres fetch (per-track) may be rate-limited on large playlists — caching mitigates this",
-    "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text; (needed before import works fully)",
-    "Followed playlists (not user-owned) still 403 — needs Spotify Extended Access to import those"
+    "Spotify rate limited until ~2026-04-26T20:13 UTC — Tier 1 queue paused, will auto-resume",
+    "OPTIONAL SQL still pending: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS tonal_balance jsonb, stereo_width float, stereo_width_per_band jsonb, crest_factor_per_band jsonb",
+    "OPTIONAL SQL still pending: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text"
   ],
-  "next": "Run manual SQL for missing columns if not done yet. Re-run /import-all-my-playlists after SQL. Brain tab library should now show playlist labels in gold and Spotify genres in dim.",
-  "notes": "Key discoveries: (1) API returns items.href not tracks.href in me/playlists response. (2) /items endpoint uses i.item not i.track. (3) Only user-owned playlists work — followed playlists still 403. 434 tracks imported with genre labels preserved."
+  "next": "Wait for Spotify rate limit to clear (~14h from 2026-04-26T06:13 UTC). Queue will auto-process 449 tracks for Tier 1. Monitor with: curl http://localhost:4242/spotify-status. Run /morning-briefing to test TikTok + staleness fixes.",
+  "notes": "TWO FIXES done: (1) gear news items >48h filtered, 24-48h marked [OUTDATED] in briefing, (2) TikTok tracks from reference_tracks + brain synthesis included in briefing context. Both SQL ALTERs are optional — columns may already exist or will be added on next write."
 }

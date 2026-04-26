@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-26] momentum-watcher.cjs — DONE
+TASK: tier-split-analysis
+WHAT: Split analysis pipeline into Tier 1 (auto, fast) and Tier 2 (on-demand, heavy). processLibraryTrackInBackground() now Tier 1 only: Spotify preview+genres, Essentia BPM/key/energy/tonal/stereo, Genius credits (~15-20s per track). Demucs stem EQ moved to runStemAnalysis() (Tier 2, called only by POST /analyze-stems). Completion signal changed from vocal_eq_curves presence to tempo != null. Startup queue changed from limit:50 + EQ check to limit:500 + tempo IS NULL. POST /analyze-stems endpoint added for on-demand Tier 2 trigger.
+RESULT: works — 449 tracks queued (Tier 1), rate limited ~14h from earlier genre enrichment run, will auto-resume
+BLOCKERS: none
+
 ## [2026-04-26] momentum-watcher.cjs + src/lib/BrainTab.svelte — DONE
 TASK: import-all-user-playlists-v2
 WHAT: importAllUserPlaylists(): use playlist.items.href (not playlist.tracks.href — that field is null in API response). Use /playlists/{id}/items endpoint (not /tracks). Map i.item (not i.track — different field name in /items response). genre_tag = playlist name lowercased. genres = Spotify artist genres (cached per session). BrainTab library display: playlist_name shown in gold .playlist-tag, genres[0] shown in dim .track-genre-tag. Followed playlists (not owned) skip cleanly with 403.

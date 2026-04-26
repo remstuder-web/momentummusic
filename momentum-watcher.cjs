@@ -1617,21 +1617,20 @@ let processingQueue = []
 let isProcessing = false
 let spotifyRateLimitUntil = 0
 
+// ── Tier 1: fast analysis — Spotify + Essentia + tonal/stereo + Genius credits ─
 async function processLibraryTrackInBackground(refTrack) {
   try {
-    // Skip if Spotify is rate limited
     if (spotifyRateLimitUntil && Date.now() < spotifyRateLimitUntil) {
       console.log('bg: Spotify rate limited, skipping')
       return
     }
 
-    // Skip if already processed
-    const { data: existing } = await supabase.from('vocal_eq_curves').select('id').eq('reference_track_id', String(refTrack.id)).limit(1)
-    if (existing?.length) { console.log('bg: skip processed:', refTrack.artist, '—', refTrack.title); return }
+    // Skip if already analysed (tempo is the Tier 1 completion signal)
+    if (refTrack.tempo != null) { console.log('bg: skip processed:', refTrack.artist, '—', refTrack.title); return }
 
     console.log('bg: processing:', refTrack.artist, '—', refTrack.title)
 
-    // Step 1: Get preview URL + genres
+    // Step 1: Spotify — preview URL + genres
     let previewUrl = refTrack.preview_url || null
     if (refTrack.spotify_id) {
       try {
@@ -1645,7 +1644,6 @@ async function processLibraryTrackInBackground(refTrack) {
             if (pvErr) console.error('bg: preview_url update failed:', refTrack.title, pvErr.message)
           }
         }
-        // Fetch and save genres if not already set
         if (!refTrack.genres?.length) {
           const genres = await fetchTrackGenres(refTrack.spotify_id)
           if (genres.length) {
@@ -1658,54 +1656,38 @@ async function processLibraryTrackInBackground(refTrack) {
     }
     if (!previewUrl) { console.log('bg: no preview URL for:', refTrack.title); return }
 
-    // Step 2: Download preview
+    // Step 2: Download 30s preview
     const tmpFile = '/tmp/ref_bg_' + refTrack.id + '_' + Date.now() + '.mp3'
     const dlRes = await fetch(previewUrl)
     if (!dlRes.ok) throw new Error('preview download failed: ' + dlRes.status)
-    const buf = Buffer.from(await dlRes.arrayBuffer())
-    fs.writeFileSync(tmpFile, buf)
+    fs.writeFileSync(tmpFile, Buffer.from(await dlRes.arrayBuffer()))
 
-    // Step 3: Essentia analysis
+    // Step 3: Essentia — BPM, key, energy, tonal balance, stereo width
     try {
       const esOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_AUDIO_SCRIPT}" "${tmpFile}" 2>/dev/null`, { encoding: 'utf8', timeout: 120000 }).trim()
       const es = JSON.parse(esOut)
       if (es.bpm) {
         const upd = {}
-        if (es.bpm) upd.tempo = es.bpm
-        if (es.key) upd.key = es.key
-        if (es.camelot) upd.camelot = es.camelot
-        if (es.energy != null) upd.energy = es.energy
-        if (es.danceability != null) upd.danceability = es.danceability
-        if (es.loudness_lufs != null) upd.loudness = es.loudness_lufs
-        if (es.valence != null) upd.valence = es.valence
-        if (es.brightness != null) upd.brightness = es.brightness
-        if (es.bass_energy != null) upd.bass_energy = es.bass_energy
+        if (es.bpm)              upd.tempo               = es.bpm
+        if (es.key)              upd.key                 = es.key
+        if (es.camelot)          upd.camelot             = es.camelot
+        if (es.energy != null)   upd.energy              = es.energy
+        if (es.danceability != null) upd.danceability    = es.danceability
+        if (es.loudness_lufs != null) upd.loudness       = es.loudness_lufs
+        if (es.valence != null)  upd.valence             = es.valence
+        if (es.brightness != null) upd.brightness        = es.brightness
+        if (es.bass_energy != null) upd.bass_energy      = es.bass_energy
+        if (es.stereo_width != null) upd.stereo_width    = es.stereo_width
+        if (es.tonal_balance)    upd.tonal_balance       = es.tonal_balance
+        if (es.stereo_width_per_band) upd.stereo_width_per_band = es.stereo_width_per_band
+        if (es.crest_factor_per_band) upd.crest_factor_per_band = es.crest_factor_per_band
         const { error: esErr } = await supabase.from('reference_tracks').update(upd).eq('id', refTrack.id)
         if (esErr) console.error('bg: Essentia update failed:', refTrack.title, esErr.message)
-        else console.log('bg: ✓ Essentia for:', refTrack.title)
+        else console.log('bg: ✓ Tier1 analysis for:', refTrack.title, Math.round(es.bpm) + 'bpm', es.key || '')
       }
     } catch(e) { console.warn('bg: Essentia failed for:', refTrack.title, e.message.slice(0, 60)) }
 
-    // Step 4: Stem EQ curves via Demucs
-    try {
-      const eqOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_EQ_SCRIPT}" "${tmpFile}" 2>/dev/null`, { encoding: 'utf8', timeout: 300000 }).trim()
-      const eqResult = JSON.parse(eqOut)
-      if (eqResult.ok && eqResult.stems) {
-        for (const [stemName, curve] of Object.entries(eqResult.stems)) {
-          const { error: eqInsErr } = await supabase.from('vocal_eq_curves').insert({
-            label: (refTrack.artist || '') + ' — ' + (refTrack.title || '') + ' (' + stemName + ')',
-            reference_track_id: String(refTrack.id),
-            stem_type: stemName,
-            source_type: 'reference',
-            curve
-          })
-          if (eqInsErr) console.error('bg: EQ curve insert failed:', stemName, refTrack.title, eqInsErr.message)
-        }
-        console.log('bg: ✓ EQ curves for:', refTrack.title)
-      }
-    } catch(e) { console.warn('bg: stem EQ failed for:', refTrack.title, e.message.slice(0, 60)) }
-
-    // Step 5: Genius credits
+    // Step 4: Genius credits
     try {
       const credits = await fetchGeniusCredits(refTrack.artist, refTrack.title)
       if (credits && (credits.producers.length || credits.mixers.length || credits.masterers.length)) {
@@ -1713,13 +1695,43 @@ async function processLibraryTrackInBackground(refTrack) {
         if (crErr) console.error('bg: credits update failed:', refTrack.title, crErr.message)
         else console.log('bg: ✓ Credits for:', refTrack.title, '| prod:', credits.producers.join(', '))
       }
-      await new Promise(r => setTimeout(r, 2000)) // polite delay for Genius
+      await new Promise(r => setTimeout(r, 2000))
     } catch(e) { console.warn('bg: credits failed for:', refTrack.title, e.message.slice(0, 60)) }
 
     try { fs.unlinkSync(tmpFile) } catch(e) {}
-    exec('rm -rf /tmp/demucs_* /tmp/stem_eq_* 2>/dev/null')
   } catch(e) {
     console.error('bg: processLibraryTrack error:', refTrack?.title, e.message)
+  }
+}
+
+// ── Tier 2: heavy analysis — Demucs stem EQ (on-demand only) ────────────────
+async function runStemAnalysis(refTrack) {
+  const previewUrl = refTrack.preview_url
+  if (!previewUrl) throw new Error('no preview_url for stem analysis')
+  const tmpFile = '/tmp/ref_bg_' + refTrack.id + '_' + Date.now() + '.mp3'
+  try {
+    const dlRes = await fetch(previewUrl)
+    if (!dlRes.ok) throw new Error('preview download failed: ' + dlRes.status)
+    fs.writeFileSync(tmpFile, Buffer.from(await dlRes.arrayBuffer()))
+    const eqOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_EQ_SCRIPT}" "${tmpFile}" 2>/dev/null`, { encoding: 'utf8', timeout: 300000 }).trim()
+    const eqResult = JSON.parse(eqOut)
+    if (eqResult.ok && eqResult.stems) {
+      for (const [stemName, curve] of Object.entries(eqResult.stems)) {
+        const { error: eqInsErr } = await supabase.from('vocal_eq_curves').insert({
+          label: (refTrack.artist || '') + ' — ' + (refTrack.title || '') + ' (' + stemName + ')',
+          reference_track_id: String(refTrack.id),
+          stem_type: stemName,
+          source_type: 'reference',
+          curve
+        })
+        if (eqInsErr) console.error('stem EQ insert failed:', stemName, refTrack.title, eqInsErr.message)
+      }
+      console.log('✓ Stem EQ curves for:', refTrack.title)
+    }
+    return eqResult
+  } finally {
+    try { fs.unlinkSync(tmpFile) } catch(e) {}
+    exec('rm -rf /tmp/demucs_* /tmp/stem_eq_* 2>/dev/null')
   }
 }
 
@@ -1758,20 +1770,19 @@ function queueLibraryTrack(track) {
   }
 }
 
-// Startup: queue all library tracks without EQ curves (15s delay to let watcher settle)
+// Startup: Tier 1 queue — all tracks missing tempo (15s delay to let watcher settle)
 setTimeout(async () => {
   try {
-    const { data: libraryTracks } = await supabase
-      .from('reference_tracks').select('*')
-      .in('source', ['user', 'agent'])
+    const { data: unanalyzed } = await supabase
+      .from('reference_tracks')
+      .select('*')
+      .in('source', ['agent', 'user'])
+      .is('tempo', null)
       .not('spotify_id', 'is', null)
-      .order('created_at', { ascending: false }).limit(50)
-    if (!libraryTracks?.length) return
-    for (const track of libraryTracks) {
-      const { data: ex } = await supabase.from('vocal_eq_curves').select('id').eq('reference_track_id', String(track.id)).limit(1)
-      if (!ex?.length) processingQueue.push(track)
-    }
-    console.log('bg: queue ready —', processingQueue.length, 'tracks to process')
+      .limit(500)
+    if (!unanalyzed?.length) return
+    processingQueue.push(...unanalyzed)
+    console.log('bg: Tier1 queue ready —', processingQueue.length, 'tracks to process')
     runBackgroundQueue()
   } catch(e) { console.warn('bg: startup queue error:', e.message) }
 }, 15000)
@@ -2654,7 +2665,7 @@ async function buildStatusResponse() {
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
     'GET /instrumentals/:filename', 'GET /stems/:filename',
     'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /speak',
-    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /extract-acapella', 'POST /analyze-youtube-track',
+    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-stems', 'POST /extract-acapella', 'POST /analyze-youtube-track',
     'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
     'POST /launch-claude-code', 'POST /launch-claude-overnight',
     'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
@@ -8690,6 +8701,28 @@ Respond ONLY in JSON:
       } catch(err) {
         res.writeHead(400, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: err.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /analyze-stems — Tier 2 on-demand stem EQ via Demucs ───────────────
+  if (req.method === 'POST' && req.url === '/analyze-stems') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', async () => {
+      try {
+        const { reference_track_id } = JSON.parse(body)
+        if (!reference_track_id) { res.writeHead(400); res.end(JSON.stringify({ error: 'reference_track_id required' })); return }
+        const { data: track, error: fetchErr } = await supabase.from('reference_tracks').select('*').eq('id', reference_track_id).single()
+        if (fetchErr || !track) { res.writeHead(404); res.end(JSON.stringify({ error: 'track not found' })); return }
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, message: 'Stem analysis started for: ' + track.title }))
+        runStemAnalysis(track).catch(e => console.error('analyze-stems error:', e.message))
+      } catch(e) {
+        res.writeHead(500)
+        res.end(JSON.stringify({ ok: false, error: e.message }))
       }
     })
     return

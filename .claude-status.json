@@ -1,23 +1,23 @@
 {
-  "updated": "2026-04-25T23:15:00Z",
-  "last_task": "import-all-user-playlists",
-  "status": "partial",
+  "updated": "2026-04-25T23:30:00Z",
+  "last_task": "import-all-user-playlists-v2",
+  "status": "done",
   "working": [
-    "importAllUserPlaylists(): fetches /me/playlists — found 22 playlists correctly",
-    "genre_tag derived from playlist name (user's Spotify labels: ELECTRONIC EDM, POP, LATIN, RAP, etc.)",
-    "Per-session artistGenreCache avoids duplicate API calls for same artist across playlists",
-    "POST /import-all-my-playlists endpoint live and responding",
-    "All 22 playlist names confirmed in logs (ELECTRONIC EDM, POP INDIE, RAP, LATIN, LUCA DURAN, etc.)"
+    "importAllUserPlaylists(): 434 tracks saved from 21 user-owned playlists",
+    "playlist.items.href used (not tracks.href — that field is null in API response)",
+    "/playlists/{id}/items endpoint works for user-owned playlists (not /tracks)",
+    "i.item field used (not i.track — /items endpoint uses different field name)",
+    "genre_tag = playlist name lowercase (ELECTRONIC EDM → 'electronic edm')",
+    "genres = Spotify artist genres per track (cached per artist per session)",
+    "BrainTab: playlist_name shown gold (.playlist-tag), genres[0] shown dim (.track-genre-tag)",
+    "2 followed playlists (not owned) correctly skip with 403 — expected behavior"
   ],
-  "broken": [
-    "/playlists/{id}/tracks returns 403 for ALL playlists — Spotify app lacks Extended Access",
-    "All 22 playlists skip with 0 tracks saved"
-  ],
+  "broken": [],
   "partial": [
-    "CRITICAL — Must request Spotify Extended Access: developer.spotify.com → app 45bb7c8c0553458ca79e0848ea805559 → Settings → Extended Access. Once approved, run POST /import-all-my-playlists again to import all tracks with genre labels.",
-    "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;",
-    "REQUIRES MANUAL SQL: ALTER TABLE projects ADD COLUMN IF NOT EXISTS reference_links jsonb DEFAULT '[]';"
+    "artist genres fetch (per-track) may be rate-limited on large playlists — caching mitigates this",
+    "REQUIRES MANUAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text; (needed before import works fully)",
+    "Followed playlists (not user-owned) still 403 — needs Spotify Extended Access to import those"
   ],
-  "next": "1. Request Spotify Extended Access at developer.spotify.com. 2. Run manual SQL for missing columns. 3. Once Extended Access approved, POST /import-all-my-playlists will import all tracks with correct genre_tag from playlist names.",
-  "notes": "22 user playlists identified: ELECTRONIC EDM, ELECTRONIC INDIE, POP DE, POP INDIE, RAP, POP ROCK, POP, LATIN, LUCA DURAN, ODEYA, PILAR, PREMO, ARITA, and others. Genre tagging uses lowercase playlist name as genre_tag with artist genres from Spotify as supplementary genres array."
+  "next": "Run manual SQL for missing columns if not done yet. Re-run /import-all-my-playlists after SQL. Brain tab library should now show playlist labels in gold and Spotify genres in dim.",
+  "notes": "Key discoveries: (1) API returns items.href not tracks.href in me/playlists response. (2) /items endpoint uses i.item not i.track. (3) Only user-owned playlists work — followed playlists still 403. 434 tracks imported with genre labels preserved."
 }

@@ -8867,6 +8867,61 @@ Respond ONLY in JSON:
     return
   }
 
+  // ── POST /average-ref-curves — average EQ curves across multiple reference tracks ──
+  if (req.method === 'POST' && req.url === '/average-ref-curves') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', async () => {
+      try {
+        const { reference_ids, stem_type } = JSON.parse(body)
+        if (!reference_ids?.length) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'reference_ids required' })); return }
+
+        const { data: curves } = await supabaseAdmin
+          .from('vocal_eq_curves')
+          .select('curve, reference_track_id')
+          .eq('stem_type', stem_type || 'mix')
+          .in('reference_track_id', reference_ids.map(String))
+
+        if (!curves?.length) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'no curves found for these references' }))
+          return
+        }
+
+        const arrays = curves.map(c => {
+          const arr = c.curve
+          if (Array.isArray(arr)) return arr.filter(v => v !== null && isFinite(v))
+          if (arr && typeof arr === 'object') {
+            const vals = Object.keys(arr).filter(k => !isNaN(k)).sort((a,b)=>Number(a)-Number(b)).map(k=>arr[k])
+            return vals.filter(v => v !== null && isFinite(v))
+          }
+          return []
+        }).filter(a => a.length > 0)
+
+        if (!arrays.length) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'no valid curve data' }))
+          return
+        }
+
+        const len = Math.max(...arrays.map(a => a.length))
+        const averaged = Array.from({ length: len }, (_, i) => {
+          const vals = arrays.map(a => a[i]).filter(v => v !== null && isFinite(v))
+          return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+        })
+
+        console.log('✓ avg-ref-curves:', curves.length, 'curves averaged for stem:', stem_type)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, curve: averaged, count: curves.length }))
+      } catch(e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /analyze-audio-features — run Essentia analysis on local audio file ──
   if (req.method === 'POST' && req.url === '/analyze-audio-features') {
     const chunks = []; req.on('data', c => chunks.push(c))

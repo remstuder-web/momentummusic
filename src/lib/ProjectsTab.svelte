@@ -58,6 +58,9 @@
   let refPickerOpen = $state({}) // song.id -> bool
   let notesOpen = $state({}) // song.id -> bool
   let addingRef = $state({}) // song.id -> bool
+  let analyzerLoading = $state({}) // song.id -> bool
+  let stemMatches = $state({}) // song.id -> {vocals, drums, bass, other, mix}
+  let avgRefCurve = $state({}) // song.id -> averaged curve array
   let analyzerOpen = $state({}) // song.id -> { track, match, arc, feedback, trend }
   let successMatch = $state({}) // song.id -> result from /analyze-success-match
   let successMatchLoading = $state({}) // song.id -> bool
@@ -2229,6 +2232,8 @@
         vocalComparison = { ...vocalComparison }
       }
     }
+    // Calculate per-stem match % if ref selected
+    if (selRef) calculateStemMatches(songId, selRef)
   }
 
   function widthLabel(w) {
@@ -2322,21 +2327,107 @@ Return JSON only:
     if (opening && section === 'trend') loadTrendVelocity()
   }
 
-  async function generateProQ4Preset(songId, refId, stem) {
+  // Helper: extract curve array from any format (mirrors VocalEqChart logic)
+  function getCurveArr(curve) {
+    if (!curve) return []
+    if (Array.isArray(curve)) return curve.filter(v => v !== null && isFinite(v))
+    if (typeof curve === 'object') {
+      const vals = Object.keys(curve).filter(k => !isNaN(k)).sort((a,b)=>Number(a)-Number(b)).map(k=>curve[k]).filter(v=>v!==null&&isFinite(v))
+      if (vals.length) return vals
+    }
+    return []
+  }
+
+  async function onAnalyzerOpen(song) {
+    analyzerLoading[song.id] = true
+    analyzerLoading = { ...analyzerLoading }
     try {
-      const r = await fetch('http://localhost:4242/generate-proq4-preset', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ song_id: songId, reference_track_id: refId, stem_type: stem })
-      })
-      const d = await r.json()
-      if (d.ok) {
-        alert('✓ ' + d.filename + ' saved to Desktop (' + d.bands + ' bands)')
+      const { data: existingCurves } = await supabase
+        .from('vocal_eq_curves')
+        .select('id, stem_type, created_at')
+        .eq('song_id', String(song.id))
+        .eq('source_type', 'mix')
+        .order('created_at', { ascending: false })
+        .limit(4)
+      if ((existingCurves?.length ?? 0) >= 4) {
+        await loadVocalEq(song.id)
       } else {
-        alert('Error: ' + (d.error || 'unknown error'))
+        await analyzeMyVocal(song)
       }
     } catch(e) {
-      alert('Pro-Q 4 preset failed: ' + e.message)
+      console.error('onAnalyzerOpen error:', e.message)
+      await loadVocalEq(song.id)
+    } finally {
+      analyzerLoading[song.id] = false
+      analyzerLoading = { ...analyzerLoading }
+    }
+  }
+
+  async function calculateStemMatches(songId, refId) {
+    const curves = vocalEqCurves[songId] || []
+    const matches = {}
+    for (const stem of ['vocals', 'drums', 'bass', 'other', 'mix']) {
+      const mixC = curves.find(c => c.stem_type === stem && c.source_type === 'mix')
+      const refC = curves.find(c => c.stem_type === stem && String(c.reference_track_id) === String(refId))
+      if (mixC?.curve && refC?.curve) {
+        const mixArr = getCurveArr(mixC.curve)
+        const refArr = getCurveArr(refC.curve)
+        const len = Math.min(mixArr.length, refArr.length)
+        if (!len) continue
+        const diff = Array.from({ length: len }, (_, i) => Math.abs(mixArr[i] - (refArr[i] || 0)))
+        const avgDiff = diff.reduce((a, b) => a + b, 0) / diff.length
+        matches[stem] = Math.max(0, Math.round(100 - avgDiff * 3))
+      }
+    }
+    stemMatches[songId] = matches
+    stemMatches = { ...stemMatches }
+  }
+
+  async function generateAllPresets(songId, refId) {
+    if (!refId) { alert('Select a reference first'); return }
+    const stems = ['vocals', 'drums', 'bass', 'other']
+    let count = 0
+    for (const stem of stems) {
+      try {
+        const r = await fetch('http://localhost:4242/generate-proq4-preset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ song_id: songId, reference_track_id: refId, stem_type: stem })
+        })
+        const d = await r.json()
+        if (d.ok) count++
+      } catch(e) { /* skip failed stems */ }
+    }
+    alert('✓ ' + count + '/4 Pro-Q 4 presets saved to Desktop')
+  }
+
+  async function loadAverageRefCurve(songId, song) {
+    const project = projects.find(p => p.id === song.project_id)
+    const allRefs = [
+      ...(project?.reference_links || []),
+      ...(project?.project_meta?.reference_links || []),
+      ...(song.reference_links || [])
+    ]
+    if (!allRefs.length) { alert('No references linked to this song/project'); return }
+    const stemKey = activeStem[songId] || 'mix'
+    try {
+      const r = await fetch('http://localhost:4242/average-ref-curves', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference_ids: allRefs.map(r => r.spotify_id || r.id).filter(Boolean),
+          stem_type: stemKey
+        })
+      })
+      const d = await r.json()
+      if (d.curve) {
+        avgRefCurve[songId] = d.curve
+        avgRefCurve = { ...avgRefCurve }
+      } else {
+        alert('No curves found for these references yet')
+      }
+    } catch(e) {
+      alert('Avg ref failed: ' + e.message)
     }
   }
 
@@ -3354,12 +3445,11 @@ Return JSON only:
                     showVocalEq[song.id] = !showVocalEq[song.id]
                     showVocalEq = { ...showVocalEq }
                     if (showVocalEq[song.id]) {
-                      // Restore from cache immediately, then refresh
                       if (vocalEqCache.has(song.id)) {
                         vocalEqCurves[song.id] = vocalEqCache.get(song.id)
                         vocalEqCurves = { ...vocalEqCurves }
                       }
-                      loadVocalEq(song.id)
+                      onAnalyzerOpen(song)
                     }
                   }}>
                     <span class="vocal-eq-title">🎤 ANALYZER</span>
@@ -3490,19 +3580,32 @@ Return JSON only:
                         {#if selectedRef && !refCurveData}
                           <div class="no-curve-msg">No EQ curve yet for this track — background analysis pending</div>
                         {/if}
+                        <!-- Auto-analyze status -->
+                        {#if analyzerLoading[song.id]}
+                          <div class="analyzer-auto-status">⟳ Analyzing stems...</div>
+                        {:else if songCurves.filter(c => c.source_type === 'mix').length === 0}
+                          <div class="analyzer-auto-status">No analysis yet — drop an audio file to trigger</div>
+                        {/if}
                         <!-- EQ Chart -->
                         <VocalEqChart
                           mixCurve={mixCurve}
                           refCurve={refCurve}
+                          avgCurve={avgRefCurve[song.id] ?? null}
                           mixLabel={mixCurveData?.label ?? ''}
                           refLabel={refCurveData?.label ?? ''}
                           isMixTab={isMixTab}
                         />
-                        {#if mixCurve && refCurve && selectedRef}
-                          <button class="proq-btn" onclick={() => generateProQ4Preset(song.id, selectedRef, stemKey)}>
-                            ↓ Pro-Q 4 preset
+                        <!-- Action buttons row -->
+                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px">
+                          {#if selectedRef}
+                            <button class="proq-btn" onclick={() => generateAllPresets(song.id, selectedRef)}>
+                              ↓ Pro-Q 4 — all stems
+                            </button>
+                          {/if}
+                          <button class="avg-ref-btn" onclick={() => loadAverageRefCurve(song.id, song)}>
+                            ⌀ Avg refs
                           </button>
-                        {/if}
+                        </div>
                       {:else}
                         <!-- TONAL BALANCE + STEREO WIDTH panel -->
                         {@const mixTonal = latestA?.tonal_balance}
@@ -3640,25 +3743,23 @@ Return JSON only:
 
                       <!-- Status -->
                       {#if vocalEqStatus[song.id] === 'separating'}
-                        <div class="vocal-status">⏳ Separating stems… (60–90s)</div>
+                        <div class="vocal-status">⏳ Separating stems… (60–90s)
+                          <button class="vocal-btn" style="font-size:9px;color:#555;border-color:#252525;margin-left:8px"
+                            onclick={() => { vocalEqStatus = { ...vocalEqStatus, [song.id]: null } }}>
+                            Reset
+                          </button>
+                        </div>
                       {:else if vocalEqStatus[song.id] === 'error'}
-                        <div class="vocal-status err">✗ Analysis failed — try again</div>
+                        <div class="vocal-status err">✗ Analysis failed —
+                          <button class="vocal-btn" style="font-size:9px;margin-left:6px"
+                            onclick={() => analyzeMyVocal(song)}>
+                            Retry
+                          </button>
+                        </div>
                       {/if}
 
                       <!-- Action row -->
                       <div class="vocal-eq-actions">
-                        <div style="display:flex;gap:6px;align-items:center">
-                          <button class="vocal-btn" disabled={vocalEqStatus[song.id] === 'separating'}
-                            onclick={() => analyzeMyVocal(song)}>
-                            {vocalEqStatus[song.id] === 'separating' ? 'Analyzing…' : 'Analyze My Stems'}
-                          </button>
-                          {#if vocalEqStatus[song.id] === 'separating'}
-                            <button class="vocal-btn" style="font-size:9px;color:#555;border-color:#252525"
-                              onclick={() => { vocalEqStatus = { ...vocalEqStatus, [song.id]: null } }}>
-                              Reset
-                            </button>
-                          {/if}
-                        </div>
                         <div class="vocal-mozart-wrap">
                           <button class="vocal-mozart-toggle {mozartAnalyzeOpen[song.id] ? 'active' : ''}"
                             onclick={() => { mozartAnalyzeOpen[song.id] = !mozartAnalyzeOpen[song.id]; mozartAnalyzeOpen = { ...mozartAnalyzeOpen } }}>
@@ -3684,21 +3785,32 @@ Return JSON only:
                         </div>
                       </div>
 
-                      <!-- Comparison results -->
-                      {#if cmp}
-                        <div class="eq-match-score">Vocals match: <span class="{cmp.match_score >= 70 ? 'eq-match-good' : cmp.match_score >= 40 ? 'eq-match-mid' : 'eq-match-low'}">{cmp.match_score}%</span></div>
-                        {#if cmp.instructions?.length}
-                          <div class="eq-instructions">
-                            {#each cmp.instructions as inst}
-                              <div class="eq-inst {inst.action === 'BOOST' ? 'boost' : 'cut'}">
-                                <span class="eq-inst-action">{inst.action}</span>
-                                <span class="eq-inst-db">{inst.action === 'BOOST' ? '+' : '-'}{inst.amount}dB</span>
-                                <span class="eq-inst-band">{inst.freqLabel}</span>
-                                <span class="eq-inst-reason">{inst.reason}</span>
+                      <!-- Per-stem match % -->
+                      {#if selectedRef && stemMatches[song.id] && Object.keys(stemMatches[song.id]).length}
+                        <div class="stem-match-row">
+                          {#each ['mix','vocals','drums','bass','other'] as stem}
+                            {@const pct = stemMatches[song.id][stem]}
+                            {#if pct !== undefined}
+                              <div class="stem-match-item">
+                                <span class="stem-match-label">{stem}</span>
+                                <span class="stem-match-pct" style="color:{pct > 75 ? '#4caf82' : pct > 50 ? '#e8a838' : '#e57373'}">{pct}%</span>
                               </div>
-                            {/each}
-                          </div>
-                        {/if}
+                            {/if}
+                          {/each}
+                        </div>
+                      {/if}
+                      <!-- EQ instructions from compare-vocal-eq -->
+                      {#if cmp?.instructions?.length}
+                        <div class="eq-instructions">
+                          {#each cmp.instructions as inst}
+                            <div class="eq-inst {inst.action === 'BOOST' ? 'boost' : 'cut'}">
+                              <span class="eq-inst-action">{inst.action}</span>
+                              <span class="eq-inst-db">{inst.action === 'BOOST' ? '+' : '-'}{inst.amount}dB</span>
+                              <span class="eq-inst-band">{inst.freqLabel}</span>
+                              <span class="eq-inst-reason">{inst.reason}</span>
+                            </div>
+                          {/each}
+                        </div>
                       {/if}
 
                       <!-- Curve list -->
@@ -4735,6 +4847,13 @@ Return JSON only:
   .notes-toggle-arrow { font-size: 10px; color: #444; }
   .add-ref-toggle { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px dashed #252525; color: #333; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 4px; }
   .add-ref-toggle:hover { border-color: #444; color: #555; }
+  .analyzer-auto-status { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; font-style: italic; padding: 3px 0 5px; }
+  .stem-match-row { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid #1a1a1a; margin-bottom: 6px; }
+  .stem-match-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .stem-match-label { font-family: 'Space Mono', monospace; font-size: 7px; color: #444; letter-spacing: .08em; text-transform: uppercase; }
+  .stem-match-pct { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; }
+  .avg-ref-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #252525; color: #444; padding: 3px 10px; border-radius: 2px; cursor: pointer; }
+  .avg-ref-btn:hover { border-color: #555; color: #9e9690; }
   .no-curve-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #444; font-style: italic; padding: 2px 0 4px; }
   .tonal-section-title { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: rgba(201,168,76,.6); padding: 6px 0 4px; text-transform: uppercase; }
   .tonal-panel { display: flex; flex-direction: column; }

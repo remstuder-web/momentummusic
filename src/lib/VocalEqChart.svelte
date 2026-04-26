@@ -1,8 +1,9 @@
 <script>
-  let { mixCurve = null, refCurve = null, mixLabel = '', refLabel = '', isMixTab = false } = $props()
+  let { mixCurve = null, refCurve = null, avgCurve = null, mixLabel = '', refLabel = '', isMixTab = false } = $props()
 
   const REF_COLOR = '#c9a84c'
   const MIX_COLOR = 'rgba(255,255,255,0.85)'
+  const AVG_COLOR = 'rgba(100,149,237,0.55)'
 
   // Keep last non-null values so chart doesn't blank out during async reloads
   let lastMixCurve = $state(null)
@@ -10,10 +11,8 @@
 
   $effect(() => { if (mixCurve != null) lastMixCurve = mixCurve })
   $effect(() => {
-    if (refCurve != null) {
-      console.log('refCurve data:', JSON.stringify(refCurve)?.slice(0, 200))
-      lastRefCurve = refCurve
-    }
+    if (refCurve === null) lastRefCurve = null // explicit clear when user deselects ref
+    else if (refCurve != null) lastRefCurve = refCurve
   })
 
   // Convert any curve format to array of dB values
@@ -50,6 +49,7 @@
 
   const displayMix = $derived(arrayToFreqObj(normalizePeak(getCurveArray(mixCurve ?? lastMixCurve))))
   const displayRef = $derived(arrayToFreqObj(normalizePeak(getCurveArray(refCurve ?? lastRefCurve))))
+  const displayAvg = $derived(arrayToFreqObj(normalizePeak(getCurveArray(avgCurve))))
 
   const ISO_FREQS = [
     20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160,
@@ -96,16 +96,16 @@
   // iZotope 2024 Mastering Trends — Top 40 commercial average
   // [freq_hz, avg_dB, hi_dB, lo_dB]
   const IZOTOPE_2024 = [[22,-41.06,-31.69,-63.51],[22,-41.06,-31.69,-63.51],[32,-38.46,-29.12,-60.83],[43,-36.85,-28.1,-58.43],[54,-36.32,-28.02,-56.42],[65,-36.48,-28.43,-54.95],[86,-37.52,-29.71,-53.07],[108,-38.74,-31.04,-52.26],[129,-39.98,-32.4,-51.89],[172,-42.08,-35.14,-52.14],[215,-43.34,-36.38,-52.64],[280,-44.73,-37.8,-53.51],[345,-46.53,-39.7,-55.01],[441,-48.51,-41.65,-57.08],[560,-49.76,-42.78,-58.88],[711,-51.63,-44.65,-60.43],[904,-53.92,-47.15,-62.43],[1152,-56.29,-49.86,-64.5],[1453,-58.11,-52.06,-65.71],[1852,-59.79,-54.06,-66.96],[2347,-61.93,-56.57,-69.01],[2972,-63.81,-58.84,-70.83],[3779,-65.68,-60.91,-72.74],[4791,-67.84,-63.21,-74.85],[6083,-69.25,-64.23,-77.87],[7709,-69.88,-64.89,-79.4],[9787,-70.93,-65.97,-81.2],[12425,-75.17,-69.68,-84.64],[15762,-81.16,-75.32,-88.3],[20004,-86.22,-81.27,-91.21]]
-  // Normalize: peak at 54hz (-36.32dB) maps to 0dB — subtract peak so all values become relative
-  const IZOTOPE_PEAK_DB = Math.max(...IZOTOPE_2024.map(p => p[1]))  // -36.32
+  const IZOTOPE_PEAK_DB = Math.max(...IZOTOPE_2024.map(p => p[1]))
   function iZotopeNorm(db) { return db - IZOTOPE_PEAK_DB }
 
-  // Dynamic Y-axis: include iZotope range only on FULL MIX tab (avoids squishing stem curves)
+  // Dynamic Y-axis
   const dbRange = $derived((() => {
     const mixVals = displayMix ? ISO_FREQS.filter(f => displayMix[String(f)] !== undefined).map(f => displayMix[String(f)]) : []
     const refVals = displayRef ? ISO_FREQS.filter(f => displayRef[String(f)] !== undefined).map(f => displayRef[String(f)]) : []
+    const avgVals = displayAvg ? ISO_FREQS.filter(f => displayAvg[String(f)] !== undefined).map(f => displayAvg[String(f)]) : []
     const izVals = isMixTab ? IZOTOPE_2024.map(([,avg]) => iZotopeNorm(avg)) : []
-    const all = [...mixVals, ...refVals, ...izVals].filter(v => isFinite(v))
+    const all = [...mixVals, ...refVals, ...avgVals, ...izVals].filter(v => isFinite(v))
     if (!all.length) return { min: -20, max: 20 }
     const dataMin = Math.min(...all)
     const dataMax = Math.max(...all)
@@ -122,7 +122,6 @@
     Array.from({ length: Math.round((DB_MAX - DB_MIN) / 5) + 1 }, (_, i) => DB_MIN + i * 5)
   )
 
-  // Unique clip-path ID per instance — prevents ID collision when multiple charts render
   const clipId = 'cc-' + Math.random().toString(36).slice(2, 7)
 
   let showIzotope = $state(true)
@@ -182,6 +181,12 @@
       <path d={makeIzotopePath()} fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,4" clip-path="url(#{clipId})" />
     {/if}
 
+    <!-- Average ref curve — dashed blue, behind individual ref -->
+    {#if displayAvg}
+      <polyline points={curveToPoints(displayAvg)} fill="none" stroke={AVG_COLOR} stroke-width="1"
+        stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4,3" clip-path="url(#{clipId})" />
+    {/if}
+
     <!-- Reference curve (behind mix) — gold -->
     {#if displayRef}
       <polygon points={curveToArea(displayRef)} fill="rgba(201,168,76,0.05)" clip-path="url(#{clipId})" />
@@ -189,7 +194,7 @@
         stroke-linejoin="round" stroke-linecap="round" opacity="0.7" clip-path="url(#{clipId})" />
     {/if}
 
-    <!-- Mix curve (on top) — bright white -->
+    <!-- Mix curve (always on top when data exists) — bright white -->
     {#if displayMix}
       <polygon points={curveToArea(displayMix)} fill="rgba(255,255,255,0.03)" clip-path="url(#{clipId})" />
       <polyline points={curveToPoints(displayMix)} fill="none" stroke={MIX_COLOR} stroke-width="2"
@@ -205,6 +210,11 @@
       {@const legendX = displayRef ? PAD_L + 4 + 88 : PAD_L + 4}
       <line x1={legendX} y1={PAD_T + 8} x2={legendX + 14} y2={PAD_T + 8} stroke={MIX_COLOR} stroke-width="2" />
       <text x={legendX + 18} y={PAD_T + 11.5} font-size="9" fill="rgba(255,255,255,0.8)" font-family="Space Mono, monospace">{mixLabel || 'MY MIX'}</text>
+    {/if}
+    {#if displayAvg}
+      {@const avgX = W - PAD_R - 88}
+      <line x1={avgX} y1={PAD_T + 8} x2={avgX + 14} y2={PAD_T + 8} stroke={AVG_COLOR} stroke-width="1" stroke-dasharray="4,3" />
+      <text x={avgX + 18} y={PAD_T + 11.5} font-size="9" fill={AVG_COLOR} font-family="Space Mono, monospace">AVG REFS</text>
     {/if}
     {#if isMixTab && showIzotope}
       {@const izX = W - PAD_R - 114}

@@ -1233,7 +1233,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
   const today = new Date().toISOString().slice(0, 10)
 
   // Fetch all data sources in parallel
-  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, kworbDE, pressItems, gearThreads] = await Promise.all([
+  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, kworbDE, pressItems, gearThreads, waInboxRes] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/connections?select=name`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?order=tempo.desc&limit=5&select=title,artist,genre_tags,tempo,key`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/watched_artists?active=eq.true&select=*`, { headers: sbHeaders }),
@@ -1246,10 +1246,11 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     fetchKworbGermany(),
     fetchMusicPressItems(),
     fetchGearNewsItems(),
+    fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.message&or=(read.is.null,read.eq.false)&order=created_at.desc&limit=10&select=song_title,message,patch_name,created_at`, { headers: sbHeaders }),
   ])
 
-  const [connections, refTracks, watchedArtists] = await Promise.all([
-    connectionsRes.json(), refTracksRes.json(), watchedRes.json()
+  const [connections, refTracks, watchedArtists, waMessages] = await Promise.all([
+    connectionsRes.json(), refTracksRes.json(), watchedRes.json(), waInboxRes.json().catch(() => [])
   ])
 
   const crossChartData = await getCrossChartTopics()
@@ -1374,7 +1375,7 @@ ${watchedNewText || 'none this week'}
 ## TECH — NEW GEAR & PLUGINS (top 5)
 ${gearBlock}
 
-${crossChartBlock ? crossChartBlock + '\n\n' : ''}${tiktokOnlyBlock ? tiktokOnlyBlock + '\n\n' : ''}${refTrackText ? `REFERENCE TRACKS (Remo's taste):\n${refTrackText}\n` : ''}Already known — skip: ${knownNames}
+${crossChartBlock ? crossChartBlock + '\n\n' : ''}${tiktokOnlyBlock ? tiktokOnlyBlock + '\n\n' : ''}${refTrackText ? `REFERENCE TRACKS (Remo's taste):\n${refTrackText}\n` : ''}${Array.isArray(waMessages) && waMessages.length ? `\nUNREAD MESSAGES (WhatsApp/inbox — pending context):\n${waMessages.map(m => `- ${m.song_title || 'msg'}: ${(m.message || '').slice(0, 120)}`).join('\n')}\n` : ''}Already known — skip: ${knownNames}
 ${brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]\n` : ''}
 Based ONLY on the above real data, write one complete scout report with these sections in this exact order:
 
@@ -3408,9 +3409,10 @@ async function handleOwnerCommand(chatId, text) {
     const question = text.slice(5).trim()
     await sendTelegram(chatId, '⏳ Asking Mozart...')
     try {
-      const [charts, connRows] = await Promise.allSettled([
+      const [charts, connRows, waRows] = await Promise.allSettled([
         getCrossChartTopics().catch(() => ({ crossChart: [], tiktokOnly: [] })),
-        supabase.from('brain_knowledge').select('title, content').eq('category', 'knowledge_connection').eq('active', true).order('created_at', { ascending: false }).limit(5)
+        supabase.from('brain_knowledge').select('title, content').eq('category', 'knowledge_connection').eq('active', true).order('created_at', { ascending: false }).limit(5),
+        fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.message&or=(read.is.null,read.eq.false)&order=created_at.desc&limit=5&select=song_title,message`, { headers: sbHeaders }).then(r => r.json()).catch(() => [])
       ])
       const ch = charts.status === 'fulfilled' ? charts.value : { crossChart: [], tiktokOnly: [] }
       const mozartChartCtx = [
@@ -3421,8 +3423,12 @@ async function handleOwnerCommand(chatId, text) {
       const mozartConnCtx = connData.length
         ? '\n\nKnowledge connections:\n' + connData.map(c => `- ${c.title}: ${(c.content || '').split('\n')[0]}`).join('\n')
         : ''
+      const waData = waRows.status === 'fulfilled' ? (Array.isArray(waRows.value) ? waRows.value : []) : []
+      const mozartWaCtx = waData.length
+        ? '\n\nUnread messages (pending context):\n' + waData.map(m => `- ${m.song_title || 'msg'}: ${(m.message || '').slice(0, 100)}`).join('\n')
+        : ''
       const mozartSystem = 'You are Mozart, music production advisor for Remo. Be concise — max 300 words.' +
-        (mozartChartCtx ? '\n\nCurrent chart signals:\n' + mozartChartCtx : '') + mozartConnCtx
+        (mozartChartCtx ? '\n\nCurrent chart signals:\n' + mozartChartCtx : '') + mozartConnCtx + mozartWaCtx
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },

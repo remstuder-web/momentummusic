@@ -1,20 +1,16 @@
 {
-  "updated": "2026-04-27T09:32:00Z",
-  "last_task": "daily-six-fixes",
+  "updated": "2026-04-27T09:36:00Z",
+  "last_task": "saveToCheckout-dedup",
   "status": "done",
   "working": [
-    "FIX1: ICS import/export buttons and functions removed from DailyTab",
-    "FIX2: agent-gap and agent-ok font-size normalized to 13px (was 14px)",
-    "FIX3: morning briefing fetches active songs (production/mix_prep/mixing/mastering), includes activeContext in prompt, instructs Claude to focus on those projects only",
-    "FIX4: TikTok block removed from morning briefing context and prompt sections",
-    "FIX5: runAgentScout saves type='scout' (not 'briefing'), new 7-section prompt order (BREAKING ARTISTS/TRENDING SOUNDS/NEW RELEASES/OPPORTUNITIES/INDUSTRY+EDITORIAL/TECH+TOOLS/PRESS), inbox-scroll max-height raised 320px→600px, scout type renders with parseAgentOutput + AI badge + speak button",
-    "FIX6: GET /chart-health endpoint added, returns tiktok/spotify_chart/chart_history status",
-    "chart-health result: tiktok=ok, spotify_chart=ok, chart_history=empty (expected, no chart agent run yet)"
+    "saveToCheckout: title+artist ilike check already queried all of reference_tracks (not just checkout) — confirmed",
+    "Added source+collection_name to select so log shows where duplicate was found",
+    "Added spotify_id secondary check — skips if any row has matching spotify_id regardless of source",
+    "Log messages now show: 'skip (already in library) [source/collection]:' and 'skip (spotify_id match) [source]:'",
+    "All callers (scout, tiktok, chart, briefing) automatically benefit — no call-site changes needed"
   ],
   "broken": [],
-  "partial": [
-    "chart_history table is empty — will populate after agent-chart-analysis runs"
-  ],
-  "next": "Run a scout to verify merged single-message output in inbox. Run morning-briefing to verify active-project focus and no TikTok section.",
-  "notes": "Scout now saves type='scout' — older 'briefing' type scout entries will still render correctly since both types use parseAgentOutput. The routineOnlyTypes array already includes 'scout'."
+  "partial": [],
+  "next": "Run /agent-scout or /agent-tiktok-trends and check pm2 logs to verify skip messages appear for known tracks.",
+  "notes": "The title+artist ilike check was already cross-source — the existing code was correct. The only additions were: select fields for log context, and the spotify_id secondary check for tracks imported with known Spotify IDs."
 }

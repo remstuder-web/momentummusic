@@ -1587,16 +1587,31 @@ async function fetchTikTokRealData() {
 
 async function saveToCheckout(track) {
   if (!track.title || !track.artist) return false
+
   const { data: existing } = await supabase
     .from('reference_tracks')
-    .select('id')
+    .select('id, source, collection_name')
     .ilike('title', track.title.trim())
     .ilike('artist', track.artist.trim())
+    .limit(1)
     .maybeSingle()
   if (existing) {
-    console.log('skip duplicate:', track.artist, '—', track.title)
+    console.log(`skip (already in library) [${existing.source}/${existing.collection_name}]:`, track.artist, '—', track.title)
     return false
   }
+
+  if (track.spotify_id) {
+    const { data: bySpotify } = await supabase
+      .from('reference_tracks')
+      .select('id, source')
+      .eq('spotify_id', track.spotify_id)
+      .maybeSingle()
+    if (bySpotify) {
+      console.log(`skip (spotify_id match) [${bySpotify.source}]:`, track.artist, '—', track.title)
+      return false
+    }
+  }
+
   const row = {
     title: track.title.trim(),
     artist: track.artist.trim(),

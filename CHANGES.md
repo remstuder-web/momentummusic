@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] demos: auto tempo/key, fix toggle, library genres, remove checkout, font fix — DONE
+TASK: five-fixes-demos-brain
+WHAT: FIX1 /analyze-audio accepts songId and PATCHes songs table when BPM found (only if tempo IS NULL); FIX2 toggleDemo() function consolidates both onclick handlers with stopPropagation on arr; FIX3 availableGenres loads from reference_tracks + GENRE_LIST fallback, used in per-song and header genre pickers; FIX4 CHECKOUT section fully removed from BrainTab (state, derived, functions, HTML, CSS); FIX5 refs-section-header bumped to 10px/.14em to match brain-section-title, library/speicher colors set to rgba(201,168,76,.75)
+RESULT: compiles cleanly; watcher restarted OK
+BLOCKERS: none
+
 ## [2026-04-27] scout: incorporate pulse check into scout message — DONE
 TASK: scout-pulse-merge
 WHAT: runPulseCheck gains returnOnly param — when true, returns {summary} without saving to inbox; runAgentScout calls it before inbox save and appends '## YOUR WORK PULSE' section to mainScoutText; DailyTab scoutArtists() drops separate /agent-pulse-check fetch

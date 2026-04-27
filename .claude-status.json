@@ -1,16 +1,16 @@
 {
-  "updated": "2026-04-27T12:18:00Z",
-  "last_task": "scout-pulse-merge",
+  "updated": "2026-04-27T12:27:00Z",
+  "last_task": "five-fixes-demos-brain",
   "status": "done",
   "working": [
-    "runPulseCheck(apiKey, brainRows, returnOnly=true) returns {summary} without inbox save",
-    "runAgentScout appends '\\n\\n---\\n\\n## YOUR WORK PULSE\\n' + pulseResult.summary to mainScoutText before inbox save",
-    "pulseAppend placed between mainScoutText and tracksJson (TRACKS hidden comment stays at end)",
-    "DailyTab scoutArtists() no longer calls /agent-pulse-check separately",
-    "One scout button → full picture: charts + artists + trends + pulse"
+    "FIX1: /analyze-audio now accepts songId in body; PATCHes songs table with tempo+key when songId provided and tempo IS NULL",
+    "FIX2: toggleDemo(song) function handles both card-head and arr span; arr uses e.stopPropagation() to prevent double-toggle",
+    "FIX3: availableGenres $state initialized from GENRE_LIST subs; loadAvailableGenres() enriches from reference_tracks on load; per-song and header pickers both use flat string array",
+    "FIX4: CHECKOUT section fully removed from BrainTab — checkoutExpanded, checkoutRefs, promoteToMyRefs, promoteToLibrary, HTML block, .refs-checkout/.checkout-row/.ref-source-dot.checkout CSS all deleted",
+    "FIX5: .refs-section-header bumped from 9px/.12em to 10px/.14em; library/speicher headers now rgba(201,168,76,.75) matching brain-section-title"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run /agent-scout to verify: scout card shows YOUR WORK PULSE section at bottom separated by ---, no separate pulse_check inbox entry created",
-  "notes": "runPulseCheck default behavior unchanged (returnOnly=false) — standalone /agent-pulse-check endpoint still works normally for Telegram /pulse command"
+  "next": "Test in browser: open DemoTab and click second demo to verify toggle works; drop audio file to verify BPM auto-populates; check genre picker shows reference track genres; open BrainTab and verify CHECKOUT section gone, LIBRARY/SPEICHERBOX font matches DUMP ANYTHING",
+  "notes": "GENRE_LIST import kept in DemoTab (used for fallback in loadAvailableGenres init). The const GENRES = GENRE_LIST alias was removed. ref-checkout-btns CSS kept — still used by LIBRARY section."
 }

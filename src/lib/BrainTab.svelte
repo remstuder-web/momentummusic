@@ -56,7 +56,6 @@
   let entriesOpen = $state(false)
   let libraryExpanded = $state(false)
   // myRefsExpanded removed — MY REFERENCES merged into LIBRARY
-  let checkoutExpanded = $state(true)
   let librarySearch = $state('')
   let librarySort = $state('date')
   let libraryGenreFilter = $state('')
@@ -143,11 +142,6 @@
     return acc
   })
 
-  const checkoutRefs = $derived(
-    referenceTrackEntries
-      .filter(t => t.source === 'checkout')
-      .sort((a, b) => (a.artist || '').localeCompare(b.artist || ''))
-  )
   const myRefs = $derived(
     referenceTrackEntries
       .filter(t => t.source === 'user' || t.source === 'mozart' || t.promoted === true)
@@ -308,16 +302,6 @@
   async function promoteTrack(id) {
     await supabase.from('reference_tracks').update({ source: 'user', promoted: true }).eq('id', id)
     referenceTrackEntries = referenceTrackEntries.map(t => t.id === id ? { ...t, source: 'user', promoted: true } : t)
-  }
-
-  async function promoteToMyRefs(id) {
-    await supabase.from('reference_tracks').update({ source: 'user', checkout_date: null }).eq('id', id)
-    referenceTrackEntries = referenceTrackEntries.map(t => t.id === id ? { ...t, source: 'user', checkout_date: null } : t)
-  }
-
-  async function promoteToLibrary(id) {
-    await supabase.from('reference_tracks').update({ source: 'agent', checkout_date: null }).eq('id', id)
-    referenceTrackEntries = referenceTrackEntries.map(t => t.id === id ? { ...t, source: 'agent', checkout_date: null } : t)
   }
 
   async function deleteRef(id) {
@@ -1890,41 +1874,8 @@ Return ONLY JSON (single item array):
     {/if}
   </div>
 
-  <!-- Reference Tracks — checkout / my refs / library -->
+  <!-- Reference Tracks — library / speicherbox -->
   <div class="brain-entries-col" style="margin-top: 12px;">
-
-    <!-- CHECKOUT — always open -->
-    <div class="refs-section">
-      <div class="refs-section-header refs-checkout">
-        <span>⬇ CHECKOUT</span>
-        <span class="refs-count">{checkoutRefs.length}</span>
-        <span style="font-size:9px;color:#555;margin-left:4px">listen & decide</span>
-      </div>
-      {#if checkoutRefs.length === 0}
-        <div class="refs-empty">Scout will place tracks here for review</div>
-      {:else}
-        {#each checkoutRefs as track}
-          <div class="ref-track-row checkout-row">
-            <span class="ref-source-dot checkout">{track.collection_name === 'tiktok_trending' ? '📱' : track.collection_name === 'spotify_chart' ? '🎵' : track.collection_name === 'youtube_chart' ? '▶' : '⬇'}</span>
-            <span class="ref-title">{track.artist || 'Unknown'} — {track.title}</span>
-            <span class="ref-stats">
-              {track.tempo ? Math.round(track.tempo) + 'bpm' : ''}
-              {track.camelot ? ' · ' + track.camelot : ''}
-            </span>
-            <div class="ref-checkout-btns">
-              <button class="track-play-btn"
-                onclick={() => playPreview(track)}
-              >{playingId === track.id ? '■' : '▶'}</button>
-              <button class="promote-btn gold"
-                onclick={() => promoteToLibrary(track.id)}
-                title="Move to Library">→ lib</button>
-              <button class="track-del-btn"
-                onclick={() => deleteRef(track.id)}>×</button>
-            </div>
-          </div>
-        {/each}
-      {/if}
-    </div>
 
     <!-- LIBRARY -->
     <div class="refs-section">
@@ -2961,14 +2912,13 @@ Return ONLY JSON (single item array):
   .chat-inp:focus { border-color: rgba(201,168,76,.4); }
   .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 7px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
   .refs-section { margin-bottom: 4px; }
-  .refs-section-header { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; padding: 8px 0 4px; border-bottom: 1px solid #1c1c1c; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .refs-section-header { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; padding: 8px 0 4px; border-bottom: 1px solid #1c1c1c; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
   .refs-section-header.refs-curated { color: rgba(201,168,76,.75); }
   .refs-section-header.refs-curated:hover { color: rgba(201,168,76,1); }
-  .refs-section-header.refs-checkout { color: #c9a84c; cursor: default; }
-  .refs-section-header.refs-library { color: #c9a84c; }
+  .refs-section-header.refs-library { color: rgba(201,168,76,.75); }
   .refs-section-header.refs-library:hover { color: rgba(201,168,76,1); }
   .speicher-section { margin-top: 8px; }
-  .speicher-hdr { color: #c9a84c; }
+  .speicher-hdr { color: rgba(201,168,76,.75); }
   .speicher-hdr:hover { color: rgba(201,168,76,1); }
   .speicher-grid { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
   .speicher-card { display: flex; align-items: flex-start; gap: 8px; background: #131313; border: 1px solid #222; border-radius: 3px; padding: 6px 8px; cursor: default; }
@@ -2986,12 +2936,10 @@ Return ONLY JSON (single item array):
   .refs-count { font-family: 'Space Mono', monospace; font-size: 8px; background: #1c1c1c; padding: 1px 5px; border-radius: 8px; color: #555; }
   .refs-empty { font-size: 11px; color: #444; padding: 6px 0 8px; font-style: italic; }
   .ref-track-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #161616; font-size: 12px; }
-  .ref-track-row.checkout-row { background: rgba(158,150,144,.03); }
   .ref-track-row.library { opacity: 0.65; }
   .ref-track-row.library:hover { opacity: 1; }
   .ref-source-dot { font-size: 9px; flex-shrink: 0; color: #555; }
   .ref-source-dot.user { color: #c9a84c; }
-  .ref-source-dot.checkout { color: #9e9690; font-size: 8px; }
   .ref-title { color: #cec9c1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .ref-title-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .genre-chips { display: flex; gap: 3px; flex-wrap: wrap; }

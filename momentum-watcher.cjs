@@ -8186,7 +8186,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     req.on('data', chunk => body += chunk)
     req.on('end', async () => {
       try {
-        const { filename, dir } = JSON.parse(body)
+        const { filename, dir, songId } = JSON.parse(body)
         const dirMap = { demo: DEMOS_DIR, production: PRODUCTION_DIR, mixing: MIXING_DIR, instrumental: INSTRUMENTALS_DIR }
         const srcPath = path.join(dirMap[dir] || DEMOS_DIR, filename)
         if (!fs.existsSync(srcPath)) { res.writeHead(404); res.end(JSON.stringify({ error: 'not found' })); return }
@@ -8244,6 +8244,23 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         const bpmDouble = bpm ? bpm * 2 : null
         if (bpm) console.log(`  BPM alternatives: ${bpmHalf} / ${bpm} / ${bpmDouble}`)
         console.log(`  ✓ Analysis: ${filename} → ${bpm} BPM, ${key}`)
+
+        // Auto-save back to song record when songId provided (only if tempo not already set)
+        if (songId && (bpm || key)) {
+          try {
+            const upd = {}
+            if (bpm) upd.tempo = bpm
+            if (key) upd.key = key
+            const qUrl = `${SUPABASE_URL}/rest/v1/songs?id=eq.${songId}` + (bpm ? '&tempo=is.null' : '')
+            await fetch(qUrl, {
+              method: 'PATCH',
+              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify(upd)
+            })
+            console.log(`  ✓ Saved to song ${songId}: ${bpm}bpm ${key}`)
+          } catch(e) { console.warn('  auto-save song BPM failed:', e.message) }
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
         res.end(JSON.stringify({
           bpm, bpmHalf, bpmDouble, key,

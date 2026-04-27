@@ -69,12 +69,17 @@
   let connections = $state([])
   let loading = $state(true)
   let expandedId = $state(null)
+  function toggleDemo(song) {
+    if (expandedId === song.id) renameDemoAudio(song, song.title)
+    expandedId = expandedId === song.id ? null : song.id
+    showBatchPicker = {}
+  }
   let tagInput = $state({})
   let refInput = $state({})
   let genreSearch = $state({})   // song.id → search string in genre picker
   let showGenrePicker = $state({}) // song.id → boolean
+  let availableGenres = $state(GENRE_LIST.filter(g => g.type === 'sub').map(g => g.tag))
 
-  const GENRES = GENRE_LIST
   let audioTick = $state(0) // increment to force player re-render after drop
 
   let showMoveModal = $state(false)
@@ -132,7 +137,20 @@
     await updateField(song, 'audio_path', newName)
   }
 
+  async function loadAvailableGenres() {
+    try {
+      const { data } = await supabase.from('reference_tracks').select('genre_tag, genres')
+      const genreSet = new Set(GENRE_LIST.filter(g => g.type === 'sub').map(g => g.tag))
+      for (const r of (data || [])) {
+        if (r.genre_tag) genreSet.add(r.genre_tag.toLowerCase())
+        if (Array.isArray(r.genres)) r.genres.forEach(g => g && genreSet.add(g.toLowerCase()))
+      }
+      availableGenres = [...genreSet].sort()
+    } catch(e) {}
+  }
+
   async function load() {
+    loadAvailableGenres()
     const [songsRes, patchesRes, connectionsRes, projSongsRes] = await Promise.all([
       supabase.from('songs').select('*').is('project_id', null).order('created_at', { ascending: false }),      supabase.from('patches').select('*, patch_songs(song_id)').order('created_at', { ascending: false }),
       supabase.from('connections').select('id, name, folder_link, sent_history, group_type, group_types').order('name'),
@@ -906,12 +924,8 @@
           {#if headerGenre}
             <button class="genre-opt" style="color:#555;font-style:italic" onclick={() => { headerGenre = ''; showHeaderGenrePicker = false }}>— Clear —</button>
           {/if}
-          {#each GENRES as g}
-            {#if g.type === 'main'}
-              <div class="genre-opt genre-header-label">{g.label}</div>
-            {:else}
-              <button class="genre-opt {headerGenre === g.tag ? 'sel' : ''}" onclick={() => { headerGenre = g.tag; showHeaderGenrePicker = false }}>{g.label}</button>
-            {/if}
+          {#each availableGenres as g}
+            <button class="genre-opt {headerGenre === g ? 'sel' : ''}" onclick={() => { headerGenre = g; showHeaderGenrePicker = false }}>{g}</button>
           {/each}
         </div>
       {/if}
@@ -957,7 +971,7 @@
         <div class="card {isExpanded ? 'exp' : ''}">
 
           <!-- CARD HEADER -->
-          <div class="card-head" onclick={() => { if (isExpanded) renameDemoAudio(song, song.title); expandedId = isExpanded ? null : song.id; showBatchPicker = {} }}>
+          <div class="card-head" onclick={() => toggleDemo(song)}>
             <div class="head-left">
               <div class="code-wrap">
                 <div class="code-stars-row">
@@ -1027,7 +1041,7 @@
                 </div>
               {/key}
             </div>
-            <span class="arr" onclick={() => { if (expandedId === song.id) renameDemoAudio(song, song.title); expandedId = expandedId === song.id ? null : song.id }}>▶</span>
+            <span class="arr" onclick={e => { e.stopPropagation(); toggleDemo(song) }}>▶</span>
           </div>
 
           <!-- CARD BODY -->
@@ -1102,19 +1116,18 @@
                       oninput={e => { genreSearch = {...genreSearch, [song.id]: e.target.value}; showGenrePicker = {...showGenrePicker, [song.id]: true} }}
                       onfocus={() => { showGenrePicker = {...showGenrePicker, [song.id]: true} }} />
                     {#if showGenrePicker[song.id]}
-                      {#each [GENRES.filter(g => g.type === 'sub' && (!(genreSearch[song.id]||'') || g.label.includes((genreSearch[song.id]||'').toLowerCase())) && !(song.tags||[]).includes(g.tag))] as filtered}
-                        {#if filtered.length}
-                          <div class="genre-dropdown">
-                            {#each filtered as g}
-                              <button class="genre-opt" onclick={() => {
-                                updateField(song, 'tags', [...(song.tags||[]), g.tag])
-                                genreSearch = {...genreSearch, [song.id]: ''}
-                                showGenrePicker = {...showGenrePicker, [song.id]: false}
-                              }}>{g.label}</button>
-                            {/each}
-                          </div>
-                        {/if}
-                      {/each}
+                      {@const filteredGenres = availableGenres.filter(g => (!(genreSearch[song.id]||'') || g.includes((genreSearch[song.id]||'').toLowerCase())) && !(song.tags||[]).includes(g))}
+                      {#if filteredGenres.length}
+                        <div class="genre-dropdown">
+                          {#each filteredGenres as g}
+                            <button class="genre-opt" onclick={() => {
+                              updateField(song, 'tags', [...(song.tags||[]), g])
+                              genreSearch = {...genreSearch, [song.id]: ''}
+                              showGenrePicker = {...showGenrePicker, [song.id]: false}
+                            }}>{g}</button>
+                          {/each}
+                        </div>
+                      {/if}
                     {/if}
                   </div>
                   <!-- Custom tag input - same width -->

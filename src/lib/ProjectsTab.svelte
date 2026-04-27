@@ -62,6 +62,7 @@
   let analyzerLoading = $state({}) // song.id -> bool
   let analyzerVersionLabel = $state({}) // song.id -> string
   let vocalStyleResult = $state({}) // song.id -> vocal style text
+  let refTrackOverride = $state({}) // refId -> full reference_tracks row (loaded on demand)
   let stemMatches = $state({}) // song.id -> {vocals, drums, bass, other, mix}
   let avgRefCurve = $state({}) // song.id -> averaged curve array
   let analyzerOpen = $state({}) // song.id -> { track, match, arc, feedback, trend }
@@ -2363,23 +2364,22 @@ Return JSON only:
   async function onAnalyzerTabOpen(song) {
     analyzerLoading[song.id] = true
     analyzerLoading = { ...analyzerLoading }
-    let noCurves = false
+    let hasCurves = false
     try {
-      const { data: curves } = await supabase
+      const { data: existingCurves } = await supabase
         .from('vocal_eq_curves')
-        .select('*')
+        .select('id, version_name, created_at')
         .eq('song_id', String(song.id))
         .eq('source_type', 'mix')
         .order('created_at', { ascending: false })
-        .limit(8)
-      if (curves?.length) {
-        vocalEqCurves[song.id] = curves
-        vocalEqCurves = { ...vocalEqCurves }
-        const d = new Date(curves[0].created_at)
-        analyzerVersionLabel[song.id] = 'Analysis from ' + d.toLocaleDateString('de-CH')
+        .limit(1)
+      hasCurves = !!existingCurves?.length
+      if (hasCurves) {
+        analyzerVersionLabel[song.id] =
+          'Analysis: ' + (existingCurves[0].version_name ||
+            new Date(existingCurves[0].created_at).toLocaleDateString('de-CH'))
       } else {
         analyzerVersionLabel[song.id] = 'No analysis yet'
-        noCurves = true
       }
       await loadVocalEq(song.id)
       await loadProjectRefAverage(song.id)
@@ -2389,7 +2389,36 @@ Return JSON only:
       analyzerLoading[song.id] = false
       analyzerLoading = { ...analyzerLoading }
     }
-    if (noCurves) analyzeMyVocal(song)
+    if (!hasCurves) analyzeMyVocal(song)
+  }
+
+  async function loadRefAnalysis(refId) {
+    if (!refId) return
+    const { data } = await supabase
+      .from('reference_tracks')
+      .select('*')
+      .eq('id', Number(refId))
+      .maybeSingle()
+    if (data) {
+      refTrackOverride[String(refId)] = data
+      refTrackOverride = { ...refTrackOverride }
+      console.log('Ref data loaded:', data.artist, data.title, 'tonal:', !!data.tonal_balance, 'energy:', data.energy)
+    }
+  }
+
+  function selectRefFromPicker(songId, r) {
+    const refId = String(r._rt_id ?? r.id)
+    selectedRefId[songId] = refId
+    selectedRefId = { ...selectedRefId }
+    refPickerOpen[songId] = false
+    refPickerOpen = { ...refPickerOpen }
+    refSearch[songId] = ''
+    refSearch = { ...refSearch }
+    loadVocalEq(songId)
+    if (r._rt_id || r.id) loadRefAnalysis(r._rt_id ?? r.id)
+    loadMozartInsight(songId, r)
+    loadProjectRefAverage(songId)
+    console.log('Selected ref:', r.artist, r.title, 'id:', refId)
   }
 
   async function loadProjectRefAverage(songId) {
@@ -3566,7 +3595,7 @@ Return JSON only:
                   {@const mixCurves = songCurves.filter(c => c.source_type === 'mix' && c.stem_type === stemKey)}
                   {@const mixCurve = mixCurveData?.curve && typeof mixCurveData.curve === 'object' ? mixCurveData.curve : null}
                   {@const refCurve = refCurveData?.curve && typeof refCurveData.curve === 'object' ? refCurveData.curve : null}
-                  {@const selectedRefTrack = selectedRef ? refTrackOptions.find(r => String(r._rt_id ?? r.id) === selectedRef) : null}
+                  {@const selectedRefTrack = selectedRef ? (refTrackOverride[selectedRef] || refTrackOptions.find(r => String(r._rt_id ?? r.id) === selectedRef) || null) : null}
                   {@const cmp = vocalComparison[song.id]}
                   {@const refLoading = vocalEqLoading[song.id]}
                   {@const ao = analyzerOpen[String(song.id)] || {}}
@@ -3647,16 +3676,7 @@ Return JSON only:
                                 {#if projectRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)).length}
                                   <div class="ref-picker-section">PROJECT REFS</div>
                                   {#each projectRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)) as r}
-                                    <div class="ref-picker-item" onclick={() => {
-                                      selectedRefId[song.id] = String(r._rt_id ?? r.id)
-                                      selectedRefId = { ...selectedRefId }
-                                      refPickerOpen[song.id] = false
-                                      refPickerOpen = { ...refPickerOpen }
-                                      refSearch[song.id] = ''
-                                      refSearch = { ...refSearch }
-                                      loadVocalEq(song.id)
-                                      loadMozartInsight(song.id, r)
-                                    }}>
+                                    <div class="ref-picker-item" onclick={() => selectRefFromPicker(song.id, r)}>
                                       <span class="ref-item-name">{r.artist} — {r.title || r.name}</span>
                                       {#if r.playlist_name}<span class="ref-item-tag gold">{r.playlist_name}</span>{/if}
                                     </div>
@@ -3665,32 +3685,14 @@ Return JSON only:
                                 {#if songRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)).length}
                                   <div class="ref-picker-section">SONG REFS</div>
                                   {#each songRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)) as r}
-                                    <div class="ref-picker-item" onclick={() => {
-                                      selectedRefId[song.id] = String(r._rt_id ?? r.id)
-                                      selectedRefId = { ...selectedRefId }
-                                      refPickerOpen[song.id] = false
-                                      refPickerOpen = { ...refPickerOpen }
-                                      refSearch[song.id] = ''
-                                      refSearch = { ...refSearch }
-                                      loadVocalEq(song.id)
-                                      loadMozartInsight(song.id, r)
-                                    }}>
+                                    <div class="ref-picker-item" onclick={() => selectRefFromPicker(song.id, r)}>
                                       <span class="ref-item-name">{r.artist} — {r.title || r.name}</span>
                                     </div>
                                   {/each}
                                 {/if}
                                 <div class="ref-picker-section">LIBRARY ({filteredLibrary.length})</div>
                                 {#each filteredLibrary as r}
-                                  <div class="ref-picker-item" onclick={() => {
-                                    selectedRefId[song.id] = String(r._rt_id ?? r.id)
-                                    selectedRefId = { ...selectedRefId }
-                                    refPickerOpen[song.id] = false
-                                    refPickerOpen = { ...refPickerOpen }
-                                    refSearch[song.id] = ''
-                                    refSearch = { ...refSearch }
-                                    loadVocalEq(song.id)
-                                    loadMozartInsight(song.id, r)
-                                  }}>
+                                  <div class="ref-picker-item" onclick={() => selectRefFromPicker(song.id, r)}>
                                     <span class="ref-item-name">{r.artist || 'Unknown'} — {r.title}</span>
                                     <div class="ref-item-meta">
                                       {#if r.playlist_name}<span class="ref-item-tag gold">{r.playlist_name}</span>{/if}

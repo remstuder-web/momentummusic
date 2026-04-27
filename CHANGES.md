@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-28] ProjectsTab.svelte — DONE
+TASK: analyzer-version-name-and-ref-selection
+WHAT: onAnalyzerTabOpen uses version_name for label, only auto-analyzes when no curves; added loadRefAnalysis() + selectRefFromPicker() + refTrackOverride state; all 3 picker onclick handlers now call selectRefFromPicker(); selectedRefTrack checks refTrackOverride first; version_name column confirmed exists in vocal_eq_curves
+RESULT: works — 0 svelte errors
+BLOCKERS: none
+
+## [2026-04-28] ProjectsTab.svelte — DONE
 TASK: ref-picker-sort
 WHAT: Library picker shows 100 results (was 30), sorted by playlist_name when no search query; project refs always first
 RESULT: works — 0 svelte errors

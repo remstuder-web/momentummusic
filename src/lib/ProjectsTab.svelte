@@ -2160,6 +2160,21 @@
 
     // Merge song curves + global ref curves
     const allCurves = [...songCurves, ...(globalRefCurves || [])]
+
+    // Load curves for the currently selected ref track by reference_track_id
+    const currentSelRef = selectedRefId[songId]
+    if (currentSelRef) {
+      const { data: selRefCurves } = await supabase
+        .from('vocal_eq_curves')
+        .select('*')
+        .eq('reference_track_id', currentSelRef)
+      if (selRefCurves?.length) {
+        for (const c of selRefCurves) {
+          if (!allCurves.find(x => x.id === c.id)) allCurves.push(c)
+        }
+      }
+    }
+
     vocalEqCurves[songId] = allCurves
     vocalEqCurves = { ...vocalEqCurves }
     vocalEqCache.set(songId, allCurves)
@@ -2201,7 +2216,7 @@
       .select('id, title, artist, source, credits, popularity, collection_name, spotify_id, genre_tag, tonal_balance, stereo_width, stereo_width_per_band, emotional_arc, energy, danceability, valence, brightness, warmth, bass_energy, loudness, tempo, key, camelot, vocal_pitch_mean')
       .in('source', ['user', 'agent', 'mozart', 'promoted'])
       .order('artist', { ascending: true })
-      .limit(200)
+      .limit(500)
 
     refTrackOptions = [
       ...projectRefTracks,
@@ -3544,7 +3559,8 @@ Return JSON only:
                     ? songCurves.find(c => c.source_type === 'mix')
                     : songCurves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)}
                   {@const refCurveData = selectedRef
-                    ? songCurves.find(c => String(c.reference_track_id) === selectedRef && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey))
+                    ? (songCurves.find(c => String(c.reference_track_id) === selectedRef && (isMixTab ? (!c.stem_type || c.stem_type === 'mix' || c.stem_type === 'vocals') : c.stem_type === stemKey)) ||
+                       songCurves.find(c => c.source_type === 'reference' && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey)))
                     : songCurves.find(c => c.source_type === 'reference' && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey))}
                   {@const refCurves = songCurves.filter(c => c.source_type === 'reference' && c.stem_type === stemKey && !c.reference_track_id)}
                   {@const mixCurves = songCurves.filter(c => c.source_type === 'mix' && c.stem_type === stemKey)}
@@ -3564,11 +3580,11 @@ Return JSON only:
                       {#if analyzerVersionLabel[song.id]}
                         <div class="analyzer-version-label">{analyzerVersionLabel[song.id]}</div>
                       {/if}
-                      <!-- Stem selector -->
+                      <!-- 1. Stem selector -->
                       <div class="stem-tabs">
-                        {#each ['mix', 'vocals', 'drums', 'bass', 'other', 'tonal'] as stem}
+                        {#each ['mix', 'vocals', 'drums', 'bass', 'other'] as stem}
                           <button class="stem-tab {stemKey === stem ? 'active' : ''}"
-                            onclick={() => { activeStem[song.id] = stem; activeStem = { ...activeStem }; if (stem !== 'tonal') loadVocalEq(song.id) }}>
+                            onclick={() => { activeStem[song.id] = stem; activeStem = { ...activeStem }; loadVocalEq(song.id) }}>
                             {stem === 'mix' ? 'FULL MIX' : stem.toUpperCase()}
                           </button>
                         {/each}
@@ -3687,296 +3703,135 @@ Return JSON only:
                       {#if spotifyRateLimited[song.id]}
                         <div class="ref-rate-limit-msg">Spotify rate limited — track added as reference, analysis queued.</div>
                       {/if}
-                      {#if stemKey !== 'tonal'}
-                        {#if selectedRef && !refCurveData}
-                          <div class="no-curve-msg">No EQ curve yet for this track — background analysis pending</div>
-                        {/if}
-                        <!-- Analyze / Re-analyze -->
-                        {#if analyzerLoading[song.id]}
-                          <div class="analyzer-auto-status">⟳ Analyzing stems...</div>
-                        {:else}
-                          {@const mixCurveCount = songCurves.filter(c => c.source_type === 'mix').length}
-                          {@const lastMixCurve = songCurves.find(c => c.source_type === 'mix')}
-                          <div class="analyze-action-row">
-                            {#if mixCurveCount === 0}
-                              <button class="analyze-now-btn" onclick={() => analyzeMyVocal(song)}>▶ Run Analysis</button>
-                            {:else}
-                              <button class="analyze-now-btn" onclick={() => analyzeMyVocal(song)}>↺ Re-analyze</button>
-                              {#if lastMixCurve}
-                                <span class="last-analyzed">Last: {new Date(lastMixCurve.created_at).toLocaleDateString('de-CH')}</span>
-                              {/if}
+
+                      <!-- 3. Analyze / Re-analyze -->
+                      {#if selectedRef && !refCurveData}
+                        <div class="no-curve-msg">No EQ curve yet for this track — background analysis pending</div>
+                      {/if}
+                      {#if analyzerLoading[song.id]}
+                        <div class="analyzer-auto-status">⟳ Analyzing stems...</div>
+                      {:else}
+                        {@const mixCurveCount = songCurves.filter(c => c.source_type === 'mix').length}
+                        {@const lastMixCurve = songCurves.find(c => c.source_type === 'mix')}
+                        <div class="analyze-action-row">
+                          {#if mixCurveCount === 0}
+                            <button class="analyze-now-btn" onclick={() => analyzeMyVocal(song)}>▶ Run Analysis</button>
+                          {:else}
+                            <button class="analyze-now-btn" onclick={() => analyzeMyVocal(song)}>↺ Re-analyze</button>
+                            {#if lastMixCurve}
+                              <span class="last-analyzed">Last: {new Date(lastMixCurve.created_at).toLocaleDateString('de-CH')}</span>
                             {/if}
-                          </div>
+                          {/if}
+                        </div>
+                      {/if}
+                      {#if vocalEqStatus[song.id] === 'separating'}
+                        <div class="vocal-status">⏳ Separating stems… (60–90s)
+                          <button class="vocal-btn" style="font-size:9px;color:#555;border-color:#252525;margin-left:8px"
+                            onclick={() => { vocalEqStatus = { ...vocalEqStatus, [song.id]: null } }}>
+                            Reset
+                          </button>
+                        </div>
+                      {:else if vocalEqStatus[song.id] === 'error'}
+                        <div class="vocal-status err">✗ Analysis failed —
+                          <button class="vocal-btn" style="font-size:9px;margin-left:6px"
+                            onclick={() => analyzeMyVocal(song)}>
+                            Retry
+                          </button>
+                        </div>
+                      {/if}
+
+                      <!-- 4. EQ Chart -->
+                      <VocalEqChart
+                        mixCurve={mixCurve}
+                        refCurve={refCurve}
+                        avgCurve={avgRefCurve[song.id] ?? null}
+                        mixLabel={mixCurveData?.label ?? ''}
+                        refLabel={refCurveData?.label ?? ''}
+                        isMixTab={isMixTab}
+                      />
+
+                      <!-- 5. Action buttons -->
+                      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px">
+                        {#if selectedRef}
+                          <button class="proq-btn" onclick={() => generateAllPresets(song.id, selectedRef)}>
+                            ↓ Pro-Q 4 — all stems
+                          </button>
                         {/if}
-                        <!-- EQ Chart -->
-                        <VocalEqChart
-                          mixCurve={mixCurve}
-                          refCurve={refCurve}
-                          avgCurve={avgRefCurve[song.id] ?? null}
-                          mixLabel={mixCurveData?.label ?? ''}
-                          refLabel={refCurveData?.label ?? ''}
-                          isMixTab={isMixTab}
-                        />
-                        <!-- Action buttons row -->
-                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px">
-                          {#if selectedRef}
-                            <button class="proq-btn" onclick={() => generateAllPresets(song.id, selectedRef)}>
-                              ↓ Pro-Q 4 — all stems
+                        <button class="avg-ref-btn" onclick={() => loadAverageRefCurve(song.id, song)}>
+                          ⌀ Avg refs
+                        </button>
+                        {#if selectedRefTrack?._section === 'LIBRARY'}
+                          {@const project = projects.find(p => p.id === song.project_id)}
+                          {@const isAlreadyLinked = (project?.reference_links || []).some(r => r.spotify_id && r.spotify_id === selectedRefTrack.spotify_id)}
+                          {#if !isAlreadyLinked}
+                            <button class="save-ref-btn" onclick={() => saveRefToProject(song, selectedRefTrack)}>
+                              + Save to project refs
                             </button>
                           {/if}
-                          <button class="avg-ref-btn" onclick={() => loadAverageRefCurve(song.id, song)}>
-                            ⌀ Avg refs
+                        {/if}
+                      </div>
+                      <div class="vocal-eq-actions">
+                        <div class="vocal-mozart-wrap">
+                          <button class="vocal-mozart-toggle {mozartAnalyzeOpen[song.id] ? 'active' : ''}"
+                            onclick={() => { mozartAnalyzeOpen[song.id] = !mozartAnalyzeOpen[song.id]; mozartAnalyzeOpen = { ...mozartAnalyzeOpen } }}>
+                            + Add Reference
                           </button>
-                          {#if selectedRefTrack?._section === 'LIBRARY'}
-                            {@const project = projects.find(p => p.id === song.project_id)}
-                            {@const isAlreadyLinked = (project?.reference_links || []).some(r => r.spotify_id && r.spotify_id === selectedRefTrack.spotify_id)}
-                            {#if !isAlreadyLinked}
-                              <button class="save-ref-btn" onclick={() => saveRefToProject(song, selectedRefTrack)}>
-                                + Save to project refs
+                          {#if mozartAnalyzeOpen[song.id]}
+                            <div class="vocal-mozart-panel">
+                              <input class="vocal-ref-inp" type="text"
+                                placeholder="Artist · Title or Spotify URL…"
+                                value={mozartTrackQuery[song.id] || ''}
+                                oninput={e => { mozartTrackQuery[song.id] = e.currentTarget.value; mozartTrackQuery = { ...mozartTrackQuery } }}
+                                onkeydown={e => e.key === 'Enter' && runMozartAnalysis(song)} />
+                              <button class="vocal-btn vocal-btn-ref"
+                                disabled={mozartAnalysis[song.id]?.loading || !!refLoading || !mozartTrackQuery[song.id]}
+                                onclick={() => runMozartAnalysis(song)}>
+                                {mozartAnalysis[song.id]?.loading ? 'Fetching…' : 'Analyze'}
                               </button>
+                            </div>
+                            {#if mozartAnalysis[song.id]?.error}
+                              <div class="vocal-mozart-err">{mozartAnalysis[song.id].error}</div>
                             {/if}
                           {/if}
                         </div>
-                        {#if selectedRefTrack?.spotify_id}
-                          <button class="vocal-btn-analyzer"
-                            onclick={() => analyzeVocalStyle('https://open.spotify.com/track/' + selectedRefTrack.spotify_id, song.id)}>
-                            🎤 Analyze vocal style
-                          </button>
-                          {#if vocalStyleResult[song.id]}
-                            <div class="vocal-style-result">{vocalStyleResult[song.id]}</div>
-                          {/if}
-                        {/if}
-                        <!-- Tonal balance + stereo width for non-tonal stems -->
-                        {@const bands = [
-                          { key: 'bass',     label: 'BASS',     hz: '20–200 Hz'  },
-                          { key: 'low_mid',  label: 'LOW MID',  hz: '200–2k Hz'  },
-                          { key: 'high_mid', label: 'HIGH MID', hz: '2k–8k Hz'   },
-                          { key: 'air',      label: 'AIR',      hz: '8k–20k Hz'  }
-                        ]}
-                        <div class="tonal-section-title" style="margin-top:10px">TONAL BALANCE</div>
-                        <div class="tonal-panel">
-                          {#each bands as b}
-                            {@const mixPct = latestA?.tonal_balance ? Math.min(Math.round((latestA.tonal_balance[b.key] || 0) * 300), 100) : null}
-                            {@const refPct = selectedRefTrack?.tonal_balance ? Math.min(Math.round((selectedRefTrack.tonal_balance[b.key] || 0) * 300), 100) : null}
-                            <div class="band-row">
-                              <div class="band-label">
-                                <span class="band-name">{b.label}</span>
-                                <span class="band-hz">{b.hz}</span>
+                      </div>
+                      {#if selectedRef && stemMatches[song.id] && Object.keys(stemMatches[song.id]).length}
+                        <div class="stem-match-row">
+                          {#each ['mix','vocals','drums','bass','other'] as stem}
+                            {@const pct = stemMatches[song.id][stem]}
+                            {#if pct !== undefined}
+                              <div class="stem-match-item">
+                                <span class="stem-match-label">{stem}</span>
+                                <span class="stem-match-pct" style="color:{pct > 75 ? '#4caf82' : pct > 50 ? '#e8a838' : '#e57373'}">{pct}%</span>
                               </div>
-                              <div class="band-bars-col">
-                                {#if mixPct !== null}
-                                  <div class="band-bar-wrap" title="Mix: {mixPct}%">
-                                    <div class="band-bar mix" style="width:{mixPct}%"></div>
-                                  </div>
-                                {/if}
-                                {#if refPct !== null}
-                                  <div class="band-bar-wrap" title="Ref: {refPct}%">
-                                    <div class="band-bar ref" style="width:{refPct}%"></div>
-                                  </div>
-                                {/if}
-                                {#if mixPct === null && refPct === null}
-                                  <span class="band-no-data">analyze mix or select ref</span>
-                                {/if}
-                              </div>
-                              <span class="band-pct">
-                                {#if mixPct !== null}{mixPct}%{/if}
-                                {#if refPct !== null}<span class="band-pct-ref"> / {refPct}%</span>{/if}
-                              </span>
-                            </div>
+                            {/if}
                           {/each}
                         </div>
-                        <div class="tonal-section-title" style="margin-top:8px">STEREO WIDTH</div>
-                        <div class="tonal-panel">
-                          {#each bands as b}
-                            {@const mw = latestA?.stereo_width_per_band ? (latestA.stereo_width_per_band[b.key] || 0) : null}
-                            {@const rw = selectedRefTrack?.stereo_width_per_band ? (selectedRefTrack.stereo_width_per_band[b.key] || 0) : null}
-                            <div class="band-row">
-                              <div class="band-label">
-                                <span class="band-name">{b.label}</span>
-                                <span class="band-hz">{b.hz}</span>
-                              </div>
-                              <div class="band-bars-col">
-                                {#if mw !== null}
-                                  {@const wPct = Math.min(100, Math.round(mw * 100))}
-                                  <div class="band-bar-wrap" title="Mix: {widthLabel(mw)}">
-                                    <div class="band-bar mix {mw < 0.1 ? 'mono' : mw > 0.5 ? 'wide' : ''}" style="width:{wPct}%"></div>
-                                  </div>
-                                {/if}
-                                {#if rw !== null}
-                                  {@const wPct = Math.min(100, Math.round(rw * 100))}
-                                  <div class="band-bar-wrap" title="Ref: {widthLabel(rw)}">
-                                    <div class="band-bar ref {rw < 0.1 ? 'mono' : rw > 0.5 ? 'wide' : ''}" style="width:{wPct}%"></div>
-                                  </div>
-                                {/if}
-                                {#if mw === null && rw === null}
-                                  <span class="band-no-data">analyze mix or select ref</span>
-                                {/if}
-                              </div>
-                              <span class="band-pct">
-                                {#if mw !== null}{widthLabel(mw)}{/if}
-                                {#if rw !== null}<span class="band-pct-ref"> / {widthLabel(rw)}</span>{/if}
-                              </span>
-                            </div>
-                          {/each}
-                        </div>
-                      {:else}
-                        <!-- TONAL BALANCE + STEREO WIDTH panel -->
-                        {@const mixTonal = latestA?.tonal_balance}
-                        {@const mixWidth = latestA?.stereo_width_per_band}
-                        {@const refTonal = selectedRefTrack?.tonal_balance}
-                        {@const refWidth = selectedRefTrack?.stereo_width_per_band}
-                        {@const bands = [
-                          { key: 'bass',     label: 'BASS',     hz: '20–200 Hz'  },
-                          { key: 'low_mid',  label: 'LOW MID',  hz: '200–2k Hz'  },
-                          { key: 'high_mid', label: 'HIGH MID', hz: '2k–8k Hz'   },
-                          { key: 'air',      label: 'AIR',      hz: '8k–20k Hz'  }
-                        ]}
-                        <div class="tonal-section-title">TONAL BALANCE</div>
-                        <div class="tonal-panel">
-                          {#each bands as b}
-                            {@const mixPct = mixTonal ? Math.min(Math.round((mixTonal[b.key] || 0) * 300), 100) : null}
-                            {@const refPct = refTonal ? Math.min(Math.round((refTonal[b.key] || 0) * 300), 100) : null}
-                            <div class="band-row">
-                              <div class="band-label">
-                                <span class="band-name">{b.label}</span>
-                                <span class="band-hz">{b.hz}</span>
-                              </div>
-                              <div class="band-bars-col">
-                                {#if mixPct !== null}
-                                  <div class="band-bar-wrap" title="Mix: {mixPct}%">
-                                    <div class="band-bar mix" style="width:{mixPct}%"></div>
-                                  </div>
-                                {/if}
-                                {#if refPct !== null}
-                                  <div class="band-bar-wrap" title="Ref: {refPct}%">
-                                    <div class="band-bar ref" style="width:{refPct}%"></div>
-                                  </div>
-                                {/if}
-                                {#if mixPct === null && refPct === null}
-                                  <span class="band-no-data">analyze mix or select ref</span>
-                                {/if}
-                              </div>
-                              <span class="band-pct">
-                                {#if mixPct !== null}{mixPct}%{/if}
-                                {#if refPct !== null}<span class="band-pct-ref"> / {refPct}%</span>{/if}
-                              </span>
-                            </div>
-                          {/each}
-                        </div>
-
-                        <div class="tonal-section-title" style="margin-top:10px">STEREO WIDTH</div>
-                        <div class="tonal-panel">
-                          {#each bands as b}
-                            {@const mw = mixWidth ? (mixWidth[b.key] ?? null) : null}
-                            {@const rw = refWidth ? (refWidth[b.key] ?? null) : null}
-                            <div class="band-row">
-                              <div class="band-label">
-                                <span class="band-name">{b.label}</span>
-                                <span class="band-hz">{b.hz}</span>
-                              </div>
-                              <div class="band-bars-col">
-                                {#if mw !== null}
-                                  {@const wPct = Math.min(100, Math.round(mw * 100))}
-                                  <div class="band-bar-wrap" title="Mix: {widthLabel(mw)}">
-                                    <div class="band-bar mix {mw < 0.1 ? 'mono' : mw > 0.5 ? 'wide' : ''}" style="width:{wPct}%"></div>
-                                  </div>
-                                {/if}
-                                {#if rw !== null}
-                                  {@const wPct = Math.min(100, Math.round(rw * 100))}
-                                  <div class="band-bar-wrap" title="Ref: {widthLabel(rw)}">
-                                    <div class="band-bar ref {rw < 0.1 ? 'mono' : rw > 0.5 ? 'wide' : ''}" style="width:{wPct}%"></div>
-                                  </div>
-                                {/if}
-                                {#if mw === null && rw === null}
-                                  <span class="band-no-data">analyze mix or select ref</span>
-                                {/if}
-                              </div>
-                              <span class="band-pct">
-                                {#if mw !== null}{widthLabel(mw)}{/if}
-                                {#if rw !== null}<span class="band-pct-ref"> / {widthLabel(rw)}</span>{/if}
-                              </span>
+                      {/if}
+                      {#if cmp?.instructions?.length}
+                        <div class="eq-instructions">
+                          {#each cmp.instructions as inst}
+                            <div class="eq-inst {inst.action === 'BOOST' ? 'boost' : 'cut'}">
+                              <span class="eq-inst-action">{inst.action}</span>
+                              <span class="eq-inst-db">{inst.action === 'BOOST' ? '+' : '-'}{inst.amount}dB</span>
+                              <span class="eq-inst-band">{inst.freqLabel}</span>
+                              <span class="eq-inst-reason">{inst.reason}</span>
                             </div>
                           {/each}
                         </div>
                       {/if}
-
-                      <!-- Emotional arc -->
-                      {#if selectedRefTrack?.emotional_arc?.length}
-                        <div class="tonal-section-title" style="margin-top:8px">EMOTIONAL ARC</div>
-                        <div class="emotional-arc-row">
-                          {#each (selectedRefTrack.emotional_arc || []) as seg, i}
-                            <div class="arc-segment"
-                              style="height:{8 + (seg.energy||0)*40}px; background:rgba(201,168,76,{0.2+(seg.energy||0)*0.8})"
-                              title="Seg {i+1}: energy {((seg.energy||0)*100).toFixed(0)}%">
-                            </div>
+                      {#if refCurves.length || mixCurves.length}
+                        <div class="eq-curve-list">
+                          {#each refCurves as ref, i}
+                            <div class="eq-curve-item eq-curve-ref" style="color: {['rgba(201,168,76,.7)','rgba(76,175,130,.7)','rgba(74,159,212,.7)'][i] || 'rgba(201,168,76,.7)'}">● {ref.label || 'Reference ' + (i+1)}</div>
+                          {/each}
+                          {#each mixCurves as mix}
+                            <div class="eq-curve-item eq-curve-mix">● My Mix ({new Date(mix.created_at).toLocaleDateString()})</div>
                           {/each}
                         </div>
                       {/if}
 
-                      <!-- Ref track basic stats -->
-                      {#if selectedRefTrack?.tempo || selectedRefTrack?.key || selectedRefTrack?.loudness}
-                        <div class="tonal-section-title" style="margin-top:8px">REF STATS</div>
-                        <div class="ref-basic-stats">
-                          {#if selectedRefTrack.tempo}<span class="ref-stat-chip">{Math.round(selectedRefTrack.tempo)} BPM</span>{/if}
-                          {#if selectedRefTrack.key}<span class="ref-stat-chip">{selectedRefTrack.key}{#if selectedRefTrack.camelot} · {selectedRefTrack.camelot}{/if}</span>{/if}
-                          {#if selectedRefTrack.loudness}<span class="ref-stat-chip">{selectedRefTrack.loudness.toFixed(1)} LUFS</span>{/if}
-                        </div>
-                      {/if}
-
-                      <!-- Feel metrics with project-ref-average markers -->
-                      {#if [selectedRefTrack?.energy, selectedRefTrack?.danceability, selectedRefTrack?.valence, selectedRefTrack?.brightness, selectedRefTrack?.warmth, selectedRefTrack?.bass_energy, latestA?.energy, latestA?.danceability, latestA?.valence].some(v => v !== null && v !== undefined)}
-                        <div class="tonal-section-title" style="margin-top:6px">FEEL</div>
-                        {#each [
-                          { key: 'energy',       label: 'ENERGY' },
-                          { key: 'danceability', label: 'GROOVE' },
-                          { key: 'valence',      label: 'MOOD'   },
-                          { key: 'brightness',   label: 'BRIGHT' },
-                          { key: 'warmth',       label: 'WARMTH' },
-                          { key: 'bass_energy',  label: 'BASS'   }
-                        ] as metric}
-                          {#if selectedRefTrack?.[metric.key] !== null && selectedRefTrack?.[metric.key] !== undefined}
-                            <div class="ref-metric-row">
-                              <span class="ref-metric-label">{metric.label}</span>
-                              <div class="ref-metric-bar-wrap">
-                                <div class="ref-metric-bar" style="width:{(selectedRefTrack[metric.key]||0)*100}%"></div>
-                                {#if projectRefAverage[song.id]?.[metric.key] !== null && projectRefAverage[song.id]?.[metric.key] !== undefined}
-                                  <div class="avg-marker"
-                                    style="left:{(projectRefAverage[song.id][metric.key]||0)*100}%"
-                                    title="Project avg: {((projectRefAverage[song.id][metric.key]||0)*100).toFixed(0)}">
-                                  </div>
-                                {/if}
-                              </div>
-                              <span class="ref-metric-val">{((selectedRefTrack[metric.key]||0)*100).toFixed(0)}</span>
-                            </div>
-                          {/if}
-                        {/each}
-                      {/if}
-
-                      <!-- Credits (when a ref track is selected and has credits) -->
-                      {#if selectedRefTrack?.credits}
-                        <div class="ref-credits">
-                          {#if selectedRefTrack.credits.producers?.length}
-                            <div class="credit-row">
-                              <span class="credit-label">Produced</span>
-                              <span class="credit-val">{selectedRefTrack.credits.producers.join(', ')}</span>
-                            </div>
-                          {/if}
-                          {#if selectedRefTrack.credits.mixers?.length}
-                            <div class="credit-row">
-                              <span class="credit-label">Mixed</span>
-                              <span class="credit-val">{selectedRefTrack.credits.mixers.join(', ')}</span>
-                            </div>
-                          {/if}
-                          {#if selectedRefTrack.credits.masterers?.length}
-                            <div class="credit-row">
-                              <span class="credit-label">Mastered</span>
-                              <span class="credit-val">{selectedRefTrack.credits.masterers.join(', ')}</span>
-                            </div>
-                          {/if}
-                        </div>
-                      {/if}
-
-                      <!-- Mozart Insight -->
+                      <!-- 6. Mozart insight -->
                       {#if mozartInsightLoading[song.id]}
                         <div class="mz-loading">Mozart analyzing...</div>
                       {:else if mozartInsight[song.id]}
@@ -4018,88 +3873,164 @@ Return JSON only:
                         <div class="ref-added-confirm">✓ Reference added</div>
                       {/if}
 
-                      <!-- Status -->
-                      {#if vocalEqStatus[song.id] === 'separating'}
-                        <div class="vocal-status">⏳ Separating stems… (60–90s)
-                          <button class="vocal-btn" style="font-size:9px;color:#555;border-color:#252525;margin-left:8px"
-                            onclick={() => { vocalEqStatus = { ...vocalEqStatus, [song.id]: null } }}>
-                            Reset
-                          </button>
+                      <!-- 7. Feel metrics -->
+                      {#if [selectedRefTrack?.energy, selectedRefTrack?.danceability, selectedRefTrack?.valence, selectedRefTrack?.brightness, selectedRefTrack?.warmth, selectedRefTrack?.bass_energy, latestA?.energy, latestA?.danceability, latestA?.valence].some(v => v !== null && v !== undefined)}
+                        <div class="tonal-section-title" style="margin-top:6px">FEEL</div>
+                        {#each [
+                          { key: 'energy',       label: 'ENERGY' },
+                          { key: 'danceability', label: 'GROOVE' },
+                          { key: 'valence',      label: 'MOOD'   },
+                          { key: 'brightness',   label: 'BRIGHT' },
+                          { key: 'warmth',       label: 'WARMTH' },
+                          { key: 'bass_energy',  label: 'BASS'   }
+                        ] as metric}
+                          {#if selectedRefTrack?.[metric.key] !== null && selectedRefTrack?.[metric.key] !== undefined}
+                            <div class="ref-metric-row">
+                              <span class="ref-metric-label">{metric.label}</span>
+                              <div class="ref-metric-bar-wrap">
+                                <div class="ref-metric-bar" style="width:{(selectedRefTrack[metric.key]||0)*100}%"></div>
+                                {#if projectRefAverage[song.id]?.[metric.key] !== null && projectRefAverage[song.id]?.[metric.key] !== undefined}
+                                  <div class="avg-marker"
+                                    style="left:{(projectRefAverage[song.id][metric.key]||0)*100}%"
+                                    title="Project avg: {((projectRefAverage[song.id][metric.key]||0)*100).toFixed(0)}">
+                                  </div>
+                                {/if}
+                              </div>
+                              <span class="ref-metric-val">{((selectedRefTrack[metric.key]||0)*100).toFixed(0)}</span>
+                            </div>
+                          {/if}
+                        {/each}
+                      {/if}
+
+                      <!-- 8+9. Tonal balance + Stereo width -->
+                      <div style="font-size:8px;color:#252525;margin-top:4px;word-break:break-all">mix_tonal:{JSON.stringify(latestA?.tonal_balance)} ref_tonal:{JSON.stringify(selectedRefTrack?.tonal_balance)}</div>
+                      <div class="tonal-section-title" style="margin-top:6px">TONAL BALANCE</div>
+                      {#if !latestA?.tonal_balance && !selectedRefTrack?.tonal_balance}
+                        <div style="font-size:10px;color:#252525;padding:4px 0">Analyze mix + select library ref to see data</div>
+                      {:else}
+                        <div class="tonal-panel">
+                          {#each [{ key:'bass',label:'BASS',hz:'20–200 Hz'},{ key:'low_mid',label:'LOW MID',hz:'200–2k Hz'},{ key:'high_mid',label:'HIGH MID',hz:'2k–8k Hz'},{ key:'air',label:'AIR',hz:'8k–20k Hz'}] as b}
+                            {@const mixPct = latestA?.tonal_balance ? Math.min(Math.round((latestA.tonal_balance[b.key] || 0) * 300), 100) : null}
+                            {@const refPct = selectedRefTrack?.tonal_balance ? Math.min(Math.round((selectedRefTrack.tonal_balance[b.key] || 0) * 300), 100) : null}
+                            <div class="band-row">
+                              <div class="band-label">
+                                <span class="band-name">{b.label}</span>
+                                <span class="band-hz">{b.hz}</span>
+                              </div>
+                              <div class="band-bars-col">
+                                {#if mixPct !== null}
+                                  <div class="band-bar-wrap" title="Mix: {mixPct}%">
+                                    <div class="band-bar mix" style="width:{mixPct}%"></div>
+                                  </div>
+                                {/if}
+                                {#if refPct !== null}
+                                  <div class="band-bar-wrap" title="Ref: {refPct}%">
+                                    <div class="band-bar ref" style="width:{refPct}%"></div>
+                                  </div>
+                                {/if}
+                                {#if mixPct === null && refPct === null}
+                                  <span class="band-no-data">no data</span>
+                                {/if}
+                              </div>
+                              <span class="band-pct">
+                                {#if mixPct !== null}{mixPct}%{/if}
+                                {#if refPct !== null}<span class="band-pct-ref"> / {refPct}%</span>{/if}
+                              </span>
+                            </div>
+                          {/each}
                         </div>
-                      {:else if vocalEqStatus[song.id] === 'error'}
-                        <div class="vocal-status err">✗ Analysis failed —
-                          <button class="vocal-btn" style="font-size:9px;margin-left:6px"
-                            onclick={() => analyzeMyVocal(song)}>
-                            Retry
-                          </button>
+                      {/if}
+                      <div class="tonal-section-title" style="margin-top:8px">STEREO WIDTH</div>
+                      {#if !latestA?.stereo_width_per_band && !selectedRefTrack?.stereo_width_per_band}
+                        <div style="font-size:10px;color:#252525;padding:4px 0">Analyze mix + select library ref to see data</div>
+                      {:else}
+                        <div class="tonal-panel">
+                          {#each [{ key:'bass',label:'BASS',hz:'20–200 Hz'},{ key:'low_mid',label:'LOW MID',hz:'200–2k Hz'},{ key:'high_mid',label:'HIGH MID',hz:'2k–8k Hz'},{ key:'air',label:'AIR',hz:'8k–20k Hz'}] as b}
+                            {@const mw = latestA?.stereo_width_per_band ? (latestA.stereo_width_per_band[b.key] ?? null) : null}
+                            {@const rw = selectedRefTrack?.stereo_width_per_band ? (selectedRefTrack.stereo_width_per_band[b.key] ?? null) : null}
+                            <div class="band-row">
+                              <div class="band-label">
+                                <span class="band-name">{b.label}</span>
+                                <span class="band-hz">{b.hz}</span>
+                              </div>
+                              <div class="band-bars-col">
+                                {#if mw !== null}
+                                  {@const wPct = Math.min(100, Math.round(mw * 100))}
+                                  <div class="band-bar-wrap" title="Mix: {widthLabel(mw)}">
+                                    <div class="band-bar mix {mw < 0.1 ? 'mono' : mw > 0.5 ? 'wide' : ''}" style="width:{wPct}%"></div>
+                                  </div>
+                                {/if}
+                                {#if rw !== null}
+                                  {@const wPct = Math.min(100, Math.round(rw * 100))}
+                                  <div class="band-bar-wrap" title="Ref: {widthLabel(rw)}">
+                                    <div class="band-bar ref {rw < 0.1 ? 'mono' : rw > 0.5 ? 'wide' : ''}" style="width:{wPct}%"></div>
+                                  </div>
+                                {/if}
+                                {#if mw === null && rw === null}
+                                  <span class="band-no-data">no data</span>
+                                {/if}
+                              </div>
+                              <span class="band-pct">
+                                {#if mw !== null}{widthLabel(mw)}{/if}
+                                {#if rw !== null}<span class="band-pct-ref"> / {widthLabel(rw)}</span>{/if}
+                              </span>
+                            </div>
+                          {/each}
                         </div>
                       {/if}
 
-                      <!-- Action row -->
-                      <div class="vocal-eq-actions">
-                        <div class="vocal-mozart-wrap">
-                          <button class="vocal-mozart-toggle {mozartAnalyzeOpen[song.id] ? 'active' : ''}"
-                            onclick={() => { mozartAnalyzeOpen[song.id] = !mozartAnalyzeOpen[song.id]; mozartAnalyzeOpen = { ...mozartAnalyzeOpen } }}>
-                            + Add Reference
-                          </button>
-                          {#if mozartAnalyzeOpen[song.id]}
-                            <div class="vocal-mozart-panel">
-                              <input class="vocal-ref-inp" type="text"
-                                placeholder="Artist · Title or Spotify URL…"
-                                value={mozartTrackQuery[song.id] || ''}
-                                oninput={e => { mozartTrackQuery[song.id] = e.currentTarget.value; mozartTrackQuery = { ...mozartTrackQuery } }}
-                                onkeydown={e => e.key === 'Enter' && runMozartAnalysis(song)} />
-                              <button class="vocal-btn vocal-btn-ref"
-                                disabled={mozartAnalysis[song.id]?.loading || !!refLoading || !mozartTrackQuery[song.id]}
-                                onclick={() => runMozartAnalysis(song)}>
-                                {mozartAnalysis[song.id]?.loading ? 'Fetching…' : 'Analyze'}
-                              </button>
+                      <!-- 10. Emotional arc (ref track) -->
+                      {#if selectedRefTrack?.emotional_arc?.length}
+                        <div class="tonal-section-title" style="margin-top:8px">EMOTIONAL ARC</div>
+                        <div class="emotional-arc-row">
+                          {#each (selectedRefTrack.emotional_arc || []) as seg, i}
+                            <div class="arc-segment"
+                              style="height:{8 + (seg.energy||0)*40}px; background:rgba(201,168,76,{0.2+(seg.energy||0)*0.8})"
+                              title="Seg {i+1}: energy {((seg.energy||0)*100).toFixed(0)}%">
                             </div>
-                            {#if mozartAnalysis[song.id]?.error}
-                              <div class="vocal-mozart-err">{mozartAnalysis[song.id].error}</div>
-                            {/if}
+                          {/each}
+                        </div>
+                      {/if}
+
+                      <!-- 11. Credits -->
+                      {#if selectedRefTrack?.credits}
+                        <div class="ref-credits">
+                          {#if selectedRefTrack.credits.producers?.length}
+                            <div class="credit-row">
+                              <span class="credit-label">Produced</span>
+                              <span class="credit-val">{selectedRefTrack.credits.producers.join(', ')}</span>
+                            </div>
+                          {/if}
+                          {#if selectedRefTrack.credits.mixers?.length}
+                            <div class="credit-row">
+                              <span class="credit-label">Mixed</span>
+                              <span class="credit-val">{selectedRefTrack.credits.mixers.join(', ')}</span>
+                            </div>
+                          {/if}
+                          {#if selectedRefTrack.credits.masterers?.length}
+                            <div class="credit-row">
+                              <span class="credit-label">Mastered</span>
+                              <span class="credit-val">{selectedRefTrack.credits.masterers.join(', ')}</span>
+                            </div>
                           {/if}
                         </div>
-                      </div>
-
-                      <!-- Per-stem match % -->
-                      {#if selectedRef && stemMatches[song.id] && Object.keys(stemMatches[song.id]).length}
-                        <div class="stem-match-row">
-                          {#each ['mix','vocals','drums','bass','other'] as stem}
-                            {@const pct = stemMatches[song.id][stem]}
-                            {#if pct !== undefined}
-                              <div class="stem-match-item">
-                                <span class="stem-match-label">{stem}</span>
-                                <span class="stem-match-pct" style="color:{pct > 75 ? '#4caf82' : pct > 50 ? '#e8a838' : '#e57373'}">{pct}%</span>
-                              </div>
-                            {/if}
-                          {/each}
+                      {/if}
+                      {#if selectedRefTrack?.tempo || selectedRefTrack?.key || selectedRefTrack?.loudness}
+                        <div class="tonal-section-title" style="margin-top:8px">REF STATS</div>
+                        <div class="ref-basic-stats">
+                          {#if selectedRefTrack.tempo}<span class="ref-stat-chip">{Math.round(selectedRefTrack.tempo)} BPM</span>{/if}
+                          {#if selectedRefTrack.key}<span class="ref-stat-chip">{selectedRefTrack.key}{#if selectedRefTrack.camelot} · {selectedRefTrack.camelot}{/if}</span>{/if}
+                          {#if selectedRefTrack.loudness}<span class="ref-stat-chip">{selectedRefTrack.loudness.toFixed(1)} LUFS</span>{/if}
                         </div>
                       {/if}
-                      <!-- EQ instructions from compare-vocal-eq -->
-                      {#if cmp?.instructions?.length}
-                        <div class="eq-instructions">
-                          {#each cmp.instructions as inst}
-                            <div class="eq-inst {inst.action === 'BOOST' ? 'boost' : 'cut'}">
-                              <span class="eq-inst-action">{inst.action}</span>
-                              <span class="eq-inst-db">{inst.action === 'BOOST' ? '+' : '-'}{inst.amount}dB</span>
-                              <span class="eq-inst-band">{inst.freqLabel}</span>
-                              <span class="eq-inst-reason">{inst.reason}</span>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-
-                      <!-- Curve list -->
-                      {#if refCurves.length || mixCurves.length}
-                        <div class="eq-curve-list">
-                          {#each refCurves as ref, i}
-                            <div class="eq-curve-item eq-curve-ref" style="color: {['rgba(201,168,76,.7)','rgba(76,175,130,.7)','rgba(74,159,212,.7)'][i] || 'rgba(201,168,76,.7)'}">● {ref.label || 'Reference ' + (i+1)}</div>
-                          {/each}
-                          {#each mixCurves as mix}
-                            <div class="eq-curve-item eq-curve-mix">● My Mix ({new Date(mix.created_at).toLocaleDateString()})</div>
-                          {/each}
-                        </div>
+                      {#if selectedRefTrack?.spotify_id}
+                        <button class="vocal-btn-analyzer"
+                          onclick={() => analyzeVocalStyle('https://open.spotify.com/track/' + selectedRefTrack.spotify_id, song.id)}>
+                          🎤 Analyze vocal style
+                        </button>
+                        {#if vocalStyleResult[song.id]}
+                          <div class="vocal-style-result">{vocalStyleResult[song.id]}</div>
+                        {/if}
                       {/if}
 
                       <!-- TRACK ANALYSIS sub-section -->
@@ -4123,7 +4054,7 @@ Return JSON only:
                         {/if}
                       {/if}
 
-                      <!-- SUCCESS MATCH sub-section -->
+                      <!-- 12. SUCCESS MATCH -->
                       <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'match')}>
                         <span>SUCCESS MATCH</span><span class="az-arr {ao.match?'open':''}">▶</span>
                       </button>
@@ -4162,7 +4093,7 @@ Return JSON only:
                         </div>
                       {/if}
 
-                      <!-- EMOTIONAL ARC sub-section -->
+                      <!-- EMOTIONAL ARC sub-section from latestA -->
                       {#if latestA?.emotional_arc?.length}
                         <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'arc')}>
                           <span>EMOTIONAL ARC</span><span class="az-arr {ao.arc?'open':''}">▶</span>
@@ -4194,32 +4125,7 @@ Return JSON only:
                         {/if}
                       {/if}
 
-                      <!-- FEEDBACK HISTORY sub-section -->
-                      <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'feedback')}>
-                        <span>FEEDBACK HISTORY</span><span class="az-arr {ao.feedback?'open':''}">▶</span>
-                      </button>
-                      {#if ao.feedback}
-                        <div class="az-body">
-                          {#if feedbackLoading[String(song.id)]}
-                            <div class="az-loading">Loading feedback patterns…</div>
-                          {:else if feedbackInsights[String(song.id)]?.history?.length}
-                            {@const fi = feedbackInsights[String(song.id)]}
-                            <div class="az-history-total">{fi.total} feedback items logged</div>
-                            {#each fi.history as h}
-                              <div class="az-feedback-row">
-                                <span class="az-fb-type">{h.type.replace(/_/g,' ')}</span>
-                                <span class="az-fb-count">{h.count}×</span>
-                                <div class="az-fb-bar"><div class="az-fb-fill" style="width:{h.pct}%"></div></div>
-                                <span class="az-fb-pct">{h.pct}%</span>
-                              </div>
-                            {/each}
-                          {:else}
-                            <div class="az-loading">No feedback patterns yet — add feedback to versions.</div>
-                          {/if}
-                        </div>
-                      {/if}
-
-                      <!-- TREND CONTEXT sub-section -->
+                      <!-- 13. TREND CONTEXT -->
                       <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'trend')}>
                         <span>TREND CONTEXT</span><span class="az-arr {ao.trend?'open':''}">▶</span>
                       </button>
@@ -4242,6 +4148,31 @@ Return JSON only:
                             {/if}
                           {:else}
                             <div class="az-loading">No chart history yet — runs automatically with morning briefing.</div>
+                          {/if}
+                        </div>
+                      {/if}
+
+                      <!-- 14. FEEDBACK HISTORY (last) -->
+                      <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'feedback')}>
+                        <span>FEEDBACK HISTORY</span><span class="az-arr {ao.feedback?'open':''}">▶</span>
+                      </button>
+                      {#if ao.feedback}
+                        <div class="az-body">
+                          {#if feedbackLoading[String(song.id)]}
+                            <div class="az-loading">Loading feedback patterns…</div>
+                          {:else if feedbackInsights[String(song.id)]?.history?.length}
+                            {@const fi = feedbackInsights[String(song.id)]}
+                            <div class="az-history-total">{fi.total} feedback items logged</div>
+                            {#each fi.history as h}
+                              <div class="az-feedback-row">
+                                <span class="az-fb-type">{h.type.replace(/_/g,' ')}</span>
+                                <span class="az-fb-count">{h.count}×</span>
+                                <div class="az-fb-bar"><div class="az-fb-fill" style="width:{h.pct}%"></div></div>
+                                <span class="az-fb-pct">{h.pct}%</span>
+                              </div>
+                            {/each}
+                          {:else}
+                            <div class="az-loading">No feedback patterns yet — add feedback to versions.</div>
                           {/if}
                         </div>
                       {/if}

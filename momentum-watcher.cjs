@@ -21,6 +21,10 @@ const { Readable } = require('stream')
 const chokidar = require('chokidar')
 const formidable = require('formidable')
 
+function shellEscape(str) {
+  return "'" + str.replace(/'/g, "'\\''") + "'"
+}
+
 let Database = null
 try { Database = require('better-sqlite3') } catch(e) { console.warn('better-sqlite3 not available:', e.message) }
 
@@ -187,7 +191,7 @@ const MIME = {
 function transcodeToMp3(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     exec(
-      `ffmpeg -i "${inputPath}" -b:a 320k -y "${outputPath}"`,
+      `ffmpeg -i ${shellEscape(inputPath)} -b:a 320k -y ${shellEscape(outputPath)}`,
       (err) => { if (err) reject(err); else resolve(outputPath) }
     )
   })
@@ -643,7 +647,7 @@ async function runAgentChartAnalysis(apiKey) {
       const artistName = (track.artists[0]?.name || '').replace(/"/g, '')
       const trackName = track.name.replace(/"/g, '')
       execSync(`yt-dlp -x --audio-format mp3 --download-sections "*0-30" -o "${tmpAudio}" "ytsearch1:${artistName} ${trackName} official"`, { timeout: 60000 })
-      const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+      const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" ${shellEscape(tmpAudio)} 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
       feat = JSON.parse(esOut)
       console.log(`  ✓ Chart track analyzed: ${track.name} — ${feat.bpm}bpm ${feat.key} ${feat.scale}`)
     } catch(e) {
@@ -1674,7 +1678,7 @@ async function processLibraryTrackInBackground(refTrack) {
 
     // Step 3: Essentia — BPM, key, energy, tonal balance, stereo width
     try {
-      const esOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_AUDIO_SCRIPT}" "${tmpFile}" 2>/dev/null`, { encoding: 'utf8', timeout: 120000 }).trim()
+      const esOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_AUDIO_SCRIPT}" ${shellEscape(tmpFile)} 2>/dev/null`, { encoding: 'utf8', timeout: 120000 }).trim()
       const es = JSON.parse(esOut)
       if (es.bpm) {
         const upd = {}
@@ -1723,7 +1727,7 @@ async function runStemAnalysis(refTrack) {
     const dlRes = await fetch(previewUrl)
     if (!dlRes.ok) throw new Error('preview download failed: ' + dlRes.status)
     fs.writeFileSync(tmpFile, Buffer.from(await dlRes.arrayBuffer()))
-    const eqOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_EQ_SCRIPT}" "${tmpFile}" 2>/dev/null`, { encoding: 'utf8', timeout: 300000 }).trim()
+    const eqOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_EQ_SCRIPT}" ${shellEscape(tmpFile)} 2>/dev/null`, { encoding: 'utf8', timeout: 300000 }).trim()
     const eqResult = JSON.parse(eqOut)
     if (eqResult.ok && eqResult.stems) {
       for (const [stemName, curve] of Object.entries(eqResult.stems)) {
@@ -2295,7 +2299,7 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
           if (spTrack.preview_url) {
             try {
               execSync(`curl -s -o "${tmpAudio}" "${spTrack.preview_url}"`, { timeout: 15000 })
-              const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+              const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" ${shellEscape(tmpAudio)} 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
               feat = JSON.parse(esOut)
             } catch(e) { console.warn('  TikTok Essentia skipped:', e.message.slice(0, 60)) }
             finally { try { fs.unlinkSync(tmpAudio) } catch(e) {} }
@@ -5359,7 +5363,7 @@ async function extractAcapella(inputPath) {
   // Step 1: Demucs vocal separation
   await new Promise((resolve, reject) => {
     exec(
-      `"${ACAPELLA_PYTHON}" -m demucs --two-stems=vocals -o "${tmpDir}" "${inputPath}"`,
+      `"${ACAPELLA_PYTHON}" -m demucs --two-stems=vocals -o ${shellEscape(tmpDir)} ${shellEscape(inputPath)}`,
       { timeout: 300000 },
       (err) => err ? reject(new Error('Demucs failed: ' + err.message)) : resolve()
     )
@@ -5380,14 +5384,14 @@ print(json.dumps({'onset': float(onset_sec)}))
 `
   const onsetScriptPath = `/tmp/onset_${Date.now()}.py`
   fs.writeFileSync(onsetScriptPath, onsetScript)
-  const onsetRaw = execSync(`"${ACAPELLA_PYTHON}" "${onsetScriptPath}" "${vocalsPath}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+  const onsetRaw = execSync(`"${ACAPELLA_PYTHON}" ${shellEscape(onsetScriptPath)} ${shellEscape(vocalsPath)} 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
   const { onset: onsetTime } = JSON.parse(onsetRaw)
   fs.unlinkSync(onsetScriptPath)
 
   // Step 3: Essentia BPM + key
   let bpm = 0, keyLabel = 'unknown'
   try {
-    const esRaw = execSync(`"${ACAPELLA_PYTHON}" "${ACAPELLA_ANALYZE_SCRIPT}" "${vocalsPath}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+    const esRaw = execSync(`"${ACAPELLA_PYTHON}" "${ACAPELLA_ANALYZE_SCRIPT}" ${shellEscape(vocalsPath)} 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
     const esData = JSON.parse(esRaw)
     bpm = Math.round(esData.bpm || 0)
     keyLabel = (esData.key && esData.scale) ? `${esData.key}${esData.scale === 'minor' ? 'm' : ''}` : (esData.key || 'unknown')
@@ -5446,7 +5450,7 @@ async function analyzeVocalEqUrl(url, songId, label) {
   if (!audioReady) throw new Error('Could not download audio for vocal EQ')
 
   console.log('⏳ Running stem EQ analysis (ref):', label || url)
-  const raw = execSync(`"${VOCAL_EQ_PYTHON}" "${VOCAL_EQ_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 400000 }).trim()
+  const raw = execSync(`"${VOCAL_EQ_PYTHON}" "${VOCAL_EQ_SCRIPT}" ${shellEscape(tmpAudio)} 2>/dev/null`, { encoding: 'utf8', timeout: 400000 }).trim()
   try { fs.unlinkSync(tmpAudio) } catch(e) {}
 
   const result = JSON.parse(raw)
@@ -5527,7 +5531,7 @@ const server = http.createServer(async (req, res) => {
         if (!ffmpeg) throw new Error('ffmpeg not found — install with: brew install ffmpeg')
         // Pass 1: measure integrated LUFS only — no encoding
         const measured = execSync(
-          `"${ffmpeg}" -i "${tmpIn}" -af ebur128=framelog=verbose -f null /dev/null 2>&1`,
+          `"${ffmpeg}" -i ${shellEscape(tmpIn)} -af ebur128=framelog=verbose -f null /dev/null 2>&1`,
           { encoding: 'utf8' }
         )
         const lufsMatch = measured.match(/I:\s*(-?\d+\.?\d*)\s*LUFS/)
@@ -5544,7 +5548,7 @@ const server = http.createServer(async (req, res) => {
           '.mp3':  '-c:a libmp3lame -q:a 0',
           '.m4a':  '-c:a aac -b:a 320k',
         }[ext] || '-c:a pcm_s24le'
-        execSync(`"${ffmpeg}" -i "${tmpIn}" -af "volume=${gainDb}dB" ${encFlags} -y "${outPath}"`, { stdio: 'pipe' })
+        execSync(`"${ffmpeg}" -i ${shellEscape(tmpIn)} -af "volume=${gainDb}dB" ${encFlags} -y ${shellEscape(outPath)}`, { stdio: 'pipe' })
         fs.unlinkSync(tmpIn)
         console.log(`✓ Normalized → ${outPath}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -6169,7 +6173,7 @@ async function restore(input) {
             const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
             const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
             try {
-              const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${destPath}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+              const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" ${shellEscape(destPath)} 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
               const feat = JSON.parse(esOut)
               const bpm = feat.bpm ? Math.round(feat.bpm) : null
               const esKey = feat.key && feat.scale ? feat.key + ' ' + feat.scale : null
@@ -7035,7 +7039,7 @@ ${context}` }]
           try {
             const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
             const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
-            const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+            const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" ${shellEscape(tmpAudio)} 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
             const feat = JSON.parse(esOut)
             bpm = feat.bpm; key = feat.key; scale = feat.scale; key_strength = feat.key_strength
             energy = feat.energy; danceability = feat.danceability
@@ -7180,7 +7184,7 @@ ${context}` }]
         try {
           const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
           const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
-          const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 90000 }).trim()
+          const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" ${shellEscape(tmpAudio)} 2>/dev/null`, { encoding: 'utf8', timeout: 90000 }).trim()
           analysis = JSON.parse(esOut)
         } finally {
           try { fs.unlinkSync(tmpAudio) } catch(e) {}
@@ -7239,7 +7243,7 @@ ${context}` }]
                 'k, scale, strength = es.KeyExtractor(profileType="edma")(audio)',
                 'print(json.dumps({"bpm": round(float(bpm_val)), "key": k, "scale": scale}))'
               ].join('\n'))
-              const esOut = execSync(`"${ESSENTIA_PYTHON}" "${esTmp}" 2>/dev/null`, { encoding: 'utf8', timeout: 20000 }).trim()
+              const esOut = execSync(`"${ESSENTIA_PYTHON}" ${shellEscape(esTmp)} 2>/dev/null`, { encoding: 'utf8', timeout: 20000 }).trim()
               try { require('fs').unlinkSync(esTmp) } catch(e) {}
               const f = JSON.parse(esOut)
               bpm = f.bpm
@@ -7319,7 +7323,7 @@ ${context}` }]
                 'k, scale, strength = es.KeyExtractor(profileType="edma")(audio)',
                 'print(json.dumps({"bpm": round(float(bpm_val)), "key": k + (" minor" if scale=="minor" else " major")}))'
               ].join('\n'))
-              const esOut = execSync(`"${ESSENTIA_PYTHON}" "${esTmp}" 2>/dev/null`, { encoding: 'utf8', timeout: 20000 }).trim()
+              const esOut = execSync(`"${ESSENTIA_PYTHON}" ${shellEscape(esTmp)} 2>/dev/null`, { encoding: 'utf8', timeout: 20000 }).trim()
               try { fs.unlinkSync(esTmp) } catch(e) {}
               const features = JSON.parse(esOut)
               bpm = features.bpm
@@ -8054,7 +8058,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
 
         // ── Step 1: try to read embedded metadata (DAWs write BPM/KEY into files) ──
         try {
-          const probe = execSync(`ffprobe -v quiet -print_format json -show_format -show_streams "${srcPath}"`, { encoding: 'utf8' })
+          const probe = execSync(`ffprobe -v quiet -print_format json -show_format -show_streams ${shellEscape(srcPath)}`, { encoding: 'utf8' })
           const info = JSON.parse(probe)
           const tags = { ...info.format?.tags, ...(info.streams?.[0]?.tags || {}) }
           // case-insensitive tag scan
@@ -8072,7 +8076,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         let esError = null, esFeatures = {}
         try {
           const pyOut = execSync(
-            `"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${srcPath}" 2>/dev/null`,
+            `"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" ${shellEscape(srcPath)} 2>/dev/null`,
             { encoding: 'utf8', timeout: 60000 }
           ).trim()
           esFeatures = JSON.parse(pyOut)
@@ -8533,7 +8537,7 @@ Respond ONLY in JSON:
           { timeout: 90000 }
         )
 
-        const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+        const esOut = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" ${shellEscape(tmpAudio)} 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
         const feat = JSON.parse(esOut)
 
         try { fs.unlinkSync(tmpAudio) } catch(e) {}
@@ -8662,7 +8666,7 @@ Respond ONLY in JSON:
           }
 
           console.log('⏳ Running 4-stem EQ analysis on:', audioFilePath)
-          const raw = execSync(`"${VOCAL_EQ_PYTHON}" "${VOCAL_EQ_SCRIPT}" "${audioFilePath}" 2>/dev/null`, { encoding: 'utf8', timeout: 400000 }).trim()
+          const raw = execSync(`"${VOCAL_EQ_PYTHON}" "${VOCAL_EQ_SCRIPT}" ${shellEscape(audioFilePath)} 2>/dev/null`, { encoding: 'utf8', timeout: 400000 }).trim()
           const result = JSON.parse(raw)
           if (!result.ok) throw new Error(result.error || 'Script failed')
 
@@ -8946,7 +8950,7 @@ Respond ONLY in JSON:
         const ESSENTIA_PYTHON = '/opt/homebrew/bin/python3.11'
         const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
         let features
-        const rawResult = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" "${filePath}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 })
+        const rawResult = execSync(`"${ESSENTIA_PYTHON}" "${ANALYZE_SCRIPT}" ${shellEscape(filePath)} 2>/dev/null`, { encoding: 'utf8', timeout: 60000 })
         const rawFeat = JSON.parse(rawResult.trim())
         // Normalize for reference_tracks schema
         features = { ...rawFeat, tempo: rawFeat.bpm, key: rawFeat.key + ' ' + rawFeat.scale, loudness: rawFeat.loudness_lufs, duration: rawFeat.duration_seconds }
@@ -9266,7 +9270,7 @@ Respond ONLY in JSON:
             }
             if (audioReady) {
               try {
-                const esOut = execSync(`"/opt/homebrew/bin/python3.11" "${path.join(__dirname, 'analyze_audio.py')}" "${tmpAudio}" 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+                const esOut = execSync(`"/opt/homebrew/bin/python3.11" "${path.join(__dirname, 'analyze_audio.py')}" ${shellEscape(tmpAudio)} 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
                 const feat = JSON.parse(esOut)
                 bpm = feat.bpm; keyStr = feat.key ? `${feat.key} ${feat.scale || ''}`.trim() : null
                 camelot = feat.camelot || null; energy = feat.energy; danceability = feat.danceability

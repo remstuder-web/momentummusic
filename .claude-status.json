@@ -1,19 +1,15 @@
 {
-  "updated": "2026-04-26T06:48:00Z",
-  "last_task": "move-release-checklist",
+  "updated": "2026-04-27T08:58:00Z",
+  "last_task": "shell-quoting-fix",
   "status": "done",
   "working": [
-    "Release checklist now inside {#if wd.current_stage === 'stems'} block — always shows on STEMS tab",
-    "Mastering stage no longer shows the release checklist",
-    "Released songs not currently in stems stage: fallback block still renders the checklist",
-    "All previous UI changes intact (notes toggle, ref picker, drop zone labels, Pro-Q 4 button)"
+    "shellEscape() added to momentum-watcher.cjs — wraps all file path args in single quotes with embedded-quote escaping",
+    "23 exec/execSync call sites updated: analyze_audio.py, analyze_vocal_eq.py, ffmpeg, ffprobe, demucs",
+    "Filenames with backticks, apostrophes, single quotes, spaces now safe in all shell commands",
+    "pm2 restart confirmed — /ping responding"
   ],
   "broken": [],
-  "partial": [
-    "Spotify rate limit until ~2026-04-26T20:13 UTC — Tier 1 queue paused, auto-resumes",
-    "Pro-Q 4 .ffp format untested against actual FabFilter parser",
-    "OPTIONAL SQL: ALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS tonal_balance jsonb, stereo_width float, stereo_width_per_band jsonb, crest_factor_per_band jsonb"
-  ],
-  "next": "Test in browser: open a STEMS-stage song and verify release checklist appears. Open a MASTERING-stage song and verify checklist is gone.",
-  "notes": "Checklist uses two render points: (1) inside stems block (always visible for stems stage), (2) fallback outside block for releasedSongIds that are not in stems stage. No functionality changed."
+  "partial": [],
+  "next": "Test ANALYZER: verify tonal balance + stereo width panels appear after Essentia analysis on a WAV. Monitor Spotify queue.",
+  "notes": "shellEscape uses POSIX single-quote wrapping: \"'\" + str.replace(/'/g, \"'\\\\''\" ) + \"'\". This is safe for all shells (/bin/sh, bash, zsh). Script paths (ANALYZE_SCRIPT, etc.) remain double-quoted since they are constant and do not contain user-provided content."
 }

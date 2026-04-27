@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] momentum-watcher.cjs — DONE
+TASK: shell-quoting-fix
+WHAT: Added shellEscape() function; applied to all 23 file path arguments in exec/execSync calls (analyze_audio.py, analyze_vocal_eq.py, ffmpeg, ffprobe, demucs). Fixes filenames with backticks, single quotes, apostrophes, spaces.
+RESULT: works — pm2 restart confirmed, /ping responding
+BLOCKERS: none
+
 ## [2026-04-26] momentum-watcher.cjs — DONE
 TASK: tier-split-analysis
 WHAT: Split analysis pipeline into Tier 1 (auto, fast) and Tier 2 (on-demand, heavy). processLibraryTrackInBackground() now Tier 1 only: Spotify preview+genres, Essentia BPM/key/energy/tonal/stereo, Genius credits (~15-20s per track). Demucs stem EQ moved to runStemAnalysis() (Tier 2, called only by POST /analyze-stems). Completion signal changed from vocal_eq_curves presence to tempo != null. Startup queue changed from limit:50 + EQ check to limit:500 + tempo IS NULL. POST /analyze-stems endpoint added for on-demand Tier 2 trigger.

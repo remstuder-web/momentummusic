@@ -111,7 +111,7 @@
     const dataMax = Math.max(...all)
     return {
       min: Math.max(Math.floor((dataMin - 3) / 5) * 5, -60),
-      max: Math.min(Math.ceil((dataMax + 3) / 5) * 5, 30)
+      max: Math.min(Math.ceil((dataMax + 10) / 5) * 5, 30)
     }
   })())
 

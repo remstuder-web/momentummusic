@@ -3638,7 +3638,11 @@ Return JSON only:
                             </div>
                             {#if refPickerOpen[song.id] && !selectedRef}
                               {@const q = (refSearch[song.id] || '').toLowerCase()}
-                              {@const filteredLibrary = refTrackOptions.filter(r => r._section === 'LIBRARY' && (!q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q) || (r.genre_tag||'').toLowerCase().includes(q) || (r.playlist_name||'').toLowerCase().includes(q))).slice(0, 30)}
+                              {@const filteredLibrary = refTrackOptions.filter(r => r._section === 'LIBRARY' && (!q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q) || (r.genre_tag||'').toLowerCase().includes(q) || (r.playlist_name||'').toLowerCase().includes(q))).sort((a, b) => {
+                                if (a._section === 'PROJECT') return -1
+                                if (b._section === 'PROJECT') return 1
+                                return (a.playlist_name||'zzz').localeCompare(b.playlist_name||'zzz')
+                              }).slice(0, 100)}
                               <div class="ref-picker-list">
                                 {#if projectRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)).length}
                                   <div class="ref-picker-section">PROJECT REFS</div>

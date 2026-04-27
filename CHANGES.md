@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-04-28] ProjectsTab.svelte — DONE
+TASK: ref-picker-sort
+WHAT: Library picker shows 100 results (was 30), sorted by playlist_name when no search query; project refs always first
+RESULT: works — 0 svelte errors
+BLOCKERS: none
+
+## [2026-04-28] ProjectsTab.svelte — DONE
 TASK: analyzer-vocal-style-button
 WHAT: Added vocal style analysis button in ANALYZER tab (shows when ref track has spotify_id); stores result in vocalStyleResult[song.id] state; removed 🎤 button from REFS tab chip row; updated analyzeVocalStyle() to store result instead of appending to aiMessages
 RESULT: works — 0 svelte errors

@@ -1,20 +1,29 @@
 {
-  "updated": "2026-04-27T10:34:00Z",
-  "last_task": "scout-chart-grid",
+  "updated": "2026-04-27T11:00:00Z",
+  "last_task": "fix3-fix4-fix5",
   "status": "done",
   "working": [
-    "fetchKworbGermany() added — scrapes kworb.net/spotify/country/de_daily.html, returns [{position,artist,title,source:'kworb_spotify_de'}]",
-    "runAgentScout Promise.all now includes kworbDE",
-    "chartContext built: SPOTIFY GLOBAL / SPOTIFY GERMANY / TIKTOK / YOUTUBE top 5 each",
-    "Scout Claude prompt: CHARTS section first, then BREAKING ARTISTS, TRENDING SOUNDS, NEW RELEASES, OPPORTUNITIES, INDUSTRY/EDITORIAL, TECH & TOOLS, PRESS",
-    "Scout inbox_notification.metadata stores spotify_global/spotify_de/tiktok/youtube arrays (top 5 each)",
-    "DailyTab: 2x2 chart-grid renders above agent-output for type=scout when metadata.spotify_global present",
-    "CSS: chart-grid, chart-col, chart-title, chart-row added"
+    "FIX3: chart-track-row expanded format with stacked artist/title, play/brain/lib buttons in both today+older sections",
+    "FIX3: addChartTrackToBrain (inserts to brain_knowledge category=reference_current)",
+    "FIX3: addChartTrackToLibrary (POST /save-to-library to watcher)",
+    "FIX3: playSpotifyTrack (opens open.spotify.com/track/<id> in new tab)",
+    "FIX3: /save-to-library endpoint in watcher (upsert if spotify_id, insert otherwise)",
+    "FIX3: new chart CSS: chart-track-row, chart-pos, chart-track-info, chart-track-artist, chart-track-title-text, chart-track-actions",
+    "FIX4: extractTracksFromText() now called inside runAgentScout (not in endpoint)",
+    "FIX4: suggested_tracks added to scout inbox_notification metadata (max 15)",
+    "FIX4: MENTIONED TRACKS block shown in DailyTab scout card with brain/lib buttons",
+    "FIX4: saveToCheckout loops removed from /agent-scout endpoint",
+    "FIX5: scoutText split on \\n## PRESS — mainScoutText saved as type=scout",
+    "FIX5: pressScoutText saved as type=scout_articles with metadata.article_count",
+    "FIX5: scout_articles added to routineOnlyTypes",
+    "FIX5: articles-block collapsible in DailyTab (openArticles state, click to expand)",
+    "FIX1: scout never called morning briefing — already clean (verified previous session)",
+    "FIX2: N/A — fetchWhatsAppMessages doesn't exist in codebase"
   ],
   "broken": [],
   "partial": [
-    "tiktokTop uses crossChartData.tiktok from Supabase reference_tracks — will be empty if tiktok agent hasn't run recently"
+    "chart play button only works if track has spotify_id — kworb tracks from kworbSP have spotify_id extracted, but kworbDE/tiktok/youtube may not"
   ],
-  "next": "Run /agent-scout to verify: chart grid appears in inbox, DE chart populates, metadata fields present in Supabase.",
-  "notes": "kworbYT returns strings not objects — stored as raw strings in metadata.youtube, displayed as {t} (not t.title) in DailyTab. tiktok top 5 comes from getCrossChartTopics() which reads reference_tracks where collection_name='tiktok_trending'."
+  "next": "Run /agent-scout to verify: suggested_tracks in metadata, MENTIONED TRACKS block visible, scout_articles collapsible appears, no auto-checkout to reference_tracks",
+  "notes": "YouTube chart data (kworbYT) is raw strings — chart-track-row shows only artist span (the full string), no title span. TikTok data comes from getCrossChartTopics() which reads reference_tracks where collection_name=tiktok_trending."
 }

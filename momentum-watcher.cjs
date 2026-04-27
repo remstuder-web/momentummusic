@@ -1522,6 +1522,14 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     }
   }
 
+  // Split PRESS section for separate notification (FIX 5)
+  const pressSep = scoutText.indexOf('\n## PRESS')
+  const mainScoutText = pressSep >= 0 ? scoutText.slice(0, pressSep).trim() : scoutText
+  const pressScoutText = pressSep >= 0 ? scoutText.slice(pressSep).trim() : ''
+
+  // Extract track mentions for suggested_tracks metadata (FIX 4)
+  const suggestedTracks = await extractTracksFromText(mainScoutText, apiKey)
+
   // Encode kworb tracks as structured data in inbox message
   const kworbTracks = (Array.isArray(kworbSP) ? kworbSP : []).slice(0, 10).map(t => ({
     title: t.title, artist: t.artist,
@@ -1544,17 +1552,37 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
       song_code: null,
       song_title: 'Artist Scout',
       artist: null,
-      message: scoutText + tracksJson,
+      message: mainScoutText + tracksJson,
       patch_name: `Scout ${today}`,
       read: false,
       metadata: {
         spotify_global: kworbSP.slice(0, 5),
         spotify_de: kworbDE.slice(0, 5),
         tiktok: tiktokTop,
-        youtube: kworbYT.slice(0, 5)
+        youtube: kworbYT.slice(0, 5),
+        suggested_tracks: suggestedTracks.slice(0, 15)
       }
     })
   })
+
+  // Save PRESS section as separate scout_articles notification (FIX 5)
+  if (pressScoutText) {
+    await deleteInboxToday('Scout Articles')
+    await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+      method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        type: 'scout_articles',
+        song_code: null,
+        song_title: 'Scout Articles',
+        artist: null,
+        message: pressScoutText,
+        patch_name: `Scout ${today}`,
+        read: false,
+        metadata: { article_count: pressItems.length }
+      })
+    })
+  }
+
   console.log('✓ Agent Scout report saved to inbox + brain_knowledge')
 
   return { ok: true, suggestions: scoutText, tracks: allTracks }
@@ -6835,44 +6863,6 @@ ${context}` }]
         const brainRows = await fetchSharedBrainContext()
         const result = await runAgentScout(apiKey, brainRows)
 
-        // Save all scout tracks to reference_tracks as checkout
-        const tracksToSave = [
-          ...(result.tracks || []),
-          ...(result.tiktok_tracks || []),
-          ...(result.spotify_tracks || [])
-        ].filter(t => t.title && t.artist)
-        const now = new Date().toISOString()
-        const dateStr = now.slice(0, 10)
-        for (const track of tracksToSave) {
-          try {
-            await saveToCheckout({
-              title: track.title, artist: track.artist,
-              collection_name: 'scout_' + dateStr,
-              spotify_id: track.spotify_id || null,
-              tempo: track.bpm || null, key: track.key || null,
-              camelot: track.camelot || null, energy: track.energy || null,
-              danceability: track.danceability || null, loudness: track.loudness_lufs || null,
-              valence: track.valence || null, brightness: track.brightness || null
-            })
-          } catch(e) {
-            console.error('scout track save error:', e.message)
-          }
-        }
-
-        // Extract ALL track/song mentions from the generated scout text and save to checkout
-        const mentionedTracks = await extractTracksFromText(result.suggestions || '', apiKey)
-        console.log('extractTracksFromText returned:', mentionedTracks.length, 'tracks')
-        const dateMentioned = new Date().toISOString().slice(0, 10)
-
-        for (const track of mentionedTracks) {
-          if (!track.title || !track.artist) continue
-          try {
-            await saveToCheckout({ title: track.title, artist: track.artist, collection_name: 'scout_' + dateMentioned })
-          } catch(e) {
-            console.error('✗ EXCEPTION:', e.message)
-          }
-        }
-
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(result))
         setImmediate(() => brainToObsidian().catch(() => {}))
@@ -11422,6 +11412,36 @@ ${chatText.slice(0, 4000)}`
 
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, id }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /save-to-library — add track to reference_tracks ─────────────────
+  if (req.method === 'POST' && req.url === '/save-to-library') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!body.title || !body.artist) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'title and artist required' })); return }
+        const row = {
+          title: body.title.trim(),
+          artist: body.artist.trim(),
+          spotify_id: body.spotify_id || null,
+          source: body.source || 'agent',
+          collection_name: body.collection_name || 'manual_pick',
+          approved: true
+        }
+        const { error } = body.spotify_id
+          ? await supabase.from('reference_tracks').upsert(row, { onConflict: 'spotify_id' })
+          : await supabase.from('reference_tracks').insert(row)
+        if (error) throw new Error(error.message)
+        console.log('✓ save-to-library:', body.artist, '—', body.title)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
       } catch(e) {
         res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
       }

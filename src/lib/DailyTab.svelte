@@ -79,6 +79,7 @@
   }
 
   let speakingId = $state(null)
+  let openArticles = $state({})
   let currentAudio = $state(null)
   let speakToast = $state('')
   let speakToastTimer = null
@@ -719,7 +720,7 @@
   let pressItems = $derived(inboxItems.filter(n => n.type === 'press' && n.created_at?.slice(0,10) === todayISO).slice(0, 3))
   let whatsappItems = $derived(inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp'))
 
-  const routineOnlyTypes = ['briefing', 'scout', 'pulse_check', 'chart']
+  const routineOnlyTypes = ['briefing', 'scout', 'pulse_check', 'chart', 'scout_articles']
   let visibleInbox = $derived(
     inboxItems.filter(n => routineOnlyTypes.includes(n.type) ? activeSection === 'routine' : true)
   )
@@ -863,6 +864,33 @@
     await supabase.from('inbox_notifications').update({ read: true }).in('id', unreadIds)
     inboxItems = inboxItems.map(n => ({ ...n, read: true }))
     inboxUnread = 0
+  }
+
+  async function addChartTrackToBrain(track) {
+    const entry = `${track.artist} — ${track.title}${track.spotify_id ? ' (spotify:' + track.spotify_id + ')' : ''}`
+    const { error } = await supabase.from('brain_knowledge').insert({
+      category: 'reference_current', entry, source: 'chart', notes: track.source || ''
+    })
+    if (!error) alert(`Added to brain: ${track.artist} — ${track.title}`)
+    else alert('Error: ' + error.message)
+  }
+
+  async function addChartTrackToLibrary(track) {
+    const res = await fetch('http://localhost:4242/save-to-library', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: track.title, artist: track.artist, spotify_id: track.spotify_id || null,
+        source: 'chart', collection_name: 'chart_pick'
+      })
+    })
+    const j = await res.json().catch(() => ({}))
+    if (j.ok) alert(`Saved to library: ${track.artist} — ${track.title}`)
+    else alert('Error: ' + (j.error || 'unknown'))
+  }
+
+  function playSpotifyTrack(spotifyId) {
+    window.open(`https://open.spotify.com/track/${spotifyId}`, '_blank')
   }
 
   async function deleteInboxItem(id) {
@@ -1936,33 +1964,68 @@ ${mozartContext}`
                 {#if n.type === 'briefing' || n.type === 'scout'}
                   {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
                     <div class="chart-grid">
-                      <div class="chart-col">
-                        <div class="chart-title">🌍 SPOTIFY GLOBAL</div>
-                        {#each n.metadata.spotify_global as t, i}
-                          <div class="chart-row">{i+1}. {t.artist} — {t.title}</div>
-                        {/each}
-                      </div>
-                      <div class="chart-col">
-                        <div class="chart-title">🇩🇪 SPOTIFY DE</div>
-                        {#each (n.metadata.spotify_de || []) as t, i}
-                          <div class="chart-row">{i+1}. {t.artist} — {t.title}</div>
-                        {/each}
-                      </div>
-                      <div class="chart-col">
-                        <div class="chart-title">📱 TIKTOK</div>
-                        {#each (n.metadata.tiktok || []) as t, i}
-                          <div class="chart-row">{i+1}. {t.artist ? t.artist + ' — ' : ''}{t.title}</div>
-                        {/each}
-                      </div>
-                      <div class="chart-col">
-                        <div class="chart-title">▶ YOUTUBE</div>
-                        {#each (n.metadata.youtube || []) as t, i}
-                          <div class="chart-row">{i+1}. {t}</div>
-                        {/each}
-                      </div>
+                      {#each [
+                        {key:'spotify_global', label:'🌍 SPOTIFY GLOBAL'},
+                        {key:'spotify_de', label:'🇩🇪 SPOTIFY DE'},
+                        {key:'tiktok', label:'📱 TIKTOK'},
+                        {key:'youtube', label:'▶ YOUTUBE'}
+                      ] as chart}
+                        <div class="chart-col">
+                          <div class="chart-title">{chart.label}</div>
+                          {#each (n.metadata[chart.key] || []) as t, i}
+                            <div class="chart-track-row">
+                              <span class="chart-pos">{i+1}</span>
+                              <div class="chart-track-info">
+                                {#if typeof t === 'string'}
+                                  <span class="chart-track-artist">{t}</span>
+                                {:else}
+                                  <span class="chart-track-artist">{t.artist || ''}</span>
+                                  <span class="chart-track-title-text">{t.title || ''}</span>
+                                {/if}
+                              </div>
+                              <div class="chart-track-actions">
+                                {#if typeof t !== 'string' && t.spotify_id}
+                                  <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
+                                {/if}
+                                {#if typeof t !== 'string'}
+                                  <button class="chart-brain-btn" onclick={() => addChartTrackToBrain(t)}>＋</button>
+                                  <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                                {/if}
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                  {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
+                    <div class="suggested-tracks">
+                      <div class="chart-title" style="margin-bottom:6px">MENTIONED TRACKS</div>
+                      {#each n.metadata.suggested_tracks as t}
+                        <div class="chart-track-row">
+                          <div class="chart-track-info">
+                            <span class="chart-track-artist">{t.artist || ''}</span>
+                            <span class="chart-track-title-text">{t.title || ''}</span>
+                          </div>
+                          <div class="chart-track-actions">
+                            <button class="chart-brain-btn" onclick={() => addChartTrackToBrain(t)}>＋</button>
+                            <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                          </div>
+                        </div>
+                      {/each}
                     </div>
                   {/if}
                   <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
+                {:else if n.type === 'scout_articles'}
+                  <div class="articles-block">
+                    <div class="articles-header" onclick={() => openArticles[n.id] = !openArticles[n.id]}>
+                      <span class="articles-count">{n.metadata?.article_count || '?'} sources</span>
+                      <span class="articles-toggle">{openArticles[n.id] ? '▲' : '▼'}</span>
+                    </div>
+                    {#if openArticles[n.id]}
+                      <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
+                    {/if}
+                  </div>
                 {:else if n.metadata?.real_intent}
                   {@const m = n.metadata}
                   <div class="wa-analysis {m.boundary_alert ? 'has-boundary' : ''}">
@@ -2004,33 +2067,68 @@ ${mozartContext}`
                 {#if n.type === 'briefing' || n.type === 'scout'}
                   {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
                     <div class="chart-grid">
-                      <div class="chart-col">
-                        <div class="chart-title">🌍 SPOTIFY GLOBAL</div>
-                        {#each n.metadata.spotify_global as t, i}
-                          <div class="chart-row">{i+1}. {t.artist} — {t.title}</div>
-                        {/each}
-                      </div>
-                      <div class="chart-col">
-                        <div class="chart-title">🇩🇪 SPOTIFY DE</div>
-                        {#each (n.metadata.spotify_de || []) as t, i}
-                          <div class="chart-row">{i+1}. {t.artist} — {t.title}</div>
-                        {/each}
-                      </div>
-                      <div class="chart-col">
-                        <div class="chart-title">📱 TIKTOK</div>
-                        {#each (n.metadata.tiktok || []) as t, i}
-                          <div class="chart-row">{i+1}. {t.artist ? t.artist + ' — ' : ''}{t.title}</div>
-                        {/each}
-                      </div>
-                      <div class="chart-col">
-                        <div class="chart-title">▶ YOUTUBE</div>
-                        {#each (n.metadata.youtube || []) as t, i}
-                          <div class="chart-row">{i+1}. {t}</div>
-                        {/each}
-                      </div>
+                      {#each [
+                        {key:'spotify_global', label:'🌍 SPOTIFY GLOBAL'},
+                        {key:'spotify_de', label:'🇩🇪 SPOTIFY DE'},
+                        {key:'tiktok', label:'📱 TIKTOK'},
+                        {key:'youtube', label:'▶ YOUTUBE'}
+                      ] as chart}
+                        <div class="chart-col">
+                          <div class="chart-title">{chart.label}</div>
+                          {#each (n.metadata[chart.key] || []) as t, i}
+                            <div class="chart-track-row">
+                              <span class="chart-pos">{i+1}</span>
+                              <div class="chart-track-info">
+                                {#if typeof t === 'string'}
+                                  <span class="chart-track-artist">{t}</span>
+                                {:else}
+                                  <span class="chart-track-artist">{t.artist || ''}</span>
+                                  <span class="chart-track-title-text">{t.title || ''}</span>
+                                {/if}
+                              </div>
+                              <div class="chart-track-actions">
+                                {#if typeof t !== 'string' && t.spotify_id}
+                                  <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
+                                {/if}
+                                {#if typeof t !== 'string'}
+                                  <button class="chart-brain-btn" onclick={() => addChartTrackToBrain(t)}>＋</button>
+                                  <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                                {/if}
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                  {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
+                    <div class="suggested-tracks">
+                      <div class="chart-title" style="margin-bottom:6px">MENTIONED TRACKS</div>
+                      {#each n.metadata.suggested_tracks as t}
+                        <div class="chart-track-row">
+                          <div class="chart-track-info">
+                            <span class="chart-track-artist">{t.artist || ''}</span>
+                            <span class="chart-track-title-text">{t.title || ''}</span>
+                          </div>
+                          <div class="chart-track-actions">
+                            <button class="chart-brain-btn" onclick={() => addChartTrackToBrain(t)}>＋</button>
+                            <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                          </div>
+                        </div>
+                      {/each}
                     </div>
                   {/if}
                   <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
+                {:else if n.type === 'scout_articles'}
+                  <div class="articles-block">
+                    <div class="articles-header" onclick={() => openArticles[n.id] = !openArticles[n.id]}>
+                      <span class="articles-count">{n.metadata?.article_count || '?'} sources</span>
+                      <span class="articles-toggle">{openArticles[n.id] ? '▲' : '▼'}</span>
+                    </div>
+                    {#if openArticles[n.id]}
+                      <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
+                    {/if}
+                  </div>
                 {:else}
                   <div class="inbox-msg">{n.message}</div>
                 {/if}
@@ -2424,9 +2522,25 @@ ${mozartContext}`
   .year-scroll { max-height: calc(10 * 32px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .inbox-scroll { max-height: 600px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #1a1a1a; }
-  .chart-col { display: flex; flex-direction: column; gap: 2px; }
+  .chart-col { display: flex; flex-direction: column; gap: 3px; }
   .chart-title { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .08em; margin-bottom: 4px; }
-  .chart-row { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chart-track-row { display: flex; align-items: center; gap: 5px; padding: 3px 0; border-bottom: 1px solid #151515; }
+  .chart-track-row:last-child { border-bottom: none; }
+  .chart-pos { font-family: 'Space Mono', monospace; font-size: 9px; color: #3c3c3c; min-width: 13px; text-align: right; flex-shrink: 0; }
+  .chart-track-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .chart-track-artist { font-size: 11px; color: #cec9c1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+  .chart-track-title-text { font-size: 10px; color: #9e9690; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+  .chart-track-actions { display: flex; gap: 2px; flex-shrink: 0; }
+  .chart-play-btn, .chart-brain-btn, .chart-lib-btn { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; cursor: pointer; font-size: 9px; padding: 2px 4px; line-height: 1; }
+  .chart-play-btn { color: #4caf82; }
+  .chart-brain-btn { color: rgba(201,168,76,.8); }
+  .chart-lib-btn { color: #9e9690; }
+  .chart-play-btn:hover, .chart-brain-btn:hover, .chart-lib-btn:hover { background: #252525; }
+  .suggested-tracks { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #1a1a1a; }
+  .articles-block { padding: 4px 0; }
+  .articles-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 6px 0; border-top: 1px solid #1a1a1a; }
+  .articles-count { font-family: 'Space Mono', monospace; font-size: 10px; color: rgba(201,168,76,.6); letter-spacing: .05em; }
+  .articles-toggle { font-size: 9px; color: #3c3c3c; }
   .inbox-row { display: flex; align-items: flex-start; gap: 0; }
   .inbox-del-btn { flex-shrink: 0; order: -1; background: transparent; border: none; color: #444; font-size: 13px; cursor: pointer; padding: 10px 6px 10px 2px; align-self: flex-start; }
   .inbox-del-btn:hover { color: #e05a4a; }

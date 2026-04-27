@@ -1,19 +1,18 @@
 {
-  "updated": "2026-04-27T13:05:00Z",
-  "last_task": "analyzer-feel-metrics",
+  "updated": "2026-04-27T13:20:00Z",
+  "last_task": "analyzer-tab-only",
   "status": "done",
   "working": [
-    "Library ref select query extended with emotional_arc, energy, danceability, valence, brightness, warmth, bass_energy, loudness, tempo, key, camelot, vocal_pitch_mean",
-    "Emotional arc bar display in tonal tab after stereo width (segments sized by energy, gold fill opacity scales with energy)",
-    "Ref stat chips row: BPM, Key+Camelot, LUFS",
-    "Feel metrics bars: ENERGY / GROOVE / MOOD / BRIGHT / WARMTH / BASS — gold bars 0-100%",
-    "Project ref average white marker on each feel bar (avg of project+song reference_links)",
-    "loadProjectRefAverage() new function — queries reference_tracks by spotify_id from all project/song refs",
-    "Called on ANALYZER tab open (onAnalyzerTabOpen)",
-    "CSS for emotional-arc-row, arc-segment, ref-basic-stats, ref-stat-chip, ref-metric-row/bar/val, avg-marker"
+    "Old collapsible 🎤 ANALYZER toggle removed — no more vocal-eq-header button",
+    "Analyzer content (vocal-eq-section) now only renders when activeSongTab[song.id] === 'analyzer'",
+    "Dead onAnalyzerOpen() function removed",
+    "showVocalEq no longer set anywhere (kept state var as legacy stub)",
+    "Orphaned CSS for .vocal-eq-header/.vocal-eq-title/.vocal-eq-arr removed",
+    "vocal-eq-section always has class='vocal-eq-section analyzer-tab' (no conditional class)",
+    "All analyzer content confirmed inside vocal-eq-body: stem tabs, VocalEqChart, ref picker, tonal/stereo/feel panels, emotional arc, credits, stem match %, SUCCESS MATCH, FEEDBACK HISTORY, TREND CONTEXT, Pro-Q 4 button, avg refs button"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test in browser: open ANALYZER tab on a song with a library ref selected — verify emotional arc shows, feel bars render, project avg marker appears; verify no JS errors if selectedRefTrack has null fields",
-  "notes": "Feel metrics only render if at least one of the 6 fields is non-null on the selectedRefTrack. Emotional arc only renders if emotional_arc is a non-empty array. Both sections are in the tonal {:else} block."
+  "next": "Test in browser: click ANALYZER tab on a song — all content should appear; closing tab (click again) should hide it; no analyzer visible outside the tab; confirm no JS errors",
+  "notes": "The vocal-eq-section div itself still renders in the DOM always (outside the if block), but its content only renders when activeSongTab === 'analyzer'. The outer div is empty/invisible otherwise."
 }

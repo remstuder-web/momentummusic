@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] ProjectsTab.svelte analyzer cleanup — DONE
+TASK: analyzer-tab-only
+WHAT: Removed old collapsible 🎤 ANALYZER toggle (vocal-eq-header button + showVocalEq condition); analyzer content now ONLY accessible via ANALYZER stage tab; removed dead onAnalyzerOpen() function; cleaned showVocalEq refs from analyzeMyVocal; removed orphaned CSS (.vocal-eq-header/.vocal-eq-title/.vocal-eq-arr); vocal-eq-section always has analyzer-tab class now
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-27] ProjectsTab.svelte analyzer feel metrics — DONE
 TASK: analyzer-feel-metrics
 WHAT: Library ref select query adds emotional_arc/energy/danceability/valence/brightness/warmth/bass_energy/loudness/tempo/key/camelot/vocal_pitch_mean; emotional arc bar display; ref stat chips (BPM/key/LUFS); feel metrics bars (energy/groove/mood/bright/warmth/bass) with project-ref-average white marker; loadProjectRefAverage() called on ANALYZER tab open; CSS for all new elements

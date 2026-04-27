@@ -3670,15 +3670,22 @@ Return JSON only:
                         {#if selectedRef && !refCurveData}
                           <div class="no-curve-msg">No EQ curve yet for this track — background analysis pending</div>
                         {/if}
-                        <!-- Auto-analyze status -->
+                        <!-- Analyze / Re-analyze -->
                         {#if analyzerLoading[song.id]}
                           <div class="analyzer-auto-status">⟳ Analyzing stems...</div>
-                        {:else if songCurves.filter(c => c.source_type === 'mix').length === 0}
-                          {#if activeSongTab[song.id] === 'analyzer'}
-                            <button class="analyze-now-btn" onclick={() => analyzeMyVocal(song)}>▶ Run Analysis</button>
-                          {:else}
-                            <div class="analyzer-auto-status">No analysis yet — drop an audio file to trigger</div>
-                          {/if}
+                        {:else}
+                          {@const mixCurveCount = songCurves.filter(c => c.source_type === 'mix').length}
+                          {@const lastMixCurve = songCurves.find(c => c.source_type === 'mix')}
+                          <div class="analyze-action-row">
+                            {#if mixCurveCount === 0}
+                              <button class="analyze-now-btn" onclick={() => analyzeMyVocal(song)}>▶ Run Analysis</button>
+                            {:else}
+                              <button class="analyze-now-btn" onclick={() => analyzeMyVocal(song)}>↺ Re-analyze</button>
+                              {#if lastMixCurve}
+                                <span class="last-analyzed">Last: {new Date(lastMixCurve.created_at).toLocaleDateString('de-CH')}</span>
+                              {/if}
+                            {/if}
+                          </div>
                         {/if}
                         <!-- EQ Chart -->
                         <VocalEqChart
@@ -5089,6 +5096,8 @@ Return JSON only:
   .analyzer-version-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; letter-spacing: .06em; padding: 2px 0 6px; }
   .analyze-now-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #9e9690; padding: 4px 12px; border-radius: 2px; cursor: pointer; }
   .analyze-now-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+  .analyze-action-row { display: flex; align-items: center; gap: 0; padding: 2px 0 4px; }
+  .last-analyzed { font-family: 'Space Mono', monospace; font-size: 8px; color: #333; margin-left: 8px; }
   .stem-match-row { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid #1a1a1a; margin-bottom: 6px; }
   .stem-match-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .stem-match-label { font-family: 'Space Mono', monospace; font-size: 7px; color: #444; letter-spacing: .08em; text-transform: uppercase; }

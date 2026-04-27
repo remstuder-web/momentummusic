@@ -1962,6 +1962,7 @@ ${mozartContext}`
                   <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
                 </div>
                 {#if n.type === 'briefing' || n.type === 'scout'}
+                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*?(?=\n## )/m, '').trim() : n.message}
                   {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
                     <div class="chart-grid">
                       {#each [
@@ -1988,7 +1989,6 @@ ${mozartContext}`
                                   <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
                                 {/if}
                                 {#if typeof t !== 'string'}
-                                  <button class="chart-brain-btn" onclick={() => addChartTrackToBrain(t)}>＋</button>
                                   <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
                                 {/if}
                               </div>
@@ -1999,23 +1999,26 @@ ${mozartContext}`
                     </div>
                   {/if}
                   {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
-                    <div class="suggested-tracks">
-                      <div class="chart-title" style="margin-bottom:6px">MENTIONED TRACKS</div>
-                      {#each n.metadata.suggested_tracks as t}
-                        <div class="chart-track-row">
-                          <div class="chart-track-info">
-                            <span class="chart-track-artist">{t.artist || ''}</span>
-                            <span class="chart-track-title-text">{t.title || ''}</span>
+                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\s/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\s/g,'')))}
+                    {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\s/g,'')))}
+                    {#if uniqueScoutTracks.length}
+                      <div class="suggested-tracks">
+                        <div class="chart-title" style="margin-bottom:6px">MENTIONED TRACKS</div>
+                        {#each uniqueScoutTracks as t}
+                          <div class="chart-track-row">
+                            <div class="chart-track-info">
+                              <span class="chart-track-artist">{t.artist || ''}</span>
+                              <span class="chart-track-title-text">{t.title || ''}</span>
+                            </div>
+                            <div class="chart-track-actions">
+                              <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                            </div>
                           </div>
-                          <div class="chart-track-actions">
-                            <button class="chart-brain-btn" onclick={() => addChartTrackToBrain(t)}>＋</button>
-                            <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                          </div>
-                        </div>
-                      {/each}
-                    </div>
+                        {/each}
+                      </div>
+                    {/if}
                   {/if}
-                  <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
+                  <div class="agent-output">{@html parseAgentOutput(scoutMsg)}</div>
                 {:else if n.type === 'scout_articles'}
                   <div class="articles-block">
                     <div class="articles-header" onclick={() => openArticles[n.id] = !openArticles[n.id]}>
@@ -2065,6 +2068,7 @@ ${mozartContext}`
                   <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
                 </div>
                 {#if n.type === 'briefing' || n.type === 'scout'}
+                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*?(?=\n## )/m, '').trim() : n.message}
                   {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
                     <div class="chart-grid">
                       {#each [
@@ -2091,7 +2095,6 @@ ${mozartContext}`
                                   <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
                                 {/if}
                                 {#if typeof t !== 'string'}
-                                  <button class="chart-brain-btn" onclick={() => addChartTrackToBrain(t)}>＋</button>
                                   <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
                                 {/if}
                               </div>
@@ -2102,23 +2105,26 @@ ${mozartContext}`
                     </div>
                   {/if}
                   {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
-                    <div class="suggested-tracks">
-                      <div class="chart-title" style="margin-bottom:6px">MENTIONED TRACKS</div>
-                      {#each n.metadata.suggested_tracks as t}
-                        <div class="chart-track-row">
-                          <div class="chart-track-info">
-                            <span class="chart-track-artist">{t.artist || ''}</span>
-                            <span class="chart-track-title-text">{t.title || ''}</span>
+                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\s/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\s/g,'')))}
+                    {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\s/g,'')))}
+                    {#if uniqueScoutTracks.length}
+                      <div class="suggested-tracks">
+                        <div class="chart-title" style="margin-bottom:6px">MENTIONED TRACKS</div>
+                        {#each uniqueScoutTracks as t}
+                          <div class="chart-track-row">
+                            <div class="chart-track-info">
+                              <span class="chart-track-artist">{t.artist || ''}</span>
+                              <span class="chart-track-title-text">{t.title || ''}</span>
+                            </div>
+                            <div class="chart-track-actions">
+                              <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                            </div>
                           </div>
-                          <div class="chart-track-actions">
-                            <button class="chart-brain-btn" onclick={() => addChartTrackToBrain(t)}>＋</button>
-                            <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                          </div>
-                        </div>
-                      {/each}
-                    </div>
+                        {/each}
+                      </div>
+                    {/if}
                   {/if}
-                  <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
+                  <div class="agent-output">{@html parseAgentOutput(scoutMsg)}</div>
                 {:else if n.type === 'scout_articles'}
                   <div class="articles-block">
                     <div class="articles-header" onclick={() => openArticles[n.id] = !openArticles[n.id]}>
@@ -2531,11 +2537,10 @@ ${mozartContext}`
   .chart-track-artist { font-size: 11px; color: #cec9c1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
   .chart-track-title-text { font-size: 10px; color: #9e9690; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
   .chart-track-actions { display: flex; gap: 2px; flex-shrink: 0; }
-  .chart-play-btn, .chart-brain-btn, .chart-lib-btn { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; cursor: pointer; font-size: 9px; padding: 2px 4px; line-height: 1; }
+  .chart-play-btn, .chart-lib-btn { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; cursor: pointer; font-size: 9px; padding: 2px 4px; line-height: 1; }
   .chart-play-btn { color: #4caf82; }
-  .chart-brain-btn { color: rgba(201,168,76,.8); }
   .chart-lib-btn { color: #9e9690; }
-  .chart-play-btn:hover, .chart-brain-btn:hover, .chart-lib-btn:hover { background: #252525; }
+  .chart-play-btn:hover, .chart-lib-btn:hover { background: #252525; }
   .suggested-tracks { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #1a1a1a; }
   .articles-block { padding: 4px 0; }
   .articles-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 6px 0; border-top: 1px solid #1a1a1a; }

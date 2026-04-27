@@ -1309,7 +1309,20 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     ? kworbDE.map(t => `${t.position}. ${t.artist} — ${t.title}`).join('\n')
     : 'Unavailable'
 
-  const tiktokTop = (crossChartData.tiktok || []).slice(0, 5)
+  const tiktokTop = (crossChartData.tiktok || []).slice(0, 10)
+
+  // Enrich YouTube tracks with Spotify IDs (run in parallel, non-blocking on failure)
+  const ytEnriched = await Promise.all(kworbYT.slice(0, 5).map(async line => {
+    const parts = line.split(' · ')
+    const artist = parts[0] || ''
+    const title = parts[1] || line
+    try {
+      const sp = await fetchSpotifyId(title, artist)
+      if (sp) return { artist: sp.artist, title: sp.title, spotify_id: sp.spotify_id, source: 'youtube_trending' }
+    } catch(e) {}
+    return { artist, title, source: 'youtube_trending' }
+  }))
+
   const chartContext = [
     'SPOTIFY GLOBAL TOP 5:',
     kworbSP.slice(0, 5).map((t, i) => `${i+1}. ${t.artist} — ${t.title}`).join('\n') || 'Unavailable',
@@ -1560,7 +1573,7 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
         spotify_global: kworbSP.slice(0, 5),
         spotify_de: kworbDE.slice(0, 5),
         tiktok: tiktokTop,
-        youtube: kworbYT.slice(0, 5),
+        youtube: ytEnriched,
         suggested_tracks: suggestedTracks.slice(0, 15)
       }
     })

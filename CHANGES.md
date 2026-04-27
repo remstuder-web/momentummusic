@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] scout display: brain btn removed, track dedup, youtube spotify, tiktok10, no dupe charts — DONE
+TASK: scout-display-fixes-6
+WHAT: FIX1/6: removed + brain button from chart rows and suggested tracks (only ▶ play + lib remain); FIX2: suggested_tracks filtered against all chart tracks via case-insensitive key set; FIX3: YouTube tracks enriched with Spotify ID via fetchSpotifyId() in parallel before storing in metadata; FIX4: TikTok metadata slice 5→10; FIX5: ## CHARTS section stripped from agent-output via regex before parseAgentOutput
+RESULT: watcher restart ok; DailyTab compiles cleanly; effects visible on next /agent-scout run
+BLOCKERS: none
+
 ## [2026-04-27] scout: chart actions + suggested tracks + articles split — DONE
 TASK: fix3-fix4-fix5
 WHAT: FIX3: chart rows expanded with stacked artist/title + play/brain/lib action buttons + addChartTrackToBrain/addChartTrackToLibrary/playSpotifyTrack functions; FIX4: scout no longer auto-saves to reference_tracks — extractTracksFromText now runs inside runAgentScout, result stored as metadata.suggested_tracks, displayed as MENTIONED TRACKS block with brain/lib buttons; FIX5: scoutText split on ## PRESS — main text saved as type=scout, press section saved as separate type=scout_articles with collapsible header in DailyTab; /save-to-library POST endpoint added to watcher

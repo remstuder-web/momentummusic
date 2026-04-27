@@ -1,15 +1,20 @@
 {
-  "updated": "2026-04-27T08:58:00Z",
-  "last_task": "shell-quoting-fix",
+  "updated": "2026-04-27T09:32:00Z",
+  "last_task": "daily-six-fixes",
   "status": "done",
   "working": [
-    "shellEscape() added to momentum-watcher.cjs — wraps all file path args in single quotes with embedded-quote escaping",
-    "23 exec/execSync call sites updated: analyze_audio.py, analyze_vocal_eq.py, ffmpeg, ffprobe, demucs",
-    "Filenames with backticks, apostrophes, single quotes, spaces now safe in all shell commands",
-    "pm2 restart confirmed — /ping responding"
+    "FIX1: ICS import/export buttons and functions removed from DailyTab",
+    "FIX2: agent-gap and agent-ok font-size normalized to 13px (was 14px)",
+    "FIX3: morning briefing fetches active songs (production/mix_prep/mixing/mastering), includes activeContext in prompt, instructs Claude to focus on those projects only",
+    "FIX4: TikTok block removed from morning briefing context and prompt sections",
+    "FIX5: runAgentScout saves type='scout' (not 'briefing'), new 7-section prompt order (BREAKING ARTISTS/TRENDING SOUNDS/NEW RELEASES/OPPORTUNITIES/INDUSTRY+EDITORIAL/TECH+TOOLS/PRESS), inbox-scroll max-height raised 320px→600px, scout type renders with parseAgentOutput + AI badge + speak button",
+    "FIX6: GET /chart-health endpoint added, returns tiktok/spotify_chart/chart_history status",
+    "chart-health result: tiktok=ok, spotify_chart=ok, chart_history=empty (expected, no chart agent run yet)"
   ],
   "broken": [],
-  "partial": [],
-  "next": "Test ANALYZER: verify tonal balance + stereo width panels appear after Essentia analysis on a WAV. Monitor Spotify queue.",
-  "notes": "shellEscape uses POSIX single-quote wrapping: \"'\" + str.replace(/'/g, \"'\\\\''\" ) + \"'\". This is safe for all shells (/bin/sh, bash, zsh). Script paths (ANALYZE_SCRIPT, etc.) remain double-quoted since they are constant and do not contain user-provided content."
+  "partial": [
+    "chart_history table is empty — will populate after agent-chart-analysis runs"
+  ],
+  "next": "Run a scout to verify merged single-message output in inbox. Run morning-briefing to verify active-project focus and no TikTok section.",
+  "notes": "Scout now saves type='scout' — older 'briefing' type scout entries will still render correctly since both types use parseAgentOutput. The routineOnlyTypes array already includes 'scout'."
 }

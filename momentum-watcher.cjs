@@ -1317,28 +1317,36 @@ ${gearBlock}
 
 ${crossChartBlock ? crossChartBlock + '\n\n' : ''}${tiktokOnlyBlock ? tiktokOnlyBlock + '\n\n' : ''}${refTrackText ? `REFERENCE TRACKS (Remo's taste):\n${refTrackText}\n` : ''}Already known — skip: ${knownNames}
 ${brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]\n` : ''}
-Based ONLY on the above real data:
+Based ONLY on the above real data, write one complete scout report with these sections in this exact order:
 
-## Breaking Artists
-- Name artists actually in the new releases or chart data
+## BREAKING ARTISTS
+- Name artists actually gaining momentum in new releases or chart data
 - Only reference real tracks listed above
-- [CROSS-CHART SIGNAL]: Artists appearing in PEAK MOMENTUM section are confirmed on both platforms — prioritize these
+- [CROSS-CHART SIGNAL]: Artists in PEAK MOMENTUM section confirmed on both platforms — prioritize these
 
-## Trending Sounds
-- Patterns visible across Spotify chart + YouTube trending + new releases
-- Note any sounds from EMERGING section not yet mainstream
+## TRENDING SOUNDS
+- Sonic and production patterns visible across Spotify chart + YouTube trending + new releases
+- Note sounds from EMERGING section not yet mainstream
+- Link to genres: ${SUB_GENRE_LABELS}
 
-## Opportunities
-- Based on gaps in the real data vs Remo's sound (genres: ${SUB_GENRE_LABELS})
+## NEW RELEASES
+- Relevant new releases from artists in Remo's network or genre space
+- Flag anything from watched artists
 
-## Tech
-- Summarize new gear from BPB/CDM relevant to music production
-- Flag anything useful for: mixing, recording, plugins, hardware, monitoring, synthesis
-- Keep to 3-4 bullet points maximum
-- If no gear data available, omit this section
+## OPPORTUNITIES
+- Collaboration or submission windows based on real data vs Remo's sound
+- Timing gaps where Remo's style fits current demand
 
-## Next Step
-- Single most important action today
+## INDUSTRY / EDITORIAL
+- Editorial push or playlist strategy insights from headlines
+- Industry news that directly affects production or releases
+
+## TECH & TOOLS
+- New gear from BPB/CDM relevant to mixing, recording, plugins, hardware
+- Keep to 3-4 bullets — omit section if no gear data
+
+## PRESS
+- One-line summaries of each press article at the bottom
 
 If data is insufficient to make a claim, say so explicitly. Never invent follower counts, statistics, or trends not in the data.
 FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for bullets, [GAP]/[OK] for emphasis. Plain text only.`
@@ -1448,7 +1456,7 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   await deleteInboxToday('Artist Scout')
   await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
     method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ type: 'briefing', song_code: null, song_title: 'Artist Scout', artist: null, message: scoutText + tracksJson, patch_name: `Scout ${today}`, read: false })
+    body: JSON.stringify({ type: 'scout', song_code: null, song_title: 'Artist Scout', artist: null, message: scoutText + tracksJson, patch_name: `Scout ${today}`, read: false })
   })
   console.log('✓ Agent Scout report saved to inbox + brain_knowledge')
 
@@ -6429,7 +6437,7 @@ async function getBrainHealth() {
           fetchCulturalTiming().catch(() => null)
         ])
         const countHeaders = { ...sbHeaders, 'Prefer': 'count=exact' }
-        const [songsRes, inboxRes, connectionsRes, brainKnowRes, goalsRes, demoCountRes, projectSongCountRes, tiktokTracksRes, tiktokBrainRes] = await Promise.all([
+        const [songsRes, inboxRes, connectionsRes, brainKnowRes, goalsRes, demoCountRes, projectSongCountRes, activeSongsRes] = await Promise.all([
           fetch(`${SUPABASE_URL}/rest/v1/songs?select=title,code,work_data,project_id&not.project_id=is.null`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?read=eq.false&order=created_at.desc&limit=20`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/connections?select=name,genre,group_types,last_contact,notes,status`, { headers: sbHeaders }),
@@ -6437,14 +6445,15 @@ async function getBrainHealth() {
           fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&category=eq.goal&select=title,content&order=created_at.desc&limit=10`, { headers: sbHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/songs?project_id=is.null&select=id`, { headers: countHeaders }),
           fetch(`${SUPABASE_URL}/rest/v1/songs?not.project_id=is.null&select=id`, { headers: countHeaders }),
-          fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?collection_name=eq.tiktok_trending&select=title,artist,created_at&order=created_at.desc&limit=10`, { headers: sbHeaders }),
-          fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?active=eq.true&title=like.TikTok Trends Week*&select=title,content&order=created_at.desc&limit=3`, { headers: sbHeaders })
+          fetch(`${SUPABASE_URL}/rest/v1/songs?select=title,code,status,key,tempo,work_data&status=in.(production,mix_prep,mixing,mastering)&order=updated_at.desc&limit=10`, { headers: sbHeaders })
         ])
         const [songs, inbox, brain, brainKnow, goals] = await Promise.all([songsRes.json(), inboxRes.json(), connectionsRes.json(), brainKnowRes.json(), goalsRes.json()])
-        const tiktokTracks = await tiktokTracksRes.json().catch(() => [])
-        const tiktokBrain = await tiktokBrainRes.json().catch(() => [])
+        const activeSongs = await activeSongsRes.json().catch(() => [])
         const demoCount = parseInt(demoCountRes.headers.get('content-range')?.split('/')[1] || '0')
         const projectSongCount = parseInt(projectSongCountRes.headers.get('content-range')?.split('/')[1] || '0')
+        const activeContext = (Array.isArray(activeSongs) ? activeSongs : [])
+          .map(s => (s.title || s.code) + ' (' + (s.status || 'active') + ')')
+          .join(', ')
 
         // Build context summary
         const stageCounts = {}
@@ -6513,22 +6522,6 @@ async function getBrainHealth() {
           if (cultural.release_timing?.tip) culturalBlock += `Release timing: ${cultural.release_timing.tip}`
         }
 
-        let tiktokBlock = ''
-        if (Array.isArray(tiktokTracks) && tiktokTracks.length) {
-          tiktokBlock += '\nTIKTOK TRENDING TRACKS (recent):\n'
-          tiktokTracks.slice(0, 8).forEach(t => { tiktokBlock += `· ${t.artist} — ${t.title}\n` })
-        }
-        if (Array.isArray(tiktokBrain) && tiktokBrain.length) {
-          const latest = tiktokBrain[0]
-          try {
-            const d = JSON.parse(latest.content)
-            if (d.summary) tiktokBlock += `TikTok synthesis (${latest.title}): ${d.summary}\n`
-            else tiktokBlock += `TikTok synthesis (${latest.title}): ${latest.content.slice(0, 200)}\n`
-          } catch {
-            tiktokBlock += `TikTok synthesis (${latest.title}): ${latest.content.slice(0, 200)}\n`
-          }
-        }
-
         const context = [
           `Today: ${todayISO}`,
           `Songs by stage: ${Object.entries(stageCounts).map(([k,v]) => `${k}(${v})`).join(', ') || 'none'}`,
@@ -6536,8 +6529,8 @@ async function getBrainHealth() {
           `Upcoming deadlines (7 days): ${upcomingDeadlines.join('; ') || 'none'}`,
           `Unread feedback: ${unreadFeedback.join('; ') || 'none'}`,
           `Artists to follow up (30+ days no contact): ${overdueArtists.slice(0,5).join('; ') || 'none'}`,
+          activeContext ? `\nACTIVE PROJECTS: ${activeContext}` : '',
           activeGoals ? `\nACTIVE GOALS:\n${activeGoals}` : '',
-          tiktokBlock ? `\n${tiktokBlock}` : '',
           gearBriefingBlock ? `\nTECH — NEW GEAR & PLUGINS:\n${gearBriefingBlock}` : '',
           culturalBlock ? `\n${culturalBlock}` : '',
           brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]` : ''
@@ -6557,11 +6550,13 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
 - End with a ## Next Step section: single most important action today
 Keep each section tight — no filler sentences.
 
+Focus only on information relevant to these active projects: ${activeContext || 'see pipeline data below'}.
+Skip generic industry news unless it directly affects these specific songs or artists.
+
 Sections to include:
 ## Today's Focus
 ## Pipeline Status
 ## Watch Out
-## TikTok (only if TikTok trending tracks data present — 2-3 bullets on what sounds/genres are blowing up)
 ## Tech (only if gear news data present — summarize new gear relevant to mixing/recording/plugins/hardware, 3-4 bullets max)
 ## Next Step
 
@@ -10305,6 +10300,27 @@ ${chatText.slice(0, 4000)}`
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ ok: true, time: new Date().toISOString() }))
+    return
+  }
+
+  // ── GET /chart-health — verify chart data sources have recent entries ──────
+  if (req.method === 'GET' && req.url === '/chart-health') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const checks = {}
+    try {
+      const { data: tiktok } = await supabaseAdmin.from('reference_tracks').select('id').eq('collection_name', 'tiktok_trending').order('created_at', { ascending: false }).limit(1)
+      checks.tiktok = tiktok?.length ? 'ok' : 'empty'
+    } catch(e) { checks.tiktok = 'error: ' + e.message }
+    try {
+      const { data: spotify } = await supabaseAdmin.from('reference_tracks').select('id').eq('collection_name', 'daily_chart').order('created_at', { ascending: false }).limit(1)
+      checks.spotify_chart = spotify?.length ? 'ok' : 'empty'
+    } catch(e) { checks.spotify_chart = 'error: ' + e.message }
+    try {
+      const { data: history } = await supabaseAdmin.from('chart_history').select('id').order('created_at', { ascending: false }).limit(1)
+      checks.chart_history = history?.length ? 'ok' : 'empty'
+    } catch(e) { checks.chart_history = 'error: ' + e.message }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, checks }))
     return
   }
 

@@ -707,44 +707,6 @@
     }
   }
 
-  function exportICS() {
-    const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Momentum//Music//EN','CALSCALE:GREGORIAN']
-    ;(state.tasks||[]).filter(t=>t.date).forEach(t => {
-      const dt = t.date.replace(/-/g,'')
-      lines.push('BEGIN:VEVENT',`UID:task-${t.id}@momentum`,`DTSTART;VALUE=DATE:${dt}`,`DTEND;VALUE=DATE:${dt}`,`SUMMARY:${t.label}${t.project?' ['+t.project+']':''}`,`CATEGORIES:${t.type==='private'?'PRIVATE':'MOMENTUM'}`,'END:VEVENT')
-    })
-    projects.forEach(p => {
-      (p.deadlines||[]).filter(d=>d.date&&!d.done).forEach(d => {
-        const dt = d.date.replace(/-/g,'')
-        lines.push('BEGIN:VEVENT',`UID:dl-${p.name}-${d.date}@momentum`.replace(/[^a-zA-Z0-9@.-]/g,'-'),`DTSTART;VALUE=DATE:${dt}`,`DTEND;VALUE=DATE:${dt}`,`SUMMARY:🎵 ${d.label} [${p.name}]`,'CATEGORIES:MOMENTUM','END:VEVENT')
-      })
-    })
-    lines.push('END:VCALENDAR')
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([lines.join('\r\n')],{type:'text/calendar'}))
-    a.download = 'momentum.ics'; a.click()
-  }
-
-  function importICS() {
-    const input = document.createElement('input'); input.type='file'; input.accept='.ics'
-    input.onchange = async e => {
-      const file = e.target.files[0]; if (!file) return
-      const text = await file.text()
-      const events = []
-      text.split('BEGIN:VEVENT').slice(1).forEach(block => {
-        const summary = (block.match(/SUMMARY:(.+)/)?.[1]||'').trim()
-        const dtstart = block.match(/DTSTART[^:]*:(\d{8})/)?.[1]||''
-        if (summary && dtstart) {
-          const date = `${dtstart.slice(0,4)}-${dtstart.slice(4,6)}-${dtstart.slice(6,8)}`
-          events.push({id:'t'+Date.now()+Math.random(),label:summary,date,time:'',type:'general',project:'',song:'',done:false,hidden_from_upcoming:false})
-        }
-      })
-      if (events.length) { state.tasks=[...(state.tasks||[]),...events]; await save(); alert(`Imported ${events.length} events.`) }
-      else alert('No events found.')
-    }
-    input.click()
-  }
-
   let upcomingTab = $state('week')
   let editingTaskId = $state(null)
   let inboxItems = $state([])
@@ -1957,21 +1919,21 @@ ${mozartContext}`
             {#each todayInbox as n (n.id)}
               <div class="inbox-item {n.read ? 'read' : 'unread'}">
                 <div class="inbox-item-header">
-                  {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing'}<span class="inbox-type-badge br">✦ AI</span>{:else if n.metadata?.real_intent}<span class="inbox-type-badge wa">📱</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
+                  {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing' || n.type === 'scout'}<span class="inbox-type-badge br">✦ AI</span>{:else if n.metadata?.real_intent}<span class="inbox-type-badge wa">📱</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
                   <span class="inbox-code">{n.song_code}</span>
                   {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
                   <span class="inbox-title">{n.song_title}</span>
                   {#if n.metadata?.urgency}<span class="wa-urgency-badge {n.metadata.urgency}">{n.metadata.urgency}</span>{/if}
                   <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
                   {#if !n.read}<span class="inbox-new-dot"></span>{/if}
-                  {#if n.type === 'briefing' && n.message}
+                  {#if (n.type === 'briefing' || n.type === 'scout') && n.message}
                     <button class="inbox-speak-btn {speakingId === n.id ? 'playing' : ''}" onclick={() => speakText(n.id, n.message)} title={speakingId === n.id ? 'Stop' : 'Read aloud'}>
                       {speakingId === n.id ? '■' : '▶'}
                     </button>
                   {/if}
                   <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
                 </div>
-                {#if n.type === 'briefing'}
+                {#if n.type === 'briefing' || n.type === 'scout'}
                   <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
                 {:else if n.metadata?.real_intent}
                   {@const m = n.metadata}
@@ -2011,7 +1973,7 @@ ${mozartContext}`
                   <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
                   <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
                 </div>
-                {#if n.type === 'briefing'}
+                {#if n.type === 'briefing' || n.type === 'scout'}
                   <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
                 {:else}
                   <div class="inbox-msg">{n.message}</div>
@@ -2052,12 +2014,6 @@ ${mozartContext}`
           {/if}
         {/each}
       </div>
-    </div>
-
-    <!-- Import/Export -->
-    <div class="cal-actions-row">
-      <button class="cal-action-btn" onclick={importICS}>↓ Import .ics</button>
-      <button class="cal-action-btn" onclick={exportICS}>↑ Export .ics</button>
     </div>
 
     <!-- Day detail -->
@@ -2365,7 +2321,7 @@ ${mozartContext}`
   }
   :global(.agent-gap) {
     font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 300;
     color: #e05a4a;
     padding: 2px 0 2px 12px;
@@ -2373,7 +2329,7 @@ ${mozartContext}`
   }
   :global(.agent-ok) {
     font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 300;
     color: #4caf82;
     padding: 2px 0 2px 12px;
@@ -2410,7 +2366,7 @@ ${mozartContext}`
   .task-scroll { }
   .task-scroll.scrollable { max-height: calc(7 * 50px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .year-scroll { max-height: calc(10 * 32px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
-  .inbox-scroll { max-height: 320px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
+  .inbox-scroll { max-height: 600px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .inbox-row { display: flex; align-items: flex-start; gap: 0; }
   .inbox-del-btn { flex-shrink: 0; order: -1; background: transparent; border: none; color: #444; font-size: 13px; cursor: pointer; padding: 10px 6px 10px 2px; align-self: flex-start; }
   .inbox-del-btn:hover { color: #e05a4a; }

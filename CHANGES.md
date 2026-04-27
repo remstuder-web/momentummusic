@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] DailyTab.svelte + momentum-watcher.cjs — DONE
+TASK: daily-six-fixes
+WHAT: FIX1 removed ICS import/export buttons+functions; FIX2 normalized agent-gap/agent-ok font-size to 13px; FIX3 briefing now fetches active songs and focuses prompt on them; FIX4 removed TikTok block from morning briefing; FIX5 scout saves as type=scout, merged section order, inbox-scroll raised to 600px, scout renders with parseAgentOutput; FIX6 added GET /chart-health endpoint
+RESULT: chart-health tested ok (tiktok:ok, spotify_chart:ok, chart_history:empty expected); watcher ping ok
+BLOCKERS: none
+
 ## [2026-04-27] momentum-watcher.cjs — DONE
 TASK: shell-quoting-fix
 WHAT: Added shellEscape() function; applied to all 23 file path arguments in exec/execSync calls (analyze_audio.py, analyze_vocal_eq.py, ffmpeg, ffprobe, demucs). Fixes filenames with backticks, single quotes, apostrophes, spaces.

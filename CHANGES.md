@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] momentum-watcher.cjs bg queue — DONE
+TASK: bg-queue-stop
+WHAT: Queue fully stopped (bgQueuePaused=true, queue cleared); max 20/day limit; 30s between tracks; 1h retry on rate limit; startup skips if paused/rate-limited; GET /pause-bg-queue + /resume-bg-queue; Telegram /pausequeue + /resumequeue
+RESULT: works — queue paused + cleared immediately after restart
+BLOCKERS: none
+
 ## [2026-04-27] analyzer tab, rate limit graceful, add library ref to project, queue on rate limit — DONE
 TASK: four-fixes-analyzer
 WHAT: FIX1 ANALYZER tab added to stages-row; activeSongTab==='analyzer' hides stage content, shows analyzer body without toggle; vocal-eq-section gets analyzer-tab class; FIX2 addReferenceVocal catches rate-limit error → sets spotifyRateLimited[sid] → inline ref-rate-limit-msg instead of alert; FIX3 saveRefToProject() calls /mozart-action add_project_reference for library tracks; + Save to project refs button shown when library ref selected and not already linked; FIX4 /analyze-spotify-track checks spotifyRateLimitUntil → queues to processingQueue → returns {ok,rate_limited,queued_until} instead of throwing

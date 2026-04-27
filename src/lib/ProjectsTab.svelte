@@ -66,6 +66,7 @@
   let successMatch = $state({}) // song.id -> result from /analyze-success-match
   let successMatchLoading = $state({}) // song.id -> bool
   let spotifyRateLimited = $state({}) // song.id -> bool
+  let projectRefAverage = $state({}) // song.id -> averaged metrics object
   let feedbackInsights = $state({}) // song.id -> result from /feedback-insights
   let feedbackLoading = $state({}) // song.id -> bool
   let trendVelocity = $state(null)
@@ -2195,7 +2196,7 @@
     // Load all library tracks for ref dropdown
     const { data: libraryTracks } = await supabase
       .from('reference_tracks')
-      .select('id, title, artist, source, credits, popularity, collection_name, spotify_id, genre_tag, tonal_balance, stereo_width, stereo_width_per_band')
+      .select('id, title, artist, source, credits, popularity, collection_name, spotify_id, genre_tag, tonal_balance, stereo_width, stereo_width_per_band, emotional_arc, energy, danceability, valence, brightness, warmth, bass_energy, loudness, tempo, key, camelot, vocal_pitch_mean')
       .in('source', ['user', 'agent', 'mozart', 'promoted'])
       .order('artist', { ascending: true })
       .limit(200)
@@ -2386,12 +2387,43 @@ Return JSON only:
       }
       await loadVocalEq(song.id)
       await loadRefTrackOptions(song.id)
+      await loadProjectRefAverage(song.id)
     } catch(e) {
       console.error('onAnalyzerTabOpen error:', e.message)
     } finally {
       analyzerLoading[song.id] = false
       analyzerLoading = { ...analyzerLoading }
     }
+  }
+
+  async function loadProjectRefAverage(songId) {
+    const song = songs.find(s => s.id === songId)
+    const project = projects.find(p => p.id === song?.project_id)
+    const allRefs = [
+      ...(project?.reference_links || []),
+      ...(project?.project_meta?.reference_links || []),
+      ...(song?.reference_links || [])
+    ].filter(r => r.spotify_id)
+    if (!allRefs.length) return
+    const { data: refTracks } = await supabase
+      .from('reference_tracks')
+      .select('tempo, energy, danceability, valence, brightness, warmth, bass_energy, loudness, tonal_balance, stereo_width_per_band')
+      .in('spotify_id', allRefs.map(r => r.spotify_id).filter(Boolean))
+    if (!refTracks?.length) return
+    const numericFields = ['tempo', 'energy', 'danceability', 'valence', 'brightness', 'warmth', 'bass_energy', 'loudness']
+    const avg = {}
+    for (const field of numericFields) {
+      const vals = refTracks.map(r => r[field]).filter(v => v !== null && isFinite(Number(v)))
+      avg[field] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+    }
+    const tonalFields = ['bass', 'low_mid', 'high_mid', 'air']
+    avg.tonal_balance = {}
+    for (const f of tonalFields) {
+      const vals = refTracks.map(r => r.tonal_balance?.[f]).filter(v => v !== null && isFinite(Number(v)))
+      avg.tonal_balance[f] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+    }
+    projectRefAverage[songId] = avg
+    projectRefAverage = { ...projectRefAverage }
   }
 
   async function calculateStemMatches(songId, refId) {
@@ -3871,6 +3903,59 @@ Return JSON only:
                           </div>
                         {/if}
                       {/if}
+
+                      <!-- Emotional arc -->
+                      {#if selectedRefTrack?.emotional_arc?.length}
+                        <div class="tonal-section-title" style="margin-top:8px">EMOTIONAL ARC</div>
+                        <div class="emotional-arc-row">
+                          {#each (selectedRefTrack.emotional_arc || []) as seg, i}
+                            <div class="arc-segment"
+                              style="height:{8 + (seg.energy||0)*40}px; background:rgba(201,168,76,{0.2+(seg.energy||0)*0.8})"
+                              title="Seg {i+1}: energy {((seg.energy||0)*100).toFixed(0)}%">
+                            </div>
+                          {/each}
+                        </div>
+                      {/if}
+
+                      <!-- Ref track basic stats -->
+                      {#if selectedRefTrack?.tempo || selectedRefTrack?.key || selectedRefTrack?.loudness}
+                        <div class="tonal-section-title" style="margin-top:8px">REF STATS</div>
+                        <div class="ref-basic-stats">
+                          {#if selectedRefTrack.tempo}<span class="ref-stat-chip">{Math.round(selectedRefTrack.tempo)} BPM</span>{/if}
+                          {#if selectedRefTrack.key}<span class="ref-stat-chip">{selectedRefTrack.key}{#if selectedRefTrack.camelot} · {selectedRefTrack.camelot}{/if}</span>{/if}
+                          {#if selectedRefTrack.loudness}<span class="ref-stat-chip">{selectedRefTrack.loudness.toFixed(1)} LUFS</span>{/if}
+                        </div>
+                      {/if}
+
+                      <!-- Feel metrics with project-ref-average markers -->
+                      {#if [selectedRefTrack?.energy, selectedRefTrack?.danceability, selectedRefTrack?.valence, selectedRefTrack?.brightness, selectedRefTrack?.warmth, selectedRefTrack?.bass_energy].some(v => v !== null && v !== undefined)}
+                        <div class="tonal-section-title" style="margin-top:6px">FEEL</div>
+                        {#each [
+                          { key: 'energy',       label: 'ENERGY' },
+                          { key: 'danceability', label: 'GROOVE' },
+                          { key: 'valence',      label: 'MOOD'   },
+                          { key: 'brightness',   label: 'BRIGHT' },
+                          { key: 'warmth',       label: 'WARMTH' },
+                          { key: 'bass_energy',  label: 'BASS'   }
+                        ] as metric}
+                          {#if selectedRefTrack?.[metric.key] !== null && selectedRefTrack?.[metric.key] !== undefined}
+                            <div class="ref-metric-row">
+                              <span class="ref-metric-label">{metric.label}</span>
+                              <div class="ref-metric-bar-wrap">
+                                <div class="ref-metric-bar" style="width:{(selectedRefTrack[metric.key]||0)*100}%"></div>
+                                {#if projectRefAverage[song.id]?.[metric.key] !== null && projectRefAverage[song.id]?.[metric.key] !== undefined}
+                                  <div class="avg-marker"
+                                    style="left:{(projectRefAverage[song.id][metric.key]||0)*100}%"
+                                    title="Project avg: {((projectRefAverage[song.id][metric.key]||0)*100).toFixed(0)}">
+                                  </div>
+                                {/if}
+                              </div>
+                              <span class="ref-metric-val">{((selectedRefTrack[metric.key]||0)*100).toFixed(0)}</span>
+                            </div>
+                          {/if}
+                        {/each}
+                      {/if}
+
                       <!-- Credits (when a ref track is selected and has credits) -->
                       {#if selectedRefTrack?.credits}
                         <div class="ref-credits">
@@ -5065,6 +5150,16 @@ Return JSON only:
   .add-spotify-ref-btn:hover { background: rgba(76,175,130,.1); }
   .ref-rate-limit-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #9e9690; font-style: italic; padding: 3px 0 2px; }
   .tonal-section-title { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: rgba(201,168,76,.6); padding: 6px 0 4px; text-transform: uppercase; }
+  .emotional-arc-row { display: flex; gap: 2px; align-items: flex-end; height: 50px; padding: 4px 0; border-bottom: 1px solid #1a1a1a; }
+  .arc-segment { flex: 1; border-radius: 2px 2px 0 0; min-height: 3px; }
+  .ref-basic-stats { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0 6px; border-bottom: 1px solid #1a1a1a; }
+  .ref-stat-chip { font-family: 'Space Mono', monospace; font-size: 8px; color: #9e9690; background: #1c1c1c; border: 1px solid #252525; padding: 2px 7px; border-radius: 2px; }
+  .ref-metric-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid #0d0d0d; }
+  .ref-metric-label { font-family: 'Space Mono', monospace; font-size: 8px; color: #444; width: 55px; flex-shrink: 0; }
+  .ref-metric-bar-wrap { flex: 1; height: 4px; background: #1a1a1a; border-radius: 2px; overflow: visible; position: relative; }
+  .ref-metric-bar { height: 100%; background: #c9a84c; border-radius: 2px; transition: width .3s; }
+  .ref-metric-val { font-family: 'Space Mono', monospace; font-size: 8px; color: #333; width: 28px; text-align: right; flex-shrink: 0; }
+  .avg-marker { position: absolute; top: -1px; width: 1.5px; height: calc(100% + 2px); background: rgba(255,255,255,0.5); transform: translateX(-50%); pointer-events: none; }
   .tonal-panel { display: flex; flex-direction: column; }
   .band-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #111; }
   .band-row:last-child { border-bottom: none; }

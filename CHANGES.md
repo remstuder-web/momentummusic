@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] ProjectsTab.svelte analyzer content audit — DONE
+TASK: analyzer-verify
+WHAT: Full audit of ANALYZER tab content — all 15 items confirmed present: stem tabs (3567), VocalEqChart (3691), ref picker (3576), Mozart insight (3947), tonal balance (3720+3802), stereo width (3756+3836), feel metrics (3894), emotional arc × 2 (3871 ref arc + 4133 own-mix SVG), credits (3923), project ref avg markers (3910), SUCCESS MATCH (4094), FEEDBACK HISTORY (4165), TREND CONTEXT (4190), Pro-Q 4 (3702), avg refs (3706). No items missing — no HTML changes needed.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-27] ProjectsTab.svelte definitive analyzer cleanup — DONE
 TASK: analyzer-definitive-cleanup
 WHAT: Moved {#if activeSongTab==='analyzer'} OUTSIDE vocal-eq-section div so the entire div only renders when ANALYZER tab is active — no empty 4px gap in other stage tabs; confirmed all analyzer content (VocalEqChart, ref-picker, proq-btn, SUCCESS/FEEDBACK/TREND) appears exactly once, inside the tab; re-analyze button always visible with date label

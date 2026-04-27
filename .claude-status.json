@@ -1,17 +1,27 @@
 {
-  "updated": "2026-04-27T13:40:00Z",
-  "last_task": "analyzer-definitive-cleanup",
+  "updated": "2026-04-27T13:55:00Z",
+  "last_task": "analyzer-verify",
   "status": "done",
   "working": [
-    "vocal-eq-section div now only renders when activeSongTab[song.id] === 'analyzer' — no empty div gap in other stage tabs",
-    "Structure: {#if activeSongTab==='analyzer'} wraps <div class='vocal-eq-section analyzer-tab'> (not the other way around)",
-    "All analyzer content (VocalEqChart, ref-picker-wrap, proq-btn, SUCCESS MATCH, FEEDBACK HISTORY, TREND CONTEXT) exists exactly once, inside the ANALYZER tab",
-    "Re-analyze button: '▶ Run Analysis' when no mix curves; '↺ Re-analyze' + 'Last: dd.mm.yyyy' when curves exist",
-    "FIX1 (ref picker): already in ANALYZER tab — no change needed",
-    "FIX2 (re-analyze): always visible with date"
+    "All 15 ANALYZER tab sections confirmed present and in correct location",
+    "Stem tabs: line 3567",
+    "EQ chart (VocalEqChart): line 3691",
+    "Ref picker: line 3576",
+    "Mozart insight: line 3947",
+    "Tonal balance: lines 3720 (non-tonal stems) + 3802 (tonal tab)",
+    "Stereo width: lines 3756 (non-tonal stems) + 3836 (tonal tab)",
+    "Feel metrics bars: line 3894",
+    "Emotional arc: line 3871 (ref track arc segments) + line 4133 (own-mix arc SVG with energy/brightness)",
+    "Credits: line 3923",
+    "Project ref avg markers: line 3910",
+    "SUCCESS MATCH: line 4094",
+    "FEEDBACK HISTORY: line 4165",
+    "TREND CONTEXT: line 4190",
+    "Pro-Q 4 button: line 3702",
+    "Avg refs button: line 3706"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test in browser: verify ANALYZER tab opens correctly; verify other stage tabs (PRODUCTION, MIXING, STEMS) show no analyzer section/gap; verify re-analyze button shows correct state",
-  "notes": "The two-condition structure: {#if activeSongTab !== 'analyzer'} for stage content, then {#if activeSongTab === 'analyzer'}<div...> for analyzer. Clean separation."
+  "next": "Ready for browser testing. Open ANALYZER tab on a song with analysis data and verify all sections render correctly.",
+  "notes": "Analyzer tab block: lines 3537-4219. All inside {#if activeSongTab[song.id]==='analyzer'}. @const vars are direct children of the {#if} block (required by Svelte 5). vocal-eq-section div follows the @const declarations."
 }

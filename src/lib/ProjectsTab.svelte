@@ -61,6 +61,7 @@
   let addingRef = $state({}) // song.id -> bool
   let analyzerLoading = $state({}) // song.id -> bool
   let analyzerVersionLabel = $state({}) // song.id -> string
+  let vocalStyleResult = $state({}) // song.id -> vocal style text
   let stemMatches = $state({}) // song.id -> {vocals, drums, bass, other, mix}
   let avgRefCurve = $state({}) // song.id -> averaged curve array
   let analyzerOpen = $state({}) // song.id -> { track, match, arc, feedback, trend }
@@ -1162,26 +1163,26 @@
 
   function openSpotifySong(url) { playRefUrl(url) }
 
-  async function analyzeVocalStyle(spotifyUrl) {
+  async function analyzeVocalStyle(spotifyUrl, songId) {
     const r = await fetch('http://localhost:4242/analyze-vocal-style', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: spotifyUrl })
     })
     const d = await r.json()
-    if (d.vocalProfile) {
-      aiMessages = [...aiMessages, {
-        role: 'assistant',
-        content: '🎤 Vocal Profile: ' + (d.artist || '') + '\n\n' +
-          'Range: ' + d.vocalProfile.vocal_range + '\n' +
-          'Timbre: ' + d.vocalProfile.timbre + '\n' +
-          'Expression: ' + d.vocalProfile.expressiveness + '\n' +
-          'Vibrato: ' + d.vocalProfile.vibrato + '\n\n' +
-          'Production recommendations:\n' +
-          d.vocalProfile.recommendations.map(rec => '· ' + rec).join('\n')
-      }]
-    } else {
-      aiMessages = [...aiMessages, { role: 'assistant', content: '🎤 Could not extract vocal profile — no pitch data in preview.' }]
+    if (d.result && songId) {
+      vocalStyleResult[songId] = d.result
+      vocalStyleResult = { ...vocalStyleResult }
+    } else if (d.vocalProfile && songId) {
+      vocalStyleResult[songId] = [
+        d.artist ? 'Artist: ' + d.artist : '',
+        'Range: ' + d.vocalProfile.vocal_range,
+        'Timbre: ' + d.vocalProfile.timbre,
+        'Expression: ' + d.vocalProfile.expressiveness,
+        'Vibrato: ' + d.vocalProfile.vibrato,
+        d.vocalProfile.recommendations?.length ? 'Tips: ' + d.vocalProfile.recommendations.join(' · ') : ''
+      ].filter(Boolean).join('\n')
+      vocalStyleResult = { ...vocalStyleResult }
     }
   }
 
@@ -3189,7 +3190,6 @@ Return JSON only:
                               {#if isSpotify}
                                 <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(refUrl); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
                                 <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>{refPlayingUrl === refUrl ? '■' : '▶'}</button>
-                                <button class="vocal-btn" onclick={() => analyzeVocalStyle(refUrl)} title="Analyze vocal style">🎤</button>
                               {:else}
                                 <a href={refUrl} target="_blank" class="ref-link-btn">↗</a>
                               {/if}
@@ -3737,6 +3737,15 @@ Return JSON only:
                             {/if}
                           {/if}
                         </div>
+                        {#if selectedRefTrack?.spotify_id}
+                          <button class="vocal-btn-analyzer"
+                            onclick={() => analyzeVocalStyle('https://open.spotify.com/track/' + selectedRefTrack.spotify_id, song.id)}>
+                            🎤 Analyze vocal style
+                          </button>
+                          {#if vocalStyleResult[song.id]}
+                            <div class="vocal-style-result">{vocalStyleResult[song.id]}</div>
+                          {/if}
+                        {/if}
                         <!-- Tonal balance + stereo width for non-tonal stems -->
                         {@const bands = [
                           { key: 'bass',     label: 'BASS',     hz: '20–200 Hz'  },
@@ -5123,6 +5132,9 @@ Return JSON only:
   .analyzer-version-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; letter-spacing: .06em; padding: 2px 0 6px; }
   .analyze-now-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #9e9690; padding: 4px 12px; border-radius: 2px; cursor: pointer; }
   .analyze-now-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+  .vocal-btn-analyzer { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #252525; color: #555; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 4px; }
+  .vocal-btn-analyzer:hover { border-color: #444; color: #9e9690; }
+  .vocal-style-result { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; line-height: 1.6; padding: 6px 0; border-top: 1px solid #1a1a1a; margin-top: 4px; white-space: pre-line; }
   .analyze-action-row { display: flex; align-items: center; gap: 0; padding: 2px 0 4px; }
   .last-analyzed { font-family: 'Space Mono', monospace; font-size: 8px; color: #333; margin-left: 8px; }
   .stem-match-row { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid #1a1a1a; margin-bottom: 6px; }

@@ -1,5 +1,17 @@
 # CHANGES
 
+## [2026-04-28] ProjectsTab.svelte — DONE
+TASK: analyzer-vocal-style-button
+WHAT: Added vocal style analysis button in ANALYZER tab (shows when ref track has spotify_id); stores result in vocalStyleResult[song.id] state; removed 🎤 button from REFS tab chip row; updated analyzeVocalStyle() to store result instead of appending to aiMessages
+RESULT: works — 0 svelte errors
+BLOCKERS: none
+
+## [2026-04-28] ProjectsTab.svelte + VocalEqChart.svelte — DONE
+TASK: analyzer-fix-curves
+WHAT: FIX1 mixCurveData in isMixTab now uses songCurves.find(c => c.source_type==='mix') without stem_type filter — finds any mix curve; FIX2 tonal balance/stereo width conditions changed from latestA||ref to just ref — sections show whenever ref has data, even pre-analysis; removed {else} "no tonal data" message from tonal tab; FIX3 VocalEqChart already had unique clipId (random per instance) and all paths already used clip-path — no changes needed
+RESULT: works — dev server 200
+BLOCKERS: none
+
 ## [2026-04-27] ProjectsTab.svelte analyzer content audit — DONE
 TASK: analyzer-verify
 WHAT: Full audit of ANALYZER tab content — all 15 items confirmed present: stem tabs (3567), VocalEqChart (3691), ref picker (3576), Mozart insight (3947), tonal balance (3720+3802), stereo width (3756+3836), feel metrics (3894), emotional arc × 2 (3871 ref arc + 4133 own-mix SVG), credits (3923), project ref avg markers (3910), SUCCESS MATCH (4094), FEEDBACK HISTORY (4165), TREND CONTEXT (4190), Pro-Q 4 (3702), avg refs (3706). No items missing — no HTML changes needed.

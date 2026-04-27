@@ -1,16 +1,20 @@
 {
-  "updated": "2026-04-27T09:36:00Z",
-  "last_task": "saveToCheckout-dedup",
+  "updated": "2026-04-27T10:34:00Z",
+  "last_task": "scout-chart-grid",
   "status": "done",
   "working": [
-    "saveToCheckout: title+artist ilike check already queried all of reference_tracks (not just checkout) — confirmed",
-    "Added source+collection_name to select so log shows where duplicate was found",
-    "Added spotify_id secondary check — skips if any row has matching spotify_id regardless of source",
-    "Log messages now show: 'skip (already in library) [source/collection]:' and 'skip (spotify_id match) [source]:'",
-    "All callers (scout, tiktok, chart, briefing) automatically benefit — no call-site changes needed"
+    "fetchKworbGermany() added — scrapes kworb.net/spotify/country/de_daily.html, returns [{position,artist,title,source:'kworb_spotify_de'}]",
+    "runAgentScout Promise.all now includes kworbDE",
+    "chartContext built: SPOTIFY GLOBAL / SPOTIFY GERMANY / TIKTOK / YOUTUBE top 5 each",
+    "Scout Claude prompt: CHARTS section first, then BREAKING ARTISTS, TRENDING SOUNDS, NEW RELEASES, OPPORTUNITIES, INDUSTRY/EDITORIAL, TECH & TOOLS, PRESS",
+    "Scout inbox_notification.metadata stores spotify_global/spotify_de/tiktok/youtube arrays (top 5 each)",
+    "DailyTab: 2x2 chart-grid renders above agent-output for type=scout when metadata.spotify_global present",
+    "CSS: chart-grid, chart-col, chart-title, chart-row added"
   ],
   "broken": [],
-  "partial": [],
-  "next": "Run /agent-scout or /agent-tiktok-trends and check pm2 logs to verify skip messages appear for known tracks.",
-  "notes": "The title+artist ilike check was already cross-source — the existing code was correct. The only additions were: select fields for log context, and the spotify_id secondary check for tracks imported with known Spotify IDs."
+  "partial": [
+    "tiktokTop uses crossChartData.tiktok from Supabase reference_tracks — will be empty if tiktok agent hasn't run recently"
+  ],
+  "next": "Run /agent-scout to verify: chart grid appears in inbox, DE chart populates, metadata fields present in Supabase.",
+  "notes": "kworbYT returns strings not objects — stored as raw strings in metadata.youtube, displayed as {t} (not t.title) in DailyTab. tiktok top 5 comes from getCrossChartTopics() which reads reference_tracks where collection_name='tiktok_trending'."
 }

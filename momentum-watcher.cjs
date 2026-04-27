@@ -996,6 +996,40 @@ async function fetchKworbSpotify() {
   }
 }
 
+async function fetchKworbGermany() {
+  try {
+    const res = await fetch(
+      'https://kworb.net/spotify/country/de_daily.html',
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    )
+    if (!res.ok) return []
+    const html = await res.text()
+    const results = []
+    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+    let match
+    while ((match = rowRegex.exec(html)) !== null) {
+      const cells = []
+      const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi
+      let cell
+      while ((cell = cellRegex.exec(match[1])) !== null) {
+        cells.push(cell[1].replace(/<[^>]+>/g, '').trim())
+      }
+      if (cells.length < 3) continue
+      const pos = parseInt(cells[0])
+      if (isNaN(pos)) continue
+      const artistTitle = cells[2] || ''
+      const dashIdx = artistTitle.indexOf(' - ')
+      const artist = dashIdx >= 0 ? artistTitle.slice(0, dashIdx).trim() : artistTitle
+      const title = dashIdx >= 0 ? artistTitle.slice(dashIdx + 3).trim() : ''
+      if (artist && title) results.push({ position: pos, artist, title, source: 'kworb_spotify_de' })
+    }
+    return results.slice(0, 10)
+  } catch(e) {
+    console.warn('kworb Germany failed:', e.message)
+    return []
+  }
+}
+
 async function extractTracksFromText(text, apiKey) {
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1199,7 +1233,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
   const today = new Date().toISOString().slice(0, 10)
 
   // Fetch all data sources in parallel
-  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, pressItems, gearThreads] = await Promise.all([
+  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, kworbDE, pressItems, gearThreads] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/connections?select=name`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?order=tempo.desc&limit=5&select=title,artist,genre_tags,tempo,key`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/watched_artists?active=eq.true&select=*`, { headers: sbHeaders }),
@@ -1209,6 +1243,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     fetchRssWithBody('https://www.hypebot.com/feed', 3),
     fetchKworbTrending(),
     fetchKworbSpotify(),
+    fetchKworbGermany(),
     fetchMusicPressItems(),
     fetchGearNewsItems(),
   ])
@@ -1269,6 +1304,24 @@ async function runAgentScout(apiKey, sharedBrainRows) {
   const kworbSPText = kworbSP.length
     ? kworbSP.map(t => `${t.position}. ${t.artist} — ${t.title}`).join('\n')
     : 'Unavailable'
+  const kworbDEText = kworbDE.length
+    ? kworbDE.map(t => `${t.position}. ${t.artist} — ${t.title}`).join('\n')
+    : 'Unavailable'
+
+  const tiktokTop = (crossChartData.tiktok || []).slice(0, 5)
+  const chartContext = [
+    'SPOTIFY GLOBAL TOP 5:',
+    kworbSP.slice(0, 5).map((t, i) => `${i+1}. ${t.artist} — ${t.title}`).join('\n') || 'Unavailable',
+    '',
+    'SPOTIFY GERMANY TOP 5:',
+    kworbDE.slice(0, 5).map((t, i) => `${i+1}. ${t.artist} — ${t.title}`).join('\n') || 'Unavailable',
+    '',
+    'TIKTOK TOP 5:',
+    tiktokTop.map((t, i) => `${i+1}. ${t.artist ? t.artist + ' — ' : ''}${t.title}`).join('\n') || 'Unavailable',
+    '',
+    'YOUTUBE TOP 5:',
+    kworbYT.slice(0, 5).map((l, i) => `${i+1}. ${l}`).join('\n') || 'Unavailable',
+  ].join('\n')
 
   const knownNames = (Array.isArray(connections) ? connections : []).map(b => b.name).filter(Boolean).join(', ') || 'none'
   const brainContext = buildBrainContext(sharedBrainRows)
@@ -1294,6 +1347,9 @@ async function runAgentScout(apiKey, sharedBrainRows) {
 
   const prompt = `Here is this week's REAL music data — do not invent anything outside this data:
 
+## CHART DATA (top 5 each):
+${chartContext}
+
 NEW RELEASES ON SPOTIFY:
 ${newReleasesText || 'Unavailable'}
 
@@ -1302,6 +1358,9 @@ ${kworbYTText}
 
 KWORB — Spotify Global Daily Chart:
 ${kworbSPText}
+
+KWORB — Spotify Germany Daily Chart:
+${kworbDEText}
 
 INDUSTRY HEADLINES THIS WEEK (with article snippets):
 ${rssLines}
@@ -1318,6 +1377,14 @@ ${gearBlock}
 ${crossChartBlock ? crossChartBlock + '\n\n' : ''}${tiktokOnlyBlock ? tiktokOnlyBlock + '\n\n' : ''}${refTrackText ? `REFERENCE TRACKS (Remo's taste):\n${refTrackText}\n` : ''}Already known — skip: ${knownNames}
 ${brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainContext}\n[END BACKGROUND]\n` : ''}
 Based ONLY on the above real data, write one complete scout report with these sections in this exact order:
+
+## CHARTS
+List top 5 for each source in this exact format (2 columns per row):
+🌍 SPOTIFY GLOBAL          🇩🇪 SPOTIFY DE
+[top 5 from global]        [top 5 from DE]
+
+📱 TIKTOK                  ▶ YOUTUBE
+[top 5 from tiktok]        [top 5 from youtube]
 
 ## BREAKING ARTISTS
 - Name artists actually gaining momentum in new releases or chart data
@@ -1472,7 +1539,21 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   await deleteInboxToday('Artist Scout')
   await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
     method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ type: 'scout', song_code: null, song_title: 'Artist Scout', artist: null, message: scoutText + tracksJson, patch_name: `Scout ${today}`, read: false })
+    body: JSON.stringify({
+      type: 'scout',
+      song_code: null,
+      song_title: 'Artist Scout',
+      artist: null,
+      message: scoutText + tracksJson,
+      patch_name: `Scout ${today}`,
+      read: false,
+      metadata: {
+        spotify_global: kworbSP.slice(0, 5),
+        spotify_de: kworbDE.slice(0, 5),
+        tiktok: tiktokTop,
+        youtube: kworbYT.slice(0, 5)
+      }
+    })
   })
   console.log('✓ Agent Scout report saved to inbox + brain_knowledge')
 

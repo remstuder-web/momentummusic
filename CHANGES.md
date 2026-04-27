@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] scout: 4-chart grid (spotify global+DE, tiktok, youtube) — DONE
+TASK: scout-chart-grid
+WHAT: Added fetchKworbGermany() for de_daily.html; kworbDE added to scout Promise.all; chartContext built and injected into prompt; CHARTS section added first in prompt order; scout inbox_notification now saves metadata with spotify_global/spotify_de/tiktok/youtube arrays; DailyTab renders 2x2 chart-grid before agent-output for scout type; CSS added
+RESULT: watcher restart ok; chart grid will render on next agent-scout run
+BLOCKERS: none
+
 ## [2026-04-27] momentum-watcher.cjs saveToCheckout — DONE
 TASK: saveToCheckout-dedup
 WHAT: Added source/collection_name to duplicate check select for better logging; added spotify_id secondary check; log now shows which source/collection the duplicate was found in

@@ -1934,6 +1934,34 @@ ${mozartContext}`
                   <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
                 </div>
                 {#if n.type === 'briefing' || n.type === 'scout'}
+                  {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
+                    <div class="chart-grid">
+                      <div class="chart-col">
+                        <div class="chart-title">🌍 SPOTIFY GLOBAL</div>
+                        {#each n.metadata.spotify_global as t, i}
+                          <div class="chart-row">{i+1}. {t.artist} — {t.title}</div>
+                        {/each}
+                      </div>
+                      <div class="chart-col">
+                        <div class="chart-title">🇩🇪 SPOTIFY DE</div>
+                        {#each (n.metadata.spotify_de || []) as t, i}
+                          <div class="chart-row">{i+1}. {t.artist} — {t.title}</div>
+                        {/each}
+                      </div>
+                      <div class="chart-col">
+                        <div class="chart-title">📱 TIKTOK</div>
+                        {#each (n.metadata.tiktok || []) as t, i}
+                          <div class="chart-row">{i+1}. {t.artist ? t.artist + ' — ' : ''}{t.title}</div>
+                        {/each}
+                      </div>
+                      <div class="chart-col">
+                        <div class="chart-title">▶ YOUTUBE</div>
+                        {#each (n.metadata.youtube || []) as t, i}
+                          <div class="chart-row">{i+1}. {t}</div>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                   <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
                 {:else if n.metadata?.real_intent}
                   {@const m = n.metadata}
@@ -1974,6 +2002,34 @@ ${mozartContext}`
                   <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
                 </div>
                 {#if n.type === 'briefing' || n.type === 'scout'}
+                  {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
+                    <div class="chart-grid">
+                      <div class="chart-col">
+                        <div class="chart-title">🌍 SPOTIFY GLOBAL</div>
+                        {#each n.metadata.spotify_global as t, i}
+                          <div class="chart-row">{i+1}. {t.artist} — {t.title}</div>
+                        {/each}
+                      </div>
+                      <div class="chart-col">
+                        <div class="chart-title">🇩🇪 SPOTIFY DE</div>
+                        {#each (n.metadata.spotify_de || []) as t, i}
+                          <div class="chart-row">{i+1}. {t.artist} — {t.title}</div>
+                        {/each}
+                      </div>
+                      <div class="chart-col">
+                        <div class="chart-title">📱 TIKTOK</div>
+                        {#each (n.metadata.tiktok || []) as t, i}
+                          <div class="chart-row">{i+1}. {t.artist ? t.artist + ' — ' : ''}{t.title}</div>
+                        {/each}
+                      </div>
+                      <div class="chart-col">
+                        <div class="chart-title">▶ YOUTUBE</div>
+                        {#each (n.metadata.youtube || []) as t, i}
+                          <div class="chart-row">{i+1}. {t}</div>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                   <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
                 {:else}
                   <div class="inbox-msg">{n.message}</div>
@@ -2367,6 +2423,10 @@ ${mozartContext}`
   .task-scroll.scrollable { max-height: calc(7 * 50px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .year-scroll { max-height: calc(10 * 32px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .inbox-scroll { max-height: 600px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #1a1a1a; }
+  .chart-col { display: flex; flex-direction: column; gap: 2px; }
+  .chart-title { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .08em; margin-bottom: 4px; }
+  .chart-row { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .inbox-row { display: flex; align-items: flex-start; gap: 0; }
   .inbox-del-btn { flex-shrink: 0; order: -1; background: transparent; border: none; color: #444; font-size: 13px; cursor: pointer; padding: 10px 6px 10px 2px; align-self: flex-start; }
   .inbox-del-btn:hover { color: #e05a4a; }

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] mozart refs: always enrich with spotify before saving, never null url — DONE
+TASK: mozart-ref-enrich
+WHAT: /mozart-action add_project_reference: removed conditional (was: only enrich if !spotify_id) — now always calls fetchSpotifyId(); sets payload.url, payload.name during enrichment; adds URL fallback after enrichment block (spotify_id→url or null); ref push uses payload.url/payload.name instead of recomputing
+RESULT: watcher restart ok
+BLOCKERS: none
+
 ## [2026-04-27] scout: no checkout, youtube names, tiktok 10 full width, unique mentioned, hide lib if in library — DONE
 TASK: scout-five-fixes
 WHAT: FIX1: saveToCheckout already removed from runAgentScout (done prior); FIX2: fetchKworbTrending rewritten to return objects {position,title,artist} + debug log + all kworbYT string callsites updated; FIX3: tiktok-col spans 2 grid columns with 10-item 2-col sub-grid (CSS: grid-column:span 2, grid-template-columns:1fr 1fr); FIX4: chartTrackKeys dedup uses /\W/g not /\s/g, label renamed ALSO MENTIONED; FIX5: loadLibraryIds() on mount, librarySpotifyIds Set, lib btn hidden shows ✓ badge when track in library, addChartTrackToLibrary updates Set on success

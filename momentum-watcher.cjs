@@ -11485,17 +11485,23 @@ ${chatText.slice(0, 4000)}`
         let result = ''
 
         if (action === 'add_project_reference') {
-          // Auto-enrich with Spotify if no spotify_id yet
-          if (!payload.spotify_id && payload.title) {
+          // Always enrich with Spotify — overwrites any stale/missing spotify_id
+          if (payload.title) {
             const sp = await fetchSpotifyId(payload.title, payload.artist)
             if (sp) {
               payload.spotify_id = sp.spotify_id
               payload.title      = sp.title
               payload.artist     = sp.artist
               payload.popularity = sp.popularity
+              payload.url        = 'https://open.spotify.com/track/' + sp.spotify_id
+              payload.name       = sp.artist + ' — ' + sp.title
               console.log('[mozart] Spotify enriched:', payload.title, payload.spotify_id)
             }
           }
+          // Never save with url: null — fall back to spotify_id if enrichment failed
+          payload.url = payload.spotify_id
+            ? 'https://open.spotify.com/track/' + payload.spotify_id
+            : null
 
           // Save to reference_tracks checkout
           if (payload.spotify_id) {
@@ -11568,10 +11574,8 @@ ${chatText.slice(0, 4000)}`
                 ref_type: payload.ref_type || 'music',
                 added_by: 'mozart',
                 added_at: new Date().toISOString(),
-                url: payload.spotify_id
-                  ? 'https://open.spotify.com/track/' + payload.spotify_id
-                  : null,
-                name: (payload.artist || '') + ' — ' + (payload.title || '')
+                url: payload.url || null,
+                name: payload.name || (payload.artist || '') + ' — ' + (payload.title || '')
               })
 
               const { error: updateErr } = await supabase

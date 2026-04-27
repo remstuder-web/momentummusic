@@ -1,16 +1,16 @@
 {
-  "updated": "2026-04-27T11:45:00Z",
-  "last_task": "analyzer-mozart-insight",
+  "updated": "2026-04-27T12:18:00Z",
+  "last_task": "scout-pulse-merge",
   "status": "done",
   "working": [
-    "ANALYZER shows '✓ Reference added' (green, Space Mono) when mozartAnalysis[song.id]?.ok is true",
-    "Handles two cases: (1) mozartInsight present → confirm above mz-insight block; (2) mozartAnalysis.ok but no insight yet → confirm only",
-    "next-move-section rendered below mz-insight when mz.next_step present — gold border-left, subtle gold background, 12px DM Sans text",
-    "next_step content appears TWICE: inside mz-section (NEXT STEP label) and in standalone next-move-section (NEXT MOVE label) — intentional per spec",
-    "CSS added: ref-added-confirm, next-move-section, next-move-label, next-move-text"
+    "runPulseCheck(apiKey, brainRows, returnOnly=true) returns {summary} without inbox save",
+    "runAgentScout appends '\\n\\n---\\n\\n## YOUR WORK PULSE\\n' + pulseResult.summary to mainScoutText before inbox save",
+    "pulseAppend placed between mainScoutText and tracksJson (TRACKS hidden comment stays at end)",
+    "DailyTab scoutArtists() no longer calls /agent-pulse-check separately",
+    "One scout button → full picture: charts + artists + trends + pulse"
   ],
   "broken": [],
   "partial": [],
-  "next": "Run Mozart analysis via + Add Reference in ANALYZER to verify: confirm appears, strategic context shows, NEXT MOVE section visible with gold styling",
-  "notes": "mozartInsight is set by a separate loadMozartInsight function (not runMozartAnalysis). mozartAnalysis tracks the add-ref action status only."
+  "next": "Run /agent-scout to verify: scout card shows YOUR WORK PULSE section at bottom separated by ---, no separate pulse_check inbox entry created",
+  "notes": "runPulseCheck default behavior unchanged (returnOnly=false) — standalone /agent-pulse-check endpoint still works normally for Telegram /pulse command"
 }

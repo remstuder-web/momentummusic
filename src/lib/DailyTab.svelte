@@ -780,16 +780,6 @@
       const data = await res.json()
       if (!data.ok) throw new Error(data.error)
       agentLastRun = { ...agentLastRun, scout: new Date().toISOString() }
-      // Also run pulse check and append results
-      try {
-        const pr = await fetch('http://localhost:4242/agent-pulse-check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey })
-        })
-        const pd = await pr.json()
-        if (pd.ok) agentLastRun = { ...agentLastRun, pulse: new Date().toISOString() }
-      } catch(e) { /* pulse non-critical */ }
       await loadInbox()
     } catch(e) {
       alert('Scout error: ' + e.message + '\nMake sure watcher is running.')

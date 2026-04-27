@@ -442,7 +442,7 @@ async function deleteInboxToday(songTitle) {
 }
 
 // ── Pulse check — compare fresh RSS headlines against brain knowledge ─────────
-async function runPulseCheck(apiKey, sharedBrainRows) {
+async function runPulseCheck(apiKey, sharedBrainRows, returnOnly = false) {
   const sites = [
     { name: 'Music Business Worldwide', url: 'https://www.musicbusinessworldwide.com/feed/' },
     { name: 'Hypebot',                  url: 'https://www.hypebot.com/latest/rss/' }
@@ -535,6 +535,10 @@ ${brainSummary}` }]
   })
   const cd = await claudeRes.json()
   const pulse = cd.content?.[0]?.text || ''
+
+  if (returnOnly) {
+    return (!pulse.includes('NO_UPDATES') && pulse.trim()) ? { summary: pulse } : null
+  }
 
   if (!pulse.includes('NO_UPDATES') && pulse.trim()) {
     const pulseToday = new Date().toISOString().slice(0, 10)
@@ -1566,6 +1570,17 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   const allTracks = [...kworbTracks, ...kworbYTTracks].slice(0, 10)
   const tracksJson = allTracks.length ? `\n<!--TRACKS:${JSON.stringify(allTracks)}-->` : ''
 
+  // Run pulse check and merge into scout message
+  let pulseAppend = ''
+  try {
+    const pulseResult = await runPulseCheck(apiKey, brainRows, true)
+    if (pulseResult?.summary) {
+      pulseAppend = '\n\n---\n\n## YOUR WORK PULSE\n' + pulseResult.summary
+    }
+  } catch(e) {
+    console.warn('pulse check in scout failed:', e.message)
+  }
+
   await deleteInboxToday('Artist Scout')
   await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
     method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
@@ -1574,7 +1589,7 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
       song_code: null,
       song_title: 'Artist Scout',
       artist: null,
-      message: mainScoutText + tracksJson,
+      message: mainScoutText + pulseAppend + tracksJson,
       patch_name: `Scout ${today}`,
       read: false,
       metadata: {

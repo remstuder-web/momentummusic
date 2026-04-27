@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] scout: incorporate pulse check into scout message — DONE
+TASK: scout-pulse-merge
+WHAT: runPulseCheck gains returnOnly param — when true, returns {summary} without saving to inbox; runAgentScout calls it before inbox save and appends '## YOUR WORK PULSE' section to mainScoutText; DailyTab scoutArtists() drops separate /agent-pulse-check fetch
+RESULT: one scout button → full picture (charts + artists + pulse); no duplicate pulse_check inbox entries
+BLOCKERS: none
+
 ## [2026-04-27] analyzer: Mozart strategic context + next move section — DONE
 TASK: analyzer-mozart-insight
 WHAT: ANALYZER panel now shows ✓ Reference added confirm when mozartAnalysis[song.id]?.ok; strategic/creative/next_step already rendered via mozartInsight; added standalone next-move-section below mz-insight with gold border-left styling; also handles case where mozartAnalysis.ok without mozartInsight (shows confirm only); CSS: ref-added-confirm, next-move-section, next-move-label, next-move-text

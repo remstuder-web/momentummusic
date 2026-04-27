@@ -1434,9 +1434,25 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   // Save chart positions for trend velocity (BUILD 3) — silent, don't block briefing
   if (Array.isArray(kworbSP) && kworbSP.length) {
     const today = new Date().toISOString().slice(0,10)
-    const histRows = kworbSP.slice(0,50).map(t => ({ title: t.title, artist: t.artist, position: t.position, chart_date: today, source: 'kworb' }))
-    const { error: histErr } = await supabaseAdmin.from('chart_history').upsert(histRows, { onConflict: 'title,artist,chart_date', ignoreDuplicates: true })
-    if (histErr) console.error('chart_history upsert error:', histErr.message)
+    const source = 'kworb'
+    for (const t of kworbSP.slice(0, 50)) {
+      if (!t.title || !t.artist) continue
+      await supabaseAdmin.from('chart_history')
+        .delete()
+        .eq('title', t.title)
+        .eq('artist', t.artist)
+        .eq('chart_date', today)
+        .eq('source', source)
+      const { error: histErr } = await supabaseAdmin.from('chart_history').insert({
+        title: t.title,
+        artist: t.artist,
+        spotify_id: t.spotify_id || null,
+        position: t.position || null,
+        chart_date: today,
+        source
+      })
+      if (histErr) console.error('chart_history insert error:', t.title, histErr.message)
+    }
   }
 
   // Encode kworb tracks as structured data in inbox message

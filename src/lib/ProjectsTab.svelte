@@ -3786,6 +3786,9 @@ Return JSON only:
                         <div class="mz-loading">Mozart analyzing...</div>
                       {:else if mozartInsight[song.id]}
                         {@const mz = mozartInsight[song.id]}
+                        {#if mozartAnalysis[song.id]?.ok}
+                          <div class="ref-added-confirm">✓ Reference added</div>
+                        {/if}
                         <div class="mz-insight">
                           {#if mz.strategic?.length}
                             <div class="mz-section">
@@ -3810,6 +3813,14 @@ Return JSON only:
                             </div>
                           {/if}
                         </div>
+                        {#if mz.next_step}
+                          <div class="next-move-section">
+                            <div class="next-move-label">NEXT MOVE</div>
+                            <div class="next-move-text">{mz.next_step}</div>
+                          </div>
+                        {/if}
+                      {:else if mozartAnalysis[song.id]?.ok}
+                        <div class="ref-added-confirm">✓ Reference added</div>
                       {/if}
 
                       <!-- Status -->
@@ -4888,6 +4899,10 @@ Return JSON only:
   .mz-point { font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 300; color: #9e9690; line-height: 1.6; padding: 3px 0; border-bottom: 1px solid #111; }
   .mz-next { font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 400; color: #cec9c1; line-height: 1.6; }
   .mz-loading { font-family: 'Space Mono', monospace; font-size: 9px; color: #333; padding: 8px 0; font-style: italic; }
+  .ref-added-confirm { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; letter-spacing: .05em; padding: 5px 0 3px; }
+  .next-move-section { margin-top: 10px; padding: 8px 12px; background: rgba(201,168,76,.05); border-left: 2px solid rgba(201,168,76,.4); border-radius: 2px; }
+  .next-move-label { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-bottom: 4px; }
+  .next-move-text { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #cec9c1; line-height: 1.6; }
   @keyframes va-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
   .stem-tabs { display: flex; gap: 4px; margin-bottom: 4px; }
   .stem-tab { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; padding: 3px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; letter-spacing: .06em; }

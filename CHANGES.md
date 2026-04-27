@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] analyzer: Mozart strategic context + next move section — DONE
+TASK: analyzer-mozart-insight
+WHAT: ANALYZER panel now shows ✓ Reference added confirm when mozartAnalysis[song.id]?.ok; strategic/creative/next_step already rendered via mozartInsight; added standalone next-move-section below mz-insight with gold border-left styling; also handles case where mozartAnalysis.ok without mozartInsight (shows confirm only); CSS: ref-added-confirm, next-move-section, next-move-label, next-move-text
+RESULT: compiles cleanly; visible after running Mozart analysis
+BLOCKERS: none
+
 ## [2026-04-27] mozart refs: always enrich with spotify before saving, never null url — DONE
 TASK: mozart-ref-enrich
 WHAT: /mozart-action add_project_reference: removed conditional (was: only enrich if !spotify_id) — now always calls fetchSpotifyId(); sets payload.url, payload.name during enrichment; adds URL fallback after enrichment block (spotify_id→url or null); ref push uses payload.url/payload.name instead of recomputing

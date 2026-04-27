@@ -1,18 +1,16 @@
 {
-  "updated": "2026-04-27T11:39:00Z",
-  "last_task": "scout-five-fixes",
+  "updated": "2026-04-27T11:45:00Z",
+  "last_task": "analyzer-mozart-insight",
   "status": "done",
   "working": [
-    "FIX1: saveToCheckout removed from runAgentScout (done in prior session)",
-    "FIX2: fetchKworbTrending returns {position,title,artist} objects; debug log logs first row cells; kworbYTText, chartContext, ytEnriched, kworbYTTracks all updated to handle objects",
-    "FIX3: tiktok-col class spans 2 grid columns with 10-item inner grid (1fr 1fr, gap 3px 16px); chart-title spans both cols",
-    "FIX4: dedup filter uses /\\W/g (non-word chars, stronger than /\\s/g); label changed to ALSO MENTIONED",
-    "FIX5: loadLibraryIds() fetches reference_tracks spotify_ids on mount; librarySpotifyIds Set; lib button hidden replaced with ✓ badge when track in library; addChartTrackToLibrary updates Set reactively"
+    "ANALYZER shows '✓ Reference added' (green, Space Mono) when mozartAnalysis[song.id]?.ok is true",
+    "Handles two cases: (1) mozartInsight present → confirm above mz-insight block; (2) mozartAnalysis.ok but no insight yet → confirm only",
+    "next-move-section rendered below mz-insight when mz.next_step present — gold border-left, subtle gold background, 12px DM Sans text",
+    "next_step content appears TWICE: inside mz-section (NEXT STEP label) and in standalone next-move-section (NEXT MOVE label) — intentional per spec",
+    "CSS added: ref-added-confirm, next-move-section, next-move-label, next-move-text"
   ],
   "broken": [],
-  "partial": [
-    "YouTube cell mapping [1]=title [2]=artist is a guess — debug log will reveal actual structure on next /agent-scout run; may need to swap indices if artist and title are wrong"
-  ],
-  "next": "Run /agent-scout and check pm2 logs for 'YouTube first row cells:' output. If title/artist are swapped, fix the mapping in fetchKworbTrending (swap text[1] and text[2]).",
-  "notes": "librarySpotifyIds only includes sources: agent, user, mozart, promoted, chart. Tracks without spotify_id always show lib button (can't check library membership by title alone efficiently in the template)."
+  "partial": [],
+  "next": "Run Mozart analysis via + Add Reference in ANALYZER to verify: confirm appears, strategic context shows, NEXT MOVE section visible with gold styling",
+  "notes": "mozartInsight is set by a separate loadMozartInsight function (not runMozartAnalysis). mozartAnalysis tracks the add-ref action status only."
 }

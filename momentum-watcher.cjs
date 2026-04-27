@@ -1814,8 +1814,11 @@ const ANALYZE_AUDIO_SCRIPT = path.join(__dirname, 'analyze_audio.py')
 const ANALYZE_EQ_SCRIPT = path.join(__dirname, 'analyze_vocal_eq.py')
 let processingQueue = []
 let isProcessing = false
-let processedThisSession = 0
 let spotifyRateLimitUntil = 0
+const MAX_PER_DAY = 20
+let processedToday = 0
+let todayKey = new Date().toISOString().slice(0, 10)
+let bgQueuePaused = false
 
 // ── Tier 1: fast analysis — Spotify + Essentia + tonal/stereo + Genius credits ─
 async function processLibraryTrackInBackground(refTrack) {
@@ -1950,22 +1953,28 @@ async function fetchTrackGenres(spotifyId) {
 }
 
 async function runBackgroundQueue() {
-  if (Date.now() < spotifyRateLimitUntil) {
-    console.log('bg queue paused — rate limited, retrying in 60s')
-    setTimeout(runBackgroundQueue, 60000)
+  if (bgQueuePaused) {
+    console.log('bg queue: manually paused')
     return
   }
-  if (processedThisSession >= 50) {
-    console.log('bg queue paused — 50-track session limit reached')
+  const today = new Date().toISOString().slice(0, 10)
+  if (today !== todayKey) { processedToday = 0; todayKey = today }
+  if (processedToday >= MAX_PER_DAY) {
+    console.log('bg queue: daily limit reached (' + MAX_PER_DAY + ')')
+    return
+  }
+  if (Date.now() < spotifyRateLimitUntil) {
+    console.log('bg queue: rate limited — retrying in 1h')
+    setTimeout(runBackgroundQueue, 60 * 60 * 1000)
     return
   }
   if (isProcessing || processingQueue.length === 0) return
   isProcessing = true
   const track = processingQueue.shift()
   await processLibraryTrackInBackground(track)
-  processedThisSession++
+  processedToday++
   isProcessing = false
-  if (processingQueue.length > 0 && processedThisSession < 50) setTimeout(runBackgroundQueue, 8000)
+  if (processingQueue.length > 0) setTimeout(runBackgroundQueue, 30000)
 }
 
 function queueLibraryTrack(track) {
@@ -1977,6 +1986,11 @@ function queueLibraryTrack(track) {
 
 // Startup: Tier 1 queue — all tracks missing tempo (15s delay to let watcher settle)
 setTimeout(async () => {
+  if (bgQueuePaused) { console.log('bg queue: skipping startup — manually paused'); return }
+  if (Date.now() < spotifyRateLimitUntil) {
+    console.log('bg queue: skipping startup — rate limited until', new Date(spotifyRateLimitUntil).toLocaleString())
+    return
+  }
   try {
     const { data: unanalyzed } = await supabase
       .from('reference_tracks')
@@ -1994,6 +2008,7 @@ setTimeout(async () => {
 
 // Startup: enrich library tracks missing genres (45s delay, after EQ queue settles)
 setTimeout(async () => {
+  if (bgQueuePaused || Date.now() < spotifyRateLimitUntil) { console.log('bg-genres: skipping startup — paused or rate limited'); return }
   try {
     const { data: tracks } = await supabase
       .from('reference_tracks')
@@ -3974,6 +3989,17 @@ async function handleOwnerCommand(chatId, text) {
       await sendTelegram(chatId, '✓ Brain connection analysis complete')
     } catch(e) { await sendTelegram(chatId, '❌ Connect error: ' + e.message) }
   }
+  else if (cmd === '/pausequeue') {
+    bgQueuePaused = true
+    processingQueue.length = 0
+    await sendTelegram(chatId, '⏸ Background queue paused + cleared. Use /resumequeue to restart.')
+  }
+  else if (cmd === '/resumequeue') {
+    bgQueuePaused = false
+    processedToday = 0
+    todayKey = new Date().toISOString().slice(0, 10)
+    await sendTelegram(chatId, '▶️ Background queue resumed. Daily limit reset (' + MAX_PER_DAY + '/day, 30s between tracks).')
+  }
   else if (cmd === '/cleanup') {
     const count = await runTelegramCleanup()
     await sendTelegram(chatId, '🗑 Deleted ' + count + ' messages older than 24h')
@@ -4019,6 +4045,8 @@ async function handleOwnerCommand(chatId, text) {
       '/tiktok — Fetch TikTok trending sounds now\n' +
       '/connect — Find connections between brain entries\n' +
       '/cleanup — Delete bot messages older than 24h\n' +
+      '/pausequeue — Stop background Spotify analysis queue\n' +
+      '/resumequeue — Resume background queue (resets daily count)\n' +
       '📷 Send photo — Extract WhatsApp screenshot\n' +
       '↩️ Forward message — Auto-analyze forwarded chat\n' +
       '/help — This message'
@@ -10478,6 +10506,29 @@ ${chatText.slice(0, 4000)}`
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ ok: true, time: new Date().toISOString() }))
+    return
+  }
+
+  // ── GET /pause-bg-queue ───────────────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/pause-bg-queue') {
+    bgQueuePaused = true
+    processingQueue.length = 0
+    console.log('bg queue: paused + cleared via API')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, paused: true, message: 'Background queue paused and cleared' }))
+    return
+  }
+
+  // ── GET /resume-bg-queue ──────────────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/resume-bg-queue') {
+    bgQueuePaused = false
+    processedToday = 0
+    todayKey = new Date().toISOString().slice(0, 10)
+    console.log('bg queue: resumed via API')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, paused: false, message: 'Background queue resumed (daily count reset)' }))
     return
   }
 

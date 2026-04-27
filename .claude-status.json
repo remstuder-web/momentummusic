@@ -1,15 +1,15 @@
 {
-  "updated": "2026-04-27T12:37:00Z",
-  "last_task": "four-fixes-analyzer",
+  "updated": "2026-04-27T12:50:00Z",
+  "last_task": "four-fixes-analyzer-2",
   "status": "done",
   "working": [
-    "FIX1: ANALYZER tab button in stages-row; clicking sets activeSongTab=analyzer, showVocalEq=true, calls onAnalyzerOpen; stage content hidden when analyzer active; vocal-eq-section shows without toggle in tab mode",
-    "FIX2: spotifyRateLimited $state per song.id; addReferenceVocal catch branch detects 'rate limit' → sets flag → inline ref-rate-limit-msg instead of alert",
-    "FIX3: saveRefToProject() calls /mozart-action add_project_reference; '+ Save to project refs' button appears when selectedRefTrack._section==='LIBRARY' and not already in project.reference_links",
-    "FIX4: /analyze-spotify-track checks spotifyRateLimitUntil at start; queues to processingQueue (dedup by spotify_id); returns {ok:true, rate_limited:true, queued_until} instead of throwing error"
+    "FIX1: onAnalyzerTabOpen loads last mix curves, sets analyzerVersionLabel (date or 'No analysis yet'), shows '▶ Run Analysis' button in tab mode; CSS for .analyzer-version-label and .analyze-now-btn added",
+    "FIX2: analyze_audio.py scipy→numpy fallback: try scipy.fft import rfft/rfftfreq, except ImportError: use np.fft equivalents",
+    "FIX3: ref picker detects Spotify URLs via isSpotifyUrl(); shows '+ Add from Spotify' button when URL pasted; addSpotifyRef() clears input and calls addReferenceVocal; CSS .add-spotify-ref-btn added",
+    "FIX4: runBackgroundQueue delay 3000ms→8000ms; processedThisSession counter; stops at 50 tracks/session"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test in browser: click ANALYZER tab button on a song to verify analyzer fills the card; test rate limit inline message; test '+ Save to project refs' button with a library track selected",
-  "notes": "ANALYZER tab uses activeSongTab (same system as LOG tab). The LOG tab button stays at far right; ANALYZER button is between STEMS and RELEASE. vocal-eq-section.analyzer-tab has no border-top/margin-top."
+  "next": "Test in browser: ANALYZER tab loads previous curves without re-analysis; ref picker shows Spotify button when URL pasted; check tonal balance in analyze_audio.py still outputs correctly with fallback",
+  "notes": "Watcher restarted (pm2). git commit 17250cf. All 4 fixes in ProjectsTab.svelte + analyze_audio.py + momentum-watcher.cjs."
 }

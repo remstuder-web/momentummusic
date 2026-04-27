@@ -1814,6 +1814,7 @@ const ANALYZE_AUDIO_SCRIPT = path.join(__dirname, 'analyze_audio.py')
 const ANALYZE_EQ_SCRIPT = path.join(__dirname, 'analyze_vocal_eq.py')
 let processingQueue = []
 let isProcessing = false
+let processedThisSession = 0
 let spotifyRateLimitUntil = 0
 
 // ── Tier 1: fast analysis — Spotify + Essentia + tonal/stereo + Genius credits ─
@@ -1954,12 +1955,17 @@ async function runBackgroundQueue() {
     setTimeout(runBackgroundQueue, 60000)
     return
   }
+  if (processedThisSession >= 50) {
+    console.log('bg queue paused — 50-track session limit reached')
+    return
+  }
   if (isProcessing || processingQueue.length === 0) return
   isProcessing = true
   const track = processingQueue.shift()
   await processLibraryTrackInBackground(track)
+  processedThisSession++
   isProcessing = false
-  if (processingQueue.length > 0) setTimeout(runBackgroundQueue, 3000)
+  if (processingQueue.length > 0 && processedThisSession < 50) setTimeout(runBackgroundQueue, 8000)
 }
 
 function queueLibraryTrack(track) {

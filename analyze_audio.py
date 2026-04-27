@@ -349,7 +349,11 @@ def analyze_stereo_and_tonal(audio_path):
         'air':      (8000, 20000)
     }
 
-    from scipy.fft import rfft, rfftfreq
+    try:
+        from scipy.fft import rfft, rfftfreq
+    except ImportError:
+        rfft = np.fft.rfft
+        rfftfreq = np.fft.rfftfreq
 
     chunk_size = 65536
     n_chunks = max(1, len(mid) // chunk_size)

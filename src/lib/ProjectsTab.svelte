@@ -59,6 +59,7 @@
   let notesOpen = $state({}) // song.id -> bool
   let addingRef = $state({}) // song.id -> bool
   let analyzerLoading = $state({}) // song.id -> bool
+  let analyzerVersionLabel = $state({}) // song.id -> string
   let stemMatches = $state({}) // song.id -> {vocals, drums, bass, other, mix}
   let avgRefCurve = $state({}) // song.id -> averaged curve array
   let analyzerOpen = $state({}) // song.id -> { track, match, arc, feedback, trend }
@@ -2364,6 +2365,35 @@ Return JSON only:
     }
   }
 
+  async function onAnalyzerTabOpen(song) {
+    analyzerLoading[song.id] = true
+    analyzerLoading = { ...analyzerLoading }
+    try {
+      const { data: curves } = await supabase
+        .from('vocal_eq_curves')
+        .select('*')
+        .eq('song_id', String(song.id))
+        .eq('source_type', 'mix')
+        .order('created_at', { ascending: false })
+        .limit(8)
+      if (curves?.length) {
+        vocalEqCurves[song.id] = curves
+        vocalEqCurves = { ...vocalEqCurves }
+        const d = new Date(curves[0].created_at)
+        analyzerVersionLabel[song.id] = 'Analysis from ' + d.toLocaleDateString('de-CH')
+      } else {
+        analyzerVersionLabel[song.id] = 'No analysis yet'
+      }
+      await loadVocalEq(song.id)
+      await loadRefTrackOptions(song.id)
+    } catch(e) {
+      console.error('onAnalyzerTabOpen error:', e.message)
+    } finally {
+      analyzerLoading[song.id] = false
+      analyzerLoading = { ...analyzerLoading }
+    }
+  }
+
   async function calculateStemMatches(songId, refId) {
     const curves = vocalEqCurves[songId] || []
     const matches = {}
@@ -2450,6 +2480,18 @@ Return JSON only:
       vocalEqStatus = { ...vocalEqStatus, [sid]: 'error' }
       alert('Vocal EQ analysis failed: ' + e.message)
     }
+  }
+
+  function isSpotifyUrl(s) {
+    return /open\.spotify\.com\/track\/[A-Za-z0-9]+/.test(s)
+  }
+
+  async function addSpotifyRef(song, url) {
+    refSearch[song.id] = ''
+    refSearch = { ...refSearch }
+    refPickerOpen[song.id] = false
+    refPickerOpen = { ...refPickerOpen }
+    await addReferenceVocal(song, url, '')
   }
 
   async function addReferenceVocal(song, url, label) {
@@ -3001,7 +3043,7 @@ Return JSON only:
                       if (!isActive) {
                         showVocalEq[song.id] = true
                         showVocalEq = { ...showVocalEq }
-                        onAnalyzerOpen(song)
+                        onAnalyzerTabOpen(song)
                       }
                     }}>
                     ANALYZER
@@ -3529,6 +3571,9 @@ Return JSON only:
                     {@const hitRefs = refTrackOptions.filter(r => r._section === 'LIBRARY' && ((r.popularity || 0) > 70 || r.collection_name === 'daily_chart' || r.collection_name === 'tiktok_trending'))}
                     {@const libraryRefs = refTrackOptions.filter(r => r._section === 'LIBRARY' && (r.popularity || 0) <= 70 && r.collection_name !== 'daily_chart' && r.collection_name !== 'tiktok_trending')}
                     <div class="vocal-eq-body">
+                      {#if analyzerVersionLabel[song.id]}
+                        <div class="analyzer-version-label">{analyzerVersionLabel[song.id]}</div>
+                      {/if}
                       <!-- Stem selector -->
                       <div class="stem-tabs">
                         {#each ['mix', 'vocals', 'drums', 'bass', 'other', 'tonal'] as stem}
@@ -3538,17 +3583,21 @@ Return JSON only:
                           </button>
                         {/each}
                       </div>
-                      <!-- Ref picker — searchable dropdown -->
+                      <!-- Ref picker — searchable dropdown or Spotify URL paste -->
                       <div class="ref-picker-wrap">
                         <div class="ref-picker-input-row">
                           <input
                             class="ref-search-input"
-                            placeholder="Search references..."
+                            placeholder="Search or paste Spotify URL..."
                             value={refSearch[song.id] || ''}
                             oninput={e => { refSearch[song.id] = e.currentTarget.value; refSearch = { ...refSearch } }}
-                            onfocus={() => { refPickerOpen[song.id] = true; refPickerOpen = { ...refPickerOpen } }}
+                            onfocus={() => { if (!isSpotifyUrl(refSearch[song.id] || '')) { refPickerOpen[song.id] = true; refPickerOpen = { ...refPickerOpen } } }}
                           />
-                          {#if selectedRef}
+                          {#if isSpotifyUrl(refSearch[song.id] || '')}
+                            <button class="add-spotify-ref-btn" onclick={() => addSpotifyRef(song, refSearch[song.id] || '')}>
+                              + Add from Spotify
+                            </button>
+                          {:else if selectedRef}
                             {@const sel = refTrackOptions.find(r => String(r._rt_id ?? r.id) === selectedRef)}
                             {#if sel}
                               <span class="ref-selected-badge">
@@ -3563,7 +3612,7 @@ Return JSON only:
                             {/if}
                           {/if}
                         </div>
-                        {#if refPickerOpen[song.id]}
+                        {#if refPickerOpen[song.id] && !isSpotifyUrl(refSearch[song.id] || '')}
                           {@const q = (refSearch[song.id] || '').toLowerCase()}
                           {@const filteredLibrary = refTrackOptions.filter(r => r._section === 'LIBRARY' && (!q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q) || (r.genre_tag||'').toLowerCase().includes(q) || (r.playlist_name||'').toLowerCase().includes(q))).slice(0, 30)}
                           <div class="ref-picker-list">
@@ -3636,7 +3685,11 @@ Return JSON only:
                         {#if analyzerLoading[song.id]}
                           <div class="analyzer-auto-status">⟳ Analyzing stems...</div>
                         {:else if songCurves.filter(c => c.source_type === 'mix').length === 0}
-                          <div class="analyzer-auto-status">No analysis yet — drop an audio file to trigger</div>
+                          {#if activeSongTab[song.id] === 'analyzer'}
+                            <button class="analyze-now-btn" onclick={() => analyzeMyVocal(song)}>▶ Run Analysis</button>
+                          {:else}
+                            <div class="analyzer-auto-status">No analysis yet — drop an audio file to trigger</div>
+                          {/if}
                         {/if}
                         <!-- EQ Chart -->
                         <VocalEqChart
@@ -4996,6 +5049,9 @@ Return JSON only:
   .add-ref-toggle { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px dashed #252525; color: #333; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 4px; }
   .add-ref-toggle:hover { border-color: #444; color: #555; }
   .analyzer-auto-status { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; font-style: italic; padding: 3px 0 5px; }
+  .analyzer-version-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; letter-spacing: .06em; padding: 2px 0 6px; }
+  .analyze-now-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #303030; color: #9e9690; padding: 4px 12px; border-radius: 2px; cursor: pointer; }
+  .analyze-now-btn:hover { border-color: #c9a84c; color: #c9a84c; }
   .stem-match-row { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid #1a1a1a; margin-bottom: 6px; }
   .stem-match-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .stem-match-label { font-family: 'Space Mono', monospace; font-size: 7px; color: #444; letter-spacing: .08em; text-transform: uppercase; }
@@ -5005,6 +5061,8 @@ Return JSON only:
   .no-curve-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #444; font-style: italic; padding: 2px 0 4px; }
   .save-ref-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid rgba(76,175,130,.4); color: #4caf82; padding: 3px 10px; border-radius: 2px; cursor: pointer; }
   .save-ref-btn:hover { background: rgba(76,175,130,.08); }
+  .add-spotify-ref-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid rgba(76,175,130,.5); color: #4caf82; padding: 3px 10px; border-radius: 2px; cursor: pointer; white-space: nowrap; }
+  .add-spotify-ref-btn:hover { background: rgba(76,175,130,.1); }
   .ref-rate-limit-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #9e9690; font-style: italic; padding: 3px 0 2px; }
   .tonal-section-title { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: rgba(201,168,76,.6); padding: 6px 0 4px; text-transform: uppercase; }
   .tonal-panel { display: flex; flex-direction: column; }

@@ -1815,7 +1815,7 @@ const ANALYZE_EQ_SCRIPT = path.join(__dirname, 'analyze_vocal_eq.py')
 let processingQueue = []
 let isProcessing = false
 let spotifyRateLimitUntil = 0
-const MAX_PER_DAY = 20
+const MAX_PER_DAY = 10
 let processedToday = 0
 let todayKey = new Date().toISOString().slice(0, 10)
 let bgQueuePaused = false
@@ -1904,6 +1904,10 @@ async function processLibraryTrackInBackground(refTrack) {
     try { fs.unlinkSync(tmpFile) } catch(e) {}
   } catch(e) {
     console.error('bg: processLibraryTrack error:', refTrack?.title, e.message)
+  } finally {
+    try {
+      await supabase.from('reference_tracks').update({ analysis_attempted_at: new Date().toISOString() }).eq('id', refTrack.id)
+    } catch(e) { console.warn('bg: failed to set analysis_attempted_at:', e.message) }
   }
 }
 
@@ -1974,7 +1978,7 @@ async function runBackgroundQueue() {
   await processLibraryTrackInBackground(track)
   processedToday++
   isProcessing = false
-  if (processingQueue.length > 0) setTimeout(runBackgroundQueue, 30000)
+  if (processingQueue.length > 0) setTimeout(runBackgroundQueue, 60000)
 }
 
 function queueLibraryTrack(track) {
@@ -1997,8 +2001,9 @@ setTimeout(async () => {
       .select('*')
       .in('source', ['agent', 'user'])
       .is('tempo', null)
+      .is('analysis_attempted_at', null)
       .not('spotify_id', 'is', null)
-      .limit(500)
+      .limit(5)
     if (!unanalyzed?.length) return
     processingQueue.push(...unanalyzed)
     console.log('bg: Tier1 queue ready —', processingQueue.length, 'tracks to process')
@@ -3998,7 +4003,24 @@ async function handleOwnerCommand(chatId, text) {
     bgQueuePaused = false
     processedToday = 0
     todayKey = new Date().toISOString().slice(0, 10)
-    await sendTelegram(chatId, '▶️ Background queue resumed. Daily limit reset (' + MAX_PER_DAY + '/day, 30s between tracks).')
+    await sendTelegram(chatId, '▶️ Background queue resumed. Daily limit reset (' + MAX_PER_DAY + '/day, 60s between tracks).')
+  }
+  else if (cmd === '/processref') {
+    try {
+      const { data: next } = await supabase
+        .from('reference_tracks')
+        .select('*')
+        .in('source', ['agent', 'user'])
+        .is('tempo', null)
+        .is('analysis_attempted_at', null)
+        .not('spotify_id', 'is', null)
+        .limit(1)
+        .maybeSingle()
+      if (!next) { await sendTelegram(chatId, '✓ No unprocessed reference tracks found.'); return }
+      await sendTelegram(chatId, '⏳ Processing: ' + next.artist + ' — ' + next.title)
+      await processLibraryTrackInBackground(next)
+      await sendTelegram(chatId, '✓ Done: ' + next.artist + ' — ' + next.title)
+    } catch(e) { await sendTelegram(chatId, '❌ processref error: ' + e.message) }
   }
   else if (cmd === '/cleanup') {
     const count = await runTelegramCleanup()

@@ -2403,6 +2403,25 @@ Return JSON only:
       refTrackOverride[String(refId)] = data
       refTrackOverride = { ...refTrackOverride }
       console.log('Ref data loaded:', data.artist, data.title, 'tonal:', !!data.tonal_balance, 'energy:', data.energy)
+      if (!data.tempo && data.spotify_id) {
+        console.log('Triggering on-demand analysis for:', data.title)
+        refTrackOverride[String(refId)] = { ...data, _analyzing: true }
+        refTrackOverride = { ...refTrackOverride }
+        fetch('http://localhost:4242/analyze-ref-now', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ spotify_id: data.spotify_id, title: data.title, artist: data.artist })
+        }).then(r => r.json()).then(result => {
+          if (result.ok && result.track) {
+            refTrackOverride[String(refId)] = result.track
+            refTrackOverride = { ...refTrackOverride }
+          } else {
+            setTimeout(() => loadRefAnalysis(refId), 30000)
+          }
+        }).catch(() => {
+          setTimeout(() => loadRefAnalysis(refId), 30000)
+        })
+      }
     }
   }
 
@@ -3708,6 +3727,9 @@ Return JSON only:
                       </div>
                       {#if spotifyRateLimited[song.id]}
                         <div class="ref-rate-limit-msg">Spotify rate limited — track added as reference, analysis queued.</div>
+                      {/if}
+                      {#if selectedRefTrack?._analyzing}
+                        <div class="analyzing-msg">⟳ Analyzing reference track... (~2 min)</div>
                       {/if}
 
                       <!-- 3. Analyze / Re-analyze -->
@@ -5086,6 +5108,8 @@ Return JSON only:
   .add-spotify-ref-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid rgba(76,175,130,.5); color: #4caf82; padding: 3px 10px; border-radius: 2px; cursor: pointer; white-space: nowrap; }
   .add-spotify-ref-btn:hover { background: rgba(76,175,130,.1); }
   .ref-rate-limit-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #9e9690; font-style: italic; padding: 3px 0 2px; }
+  .analyzing-msg { font-family: 'Space Mono', monospace; font-size: 9px; color: #c9a84c; padding: 6px 0; animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
   .tonal-section-title { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: rgba(201,168,76,.6); padding: 6px 0 4px; text-transform: uppercase; }
   .emotional-arc-row { display: flex; gap: 2px; align-items: flex-end; height: 50px; padding: 4px 0; border-bottom: 1px solid #1a1a1a; }
   .arc-segment { flex: 1; border-radius: 2px 2px 0 0; min-height: 3px; }

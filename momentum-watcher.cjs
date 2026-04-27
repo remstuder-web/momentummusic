@@ -1821,9 +1821,9 @@ let todayKey = new Date().toISOString().slice(0, 10)
 let bgQueuePaused = false
 
 // ── Tier 1: fast analysis — Spotify + Essentia + tonal/stereo + Genius credits ─
-async function processLibraryTrackInBackground(refTrack) {
+async function processLibraryTrackInBackground(refTrack, force = false) {
   try {
-    if (spotifyRateLimitUntil && Date.now() < spotifyRateLimitUntil) {
+    if (!force && spotifyRateLimitUntil && Date.now() < spotifyRateLimitUntil) {
       console.log('bg: Spotify rate limited, skipping')
       return
     }
@@ -2890,7 +2890,7 @@ async function buildStatusResponse() {
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
     'GET /instrumentals/:filename', 'GET /stems/:filename',
     'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /speak',
-    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-stems', 'POST /extract-acapella', 'POST /analyze-youtube-track',
+    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-ref-now', 'POST /analyze-stems', 'POST /extract-acapella', 'POST /analyze-youtube-track',
     'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
     'POST /launch-claude-code', 'POST /launch-claude-overnight',
     'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
@@ -4005,21 +4005,35 @@ async function handleOwnerCommand(chatId, text) {
     todayKey = new Date().toISOString().slice(0, 10)
     await sendTelegram(chatId, '▶️ Background queue resumed. Daily limit reset (' + MAX_PER_DAY + '/day, 60s between tracks).')
   }
-  else if (cmd === '/processref') {
+  else if (text.trim().toLowerCase().startsWith('/processref')) {
+    const query = text.trim().slice('/processref'.length).trim()
     try {
-      const { data: next } = await supabase
-        .from('reference_tracks')
-        .select('*')
-        .in('source', ['agent', 'user'])
-        .is('tempo', null)
-        .is('analysis_attempted_at', null)
-        .not('spotify_id', 'is', null)
-        .limit(1)
-        .maybeSingle()
-      if (!next) { await sendTelegram(chatId, '✓ No unprocessed reference tracks found.'); return }
-      await sendTelegram(chatId, '⏳ Processing: ' + next.artist + ' — ' + next.title)
-      await processLibraryTrackInBackground(next)
-      await sendTelegram(chatId, '✓ Done: ' + next.artist + ' — ' + next.title)
+      let track
+      if (query) {
+        const { data: found } = await supabase
+          .from('reference_tracks')
+          .select('*')
+          .or('title.ilike.*' + query + '*,artist.ilike.*' + query + '*')
+          .limit(1)
+          .maybeSingle()
+        if (!found) { await sendTelegram(chatId, '❌ Track not found: ' + query); return }
+        track = found
+      } else {
+        const { data: next } = await supabase
+          .from('reference_tracks')
+          .select('*')
+          .in('source', ['agent', 'user'])
+          .is('tempo', null)
+          .is('analysis_attempted_at', null)
+          .not('spotify_id', 'is', null)
+          .limit(1)
+          .maybeSingle()
+        if (!next) { await sendTelegram(chatId, '✓ No unprocessed reference tracks found.'); return }
+        track = next
+      }
+      await sendTelegram(chatId, '⏳ Analyzing: ' + track.artist + ' — ' + track.title)
+      await processLibraryTrackInBackground(track, true)
+      await sendTelegram(chatId, '✓ Done: ' + track.artist + ' — ' + track.title)
     } catch(e) { await sendTelegram(chatId, '❌ processref error: ' + e.message) }
   }
   else if (cmd === '/cleanup') {
@@ -9218,6 +9232,47 @@ Respond ONLY in JSON:
         res.end(JSON.stringify({ ok: true, analysis: rawFeat, ...rawFeat, tempo: features.tempo, key: features.key }))
       } catch(e) {
         console.warn('analyze-audio-features error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /analyze-ref-now — on-demand analysis for one reference track ──
+  if (req.method === 'POST' && req.url === '/analyze-ref-now') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString())
+        const { spotify_id, title, artist } = body
+        if (!spotify_id) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'spotify_id required' }))
+          return
+        }
+        let { data: track } = await supabase
+          .from('reference_tracks')
+          .select('*')
+          .eq('spotify_id', spotify_id)
+          .maybeSingle()
+        if (!track) {
+          const { data: newTrack, error: insErr } = await supabase
+            .from('reference_tracks')
+            .insert({ spotify_id, title: title || '', artist: artist || '', source: 'agent', approved: true })
+            .select()
+            .single()
+          if (insErr) throw new Error('insert failed: ' + insErr.message)
+          track = newTrack
+        }
+        // Run immediately, bypassing rate limit and daily cap
+        await processLibraryTrackInBackground(track, true)
+        // Reload fresh data after analysis
+        const { data: updated } = await supabase.from('reference_tracks').select('*').eq('id', track.id).maybeSingle()
+        res.end(JSON.stringify({ ok: true, track_id: track.id, track: updated || track }))
+      } catch(e) {
+        console.error('analyze-ref-now error:', e.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: e.message }))
       }

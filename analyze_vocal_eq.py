@@ -14,11 +14,11 @@ import shutil
 
 
 def separate_stems(audio_path, output_dir):
-    """Use Demucs htdemucs model to separate all 4 stems"""
+    """Use Demucs htdemucs_ft model to separate all 4 stems"""
     try:
         result = subprocess.run([
             '/opt/homebrew/bin/python3.11', '-m', 'demucs',
-            '--name', 'htdemucs',
+            '--name', 'htdemucs_ft',
             '--out', output_dir,
             audio_path
         ], capture_output=True, text=True, timeout=360)

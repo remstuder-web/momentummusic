@@ -5656,13 +5656,13 @@ async function extractAcapella(inputPath) {
   // Step 1: Demucs vocal separation
   await new Promise((resolve, reject) => {
     exec(
-      `"${ACAPELLA_PYTHON}" -m demucs --two-stems=vocals -o ${shellEscape(tmpDir)} ${shellEscape(inputPath)}`,
+      `"${ACAPELLA_PYTHON}" -m demucs -n htdemucs_ft --two-stems=vocals -o ${shellEscape(tmpDir)} ${shellEscape(inputPath)}`,
       { timeout: 300000 },
       (err) => err ? reject(new Error('Demucs failed: ' + err.message)) : resolve()
     )
   })
 
-  const vocalsPath = path.join(tmpDir, 'htdemucs', basename, 'vocals.wav')
+  const vocalsPath = path.join(tmpDir, 'htdemucs_ft', basename, 'vocals.wav')
   if (!fs.existsSync(vocalsPath)) throw new Error('Demucs output not found: ' + vocalsPath)
 
   // Step 2: librosa onset detection via inline Python

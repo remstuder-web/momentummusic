@@ -3535,30 +3535,30 @@ Return JSON only:
 
                 <!-- Vocal EQ section / ANALYZER tab -->
                 {#if activeSongTab[song.id] === 'analyzer'}
-                <div class="vocal-eq-section analyzer-tab">
-                    {@const songCurves = vocalEqCurves[song.id] || []}
-                    {@const stemKey = activeStem[song.id] || 'mix'}
-                    {@const selectedRef = selectedRefId[song.id] || ''}
-                    {@const isMixTab = stemKey === 'mix'}
-                    {@const mixCurveData = isMixTab
-                      ? songCurves.find(c => c.source_type === 'mix' && (!c.stem_type || c.stem_type === 'mix'))
-                      : songCurves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)}
-                    {@const refCurveData = selectedRef
-                      ? songCurves.find(c => String(c.reference_track_id) === selectedRef && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey))
-                      : songCurves.find(c => c.source_type === 'reference' && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey))}
-                    {@const refCurves = songCurves.filter(c => c.source_type === 'reference' && c.stem_type === stemKey && !c.reference_track_id)}
-                    {@const mixCurves = songCurves.filter(c => c.source_type === 'mix' && c.stem_type === stemKey)}
-                    {@const mixCurve = mixCurveData?.curve && typeof mixCurveData.curve === 'object' ? mixCurveData.curve : null}
-                    {@const refCurve = refCurveData?.curve && typeof refCurveData.curve === 'object' ? refCurveData.curve : null}
-                    {@const selectedRefTrack = selectedRef ? refTrackOptions.find(r => String(r._rt_id ?? r.id) === selectedRef) : null}
-                    {@const cmp = vocalComparison[song.id]}
-                    {@const refLoading = vocalEqLoading[song.id]}
-                    {@const ao = analyzerOpen[String(song.id)] || {}}
-                    {@const latestA = (wd.versions||[]).filter(v=>v.analysis).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]?.analysis}
-                    {@const projectRefs = refTrackOptions.filter(r => r._section === 'PROJECT')}
-                    {@const songRefs = refTrackOptions.filter(r => r._section === 'SONG')}
-                    {@const hitRefs = refTrackOptions.filter(r => r._section === 'LIBRARY' && ((r.popularity || 0) > 70 || r.collection_name === 'daily_chart' || r.collection_name === 'tiktok_trending'))}
-                    {@const libraryRefs = refTrackOptions.filter(r => r._section === 'LIBRARY' && (r.popularity || 0) <= 70 && r.collection_name !== 'daily_chart' && r.collection_name !== 'tiktok_trending')}
+                  {@const songCurves = vocalEqCurves[song.id] || []}
+                  {@const stemKey = activeStem[song.id] || 'mix'}
+                  {@const selectedRef = selectedRefId[song.id] || ''}
+                  {@const isMixTab = stemKey === 'mix'}
+                  {@const mixCurveData = isMixTab
+                    ? songCurves.find(c => c.source_type === 'mix' && (!c.stem_type || c.stem_type === 'mix'))
+                    : songCurves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)}
+                  {@const refCurveData = selectedRef
+                    ? songCurves.find(c => String(c.reference_track_id) === selectedRef && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey))
+                    : songCurves.find(c => c.source_type === 'reference' && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey))}
+                  {@const refCurves = songCurves.filter(c => c.source_type === 'reference' && c.stem_type === stemKey && !c.reference_track_id)}
+                  {@const mixCurves = songCurves.filter(c => c.source_type === 'mix' && c.stem_type === stemKey)}
+                  {@const mixCurve = mixCurveData?.curve && typeof mixCurveData.curve === 'object' ? mixCurveData.curve : null}
+                  {@const refCurve = refCurveData?.curve && typeof refCurveData.curve === 'object' ? refCurveData.curve : null}
+                  {@const selectedRefTrack = selectedRef ? refTrackOptions.find(r => String(r._rt_id ?? r.id) === selectedRef) : null}
+                  {@const cmp = vocalComparison[song.id]}
+                  {@const refLoading = vocalEqLoading[song.id]}
+                  {@const ao = analyzerOpen[String(song.id)] || {}}
+                  {@const latestA = (wd.versions||[]).filter(v=>v.analysis).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]?.analysis}
+                  {@const projectRefs = refTrackOptions.filter(r => r._section === 'PROJECT')}
+                  {@const songRefs = refTrackOptions.filter(r => r._section === 'SONG')}
+                  {@const hitRefs = refTrackOptions.filter(r => r._section === 'LIBRARY' && ((r.popularity || 0) > 70 || r.collection_name === 'daily_chart' || r.collection_name === 'tiktok_trending'))}
+                  {@const libraryRefs = refTrackOptions.filter(r => r._section === 'LIBRARY' && (r.popularity || 0) <= 70 && r.collection_name !== 'daily_chart' && r.collection_name !== 'tiktok_trending')}
+                  <div class="vocal-eq-section analyzer-tab">
                     <div class="vocal-eq-body">
                       {#if analyzerVersionLabel[song.id]}
                         <div class="analyzer-version-label">{analyzerVersionLabel[song.id]}</div>

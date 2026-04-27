@@ -1,14 +1,17 @@
 {
-  "updated": "2026-04-27T13:30:00Z",
-  "last_task": "analyzer-reanalyze",
+  "updated": "2026-04-27T13:40:00Z",
+  "last_task": "analyzer-definitive-cleanup",
   "status": "done",
   "working": [
-    "FIX1: Ref picker already at lines 3576+ inside ANALYZER tab — no change needed; loadRefTrackOptions called in onAnalyzerTabOpen",
-    "FIX2: Analyze button always visible — '▶ Run Analysis' when no mix curves, '↺ Re-analyze' when curves exist; 'Last: dd.mm.yyyy' shows date of most recent mix curve; uses lastMixCurve = songCurves.find(c => c.source_type === 'mix')",
-    "CSS: .analyze-action-row (flex row), .last-analyzed (8px mono, #333, margin-left 8px)"
+    "vocal-eq-section div now only renders when activeSongTab[song.id] === 'analyzer' — no empty div gap in other stage tabs",
+    "Structure: {#if activeSongTab==='analyzer'} wraps <div class='vocal-eq-section analyzer-tab'> (not the other way around)",
+    "All analyzer content (VocalEqChart, ref-picker-wrap, proq-btn, SUCCESS MATCH, FEEDBACK HISTORY, TREND CONTEXT) exists exactly once, inside the ANALYZER tab",
+    "Re-analyze button: '▶ Run Analysis' when no mix curves; '↺ Re-analyze' + 'Last: dd.mm.yyyy' when curves exist",
+    "FIX1 (ref picker): already in ANALYZER tab — no change needed",
+    "FIX2 (re-analyze): always visible with date"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test in browser: open ANALYZER tab — should show '▶ Run Analysis' on a fresh song with no analysis, '↺ Re-analyze' + date on a song with existing analysis",
-  "notes": "The inner {#if activeSongTab[song.id] === 'analyzer'} check was removed from the analyze button block since the whole section is already inside the analyzer tab condition."
+  "next": "Test in browser: verify ANALYZER tab opens correctly; verify other stage tabs (PRODUCTION, MIXING, STEMS) show no analyzer section/gap; verify re-analyze button shows correct state",
+  "notes": "The two-condition structure: {#if activeSongTab !== 'analyzer'} for stage content, then {#if activeSongTab === 'analyzer'}<div...> for analyzer. Clean separation."
 }

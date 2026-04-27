@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] ProjectsTab.svelte definitive analyzer cleanup — DONE
+TASK: analyzer-definitive-cleanup
+WHAT: Moved {#if activeSongTab==='analyzer'} OUTSIDE vocal-eq-section div so the entire div only renders when ANALYZER tab is active — no empty 4px gap in other stage tabs; confirmed all analyzer content (VocalEqChart, ref-picker, proq-btn, SUCCESS/FEEDBACK/TREND) appears exactly once, inside the tab; re-analyze button always visible with date label
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-27] ProjectsTab.svelte analyzer: ref picker + re-analyze — DONE
 TASK: analyzer-reanalyze
 WHAT: FIX1 confirmed ref picker already in ANALYZER tab (lines 3576+) and loadRefTrackOptions called on open — no change needed; FIX2 analyze button now always visible: shows '▶ Run Analysis' when no curves, '↺ Re-analyze' when curves exist; shows 'Last: dd.mm.yyyy' date from most recent mix curve; CSS .analyze-action-row + .last-analyzed added

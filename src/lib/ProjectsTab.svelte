@@ -3534,8 +3534,8 @@ Return JSON only:
                 {/if}<!-- end non-analyzer content -->
 
                 <!-- Vocal EQ section / ANALYZER tab -->
+                {#if activeSongTab[song.id] === 'analyzer'}
                 <div class="vocal-eq-section analyzer-tab">
-                  {#if activeSongTab[song.id] === 'analyzer'}
                     {@const songCurves = vocalEqCurves[song.id] || []}
                     {@const stemKey = activeStem[song.id] || 'mix'}
                     {@const selectedRef = selectedRefId[song.id] || ''}
@@ -4215,8 +4215,8 @@ Return JSON only:
                       {/if}
 
                     </div>
-                  {/if}
                 </div>
+                {/if}
 
                 <!-- Release checklist — for released songs not in stems stage -->
                 {#if (releasedSongIds.includes(song.id) || releasedSongIds.includes(song.code)) && wd.current_stage !== 'stems'}

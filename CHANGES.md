@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] ProjectsTab.svelte analyzer: ref picker + re-analyze — DONE
+TASK: analyzer-reanalyze
+WHAT: FIX1 confirmed ref picker already in ANALYZER tab (lines 3576+) and loadRefTrackOptions called on open — no change needed; FIX2 analyze button now always visible: shows '▶ Run Analysis' when no curves, '↺ Re-analyze' when curves exist; shows 'Last: dd.mm.yyyy' date from most recent mix curve; CSS .analyze-action-row + .last-analyzed added
+RESULT: works
+BLOCKERS: none
+
 ## [2026-04-27] ProjectsTab.svelte analyzer cleanup — DONE
 TASK: analyzer-tab-only
 WHAT: Removed old collapsible 🎤 ANALYZER toggle (vocal-eq-header button + showVocalEq condition); analyzer content now ONLY accessible via ANALYZER stage tab; removed dead onAnalyzerOpen() function; cleaned showVocalEq refs from analyzeMyVocal; removed orphaned CSS (.vocal-eq-header/.vocal-eq-title/.vocal-eq-arr); vocal-eq-section always has analyzer-tab class now

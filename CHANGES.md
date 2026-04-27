@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] analyzer tab, rate limit graceful, add library ref to project, queue on rate limit — DONE
+TASK: four-fixes-analyzer
+WHAT: FIX1 ANALYZER tab added to stages-row; activeSongTab==='analyzer' hides stage content, shows analyzer body without toggle; vocal-eq-section gets analyzer-tab class; FIX2 addReferenceVocal catches rate-limit error → sets spotifyRateLimited[sid] → inline ref-rate-limit-msg instead of alert; FIX3 saveRefToProject() calls /mozart-action add_project_reference for library tracks; + Save to project refs button shown when library ref selected and not already linked; FIX4 /analyze-spotify-track checks spotifyRateLimitUntil → queues to processingQueue → returns {ok,rate_limited,queued_until} instead of throwing
+RESULT: compiles cleanly; watcher restarted OK
+BLOCKERS: none
+
 ## [2026-04-27] demos: auto tempo/key, fix toggle, library genres, remove checkout, font fix — DONE
 TASK: five-fixes-demos-brain
 WHAT: FIX1 /analyze-audio accepts songId and PATCHes songs table when BPM found (only if tempo IS NULL); FIX2 toggleDemo() function consolidates both onclick handlers with stopPropagation on arr; FIX3 availableGenres loads from reference_tracks + GENRE_LIST fallback, used in per-song and header genre pickers; FIX4 CHECKOUT section fully removed from BrainTab (state, derived, functions, HTML, CSS); FIX5 refs-section-header bumped to 10px/.14em to match brain-section-title, library/speicher colors set to rgba(201,168,76,.75)

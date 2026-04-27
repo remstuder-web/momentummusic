@@ -64,6 +64,7 @@
   let analyzerOpen = $state({}) // song.id -> { track, match, arc, feedback, trend }
   let successMatch = $state({}) // song.id -> result from /analyze-success-match
   let successMatchLoading = $state({}) // song.id -> bool
+  let spotifyRateLimited = $state({}) // song.id -> bool
   let feedbackInsights = $state({}) // song.id -> result from /feedback-insights
   let feedbackLoading = $state({}) // song.id -> bool
   let trendVelocity = $state(null)
@@ -2465,12 +2466,42 @@ Return JSON only:
       if (!d.ok) throw new Error(d.error || 'failed')
       vocalRefUrl[sid] = ''
       vocalRefUrl = { ...vocalRefUrl }
+      spotifyRateLimited[sid] = false
+      spotifyRateLimited = { ...spotifyRateLimited }
       await loadVocalEq(sid)
     } catch(e) {
-      alert('Reference vocal analysis failed: ' + e.message)
+      if ((e.message || '').toLowerCase().includes('rate limit')) {
+        spotifyRateLimited[sid] = true
+        spotifyRateLimited = { ...spotifyRateLimited }
+      } else {
+        alert('Reference vocal analysis failed: ' + e.message)
+      }
     } finally {
       vocalEqLoading[sid] = null
       vocalEqLoading = { ...vocalEqLoading }
+    }
+  }
+
+  async function saveRefToProject(song, ref) {
+    const project = projects.find(p => p.id === song.project_id)
+    if (!project) return
+    const r = await fetch('http://localhost:4242/mozart-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'add_project_reference',
+        payload: {
+          project_id: project.id,
+          title: ref.title,
+          artist: ref.artist,
+          spotify_id: ref.spotify_id,
+          ref_type: 'music'
+        }
+      })
+    })
+    const d = await r.json()
+    if (d.ok) {
+      projects = projects.map(p => p.id === project.id ? { ...p, reference_links: d.refs || p.reference_links } : p)
     }
   }
 
@@ -2962,6 +2993,19 @@ Return JSON only:
                     <button class="stage-ckb" onclick={() => saveWorkData(song, wd => { wd.stems_received = !wd.stems_received })}>{wd.stems_received?'✓':''}</button>
                     <button class="stage-name-btn" onclick={() => setStage(song, 'stems')}>STEMS</button>
                   </div>
+                  <!-- ANALYZER tab -->
+                  <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}"
+                    onclick={() => {
+                      const isActive = activeSongTab[song.id] === 'analyzer'
+                      activeSongTab = {...activeSongTab, [song.id]: isActive ? null : 'analyzer'}
+                      if (!isActive) {
+                        showVocalEq[song.id] = true
+                        showVocalEq = { ...showVocalEq }
+                        onAnalyzerOpen(song)
+                      }
+                    }}>
+                    ANALYZER
+                  </button>
                   <!-- RELEASE button after STEMS — one click creates release entry -->
                   <button class="release-stage-btn {releasedSongIds.includes(song.id)||releasedSongIds.includes(song.code)?'done':''}"
                     onclick={async () => {
@@ -3036,6 +3080,7 @@ Return JSON only:
                   </div>
                 {/if}
 
+                {#if activeSongTab[song.id] !== 'analyzer'}
                 <!-- Per-song project info — only in production stage -->
                 {#if wd.current_stage === 'production'}
                 <div class="song-meta-block">
@@ -3439,23 +3484,27 @@ Return JSON only:
                   </div>
                 {/if}
 
-                <!-- Vocal EQ section -->
-                <div class="vocal-eq-section">
-                  <button class="vocal-eq-header" onclick={() => {
-                    showVocalEq[song.id] = !showVocalEq[song.id]
-                    showVocalEq = { ...showVocalEq }
-                    if (showVocalEq[song.id]) {
-                      if (vocalEqCache.has(song.id)) {
-                        vocalEqCurves[song.id] = vocalEqCache.get(song.id)
-                        vocalEqCurves = { ...vocalEqCurves }
+                {/if}<!-- end non-analyzer content -->
+
+                <!-- Vocal EQ section / ANALYZER tab -->
+                <div class="vocal-eq-section {activeSongTab[song.id]==='analyzer' ? 'analyzer-tab' : ''}">
+                  {#if activeSongTab[song.id] !== 'analyzer'}
+                    <button class="vocal-eq-header" onclick={() => {
+                      showVocalEq[song.id] = !showVocalEq[song.id]
+                      showVocalEq = { ...showVocalEq }
+                      if (showVocalEq[song.id]) {
+                        if (vocalEqCache.has(song.id)) {
+                          vocalEqCurves[song.id] = vocalEqCache.get(song.id)
+                          vocalEqCurves = { ...vocalEqCurves }
+                        }
+                        onAnalyzerOpen(song)
                       }
-                      onAnalyzerOpen(song)
-                    }
-                  }}>
-                    <span class="vocal-eq-title">🎤 ANALYZER</span>
-                    <span class="vocal-eq-arr {showVocalEq[song.id] ? 'open' : ''}">▶</span>
-                  </button>
-                  {#if showVocalEq[song.id]}
+                    }}>
+                      <span class="vocal-eq-title">🎤 ANALYZER</span>
+                      <span class="vocal-eq-arr {showVocalEq[song.id] ? 'open' : ''}">▶</span>
+                    </button>
+                  {/if}
+                  {#if showVocalEq[song.id] || activeSongTab[song.id] === 'analyzer'}
                     {@const songCurves = vocalEqCurves[song.id] || []}
                     {@const stemKey = activeStem[song.id] || 'mix'}
                     {@const selectedRef = selectedRefId[song.id] || ''}
@@ -3576,6 +3625,9 @@ Return JSON only:
                           </div>
                         {/if}
                       </div>
+                      {#if spotifyRateLimited[song.id]}
+                        <div class="ref-rate-limit-msg">Spotify rate limited — track added as reference, analysis queued.</div>
+                      {/if}
                       {#if stemKey !== 'tonal'}
                         {#if selectedRef && !refCurveData}
                           <div class="no-curve-msg">No EQ curve yet for this track — background analysis pending</div>
@@ -3605,6 +3657,15 @@ Return JSON only:
                           <button class="avg-ref-btn" onclick={() => loadAverageRefCurve(song.id, song)}>
                             ⌀ Avg refs
                           </button>
+                          {#if selectedRefTrack?._section === 'LIBRARY'}
+                            {@const project = projects.find(p => p.id === song.project_id)}
+                            {@const isAlreadyLinked = (project?.reference_links || []).some(r => r.spotify_id && r.spotify_id === selectedRefTrack.spotify_id)}
+                            {#if !isAlreadyLinked}
+                              <button class="save-ref-btn" onclick={() => saveRefToProject(song, selectedRefTrack)}>
+                                + Save to project refs
+                              </button>
+                            {/if}
+                          {/if}
                         </div>
                         <!-- Tonal balance + stereo width for non-tonal stems -->
                         {#if latestA?.tonal_balance || selectedRefTrack?.tonal_balance}
@@ -4851,6 +4912,7 @@ Return JSON only:
 
   /* Vocal EQ */
   .vocal-eq-section { border-top: 1px solid #1a1a1a; margin-top: 16px; position: relative; z-index: 1; padding-top: 10px; }
+  .vocal-eq-section.analyzer-tab { border-top: none; margin-top: 0; padding-top: 4px; }
   .vocal-eq-header { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 6px 0; background: transparent; border: none; cursor: pointer; text-align: left; position: relative; z-index: 2; pointer-events: all; }
   .vocal-eq-header:hover { background: rgba(255,255,255,.02); }
   .vocal-eq-title { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; }
@@ -4941,6 +5003,9 @@ Return JSON only:
   .avg-ref-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #252525; color: #444; padding: 3px 10px; border-radius: 2px; cursor: pointer; }
   .avg-ref-btn:hover { border-color: #555; color: #9e9690; }
   .no-curve-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #444; font-style: italic; padding: 2px 0 4px; }
+  .save-ref-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid rgba(76,175,130,.4); color: #4caf82; padding: 3px 10px; border-radius: 2px; cursor: pointer; }
+  .save-ref-btn:hover { background: rgba(76,175,130,.08); }
+  .ref-rate-limit-msg { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #9e9690; font-style: italic; padding: 3px 0 2px; }
   .tonal-section-title { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: rgba(201,168,76,.6); padding: 6px 0 4px; text-transform: uppercase; }
   .tonal-panel { display: flex; flex-direction: column; }
   .band-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #111; }

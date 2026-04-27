@@ -1,16 +1,15 @@
 {
-  "updated": "2026-04-27T12:27:00Z",
-  "last_task": "five-fixes-demos-brain",
+  "updated": "2026-04-27T12:37:00Z",
+  "last_task": "four-fixes-analyzer",
   "status": "done",
   "working": [
-    "FIX1: /analyze-audio now accepts songId in body; PATCHes songs table with tempo+key when songId provided and tempo IS NULL",
-    "FIX2: toggleDemo(song) function handles both card-head and arr span; arr uses e.stopPropagation() to prevent double-toggle",
-    "FIX3: availableGenres $state initialized from GENRE_LIST subs; loadAvailableGenres() enriches from reference_tracks on load; per-song and header pickers both use flat string array",
-    "FIX4: CHECKOUT section fully removed from BrainTab — checkoutExpanded, checkoutRefs, promoteToMyRefs, promoteToLibrary, HTML block, .refs-checkout/.checkout-row/.ref-source-dot.checkout CSS all deleted",
-    "FIX5: .refs-section-header bumped from 9px/.12em to 10px/.14em; library/speicher headers now rgba(201,168,76,.75) matching brain-section-title"
+    "FIX1: ANALYZER tab button in stages-row; clicking sets activeSongTab=analyzer, showVocalEq=true, calls onAnalyzerOpen; stage content hidden when analyzer active; vocal-eq-section shows without toggle in tab mode",
+    "FIX2: spotifyRateLimited $state per song.id; addReferenceVocal catch branch detects 'rate limit' → sets flag → inline ref-rate-limit-msg instead of alert",
+    "FIX3: saveRefToProject() calls /mozart-action add_project_reference; '+ Save to project refs' button appears when selectedRefTrack._section==='LIBRARY' and not already in project.reference_links",
+    "FIX4: /analyze-spotify-track checks spotifyRateLimitUntil at start; queues to processingQueue (dedup by spotify_id); returns {ok:true, rate_limited:true, queued_until} instead of throwing error"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test in browser: open DemoTab and click second demo to verify toggle works; drop audio file to verify BPM auto-populates; check genre picker shows reference track genres; open BrainTab and verify CHECKOUT section gone, LIBRARY/SPEICHERBOX font matches DUMP ANYTHING",
-  "notes": "GENRE_LIST import kept in DemoTab (used for fallback in loadAvailableGenres init). The const GENRES = GENRE_LIST alias was removed. ref-checkout-btns CSS kept — still used by LIBRARY section."
+  "next": "Test in browser: click ANALYZER tab button on a song to verify analyzer fills the card; test rate limit inline message; test '+ Save to project refs' button with a library track selected",
+  "notes": "ANALYZER tab uses activeSongTab (same system as LOG tab). The LOG tab button stays at far right; ANALYZER button is between STEMS and RELEASE. vocal-eq-section.analyzer-tab has no border-top/margin-top."
 }

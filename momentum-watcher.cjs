@@ -7102,8 +7102,19 @@ ${context}` }]
     req.on('data', d => body += d)
     req.on('end', async () => {
       try {
-        const { url } = JSON.parse(body)
+        const { url, spotify_id: reqSpotifyId, title: reqTitle, artist: reqArtist } = JSON.parse(body)
         if (!url) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'No URL' })); return }
+
+        // Graceful rate-limit response: queue for background analysis
+        if (Date.now() < spotifyRateLimitUntil) {
+          const qId = reqSpotifyId || url.split('/track/')[1]?.split('?')[0]?.split('/')[0]
+          if (qId && !processingQueue.find(t => t.spotify_id === qId)) {
+            processingQueue.push({ id: qId, spotify_id: qId, title: reqTitle || '', artist: reqArtist || '', source: 'user', queued_for_analysis: true })
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, rate_limited: true, message: 'Queued for analysis — Spotify rate limited', queued_until: new Date(spotifyRateLimitUntil).toISOString() }))
+          return
+        }
 
         const trackId = url.split('/track/')[1]?.split('?')[0]?.split('/')[0]
         if (!trackId) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'Invalid Spotify track URL — expected open.spotify.com/track/...' })); return }

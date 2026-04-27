@@ -3540,7 +3540,7 @@ Return JSON only:
                   {@const selectedRef = selectedRefId[song.id] || ''}
                   {@const isMixTab = stemKey === 'mix'}
                   {@const mixCurveData = isMixTab
-                    ? songCurves.find(c => c.source_type === 'mix' && (!c.stem_type || c.stem_type === 'mix'))
+                    ? songCurves.find(c => c.source_type === 'mix')
                     : songCurves.find(c => c.source_type === 'mix' && c.stem_type === stemKey)}
                   {@const refCurveData = selectedRef
                     ? songCurves.find(c => String(c.reference_track_id) === selectedRef && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey))
@@ -3717,7 +3717,7 @@ Return JSON only:
                           {/if}
                         </div>
                         <!-- Tonal balance + stereo width for non-tonal stems -->
-                        {#if latestA?.tonal_balance || selectedRefTrack?.tonal_balance}
+                        {#if selectedRefTrack?.tonal_balance}
                           {@const bands = [
                             { key: 'bass',     label: 'BASS',     hz: '20–200 Hz'  },
                             { key: 'low_mid',  label: 'LOW MID',  hz: '200–2k Hz'  },
@@ -3753,7 +3753,7 @@ Return JSON only:
                               </div>
                             {/each}
                           </div>
-                          {#if latestA?.stereo_width_per_band || selectedRefTrack?.stereo_width_per_band}
+                          {#if selectedRefTrack?.stereo_width_per_band}
                             <div class="tonal-section-title" style="margin-top:8px">STEREO WIDTH</div>
                             <div class="tonal-panel">
                               {#each bands as b}
@@ -3799,7 +3799,7 @@ Return JSON only:
                           { key: 'high_mid', label: 'HIGH MID', hz: '2k–8k Hz'   },
                           { key: 'air',      label: 'AIR',      hz: '8k–20k Hz'  }
                         ]}
-                        {#if mixTonal || refTonal}
+                        {#if refTonal}
                           <div class="tonal-section-title">TONAL BALANCE</div>
                           <div class="tonal-panel">
                             {#each bands as b}
@@ -3829,11 +3829,9 @@ Return JSON only:
                               </div>
                             {/each}
                           </div>
-                        {:else}
-                          <div class="no-curve-msg">No tonal data — run analysis on a version first</div>
                         {/if}
 
-                        {#if mixWidth || refWidth}
+                        {#if refWidth}
                           <div class="tonal-section-title" style="margin-top:10px">STEREO WIDTH</div>
                           <div class="tonal-panel">
                             {#each bands as b}

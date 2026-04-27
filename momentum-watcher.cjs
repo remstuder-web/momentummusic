@@ -1820,7 +1820,32 @@ let processedToday = 0
 let todayKey = new Date().toISOString().slice(0, 10)
 let bgQueuePaused = false
 
-// ── Tier 1: fast analysis — Spotify + Essentia + tonal/stereo + Genius credits ─
+// ── YouTube audio download for background analysis ───────────────────────────
+async function downloadYouTubeAudio(artist, title) {
+  const tmpAudio = '/tmp/ytref_' + Date.now() + '.mp3'
+  try {
+    const safeArtist = (artist || '').replace(/["`$\\]/g, ' ').trim()
+    const safeTitle = (title || '').replace(/["`$\\]/g, ' ').trim()
+    const searchQuery = (safeArtist + ' ' + safeTitle + ' official audio').replace(/"/g, "'")
+    execSync(
+      `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-playlist` +
+      ` --match-filter "duration < 600"` +
+      ` -o "${tmpAudio}"` +
+      ` --no-warnings -q` +
+      ` "ytsearch1:${searchQuery}"`,
+      { timeout: 120000 }
+    )
+    if (!fs.existsSync(tmpAudio)) throw new Error('output file not found after yt-dlp')
+    console.log('bg: ✓ YouTube download:', artist, '—', title)
+    return tmpAudio
+  } catch(e) {
+    console.warn('bg: YouTube download failed:', artist, '—', title, '|', e.message.slice(0, 100))
+    try { fs.unlinkSync(tmpAudio) } catch(e2) {}
+    return null
+  }
+}
+
+// ── Tier 1: fast analysis — YouTube/Spotify + Essentia + tonal/stereo + Genius credits ─
 async function processLibraryTrackInBackground(refTrack, force = false) {
   try {
     if (!force && spotifyRateLimitUntil && Date.now() < spotifyRateLimitUntil) {
@@ -1833,41 +1858,49 @@ async function processLibraryTrackInBackground(refTrack, force = false) {
 
     console.log('bg: processing:', refTrack.artist, '—', refTrack.title)
 
-    // Step 1: Spotify — preview URL + genres
+    // Step 1: Spotify metadata — genres + preview URL (kept as fallback only)
     let previewUrl = refTrack.preview_url || null
     if (refTrack.spotify_id) {
       try {
         const sr = await spotifyFetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id)
-        if (!sr.ok) { console.warn('bg: Spotify track fetch failed:', sr.status, refTrack.title); return }
-        const sd = await sr.json()
-        if (!previewUrl) {
-          previewUrl = sd?.preview_url || null
-          if (previewUrl) {
-            const { error: pvErr } = await supabase.from('reference_tracks').update({ preview_url: previewUrl }).eq('id', refTrack.id)
-            if (pvErr) console.error('bg: preview_url update failed:', refTrack.title, pvErr.message)
+        if (sr.ok) {
+          const sd = await sr.json()
+          if (!previewUrl && sd?.preview_url) {
+            previewUrl = sd.preview_url
+            await supabase.from('reference_tracks').update({ preview_url: previewUrl }).eq('id', refTrack.id)
+          }
+          if (!refTrack.genres?.length) {
+            const genres = await fetchTrackGenres(refTrack.spotify_id)
+            if (genres.length) {
+              const { error: gnErr } = await supabase.from('reference_tracks').update({ genres }).eq('id', refTrack.id)
+              if (!gnErr) console.log('bg: ✓ genres for:', refTrack.title, genres.slice(0, 3).join(', '))
+            }
           }
         }
-        if (!refTrack.genres?.length) {
-          const genres = await fetchTrackGenres(refTrack.spotify_id)
-          if (genres.length) {
-            const { error: gnErr } = await supabase.from('reference_tracks').update({ genres }).eq('id', refTrack.id)
-            if (gnErr) console.error('bg: genres update failed:', refTrack.title, gnErr.message)
-            else console.log('bg: ✓ genres for:', refTrack.title, genres.slice(0, 3).join(', '))
-          }
-        }
-      } catch(e) { console.warn('bg: spotify fetch failed:', e.message) }
+      } catch(e) { console.warn('bg: Spotify metadata failed:', e.message) }
     }
-    if (!previewUrl) { console.log('bg: no preview URL for:', refTrack.title); return }
 
-    // Step 2: Download 30s preview
-    const tmpFile = '/tmp/ref_bg_' + refTrack.id + '_' + Date.now() + '.mp3'
-    const dlRes = await fetch(previewUrl)
-    if (!dlRes.ok) throw new Error('preview download failed: ' + dlRes.status)
-    fs.writeFileSync(tmpFile, Buffer.from(await dlRes.arrayBuffer()))
+    // Step 2: Get audio — YouTube full track first, Spotify preview as fallback
+    let audioFile = await downloadYouTubeAudio(refTrack.artist, refTrack.title)
+    if (!audioFile && previewUrl) {
+      try {
+        const dlRes = await fetch(previewUrl)
+        if (dlRes.ok) {
+          const previewTmp = '/tmp/preview_' + refTrack.id + '_' + Date.now() + '.mp3'
+          fs.writeFileSync(previewTmp, Buffer.from(await dlRes.arrayBuffer()))
+          audioFile = previewTmp
+          console.log('bg: using Spotify preview fallback for:', refTrack.title)
+        }
+      } catch(e) { console.warn('bg: Spotify preview fallback failed:', e.message) }
+    }
+    if (!audioFile) {
+      console.warn('bg: no audio source for:', refTrack.title)
+      return
+    }
 
     // Step 3: Essentia — BPM, key, energy, tonal balance, stereo width
     try {
-      const esOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_AUDIO_SCRIPT}" ${shellEscape(tmpFile)} 2>/dev/null`, { encoding: 'utf8', timeout: 120000 }).trim()
+      const esOut = execSync(`"${ESSENTIA_PY}" "${ANALYZE_AUDIO_SCRIPT}" ${shellEscape(audioFile)} 2>/dev/null`, { encoding: 'utf8', timeout: 120000 }).trim()
       const es = JSON.parse(esOut)
       if (es.bpm) {
         const upd = {}
@@ -1901,7 +1934,7 @@ async function processLibraryTrackInBackground(refTrack, force = false) {
       await new Promise(r => setTimeout(r, 2000))
     } catch(e) { console.warn('bg: credits failed for:', refTrack.title, e.message.slice(0, 60)) }
 
-    try { fs.unlinkSync(tmpFile) } catch(e) {}
+    try { if (audioFile) fs.unlinkSync(audioFile) } catch(e) {}
   } catch(e) {
     console.error('bg: processLibraryTrack error:', refTrack?.title, e.message)
   } finally {

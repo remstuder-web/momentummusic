@@ -1,5 +1,5 @@
 <script>
-  let { mixCurve = null, refCurve = null, avgCurve = null, mixLabel = '', refLabel = '', isMixTab = false } = $props()
+  let { mixCurve = null, refCurve = null, avgCurve = null, mixLabel = '', refLabel = '', isMixTab = false, tonalBalance = null } = $props()
 
   const REF_COLOR = '#c9a84c'
   const MIX_COLOR = 'rgba(255,255,255,0.85)'
@@ -47,8 +47,29 @@
     return Object.keys(obj).length ? obj : null
   }
 
+  // Build approximate 30-band curve from 4 tonal balance values
+  function syntheticCurveFromTonal(tonal) {
+    if (!tonal) return null
+    const bandMap = { bass: [0, 7], low_mid: [8, 17], high_mid: [18, 24], air: [25, 29] }
+    const vals = Object.values(tonal).filter(Number.isFinite)
+    if (!vals.length) return null
+    const peak = Math.max(...vals)
+    const curve = new Array(30).fill(0)
+    for (const [band, [start, end]] of Object.entries(bandMap)) {
+      const val = tonal[band] || 0
+      const normalized = (val / (peak + 0.001)) * 10 - 5
+      for (let i = start; i <= end; i++) curve[i] = normalized
+    }
+    return curve
+  }
+
   const displayMix = $derived(arrayToFreqObj(normalizePeak(getCurveArray(mixCurve ?? lastMixCurve))))
-  const displayRef = $derived(arrayToFreqObj(normalizePeak(getCurveArray(refCurve ?? lastRefCurve))))
+  const displayRef = $derived.by(() => {
+    const real = refCurve ?? lastRefCurve
+    if (real) return arrayToFreqObj(normalizePeak(getCurveArray(real)))
+    const synthetic = syntheticCurveFromTonal(tonalBalance)
+    return synthetic ? arrayToFreqObj(normalizePeak(synthetic)) : null
+  })
   const displayAvg = $derived(arrayToFreqObj(normalizePeak(getCurveArray(avgCurve))))
 
   const ISO_FREQS = [

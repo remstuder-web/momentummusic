@@ -2403,6 +2403,9 @@ Return JSON only:
       refTrackOverride[String(refId)] = data
       refTrackOverride = { ...refTrackOverride }
       console.log('Ref data loaded:', data.artist, data.title, 'tonal:', !!data.tonal_balance, 'energy:', data.energy)
+      // Auto vocal style — find which song has this ref selected
+      const songIdForRef = Object.keys(selectedRefId).find(sid => selectedRefId[sid] === String(refId))
+      if (songIdForRef && data.spotify_id) autoVocalStyle(songIdForRef, data.spotify_id)
       if (!data.tempo && data.spotify_id) {
         console.log('Triggering on-demand analysis for:', data.title)
         refTrackOverride[String(refId)] = { ...data, _analyzing: true }
@@ -2425,6 +2428,12 @@ Return JSON only:
     }
   }
 
+  function autoVocalStyle(songId, spotifyId) {
+    if (spotifyId && !vocalStyleResult[songId]) {
+      analyzeVocalStyle('https://open.spotify.com/track/' + spotifyId, songId)
+    }
+  }
+
   function selectRefFromPicker(songId, r) {
     const refId = String(r._rt_id ?? r.id)
     selectedRefId[songId] = refId
@@ -2437,6 +2446,7 @@ Return JSON only:
     if (r._rt_id || r.id) loadRefAnalysis(r._rt_id ?? r.id)
     loadMozartInsight(songId, r)
     loadProjectRefAverage(songId)
+    if (r.spotify_id) autoVocalStyle(songId, r.spotify_id)
     console.log('Selected ref:', r.artist, r.title, 'id:', refId)
   }
 
@@ -3776,6 +3786,7 @@ Return JSON only:
                         mixLabel={mixCurveData?.label ?? ''}
                         refLabel={refCurveData?.label ?? ''}
                         isMixTab={isMixTab}
+                        tonalBalance={selectedRefTrack?.tonal_balance ?? null}
                       />
 
                       <!-- 5. Action buttons -->
@@ -3891,12 +3902,6 @@ Return JSON only:
                             </div>
                           {/if}
                         </div>
-                        {#if mz.next_step}
-                          <div class="next-move-section">
-                            <div class="next-move-label">NEXT MOVE</div>
-                            <div class="next-move-text">{mz.next_step}</div>
-                          </div>
-                        {/if}
                       {:else if mozartAnalysis[song.id]?.ok}
                         <div class="ref-added-confirm">✓ Reference added</div>
                       {/if}
@@ -3931,7 +3936,6 @@ Return JSON only:
                       {/if}
 
                       <!-- 8+9. Tonal balance + Stereo width -->
-                      <div style="font-size:8px;color:#252525;margin-top:4px;word-break:break-all">mix_tonal:{JSON.stringify(latestA?.tonal_balance)} ref_tonal:{JSON.stringify(selectedRefTrack?.tonal_balance)}</div>
                       <div class="tonal-section-title" style="margin-top:6px">TONAL BALANCE</div>
                       {#if !latestA?.tonal_balance && !selectedRefTrack?.tonal_balance}
                         <div style="font-size:10px;color:#252525;padding:4px 0">Analyze mix + select library ref to see data</div>
@@ -4051,14 +4055,9 @@ Return JSON only:
                           {#if selectedRefTrack.loudness}<span class="ref-stat-chip">{selectedRefTrack.loudness.toFixed(1)} LUFS</span>{/if}
                         </div>
                       {/if}
-                      {#if selectedRefTrack?.spotify_id}
-                        <button class="vocal-btn-analyzer"
-                          onclick={() => analyzeVocalStyle('https://open.spotify.com/track/' + selectedRefTrack.spotify_id, song.id)}>
-                          🎤 Analyze vocal style
-                        </button>
-                        {#if vocalStyleResult[song.id]}
-                          <div class="vocal-style-result">{vocalStyleResult[song.id]}</div>
-                        {/if}
+                      {#if vocalStyleResult[song.id]}
+                        <div class="ref-section-label">VOCAL STYLE</div>
+                        <div class="vocal-style-result">{vocalStyleResult[song.id]}</div>
                       {/if}
 
                       <!-- TRACK ANALYSIS sub-section -->
@@ -4080,45 +4079,6 @@ Return JSON only:
                             {/if}
                           </div>
                         {/if}
-                      {/if}
-
-                      <!-- 12. SUCCESS MATCH -->
-                      <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'match')}>
-                        <span>SUCCESS MATCH</span><span class="az-arr {ao.match?'open':''}">▶</span>
-                      </button>
-                      {#if ao.match}
-                        <div class="az-body">
-                          {#if successMatchLoading[String(song.id)]}
-                            <div class="az-loading">Comparing to references…</div>
-                          {:else if successMatch[String(song.id)]?.matchScore != null}
-                            {@const sm = successMatch[String(song.id)]}
-                            <div class="az-score-row">
-                              <span class="az-score" style="color:{sm.matchScore>=70?'#4caf82':sm.matchScore>=45?'#e8a838':'#e05a4a'}">{sm.matchScore}%</span>
-                              <span class="az-score-label">match vs your {sm.pattern?.sample_count || '?'} reference tracks</span>
-                            </div>
-                            {#if sm.gaps?.length}
-                              <div class="az-gaps-title">TOP GAPS</div>
-                              {#each sm.gaps.slice(0,3) as gap}
-                                <div class="az-gap-row">
-                                  <span class="az-gap-label">{gap.label}</span>
-                                  <span class="az-gap-val">you: {gap.value != null ? (typeof gap.value === 'number' ? gap.value.toFixed(2) : gap.value) : '?'}</span>
-                                  <span class="az-gap-target">target: {gap.target}</span>
-                                  <span class="az-gap-pct" style="color:#e05a4a">{gap.match}%</span>
-                                </div>
-                              {/each}
-                            {/if}
-                            {#if sm.strengths?.length}
-                              <div class="az-gaps-title" style="color:#4caf82;margin-top:6px">STRENGTHS</div>
-                              {#each sm.strengths.slice(0,3) as s}
-                                <div class="az-gap-row"><span class="az-gap-label">{s.label}</span><span class="az-gap-pct" style="color:#4caf82">{s.match}% ✓</span></div>
-                              {/each}
-                            {/if}
-                          {:else if successMatch[String(song.id)]?.error}
-                            <div class="az-loading">{successMatch[String(song.id)].error}</div>
-                          {:else}
-                            <div class="az-loading">No analysis data — analyze this version first.</div>
-                          {/if}
-                        </div>
                       {/if}
 
                       <!-- EMOTIONAL ARC sub-section from latestA -->
@@ -4151,58 +4111,6 @@ Return JSON only:
                             </div>
                           </div>
                         {/if}
-                      {/if}
-
-                      <!-- 13. TREND CONTEXT -->
-                      <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'trend')}>
-                        <span>TREND CONTEXT</span><span class="az-arr {ao.trend?'open':''}">▶</span>
-                      </button>
-                      {#if ao.trend}
-                        <div class="az-body">
-                          {#if trendLoading}
-                            <div class="az-loading">Loading chart velocity…</div>
-                          {:else if trendVelocity?.rising?.length || trendVelocity?.falling?.length}
-                            {#if trendVelocity.rising?.length}
-                              <div class="az-gaps-title" style="color:#4caf82">RISING ↑</div>
-                              {#each trendVelocity.rising.slice(0,5) as t}
-                                <div class="az-trend-row"><span class="az-trend-name">{t.artist} — {t.title}</span><span class="az-trend-vel" style="color:#4caf82">+{Math.round(t.velocity)}/day</span></div>
-                              {/each}
-                            {/if}
-                            {#if trendVelocity.falling?.length}
-                              <div class="az-gaps-title" style="color:#e05a4a;margin-top:6px">FALLING ↓</div>
-                              {#each trendVelocity.falling.slice(0,3) as t}
-                                <div class="az-trend-row"><span class="az-trend-name">{t.artist} — {t.title}</span><span class="az-trend-vel" style="color:#e05a4a">{Math.round(t.velocity)}/day</span></div>
-                              {/each}
-                            {/if}
-                          {:else}
-                            <div class="az-loading">No chart history yet — runs automatically with morning briefing.</div>
-                          {/if}
-                        </div>
-                      {/if}
-
-                      <!-- 14. FEEDBACK HISTORY (last) -->
-                      <button class="az-section-hdr" onclick={() => toggleAnalyzerSection(song.id, 'feedback')}>
-                        <span>FEEDBACK HISTORY</span><span class="az-arr {ao.feedback?'open':''}">▶</span>
-                      </button>
-                      {#if ao.feedback}
-                        <div class="az-body">
-                          {#if feedbackLoading[String(song.id)]}
-                            <div class="az-loading">Loading feedback patterns…</div>
-                          {:else if feedbackInsights[String(song.id)]?.history?.length}
-                            {@const fi = feedbackInsights[String(song.id)]}
-                            <div class="az-history-total">{fi.total} feedback items logged</div>
-                            {#each fi.history as h}
-                              <div class="az-feedback-row">
-                                <span class="az-fb-type">{h.type.replace(/_/g,' ')}</span>
-                                <span class="az-fb-count">{h.count}×</span>
-                                <div class="az-fb-bar"><div class="az-fb-fill" style="width:{h.pct}%"></div></div>
-                                <span class="az-fb-pct">{h.pct}%</span>
-                              </div>
-                            {/each}
-                          {:else}
-                            <div class="az-loading">No feedback patterns yet — add feedback to versions.</div>
-                          {/if}
-                        </div>
                       {/if}
 
                     </div>

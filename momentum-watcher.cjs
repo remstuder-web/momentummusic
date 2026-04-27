@@ -1815,7 +1815,7 @@ const ANALYZE_EQ_SCRIPT = path.join(__dirname, 'analyze_vocal_eq.py')
 let processingQueue = []
 let isProcessing = false
 let spotifyRateLimitUntil = 0
-const MAX_PER_DAY = 10
+const MAX_PER_DAY = 50
 let processedToday = 0
 let todayKey = new Date().toISOString().slice(0, 10)
 let bgQueuePaused = false
@@ -2000,18 +2000,13 @@ async function runBackgroundQueue() {
     console.log('bg queue: daily limit reached (' + MAX_PER_DAY + ')')
     return
   }
-  if (Date.now() < spotifyRateLimitUntil) {
-    console.log('bg queue: rate limited — retrying in 1h')
-    setTimeout(runBackgroundQueue, 60 * 60 * 1000)
-    return
-  }
   if (isProcessing || processingQueue.length === 0) return
   isProcessing = true
   const track = processingQueue.shift()
   await processLibraryTrackInBackground(track)
   processedToday++
   isProcessing = false
-  if (processingQueue.length > 0) setTimeout(runBackgroundQueue, 60000)
+  if (processingQueue.length > 0) setTimeout(runBackgroundQueue, 30000)
 }
 
 function queueLibraryTrack(track) {
@@ -2024,10 +2019,6 @@ function queueLibraryTrack(track) {
 // Startup: Tier 1 queue — all tracks missing tempo (15s delay to let watcher settle)
 setTimeout(async () => {
   if (bgQueuePaused) { console.log('bg queue: skipping startup — manually paused'); return }
-  if (Date.now() < spotifyRateLimitUntil) {
-    console.log('bg queue: skipping startup — rate limited until', new Date(spotifyRateLimitUntil).toLocaleString())
-    return
-  }
   try {
     const { data: unanalyzed } = await supabase
       .from('reference_tracks')
@@ -2036,7 +2027,7 @@ setTimeout(async () => {
       .is('tempo', null)
       .is('analysis_attempted_at', null)
       .not('spotify_id', 'is', null)
-      .limit(5)
+      .limit(50)
     if (!unanalyzed?.length) return
     processingQueue.push(...unanalyzed)
     console.log('bg: Tier1 queue ready —', processingQueue.length, 'tracks to process')
@@ -4036,7 +4027,7 @@ async function handleOwnerCommand(chatId, text) {
     bgQueuePaused = false
     processedToday = 0
     todayKey = new Date().toISOString().slice(0, 10)
-    await sendTelegram(chatId, '▶️ Background queue resumed. Daily limit reset (' + MAX_PER_DAY + '/day, 60s between tracks).')
+    await sendTelegram(chatId, '▶️ Background queue resumed. Daily limit reset (' + MAX_PER_DAY + '/day, 30s between tracks).')
   }
   else if (text.trim().toLowerCase().startsWith('/processref')) {
     const query = text.trim().slice('/processref'.length).trim()

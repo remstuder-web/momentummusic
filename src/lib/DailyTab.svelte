@@ -83,6 +83,16 @@
   let currentAudio = $state(null)
   let speakToast = $state('')
   let speakToastTimer = null
+  let librarySpotifyIds = $state(new Set())
+
+  async function loadLibraryIds() {
+    const { data } = await supabase
+      .from('reference_tracks')
+      .select('spotify_id')
+      .in('source', ['agent', 'user', 'mozart', 'promoted', 'chart'])
+      .not('spotify_id', 'is', null)
+    librarySpotifyIds = new Set((data || []).map(r => r.spotify_id).filter(Boolean))
+  }
 
   function showSpeakToast(msg) {
     speakToast = msg
@@ -885,8 +895,10 @@
       })
     })
     const j = await res.json().catch(() => ({}))
-    if (j.ok) alert(`Saved to library: ${track.artist} — ${track.title}`)
-    else alert('Error: ' + (j.error || 'unknown'))
+    if (j.ok) {
+      if (track.spotify_id) librarySpotifyIds = new Set([...librarySpotifyIds, track.spotify_id])
+      alert(`Saved to library: ${track.artist} — ${track.title}`)
+    } else alert('Error: ' + (j.error || 'unknown'))
   }
 
   function playSpotifyTrack(spotifyId) {
@@ -1247,6 +1259,7 @@ ${mozartContext}`
 
   onMount(() => {
     syncDownloadNotifications()
+    loadLibraryIds()
     const onFocus = () => reloadProjectData()
     const onVisible = () => { if (document.visibilityState === 'visible') reloadProjectData() }
     window.addEventListener('focus', onFocus)
@@ -1971,39 +1984,74 @@ ${mozartContext}`
                         {key:'tiktok', label:'📱 TIKTOK'},
                         {key:'youtube', label:'▶ YOUTUBE'}
                       ] as chart}
-                        <div class="chart-col">
-                          <div class="chart-title">{chart.label}</div>
-                          {#each (n.metadata[chart.key] || []) as t, i}
-                            <div class="chart-track-row">
-                              <span class="chart-pos">{i+1}</span>
-                              <div class="chart-track-info">
-                                {#if typeof t === 'string'}
-                                  <span class="chart-track-artist">{t}</span>
-                                {:else}
-                                  <span class="chart-track-artist">{t.artist || ''}</span>
-                                  <span class="chart-track-title-text">{t.title || ''}</span>
-                                {/if}
+                        {#if chart.key === 'tiktok'}
+                          <div class="tiktok-col">
+                            <div class="chart-title">{chart.label}</div>
+                            {#each (n.metadata.tiktok || []) as t, i}
+                              <div class="chart-track-row">
+                                <span class="chart-pos">{i+1}</span>
+                                <div class="chart-track-info">
+                                  {#if typeof t === 'string'}
+                                    <span class="chart-track-artist">{t}</span>
+                                  {:else}
+                                    <span class="chart-track-artist">{t.artist || ''}</span>
+                                    <span class="chart-track-title-text">{t.title || ''}</span>
+                                  {/if}
+                                </div>
+                                <div class="chart-track-actions">
+                                  {#if typeof t !== 'string' && t.spotify_id}
+                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
+                                  {/if}
+                                  {#if typeof t !== 'string'}
+                                    {#if !librarySpotifyIds.has(t.spotify_id)}
+                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                                    {:else}
+                                      <span class="in-library-badge">✓</span>
+                                    {/if}
+                                  {/if}
+                                </div>
                               </div>
-                              <div class="chart-track-actions">
-                                {#if typeof t !== 'string' && t.spotify_id}
-                                  <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
-                                {/if}
-                                {#if typeof t !== 'string'}
-                                  <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                                {/if}
+                            {/each}
+                          </div>
+                        {:else}
+                          <div class="chart-col">
+                            <div class="chart-title">{chart.label}</div>
+                            {#each (n.metadata[chart.key] || []) as t, i}
+                              <div class="chart-track-row">
+                                <span class="chart-pos">{i+1}</span>
+                                <div class="chart-track-info">
+                                  {#if typeof t === 'string'}
+                                    <span class="chart-track-artist">{t}</span>
+                                  {:else}
+                                    <span class="chart-track-artist">{t.artist || ''}</span>
+                                    <span class="chart-track-title-text">{t.title || ''}</span>
+                                  {/if}
+                                </div>
+                                <div class="chart-track-actions">
+                                  {#if typeof t !== 'string' && t.spotify_id}
+                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
+                                  {/if}
+                                  {#if typeof t !== 'string'}
+                                    {#if !librarySpotifyIds.has(t.spotify_id)}
+                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                                    {:else}
+                                      <span class="in-library-badge">✓</span>
+                                    {/if}
+                                  {/if}
+                                </div>
                               </div>
-                            </div>
-                          {/each}
-                        </div>
+                            {/each}
+                          </div>
+                        {/if}
                       {/each}
                     </div>
                   {/if}
                   {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
-                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\s/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\s/g,'')))}
-                    {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\s/g,'')))}
+                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\W/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
+                    {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
                     {#if uniqueScoutTracks.length}
                       <div class="suggested-tracks">
-                        <div class="chart-title" style="margin-bottom:6px">MENTIONED TRACKS</div>
+                        <div class="chart-title" style="margin-bottom:6px">ALSO MENTIONED</div>
                         {#each uniqueScoutTracks as t}
                           <div class="chart-track-row">
                             <div class="chart-track-info">
@@ -2011,7 +2059,11 @@ ${mozartContext}`
                               <span class="chart-track-title-text">{t.title || ''}</span>
                             </div>
                             <div class="chart-track-actions">
-                              <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                              {#if !librarySpotifyIds.has(t.spotify_id)}
+                                <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                              {:else}
+                                <span class="in-library-badge">✓</span>
+                              {/if}
                             </div>
                           </div>
                         {/each}
@@ -2077,39 +2129,74 @@ ${mozartContext}`
                         {key:'tiktok', label:'📱 TIKTOK'},
                         {key:'youtube', label:'▶ YOUTUBE'}
                       ] as chart}
-                        <div class="chart-col">
-                          <div class="chart-title">{chart.label}</div>
-                          {#each (n.metadata[chart.key] || []) as t, i}
-                            <div class="chart-track-row">
-                              <span class="chart-pos">{i+1}</span>
-                              <div class="chart-track-info">
-                                {#if typeof t === 'string'}
-                                  <span class="chart-track-artist">{t}</span>
-                                {:else}
-                                  <span class="chart-track-artist">{t.artist || ''}</span>
-                                  <span class="chart-track-title-text">{t.title || ''}</span>
-                                {/if}
+                        {#if chart.key === 'tiktok'}
+                          <div class="tiktok-col">
+                            <div class="chart-title">{chart.label}</div>
+                            {#each (n.metadata.tiktok || []) as t, i}
+                              <div class="chart-track-row">
+                                <span class="chart-pos">{i+1}</span>
+                                <div class="chart-track-info">
+                                  {#if typeof t === 'string'}
+                                    <span class="chart-track-artist">{t}</span>
+                                  {:else}
+                                    <span class="chart-track-artist">{t.artist || ''}</span>
+                                    <span class="chart-track-title-text">{t.title || ''}</span>
+                                  {/if}
+                                </div>
+                                <div class="chart-track-actions">
+                                  {#if typeof t !== 'string' && t.spotify_id}
+                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
+                                  {/if}
+                                  {#if typeof t !== 'string'}
+                                    {#if !librarySpotifyIds.has(t.spotify_id)}
+                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                                    {:else}
+                                      <span class="in-library-badge">✓</span>
+                                    {/if}
+                                  {/if}
+                                </div>
                               </div>
-                              <div class="chart-track-actions">
-                                {#if typeof t !== 'string' && t.spotify_id}
-                                  <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
-                                {/if}
-                                {#if typeof t !== 'string'}
-                                  <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                                {/if}
+                            {/each}
+                          </div>
+                        {:else}
+                          <div class="chart-col">
+                            <div class="chart-title">{chart.label}</div>
+                            {#each (n.metadata[chart.key] || []) as t, i}
+                              <div class="chart-track-row">
+                                <span class="chart-pos">{i+1}</span>
+                                <div class="chart-track-info">
+                                  {#if typeof t === 'string'}
+                                    <span class="chart-track-artist">{t}</span>
+                                  {:else}
+                                    <span class="chart-track-artist">{t.artist || ''}</span>
+                                    <span class="chart-track-title-text">{t.title || ''}</span>
+                                  {/if}
+                                </div>
+                                <div class="chart-track-actions">
+                                  {#if typeof t !== 'string' && t.spotify_id}
+                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
+                                  {/if}
+                                  {#if typeof t !== 'string'}
+                                    {#if !librarySpotifyIds.has(t.spotify_id)}
+                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                                    {:else}
+                                      <span class="in-library-badge">✓</span>
+                                    {/if}
+                                  {/if}
+                                </div>
                               </div>
-                            </div>
-                          {/each}
-                        </div>
+                            {/each}
+                          </div>
+                        {/if}
                       {/each}
                     </div>
                   {/if}
                   {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
-                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\s/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\s/g,'')))}
-                    {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\s/g,'')))}
+                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\W/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
+                    {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
                     {#if uniqueScoutTracks.length}
                       <div class="suggested-tracks">
-                        <div class="chart-title" style="margin-bottom:6px">MENTIONED TRACKS</div>
+                        <div class="chart-title" style="margin-bottom:6px">ALSO MENTIONED</div>
                         {#each uniqueScoutTracks as t}
                           <div class="chart-track-row">
                             <div class="chart-track-info">
@@ -2117,7 +2204,11 @@ ${mozartContext}`
                               <span class="chart-track-title-text">{t.title || ''}</span>
                             </div>
                             <div class="chart-track-actions">
-                              <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                              {#if !librarySpotifyIds.has(t.spotify_id)}
+                                <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                              {:else}
+                                <span class="in-library-badge">✓</span>
+                              {/if}
                             </div>
                           </div>
                         {/each}
@@ -2529,6 +2620,8 @@ ${mozartContext}`
   .inbox-scroll { max-height: 600px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #1a1a1a; }
   .chart-col { display: flex; flex-direction: column; gap: 3px; }
+  .tiktok-col { grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; }
+  .tiktok-col .chart-title { grid-column: span 2; }
   .chart-title { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .08em; margin-bottom: 4px; }
   .chart-track-row { display: flex; align-items: center; gap: 5px; padding: 3px 0; border-bottom: 1px solid #151515; }
   .chart-track-row:last-child { border-bottom: none; }
@@ -2541,6 +2634,7 @@ ${mozartContext}`
   .chart-play-btn { color: #4caf82; }
   .chart-lib-btn { color: #9e9690; }
   .chart-play-btn:hover, .chart-lib-btn:hover { background: #252525; }
+  .in-library-badge { font-family: 'Space Mono', monospace; font-size: 7px; color: #2a4a2a; padding: 2px 5px; }
   .suggested-tracks { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #1a1a1a; }
   .articles-block { padding: 4px 0; }
   .articles-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 6px 0; border-top: 1px solid #1a1a1a; }

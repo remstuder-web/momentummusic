@@ -1,18 +1,18 @@
 {
-  "updated": "2026-04-27T11:20:00Z",
-  "last_task": "scout-display-fixes-6",
+  "updated": "2026-04-27T11:39:00Z",
+  "last_task": "scout-five-fixes",
   "status": "done",
   "working": [
-    "FIX1/FIX6: chart-brain-btn removed from chart rows and suggested-tracks rows in both today+older sections; CSS cleaned up",
-    "FIX2: suggested_tracks filtered via chartTrackKeys Set (case-insensitive, whitespace-stripped) against all 4 chart sources",
-    "FIX3: YouTube tracks enriched with fetchSpotifyId() in parallel — stored as {artist,title,spotify_id} objects in metadata.youtube",
-    "FIX4: tiktokTop slice 5→10; metadata.tiktok now stores up to 10 items",
-    "FIX5: ## CHARTS section stripped from agent-output via /^## CHARTS[\\s\\S]*?(?=\\n## )/m regex before parseAgentOutput"
+    "FIX1: saveToCheckout removed from runAgentScout (done in prior session)",
+    "FIX2: fetchKworbTrending returns {position,title,artist} objects; debug log logs first row cells; kworbYTText, chartContext, ytEnriched, kworbYTTracks all updated to handle objects",
+    "FIX3: tiktok-col class spans 2 grid columns with 10-item inner grid (1fr 1fr, gap 3px 16px); chart-title spans both cols",
+    "FIX4: dedup filter uses /\\W/g (non-word chars, stronger than /\\s/g); label changed to ALSO MENTIONED",
+    "FIX5: loadLibraryIds() fetches reference_tracks spotify_ids on mount; librarySpotifyIds Set; lib button hidden replaced with ✓ badge when track in library; addChartTrackToLibrary updates Set reactively"
   ],
   "broken": [],
   "partial": [
-    "YouTube enrichment only runs for new scout runs — existing inbox cards with raw string youtube data still show strings (no spotify_id)"
+    "YouTube cell mapping [1]=title [2]=artist is a guess — debug log will reveal actual structure on next /agent-scout run; may need to swap indices if artist and title are wrong"
   ],
-  "next": "Run /agent-scout to verify all 6 fixes: no brain button, unique mentioned tracks, youtube has spotify_id (▶ button appears), tiktok shows 10, no duplicate CHARTS section in text",
-  "notes": "addChartTrackToBrain() function kept in script (may be used elsewhere) even though buttons removed from templates. {@const} blocks used inline for dedup logic — Svelte 5 supports this inside {#if} blocks."
+  "next": "Run /agent-scout and check pm2 logs for 'YouTube first row cells:' output. If title/artist are swapped, fix the mapping in fetchKworbTrending (swap text[1] and text[2]).",
+  "notes": "librarySpotifyIds only includes sources: agent, user, mozart, promoted, chart. Tracks without spotify_id always show lib button (can't check library membership by title alone efficiently in the template)."
 }

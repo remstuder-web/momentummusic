@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] scout: no checkout, youtube names, tiktok 10 full width, unique mentioned, hide lib if in library — DONE
+TASK: scout-five-fixes
+WHAT: FIX1: saveToCheckout already removed from runAgentScout (done prior); FIX2: fetchKworbTrending rewritten to return objects {position,title,artist} + debug log + all kworbYT string callsites updated; FIX3: tiktok-col spans 2 grid columns with 10-item 2-col sub-grid (CSS: grid-column:span 2, grid-template-columns:1fr 1fr); FIX4: chartTrackKeys dedup uses /\W/g not /\s/g, label renamed ALSO MENTIONED; FIX5: loadLibraryIds() on mount, librarySpotifyIds Set, lib btn hidden shows ✓ badge when track in library, addChartTrackToLibrary updates Set on success
+RESULT: watcher restart ok; loadLibraryIds fires on DailyTab mount
+BLOCKERS: YouTube cell mapping uses [1]=title [2]=artist — may need adjustment after seeing actual kworb HTML structure (debug log added)
+
 ## [2026-04-27] scout display: brain btn removed, track dedup, youtube spotify, tiktok10, no dupe charts — DONE
 TASK: scout-display-fixes-6
 WHAT: FIX1/6: removed + brain button from chart rows and suggested tracks (only ▶ play + lib remain); FIX2: suggested_tracks filtered against all chart tracks via case-insensitive key set; FIX3: YouTube tracks enriched with Spotify ID via fetchSpotifyId() in parallel before storing in metadata; FIX4: TikTok metadata slice 5→10; FIX5: ## CHARTS section stripped from agent-output via regex before parseAgentOutput

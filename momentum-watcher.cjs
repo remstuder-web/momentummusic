@@ -946,13 +946,21 @@ async function fetchKworbTrending() {
     const html = await res.text()
     const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
     const items = []
+    let logged = false
     for (const row of rows) {
       const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
-      const text = cells.map(c => c[1].replace(/<[^>]+>/g, '').trim()).filter(Boolean)
-      if (text.length >= 2 && !/^(pos|#|rank)/i.test(text[0])) {
-        items.push(text.slice(0, 3).join(' · '))
-        if (items.length >= 10) break
+      const text = cells.map(c => c[1].replace(/<[^>]+>/g, '').trim())
+      if (!logged && text.some(Boolean)) {
+        console.log('YouTube first row cells:', text.slice(0, 5))
+        logged = true
       }
+      const pos = parseInt(text[0])
+      if (isNaN(pos)) continue
+      const title = text[1] || text[2] || ''
+      const artist = text[2] || text[3] || ''
+      if (!title) continue
+      items.push({ position: pos, title, artist, source: 'youtube_trending' })
+      if (items.length >= 10) break
     }
     return items
   } catch(e) {
@@ -1301,7 +1309,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     formatRss(hypebot, 'Hypebot'),
   ].filter(Boolean).join('\n') || 'No headlines fetched'
 
-  const kworbYTText = kworbYT.length ? kworbYT.map((l, i) => `${i+1}. ${l}`).join('\n') : 'Unavailable'
+  const kworbYTText = kworbYT.length ? kworbYT.map((t, i) => `${i+1}. ${typeof t === 'string' ? t : (t.artist ? t.artist + ' — ' : '') + t.title}`).join('\n') : 'Unavailable'
   const kworbSPText = kworbSP.length
     ? kworbSP.map(t => `${t.position}. ${t.artist} — ${t.title}`).join('\n')
     : 'Unavailable'
@@ -1312,10 +1320,9 @@ async function runAgentScout(apiKey, sharedBrainRows) {
   const tiktokTop = (crossChartData.tiktok || []).slice(0, 10)
 
   // Enrich YouTube tracks with Spotify IDs (run in parallel, non-blocking on failure)
-  const ytEnriched = await Promise.all(kworbYT.slice(0, 5).map(async line => {
-    const parts = line.split(' · ')
-    const artist = parts[0] || ''
-    const title = parts[1] || line
+  const ytEnriched = await Promise.all(kworbYT.slice(0, 5).map(async item => {
+    const title = typeof item === 'string' ? (item.split(' · ')[1] || item) : (item.title || '')
+    const artist = typeof item === 'string' ? (item.split(' · ')[0] || '') : (item.artist || '')
     try {
       const sp = await fetchSpotifyId(title, artist)
       if (sp) return { artist: sp.artist, title: sp.title, spotify_id: sp.spotify_id, source: 'youtube_trending' }
@@ -1334,7 +1341,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     tiktokTop.map((t, i) => `${i+1}. ${t.artist ? t.artist + ' — ' : ''}${t.title}`).join('\n') || 'Unavailable',
     '',
     'YOUTUBE TOP 5:',
-    kworbYT.slice(0, 5).map((l, i) => `${i+1}. ${l}`).join('\n') || 'Unavailable',
+    kworbYT.slice(0, 5).map((t, i) => `${i+1}. ${typeof t === 'string' ? t : (t.artist ? t.artist + ' — ' : '') + t.title}`).join('\n') || 'Unavailable',
   ].join('\n')
 
   const knownNames = (Array.isArray(connections) ? connections : []).map(b => b.name).filter(Boolean).join(', ') || 'none'
@@ -1551,9 +1558,10 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     spotify_url: `https://open.spotify.com/search/${encodeURIComponent((t.artist || '') + ' ' + (t.title || ''))}`,
     source: 'spotify_global'
   }))
-  const kworbYTTracks = (Array.isArray(kworbYT) ? kworbYT : []).slice(0, 5).map(line => {
-    const parts = line.split(' · ')
-    return { title: parts[1] || line, artist: parts[0] || '', youtube_url: `https://www.youtube.com/results?search_query=${encodeURIComponent(line)}`, source: 'youtube_trending' }
+  const kworbYTTracks = (Array.isArray(kworbYT) ? kworbYT : []).slice(0, 5).map(item => {
+    const title = typeof item === 'string' ? (item.split(' · ')[1] || item) : (item.title || '')
+    const artist = typeof item === 'string' ? (item.split(' · ')[0] || '') : (item.artist || '')
+    return { title, artist, youtube_url: `https://www.youtube.com/results?search_query=${encodeURIComponent(artist + ' ' + title)}`, source: 'youtube_trending' }
   })
   const allTracks = [...kworbTracks, ...kworbYTTracks].slice(0, 10)
   const tracksJson = allTracks.length ? `\n<!--TRACKS:${JSON.stringify(allTracks)}-->` : ''

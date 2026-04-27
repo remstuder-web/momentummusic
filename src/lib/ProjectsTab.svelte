@@ -49,7 +49,7 @@
   let vocalEqStatus = $state({}) // song.id -> 'separating' | 'done' | 'error'
   let vocalEqLoading = $state({}) // song.id -> 'ref' | null
   let vocalRefUrl = $state({}) // song.id -> url input string
-  let showVocalEq = $state({}) // song.id -> bool
+  let showVocalEq = $state({}) // kept for legacy compat — not actively used
   let vocalComparison = $state({}) // song.id -> comparison result
   let activeStem = $state({}) // song.id -> 'vocals' | 'drums' | 'bass' | 'other'
   let selectedRefId = $state({}) // song.id -> reference_track_id (string)
@@ -2341,30 +2341,7 @@ Return JSON only:
     return []
   }
 
-  async function onAnalyzerOpen(song) {
-    analyzerLoading[song.id] = true
-    analyzerLoading = { ...analyzerLoading }
-    try {
-      const { data: existingCurves } = await supabase
-        .from('vocal_eq_curves')
-        .select('id, stem_type, created_at')
-        .eq('song_id', String(song.id))
-        .eq('source_type', 'mix')
-        .order('created_at', { ascending: false })
-        .limit(4)
-      if ((existingCurves?.length ?? 0) >= 4) {
-        await loadVocalEq(song.id)
-      } else {
-        await analyzeMyVocal(song)
-      }
-    } catch(e) {
-      console.error('onAnalyzerOpen error:', e.message)
-      await loadVocalEq(song.id)
-    } finally {
-      analyzerLoading[song.id] = false
-      analyzerLoading = { ...analyzerLoading }
-    }
-  }
+
 
   async function onAnalyzerTabOpen(song) {
     analyzerLoading[song.id] = true
@@ -2505,8 +2482,6 @@ Return JSON only:
       const d = await r.json()
       if (!d.ok) throw new Error(d.error || 'failed')
       await loadVocalEq(sid)
-      showVocalEq[sid] = true
-      showVocalEq = { ...showVocalEq }
       vocalEqStatus = { ...vocalEqStatus, [sid]: 'done' }
     } catch(e) {
       vocalEqStatus = { ...vocalEqStatus, [sid]: 'error' }
@@ -3073,8 +3048,6 @@ Return JSON only:
                       const isActive = activeSongTab[song.id] === 'analyzer'
                       activeSongTab = {...activeSongTab, [song.id]: isActive ? null : 'analyzer'}
                       if (!isActive) {
-                        showVocalEq[song.id] = true
-                        showVocalEq = { ...showVocalEq }
                         onAnalyzerTabOpen(song)
                       }
                     }}>
@@ -3561,24 +3534,8 @@ Return JSON only:
                 {/if}<!-- end non-analyzer content -->
 
                 <!-- Vocal EQ section / ANALYZER tab -->
-                <div class="vocal-eq-section {activeSongTab[song.id]==='analyzer' ? 'analyzer-tab' : ''}">
-                  {#if activeSongTab[song.id] !== 'analyzer'}
-                    <button class="vocal-eq-header" onclick={() => {
-                      showVocalEq[song.id] = !showVocalEq[song.id]
-                      showVocalEq = { ...showVocalEq }
-                      if (showVocalEq[song.id]) {
-                        if (vocalEqCache.has(song.id)) {
-                          vocalEqCurves[song.id] = vocalEqCache.get(song.id)
-                          vocalEqCurves = { ...vocalEqCurves }
-                        }
-                        onAnalyzerOpen(song)
-                      }
-                    }}>
-                      <span class="vocal-eq-title">🎤 ANALYZER</span>
-                      <span class="vocal-eq-arr {showVocalEq[song.id] ? 'open' : ''}">▶</span>
-                    </button>
-                  {/if}
-                  {#if showVocalEq[song.id] || activeSongTab[song.id] === 'analyzer'}
+                <div class="vocal-eq-section analyzer-tab">
+                  {#if activeSongTab[song.id] === 'analyzer'}
                     {@const songCurves = vocalEqCurves[song.id] || []}
                     {@const stemKey = activeStem[song.id] || 'mix'}
                     {@const selectedRef = selectedRefId[song.id] || ''}
@@ -5051,11 +5008,6 @@ Return JSON only:
   /* Vocal EQ */
   .vocal-eq-section { border-top: 1px solid #1a1a1a; margin-top: 16px; position: relative; z-index: 1; padding-top: 10px; }
   .vocal-eq-section.analyzer-tab { border-top: none; margin-top: 0; padding-top: 4px; }
-  .vocal-eq-header { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 6px 0; background: transparent; border: none; cursor: pointer; text-align: left; position: relative; z-index: 2; pointer-events: all; }
-  .vocal-eq-header:hover { background: rgba(255,255,255,.02); }
-  .vocal-eq-title { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; }
-  .vocal-eq-arr { font-size: 9px; color: #555; transition: transform .2s; font-family: 'Space Mono', monospace; }
-  .vocal-eq-arr.open { transform: rotate(90deg); }
   .vocal-eq-body { padding: 6px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
   .vocal-eq-actions { display: flex; flex-direction: column; gap: 6px; }
   .vocal-ref-row { display: flex; gap: 6px; }

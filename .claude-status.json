@@ -1,18 +1,19 @@
 {
-  "updated": "2026-04-27T12:53:00Z",
-  "last_task": "bg-queue-stop",
+  "updated": "2026-04-27T13:05:00Z",
+  "last_task": "analyzer-feel-metrics",
   "status": "done",
   "working": [
-    "bg queue immediately paused + cleared on startup (bgQueuePaused=true + processingQueue.length=0 via /pause-bg-queue)",
-    "runBackgroundQueue: max 20 tracks/day, 30s between tracks, 1h retry on rate limit",
-    "startup Tier1 + genres enrichment both skip if bgQueuePaused or rate limited",
-    "GET /pause-bg-queue: pauses + clears queue",
-    "GET /resume-bg-queue: resumes, resets daily count",
-    "Telegram /pausequeue and /resumequeue commands working",
-    "Queue currently PAUSED — Spotify rate limited"
+    "Library ref select query extended with emotional_arc, energy, danceability, valence, brightness, warmth, bass_energy, loudness, tempo, key, camelot, vocal_pitch_mean",
+    "Emotional arc bar display in tonal tab after stereo width (segments sized by energy, gold fill opacity scales with energy)",
+    "Ref stat chips row: BPM, Key+Camelot, LUFS",
+    "Feel metrics bars: ENERGY / GROOVE / MOOD / BRIGHT / WARMTH / BASS — gold bars 0-100%",
+    "Project ref average white marker on each feel bar (avg of project+song reference_links)",
+    "loadProjectRefAverage() new function — queries reference_tracks by spotify_id from all project/song refs",
+    "Called on ANALYZER tab open (onAnalyzerTabOpen)",
+    "CSS for emotional-arc-row, arc-segment, ref-basic-stats, ref-stat-chip, ref-metric-row/bar/val, avg-marker"
   ],
   "broken": [],
   "partial": [],
-  "next": "When Spotify rate limit clears tomorrow, use /resumequeue on Telegram or GET /resume-bg-queue to restart processing (max 20 tracks that day)",
-  "notes": "bgQueuePaused starts false on each pm2 restart — call /pause-bg-queue immediately after restart while rate limited (already done this session). Queue cleared: 0 tracks pending."
+  "next": "Test in browser: open ANALYZER tab on a song with a library ref selected — verify emotional arc shows, feel bars render, project avg marker appears; verify no JS errors if selectedRefTrack has null fields",
+  "notes": "Feel metrics only render if at least one of the 6 fields is non-null on the selectedRefTrack. Emotional arc only renders if emotional_arc is a non-empty array. Both sections are in the tonal {:else} block."
 }

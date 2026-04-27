@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-04-27] ProjectsTab.svelte analyzer feel metrics — DONE
+TASK: analyzer-feel-metrics
+WHAT: Library ref select query adds emotional_arc/energy/danceability/valence/brightness/warmth/bass_energy/loudness/tempo/key/camelot/vocal_pitch_mean; emotional arc bar display; ref stat chips (BPM/key/LUFS); feel metrics bars (energy/groove/mood/bright/warmth/bass) with project-ref-average white marker; loadProjectRefAverage() called on ANALYZER tab open; CSS for all new elements
+RESULT: untested in browser
+BLOCKERS: none
+
 ## [2026-04-27] momentum-watcher.cjs bg queue — DONE
 TASK: bg-queue-stop
 WHAT: Queue fully stopped (bgQueuePaused=true, queue cleared); max 20/day limit; 30s between tracks; 1h retry on rate limit; startup skips if paused/rate-limited; GET /pause-bg-queue + /resume-bg-queue; Telegram /pausequeue + /resumequeue

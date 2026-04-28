@@ -413,6 +413,74 @@ Label your assessments:
 [NEW] = something the brain doesn't know yet`
 }
 
+// ── Genre intelligence ────────────────────────────────────────────────────────
+async function buildGenreProfiles() {
+  const { data: tracks } = await supabase
+    .from('reference_tracks')
+    .select('genres, genre_tag, playlist_name, tempo, energy, danceability, valence, brightness, warmth, bass_energy, loudness, tonal_balance, stereo_width')
+    .in('source', ['agent', 'user'])
+    .not('tempo', 'is', null)
+    .or('genres.not.is.null,genre_tag.not.is.null')
+  if (!tracks?.length) return {}
+
+  const genreGroups = {}
+  for (const t of tracks) {
+    const primary = t.genre_tag || (t.genres || [])[0]
+    if (!primary) continue
+    if (!genreGroups[primary]) genreGroups[primary] = []
+    genreGroups[primary].push(t)
+  }
+
+  const profiles = {}
+  for (const [genre, gt] of Object.entries(genreGroups)) {
+    if (gt.length < 3) continue
+    const avg = field => {
+      const vals = gt.map(t => t[field]).filter(v => v != null && isFinite(Number(v)))
+      return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 100) / 100 : null
+    }
+    profiles[genre] = {
+      count: gt.length,
+      tempo: avg('tempo'),
+      energy: avg('energy'),
+      danceability: avg('danceability'),
+      valence: avg('valence'),
+      brightness: avg('brightness'),
+      warmth: avg('warmth'),
+      bass_energy: avg('bass_energy'),
+      loudness: avg('loudness')
+    }
+  }
+  return profiles
+}
+
+async function saveGenreProfiles() {
+  const profiles = await buildGenreProfiles()
+  const genres = Object.keys(profiles)
+  if (!genres.length) return 0
+  for (const [genre, profile] of Object.entries(profiles)) {
+    if (profile.count < 3) continue
+    const content =
+      'BPM: ' + Math.round(profile.tempo || 0) +
+      ' | Energy: ' + Math.round((profile.energy || 0) * 100) + '%' +
+      ' | Danceability: ' + Math.round((profile.danceability || 0) * 100) + '%' +
+      ' | Valence: ' + Math.round((profile.valence || 0) * 100) + '%' +
+      ' | Brightness: ' + Math.round((profile.brightness || 0) * 100) + '%' +
+      ' | Bass: ' + Math.round((profile.bass_energy || 0) * 100) + '%' +
+      ' | Loudness: ' + (profile.loudness || 0).toFixed(1) + 'dB' +
+      ' | ' + profile.count + ' tracks analyzed'
+    await supabase.from('brain_knowledge').upsert({
+      category: 'market_knowledge',
+      title: 'Genre Profile: ' + genre,
+      content,
+      active: true,
+      confidence: 'medium',
+      source_type: 'auto_analysis'
+    }, { onConflict: 'title' })
+  }
+  console.log('✓ Genre profiles saved:', genres.length)
+  return genres.length
+}
+
 // ── Agent helpers ─────────────────────────────────────────────────────────────
 async function extractInsight(text, apiKey) {
   if (!apiKey || !text) return text.slice(0, 200)
@@ -3495,10 +3563,11 @@ async function handleOwnerCommand(chatId, text) {
     const question = text.slice(5).trim()
     await sendTelegram(chatId, '⏳ Asking Mozart...')
     try {
-      const [charts, connRows, waRows] = await Promise.allSettled([
+      const [charts, connRows, waRows, genreRows] = await Promise.allSettled([
         getCrossChartTopics().catch(() => ({ crossChart: [], tiktokOnly: [] })),
         supabase.from('brain_knowledge').select('title, content').eq('category', 'knowledge_connection').eq('active', true).order('created_at', { ascending: false }).limit(5),
-        fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.message&or=(read.is.null,read.eq.false)&order=created_at.desc&limit=5&select=song_title,message`, { headers: sbHeaders }).then(r => r.json()).catch(() => [])
+        fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.message&or=(read.is.null,read.eq.false)&order=created_at.desc&limit=5&select=song_title,message`, { headers: sbHeaders }).then(r => r.json()).catch(() => []),
+        supabase.from('brain_knowledge').select('title, content').eq('category', 'market_knowledge').ilike('title', 'Genre Profile:%').eq('active', true).order('created_at', { ascending: false }).limit(8)
       ])
       const ch = charts.status === 'fulfilled' ? charts.value : { crossChart: [], tiktokOnly: [] }
       const mozartChartCtx = [
@@ -3513,8 +3582,12 @@ async function handleOwnerCommand(chatId, text) {
       const mozartWaCtx = waData.length
         ? '\n\nUnread messages (pending context):\n' + waData.map(m => `- ${m.song_title || 'msg'}: ${(m.message || '').slice(0, 100)}`).join('\n')
         : ''
+      const genreData = genreRows.status === 'fulfilled' ? (genreRows.value.data || []) : []
+      const mozartGenreCtx = genreData.length
+        ? '\n\nYour genre landscape (analyzed library):\n' + genreData.map(g => g.title.replace('Genre Profile: ', '') + ': ' + g.content).join('\n')
+        : ''
       const mozartSystem = 'You are Mozart, music production advisor for Remo. Be concise — max 300 words.' +
-        (mozartChartCtx ? '\n\nCurrent chart signals:\n' + mozartChartCtx : '') + mozartConnCtx + mozartWaCtx
+        (mozartChartCtx ? '\n\nCurrent chart signals:\n' + mozartChartCtx : '') + mozartConnCtx + mozartWaCtx + mozartGenreCtx
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
@@ -4059,6 +4132,16 @@ async function handleOwnerCommand(chatId, text) {
       await processLibraryTrackInBackground(track, true)
       await sendTelegram(chatId, '✓ Done: ' + track.artist + ' — ' + track.title)
     } catch(e) { await sendTelegram(chatId, '❌ processref error: ' + e.message) }
+  }
+  else if (cmd === '/genreprofiles') {
+    await sendTelegram(chatId, '⏳ Building genre profiles from library...')
+    try {
+      const count = await saveGenreProfiles()
+      if (!count) { await sendTelegram(chatId, '⚠️ No genres found — analyze more library tracks first.'); return }
+      const { data: profiles } = await supabase.from('brain_knowledge').select('title, content').eq('category', 'market_knowledge').ilike('title', 'Genre Profile:%').eq('active', true).order('title')
+      const summary = (profiles || []).map(p => p.title.replace('Genre Profile: ', '') + ': ' + p.content.split('|')[0].trim()).join('\n')
+      await sendTelegram(chatId, '✓ ' + count + ' genre profiles saved:\n\n' + summary)
+    } catch(e) { await sendTelegram(chatId, '❌ Genre profiles error: ' + e.message) }
   }
   else if (cmd === '/cleanup') {
     const count = await runTelegramCleanup()
@@ -8096,6 +8179,21 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, pattern }))
     } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /update-genre-profiles — build genre profiles from library + save to brain ──
+  if (req.method === 'POST' && req.url === '/update-genre-profiles') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    req.resume()
+    try {
+      const count = await saveGenreProfiles()
+      res.end(JSON.stringify({ ok: true, saved: count }))
+    } catch(e) {
+      console.error('update-genre-profiles error:', e.message)
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))
     }
@@ -13150,6 +13248,7 @@ Max 150 words. Be specific and actionable.` }]
       weeklyBrainReview()
       weeklySystemReview()
       connectBrainEntries()
+      saveGenreProfiles().catch(e => console.warn('Sunday genre profiles error:', e.message))
     }
     // 3am daily — brain dedup
     if (now.getHours() === 3 && now.getMinutes() < 5) {

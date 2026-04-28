@@ -8206,6 +8206,67 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
+  // ── POST /analyze-trend-fit — compare song analysis to current chart averages ──
+  if (req.method === 'POST' && req.url === '/analyze-trend-fit') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const { analysis: songAnalysis } = JSON.parse(Buffer.concat(chunks).toString())
+        if (!songAnalysis) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'analysis required' })); return }
+
+        const { data: chartTracks } = await supabase
+          .from('reference_tracks')
+          .select('tempo, energy, danceability, valence, key, camelot, tonal_balance')
+          .in('collection_name', ['tiktok_trending', 'daily_chart', 'kworb_spotify_global'])
+          .not('tempo', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(50)
+
+        if (!chartTracks?.length) {
+          res.end(JSON.stringify({ ok: false, error: 'No chart data available yet — run /chart to populate.' }))
+          return
+        }
+
+        const avg = (arr, key) => {
+          const vals = arr.map(t => t[key]).filter(v => v != null && isFinite(v))
+          return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+        }
+
+        const chartAvg = {
+          tempo: avg(chartTracks, 'tempo'),
+          energy: avg(chartTracks, 'energy'),
+          danceability: avg(chartTracks, 'danceability'),
+          valence: avg(chartTracks, 'valence')
+        }
+
+        const gaps = {
+          tempo: songAnalysis.bpm != null && chartAvg.tempo != null ? songAnalysis.bpm - chartAvg.tempo : null,
+          energy: songAnalysis.energy != null && chartAvg.energy != null ? (songAnalysis.energy - chartAvg.energy) * 100 : null,
+          danceability: songAnalysis.danceability != null && chartAvg.danceability != null ? (songAnalysis.danceability - chartAvg.danceability) * 100 : null,
+          valence: songAnalysis.valence != null && chartAvg.valence != null ? (songAnalysis.valence - chartAvg.valence) * 100 : null
+        }
+
+        const validGaps = Object.fromEntries(Object.entries(gaps).filter(([, v]) => v != null))
+
+        const prompt = `Current chart averages (${chartTracks.length} trending tracks): BPM ${chartAvg.tempo ? Math.round(chartAvg.tempo) : '?'}, energy ${chartAvg.energy ? Math.round(chartAvg.energy * 100) : '?'}%, danceability ${chartAvg.danceability ? Math.round(chartAvg.danceability * 100) : '?'}%, valence ${chartAvg.valence ? Math.round(chartAvg.valence * 100) : '?'}%.\n\nThis track: BPM ${songAnalysis.bpm ? Math.round(songAnalysis.bpm) : '?'}, energy ${songAnalysis.energy != null ? Math.round(songAnalysis.energy * 100) : '?'}%, danceability ${songAnalysis.danceability != null ? Math.round(songAnalysis.danceability * 100) : '?'}%, valence ${songAnalysis.valence != null ? Math.round(songAnalysis.valence * 100) : '?'}%.\n\nGaps vs charts: ${Object.entries(validGaps).map(([k, v]) => `${k} ${v > 0 ? '+' : ''}${Math.round(v)}${k === 'tempo' ? 'bpm' : '%'}`).join(', ')}.\n\nIn 2 sentences: how does this track fit current chart trends? What one thing would make it more competitive?`
+
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] })
+        })
+        const d = await r.json()
+        res.end(JSON.stringify({ ok: true, chart_avg: chartAvg, gaps: validGaps, insight: d.content?.[0]?.text || '', sample_count: chartTracks.length }))
+      } catch(e) {
+        console.error('analyze-trend-fit error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /enrich-track-credits — fetch Genius + Spotify collaborators ──
   if (req.method === 'POST' && req.url === '/enrich-track-credits') {
     const chunks = []; req.on('data', c => chunks.push(c))

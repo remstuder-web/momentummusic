@@ -74,6 +74,8 @@
   let feedbackLoading = $state({}) // song.id -> bool
   let trendVelocity = $state(null)
   let trendLoading = $state(false)
+  let trendFit = $state({})
+  let trendFitLoading = $state({})
   let finishingChecklist = $state([])
   let checkedItems = $state({})
   let mozartAnalyzeOpen = $state({}) // song.id -> bool
@@ -2338,6 +2340,25 @@ Return JSON only:
     trendLoading = false
   }
 
+  async function loadTrendFit(songId) {
+    const s = songs.find(s => s.id === songId)
+    const a = (s?.work_data?.versions || [])
+      .filter(v => v.analysis)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]?.analysis
+    if (!a) return
+    trendFitLoading = { ...trendFitLoading, [songId]: true }
+    trendFit = { ...trendFit }
+    try {
+      const r = await fetch('http://localhost:4242/analyze-trend-fit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysis: a })
+      })
+      trendFit = { ...trendFit, [songId]: await r.json() }
+    } catch(e) { trendFit = { ...trendFit, [songId]: { ok: false, error: e.message } } }
+    trendFitLoading = { ...trendFitLoading, [songId]: false }
+  }
+
   function toggleAnalyzerSection(songId, section) {
     const sid = String(songId)
     const cur = analyzerOpen[sid] || {}
@@ -4113,6 +4134,62 @@ Return JSON only:
                         {/if}
                       {/if}
 
+                      <!-- SUCCESS MATCH -->
+                      {#if latestA}
+                        <div class="ref-section-label" style="margin-top:8px">SUCCESS MATCH</div>
+                        {#if successMatchLoading[String(song.id)]}
+                          <div class="analyzer-auto-status">⟳ Comparing to references…</div>
+                        {:else if successMatch[String(song.id)]?.matchScore != null}
+                          {@const sm = successMatch[String(song.id)]}
+                          <div class="az-score-row">
+                            <span class="az-score" style="color:{sm.matchScore>=70?'#4caf82':sm.matchScore>=45?'#e8a838':'#e05a4a'}">{sm.matchScore}%</span>
+                            <span class="az-score-label">match vs your {sm.pattern?.sample_count || '?'} reference tracks</span>
+                          </div>
+                          {#if sm.gaps?.length}
+                            <div class="az-gaps-title">TOP GAPS</div>
+                            {#each sm.gaps.slice(0,3) as gap}
+                              <div class="az-gap-row">
+                                <span class="az-gap-label">{gap.label}</span>
+                                <span class="az-gap-val">you: {gap.value != null ? (typeof gap.value === 'number' ? gap.value.toFixed(2) : gap.value) : '?'}</span>
+                                <span class="az-gap-target">target: {gap.target}</span>
+                                <span class="az-gap-pct" style="color:#e05a4a">{gap.match}%</span>
+                              </div>
+                            {/each}
+                          {/if}
+                          {#if sm.strengths?.length}
+                            <div class="az-gaps-title" style="color:#4caf82;margin-top:6px">STRENGTHS</div>
+                            {#each sm.strengths.slice(0,3) as s}
+                              <div class="az-gap-row"><span class="az-gap-label">{s.label}</span><span class="az-gap-pct" style="color:#4caf82">{s.match}% ✓</span></div>
+                            {/each}
+                          {/if}
+                        {:else if successMatch[String(song.id)]?.error}
+                          <div class="az-loading">{successMatch[String(song.id)].error}</div>
+                        {:else}
+                          <button class="trend-fit-btn" onclick={() => loadSuccessMatch(song)}>Analyze match</button>
+                        {/if}
+                      {/if}
+
+                      <!-- TREND FIT -->
+                      {#if latestA}
+                        <div class="ref-section-label" style="margin-top:8px">TREND FIT</div>
+                        {#if trendFit[song.id]?.insight}
+                          <div class="trend-fit-insight">{trendFit[song.id].insight}</div>
+                          <div class="trend-fit-gaps">
+                            {#each Object.entries(trendFit[song.id].gaps || {}) as [key, val]}
+                              {#if Math.abs(val) > 3}
+                                <span class="trend-gap {val > 0 ? 'above' : 'below'}">
+                                  {key}: {val > 0 ? '+' : ''}{Math.round(val)}{key === 'tempo' ? 'bpm' : '%'}
+                                </span>
+                              {/if}
+                            {/each}
+                          </div>
+                        {:else if trendFitLoading[song.id]}
+                          <div class="analyzer-auto-status">⟳ Analyzing...</div>
+                        {:else}
+                          <button class="trend-fit-btn" onclick={() => loadTrendFit(song.id)}>Analyze chart fit</button>
+                        {/if}
+                      {/if}
+
                     </div>
                 </div>
                 {/if}
@@ -5019,6 +5096,13 @@ Return JSON only:
   .analyzing-msg { font-family: 'Space Mono', monospace; font-size: 9px; color: #c9a84c; padding: 6px 0; animation: pulse 1.5s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
   .tonal-section-title { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: rgba(201,168,76,.6); padding: 6px 0 4px; text-transform: uppercase; }
+  .ref-section-label { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .12em; color: rgba(201,168,76,.6); padding: 6px 0 4px; text-transform: uppercase; }
+  .trend-fit-insight { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #9e9690; line-height: 1.6; padding: 4px 0; }
+  .trend-fit-gaps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .trend-gap { font-family: 'Space Mono', monospace; font-size: 8px; padding: 2px 6px; border-radius: 2px; }
+  .trend-gap.above { color: #4caf82; border: 1px solid #1a3a1a; }
+  .trend-gap.below { color: #e57373; border: 1px solid #3a1a1a; }
+  .trend-fit-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #252525; color: #444; padding: 3px 10px; border-radius: 2px; cursor: pointer; }
   .emotional-arc-row { display: flex; gap: 2px; align-items: flex-end; height: 50px; padding: 4px 0; border-bottom: 1px solid #1a1a1a; }
   .arc-segment { flex: 1; border-radius: 2px 2px 0 0; min-height: 3px; }
   .ref-basic-stats { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0 6px; border-bottom: 1px solid #1a1a1a; }

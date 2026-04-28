@@ -696,11 +696,6 @@
   // Deadlines & Tasks
   let newDeadlineLabel = $state('')
   let newDeadlineDate = $state('')
-  let newTaskLabel = $state('')
-  let newTaskDate  = $state('')
-  let newTaskTime  = $state('')
-  let newTaskSong  = $state('')
-  let newTaskStage = $state('')
 
   const PROJ_SONG_STAGES = [
     { id: 'production',   label: 'PRODUCTION',   prefix: 'PR' },
@@ -1880,58 +1875,6 @@
     const deadlines = (selectedProject.deadlines||[]).map(d => d.id===dl.id ? {...d,done:!d.done} : d)
     await supabase.from('projects').update({ deadlines }).eq('id', selectedProject.id)
     selectedProject.deadlines = deadlines; projects = [...projects]
-  }
-  async function addTask() {
-    if (!selectedProject) return
-    const stageConf = PROJ_SONG_STAGES.find(s => s.id === newTaskStage)
-    const songObj = newTaskSong ? songs.find(s => s.id === newTaskSong) : null
-    // Build label
-    let label = newTaskLabel.trim()
-    if (stageConf && songObj) {
-      const ver = (newTaskStage === 'production' || newTaskStage === 'mixing')
-        ? getProjActiveVersion(songObj, newTaskStage) : null
-      const verStr = ver ? ' ' + ver.name.toUpperCase() : ''
-      const stageLabel = { production:'PRODUCTION REVISION', mix_prep:'MIX PREP', mixing:'MIX REVISION', mastering:'MASTERING', stems:'STEMS' }[newTaskStage]
-      const autoLabel = stageLabel + verStr
-      label = label ? autoLabel + ' — ' + label : autoLabel
-    } else if (stageConf && !songObj) {
-      // Stage only, no song — use stage label as prefix
-      const stageLabel = { production:'PRODUCTION', mix_prep:'MIX PREP', mixing:'MIXING', mastering:'MASTERING', stems:'STEMS' }[newTaskStage]
-      label = label ? stageLabel + ' — ' + label : (label || stageLabel)
-    }
-    if (!label) return
-
-    const now = new Date()
-    const todayISO = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
-    const taskDate = newTaskDate || todayISO
-    const taskEntry = {
-      id: 't'+Date.now(), label, date: taskDate,
-      time: newTaskTime || '08:00', type: songObj ? 'song' : 'project',
-      project: selectedProject.name, project_id: selectedProject.id,
-      song: songObj ? (songObj.title || songObj.code) : '',
-      song_id: songObj?.id || null,
-      stage: newTaskStage, done: false, hidden_from_upcoming: false, recurring: false
-    }
-
-    // Write to projects.tasks for backwards compat
-    const tasks = [...(selectedProject.tasks||[]), { id: taskEntry.id, label, date: taskDate, time: newTaskTime || '08:00', done: false }]
-    await supabase.from('projects').update({ tasks }).eq('id', selectedProject.id)
-    selectedProject.tasks = tasks; projects = [...projects]
-
-    // Write to daily_state — find today's row by trying both date formats Daily uses
-    const dailyKey = new Date().toDateString() // e.g. "Thu Apr 02 2026"
-    const { data: rows } = await supabase.from('daily_state').select('id,tasks').or(`date.eq.${dailyKey},date.eq.${todayISO}`)
-    const ds = rows?.[0] || null
-    const dailyTasks = [...(ds?.tasks || []), taskEntry]
-    if (ds?.id) {
-      // Update existing row by ID
-      await supabase.from('daily_state').update({ tasks: dailyTasks }).eq('id', ds.id)
-    } else {
-      // No row yet for today — create with Daily's format
-      await supabase.from('daily_state').insert({ date: dailyKey, tasks: dailyTasks })
-    }
-
-    newTaskLabel = ''; newTaskDate = ''; newTaskTime = ''; newTaskSong = ''; newTaskStage = ''
   }
   async function toggleTask(task) {
     if (!selectedProject) return
@@ -4382,42 +4325,6 @@ Return JSON only:
         <button class="btn-ghost-sm" onclick={() => cardIdx++}>Next →</button>
       </div>
     {/if}
-
-    <!-- Tasks -->
-    <div class="right-section">
-      <div class="right-section-title-plain">TASKS</div>
-      {#if selectedProject}
-        <div class="dt-body">
-          <!-- Row 1: song + stage pickers -->
-          <div class="task-add-row">
-            <select class="add-inp-sm" bind:value={newTaskSong}>
-              <option value="">— Song (optional) —</option>
-              {#each songs.filter(s => s.project_id === selectedProjectId) as s}
-                <option value={s.id}>{s.title || s.code}</option>
-              {/each}
-            </select>
-            <select class="add-inp-sm" bind:value={newTaskStage}>
-              <option value="">— Stage —</option>
-              {#each PROJ_SONG_STAGES as st}
-                <option value={st.id}>{st.label}</option>
-              {/each}
-            </select>
-          </div>
-          <!-- Row 2: task label -->
-          <div class="task-add-row">
-            <input class="add-inp-sm" style="flex:1" bind:value={newTaskLabel}
-              placeholder="Task description (optional if stage selected)..."
-              onkeydown={e=>e.key==='Enter'&&addTask()} />
-          </div>
-          <!-- Row 3: date + time + add -->
-          <div class="task-add-row">
-            <input class="add-inp-sm date-inp" type="date" bind:value={newTaskDate} />
-            <input class="add-inp-sm time-inp" type="time" bind:value={newTaskTime} />
-            <button class="add-btn-sm" onclick={addTask}>+ Add</button>
-          </div>
-        </div>
-      {/if}
-    </div>
 
     <!-- Mozart -->
     <div class="mozart-block">

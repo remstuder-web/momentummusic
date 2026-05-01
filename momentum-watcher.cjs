@@ -7981,6 +7981,26 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
+  // ── GET /spotify-track-meta?id=... — fast title+artist only, no Essentia ──
+  if (req.method === 'GET' && req.url.startsWith('/spotify-track-meta')) {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const trackId = new URL('http://x' + req.url).searchParams.get('id')
+    if (!trackId) { res.writeHead(400); res.end(JSON.stringify({ error: 'no id' })); return }
+    try {
+      const r = await spotifyFetch(`https://api.spotify.com/v1/tracks/${trackId}`)
+      if (!r.ok) throw new Error(`Spotify ${r.status}`)
+      const d = await r.json()
+      const title = d.name || ''
+      const artist = (d.artists || []).map(a => a.name).join(', ')
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ title, artist, name: title && artist ? `${title} — ${artist}` : title }))
+    } catch(e) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: e.message }))
+    }
+    return
+  }
+
   // ── POST /create-submission ─────────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/create-submission') {
     let body = ''

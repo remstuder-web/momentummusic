@@ -1024,10 +1024,10 @@
     if (url.includes('spotify.com/track/')) {
       spotifyId = url.split('/track/')[1].split('?')[0]
       try {
-        const r = await fetch(`http://localhost:4242/get-page-title?url=${encodeURIComponent(url.trim())}`)
+        const r = await fetch(`http://localhost:4242/spotify-track-meta?id=${spotifyId}`)
         if (r.ok) {
           const d = await r.json()
-          name = d.title || ''
+          name = d.name || ''
         }
       } catch(e) {}
     }

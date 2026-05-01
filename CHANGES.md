@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-01] momentum-watcher.cjs + ProjectsTab.svelte — DONE
+TASK: spotify-track-meta-endpoint
+WHAT: Added GET /spotify-track-meta?id=... endpoint — fast Spotify metadata only (no Essentia), returns {title, artist, name}; updated addRefLink to use it instead of broken oEmbed
+RESULT: works — confirmed "Never Gonna Give You Up — Rick Astley" response in under 1s
+BLOCKERS: none
+
 ## [2026-05-01] ProjectsTab.svelte — DONE
 TASK: addreflink-final-clean
 WHAT: Replaced addRefLink with final clean version — explicit current/refs split, refInput reset, expanded if(r.ok) block; GET get-page-title endpoint confirmed working (returns {title} field)

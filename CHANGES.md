@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-01] ProjectsTab.svelte — DONE
+TASK: revert-addreflink-oembed
+WHAT: Reverted addRefLink back to original oEmbed approach — watcher fetch broke the Add button, oEmbed was working before
+RESULT: works
+BLOCKERS: none
+
+## [2026-05-01] ProjectsTab.svelte — DONE
 TASK: fix-addreflink-timeout
 WHAT: Fixed wrong response field names (d.name/d.artists → d.title/d.artist) and added 6s AbortController timeout so slow Essentia analysis doesn't freeze the Add button; save always falls through regardless
 RESULT: works

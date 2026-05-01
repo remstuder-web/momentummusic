@@ -1022,31 +1022,14 @@
     let name = ''
     if (url.includes('spotify')) {
       try {
-        const ctrl = new AbortController()
-        const timer = setTimeout(() => ctrl.abort(), 6000)
-        const r = await fetch('http://localhost:4242/analyze-spotify-track', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: url.trim() }),
-          signal: ctrl.signal
-        })
-        clearTimeout(timer)
-        if (r.ok) {
-          const d = await r.json()
-          name = d.title && d.artist ? `${d.title} — ${d.artist}` : (d.title || '')
-        }
+        const r = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(url.trim())}`)
+        if (r.ok) { const d = await r.json(); name = d.title || '' }
       } catch(e) {}
     }
     const spotifyId = url.includes('spotify.com/track/') ? url.split('/track/')[1].split('?')[0] : null
     const newRef = { id: 'r'+Date.now(), url: url.trim(), name, spotify_id: spotifyId, added_at: new Date().toISOString() }
     const refs = [...projectRefs(p), newRef]
-    const { error } = await supabase.from('projects').update({ reference_links: refs }).eq('id', p.id)
-    if (error) { console.error('addRefLink error:', error.message); return }
-    p.reference_links = refs
-    projects = projects.map(proj => proj.id === p.id ? { ...proj, reference_links: refs } : proj)
-    refLinkInput[p.id] = ''
-    refsOpen[p.id] = true
-    refsOpen = {...refsOpen}
+    await supabase.from('projects').update({ reference_links: refs }).eq('id', p.id)
   }
 
   // Preview audio player for reference links

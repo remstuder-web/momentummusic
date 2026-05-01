@@ -1020,15 +1020,20 @@
   async function addRefLink(p, url) {
     if (!url.trim()) return
     let name = ''
-    if (url.includes('spotify')) {
+    let spotifyId = null
+    if (url.includes('spotify.com/track/')) {
+      spotifyId = url.split('/track/')[1].split('?')[0]
       try {
-        const r = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(url.trim())}`)
+        const r = await fetch('http://localhost:4242/get-page-title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url.trim() })
+        })
         if (r.ok) { const d = await r.json(); name = d.title || '' }
       } catch(e) {}
     }
-    const spotifyId = url.includes('spotify.com/track/') ? url.split('/track/')[1].split('?')[0] : null
-    const newRef = { id: 'r'+Date.now(), url: url.trim(), name, spotify_id: spotifyId, added_at: new Date().toISOString() }
-    const refs = [...projectRefs(p), newRef]
+    const newRef = { id: 'r' + Date.now(), url: url.trim(), name, spotify_id: spotifyId, added_at: new Date().toISOString() }
+    const refs = [...(p.reference_links || []), newRef]
     await supabase.from('projects').update({ reference_links: refs }).eq('id', p.id)
   }
 

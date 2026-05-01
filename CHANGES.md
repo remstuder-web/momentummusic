@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-01] ProjectsTab.svelte — DONE
+TASK: addreflink-get-page-title
+WHAT: addRefLink now calls watcher /get-page-title for Spotify name resolution; spotifyId extracted upfront; refs built from p.reference_links directly
+RESULT: saves work; name resolution depends on endpoint method matching (see notes)
+BLOCKERS: none
+
+## [2026-05-01] ProjectsTab.svelte — DONE
 TASK: revert-addreflink-oembed
 WHAT: Reverted addRefLink back to original oEmbed approach — watcher fetch broke the Add button, oEmbed was working before
 RESULT: works

@@ -1022,14 +1022,18 @@
     let name = ''
     if (url.includes('spotify')) {
       try {
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 6000)
         const r = await fetch('http://localhost:4242/analyze-spotify-track', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: url.trim() })
+          body: JSON.stringify({ url: url.trim() }),
+          signal: ctrl.signal
         })
+        clearTimeout(timer)
         if (r.ok) {
           const d = await r.json()
-          name = d.name && d.artists ? `${d.name} — ${d.artists.join(', ')}` : (d.title || d.name || '')
+          name = d.title && d.artist ? `${d.title} — ${d.artist}` : (d.title || '')
         }
       } catch(e) {}
     }

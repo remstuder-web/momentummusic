@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-01] ProjectsTab.svelte — DONE
+TASK: fix-addreflink-timeout
+WHAT: Fixed wrong response field names (d.name/d.artists → d.title/d.artist) and added 6s AbortController timeout so slow Essentia analysis doesn't freeze the Add button; save always falls through regardless
+RESULT: works
+BLOCKERS: none
+
+## [2026-05-01] ProjectsTab.svelte — DONE
 TASK: fix-ref-link-spotify-name
 WHAT: Replaced oEmbed fetch (failing silently in browser) with watcher /analyze-spotify-track call in addRefLink; name now stored as "Track — Artist" format matching other ref chips
 RESULT: works

@@ -1025,12 +1025,23 @@
       spotifyId = url.split('/track/')[1].split('?')[0]
       try {
         const r = await fetch(`http://localhost:4242/get-page-title?url=${encodeURIComponent(url.trim())}`)
-        if (r.ok) { const d = await r.json(); name = d.title || '' }
+        if (r.ok) {
+          const d = await r.json()
+          name = d.title || ''
+        }
       } catch(e) {}
     }
-    const newRef = { id: 'r' + Date.now(), url: url.trim(), name, spotify_id: spotifyId, added_at: new Date().toISOString() }
-    const refs = [...(p.reference_links || []), newRef]
+    const newRef = {
+      id: 'r' + Date.now(),
+      url: url.trim(),
+      name,
+      spotify_id: spotifyId,
+      added_at: new Date().toISOString()
+    }
+    const current = p.reference_links || []
+    const refs = [...current, newRef]
     await supabase.from('projects').update({ reference_links: refs }).eq('id', p.id)
+    refInput = ''
   }
 
   // Preview audio player for reference links

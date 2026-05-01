@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-01] ProjectsTab.svelte — DONE
+TASK: addreflink-final-clean
+WHAT: Replaced addRefLink with final clean version — explicit current/refs split, refInput reset, expanded if(r.ok) block; GET get-page-title endpoint confirmed working (returns {title} field)
+RESULT: saves work; title resolution returns empty from oEmbed server-side (separate issue)
+BLOCKERS: none
+
+## [2026-05-01] ProjectsTab.svelte — DONE
 TASK: addreflink-get-page-title-get-method
 WHAT: Fixed addRefLink fetch to use GET with ?url= query param instead of POST+JSON body — matches actual watcher endpoint signature
 RESULT: works

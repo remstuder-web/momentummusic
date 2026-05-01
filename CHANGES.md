@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-01] ProjectsTab.svelte — DONE
+TASK: fix-ref-link-spotify-name
+WHAT: Replaced oEmbed fetch (failing silently in browser) with watcher /analyze-spotify-track call in addRefLink; name now stored as "Track — Artist" format matching other ref chips
+RESULT: works
+BLOCKERS: none
+
 ## [2026-05-01] momentum-watcher.cjs — DONE
 TASK: fix-whatsapp-telegram-spam
 WHAT: Suppress system/noise contacts from new-chat announcements (blocklist: you/whatsapp/stefania), deduplicate new-chat notifications with announcedChats Set so each JID announced once per session, skip Telegram forward for system ping messages (monitoring active/started/ping/heartbeat/status ok/is alive)

@@ -1022,8 +1022,15 @@
     let name = ''
     if (url.includes('spotify')) {
       try {
-        const r = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(url.trim())}`)
-        if (r.ok) { const d = await r.json(); name = d.title || '' }
+        const r = await fetch('http://localhost:4242/analyze-spotify-track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url.trim() })
+        })
+        if (r.ok) {
+          const d = await r.json()
+          name = d.name && d.artists ? `${d.name} — ${d.artists.join(', ')}` : (d.title || d.name || '')
+        }
       } catch(e) {}
     }
     const spotifyId = url.includes('spotify.com/track/') ? url.split('/track/')[1].split('?')[0] : null

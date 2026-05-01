@@ -1429,11 +1429,11 @@
   function generateVersionName(versions, versionType) {
     if (versionType === 'mixing') {
       const n = versions.filter(v => v.version_type === 'mixing').length
-      return 'MIX_v' + String(n+1).padStart(2,'0')
+      return 'MIX_v' + String(n).padStart(2,'0')
     }
     if (versionType === 'production') {
       const n = versions.filter(v => v.version_type === 'production').length
-      return 'v' + String(n + 1).padStart(2,'0')
+      return 'v' + String(n).padStart(2,'0')
     }
     if (versionType === 'vocal_rec') {
       const prodCount = versions.filter(v => v.version_type === 'production').length

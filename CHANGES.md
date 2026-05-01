@@ -1,5 +1,95 @@
 # CHANGES
 
+## [2026-05-01] ProjectsTab.svelte — DONE
+TASK: fix-version-numbering
+WHAT: Fixed off-by-one in generateVersionName — production and MIX paths used n+1 instead of n, causing gaps (v04→v06) when "+ New Version" was clicked; also removed orphan empty versions from ECHOTRONICO (v06) and L'ODORE DEL MARE (v04) in DB
+RESULT: works
+BLOCKERS: none
+
+## [2026-05-01] Start Momentum.command — DONE
+TASK: rewrite-start-command
+WHAT: Rewrote Start Momentum.command using Terminal.app — no iTerm dependency, no AppleScript heredocs
+RESULT: works
+BLOCKERS: none
+
+## [2026-05-01] Start Momentum.command — DONE
+TASK: fix-applescript-syntax-v2
+WHAT: Rewrote Start Momentum.command using single-line osascript calls — fixes AppleScript syntax error
+RESULT: works
+BLOCKERS: none
+
+## [2026-05-01] Start Momentum.command — DONE
+TASK: fix-applescript-syntax
+WHAT: Fixed AppleScript syntax error in Start Momentum.command — rewrote using heredoc osascript blocks
+RESULT: works
+BLOCKERS: none
+
+## [2026-04-30] Start Momentum.command — DONE
+TASK: add-phantom-bot-tab
+WHAT: Added Phantom bot (api.py) as Tab 3 in Start Momentum.command; switched from Terminal.app to iTerm2; api.py lives at ~/Dropbox/!MOMENTUM MUSIC/!BACKUP/trading/api.py; activates venv before running
+RESULT: script is executable, opens Svelte Dev / Claude Code / Phantom Bot tabs in order
+BLOCKERS: none
+
+## [2026-04-30] Start Momentum.command — DONE
+TASK: remove-n8n-from-startup
+WHAT: Removed n8n tab (Tab 3) and open http://localhost:5678 from Start Momentum.command on Desktop
+RESULT: Script now opens only SvelteKit dev server and Claude Code tabs
+BLOCKERS: none
+
+## [2026-04-28] momentum-watcher.cjs — DONE
+TASK: genre-intelligence
+WHAT: buildGenreProfiles() groups analyzed library tracks by primary genre, computes avg BPM/energy/dance/valence/brightness/bass/loudness; saveGenreProfiles() upserts to brain_knowledge as 'Genre Profile: [genre]'; POST /update-genre-profiles endpoint; /genreprofiles Telegram command; genre profiles injected into /ask Mozart context; runs weekly Sunday 8am
+RESULT: endpoint works (saved: 0 currently — only 3 tracks have tempo+genre, need >3 per genre; will populate as bg queue processes overnight)
+BLOCKERS: none — data dependency only
+
+## [2026-04-28] ProjectsTab.svelte — DONE
+TASK: remove-task-creation-form
+WHAT: Removed TASKS section from right panel (title + 3-row creation form + selectedProject wrapper); removed newTaskSong/Stage/Label/Date/Time state vars; removed addTask() function (52 lines)
+RESULT: works — 0 remaining references, -93 lines
+BLOCKERS: none
+
+## [2026-04-28] ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: success-match-back-and-trend-fit
+WHAT: [1] SUCCESS MATCH restored in analyzer, shown only when latestA exists, with on-demand "Analyze match" button; [2] POST /analyze-trend-fit endpoint: fetches up to 50 chart tracks, computes avg BPM/energy/dance/valence, sends gaps to Claude Haiku for 2-sentence insight; TREND FIT section in analyzer with gap chips (green=above, red=below) and "Analyze chart fit" button; ref-section-label CSS added
+RESULT: works — pm2 restarted, ping ok
+BLOCKERS: none
+
+## [2026-04-28] momentum-watcher.cjs — DONE
+TASK: bg-queue-youtube-limits
+WHAT: MAX_PER_DAY 10→50, startup limit 5→50, delay 60s→30s, removed Spotify rate limit gate from runBackgroundQueue + startup (rate limit check stays inside processLibraryTrackInBackground for metadata only)
+RESULT: works — pm2 restarted, ping ok. 449 tracks → ~3.7h overnight
+BLOCKERS: none
+
+## [2026-04-28] ProjectsTab.svelte + VocalEqChart.svelte — DONE
+TASK: analyzer-five-fixes
+WHAT: [1] Removed duplicate NEXT MOVE block (kept NEXT STEP in Mozart section); [2] Removed vocal style button, auto-runs in selectRefFromPicker+loadRefAnalysis, shows with gold VOCAL STYLE label; [3] Removed SUCCESS MATCH, TREND CONTEXT, FEEDBACK HISTORY dropdowns from analyzer; [4] VocalEqChart gains tonalBalance prop + syntheticCurveFromTonal() fallback when no real ref EQ curve exists; [5] Removed debug div showing mix_tonal/ref_tonal JSON
+RESULT: works — 0 svelte errors
+BLOCKERS: none
+
+## [2026-04-28] momentum-watcher.cjs + analyze_vocal_eq.py — DONE
+TASK: demucs-htdemucs_ft
+WHAT: All Demucs calls switched from htdemucs to htdemucs_ft — analyze_vocal_eq.py --name flag, extractAcapella -n flag, vocalsPath directory name updated to htdemucs_ft
+RESULT: works — committed
+BLOCKERS: none
+
+## [2026-04-28] momentum-watcher.cjs — DONE
+TASK: bg-analysis-youtube
+WHAT: Added downloadYouTubeAudio(artist, title) — yt-dlp ytsearch1 query, max 10min, mp3 output; processLibraryTrackInBackground now tries YouTube first, falls back to Spotify 30s preview; Spotify API only used for genres/metadata; /analyze-ref-now inherits same path via force=true
+RESULT: works — pm2 restarted, ping ok
+BLOCKERS: none
+
+## [2026-04-28] momentum-watcher.cjs + ProjectsTab.svelte — DONE
+TASK: on-demand-ref-analysis
+WHAT: POST /analyze-ref-now endpoint (find-or-create + force analyze); processLibraryTrackInBackground gains force=false param to skip rate limit; /processref Telegram command accepts optional search query; loadRefAnalysis auto-triggers /analyze-ref-now when ref has no tempo; analyzing indicator with pulse animation shown while pending
+RESULT: works — pm2 restarted, ping ok
+BLOCKERS: none
+
+## [2026-04-28] momentum-watcher.cjs — DONE
+TASK: bg-queue-permanent-fix
+WHAT: MAX_PER_DAY 20→10, startup limit 500→5 with analysis_attempted_at filter, delay 30s→60s, analysis_attempted_at stamped in finally block, /processref Telegram command added
+RESULT: works — pm2 restarted, ping ok, column already existed
+BLOCKERS: none
+
 ## [2026-04-28] ProjectsTab.svelte — DONE
 TASK: analyzer-version-name-and-ref-selection
 WHAT: onAnalyzerTabOpen uses version_name for label, only auto-analyzes when no curves; added loadRefAnalysis() + selectRefFromPicker() + refTrackOverride state; all 3 picker onclick handlers now call selectRefFromPicker(); selectedRefTrack checks refTrackOverride first; version_name column confirmed exists in vocal_eq_curves

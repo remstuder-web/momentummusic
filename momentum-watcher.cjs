@@ -70,6 +70,9 @@ const TELEGRAM_TOKEN    = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_OWNER_ID = 33858745
 const TELEGRAM_API      = 'https://api.telegram.org/bot' + TELEGRAM_TOKEN
 const sentMessages = [] // { chat_id, message_id, sent_at }
+const announcedChats = new Set()
+const SUPPRESS_NEW_CHAT = ['you', 'whatsapp', 'stefania']
+const SYSTEM_PING_PATTERNS = ['monitoring active', 'monitoring started', 'ping', 'heartbeat', 'status ok', 'is alive']
 
 // Gemini API (optional — used for cheap WhatsApp analysis)
 const GEMINI_API_KEY    = process.env.GEMINI_API_KEY
@@ -12917,7 +12920,8 @@ async function pollWhatsApp() {
             })
           }).catch(() => {})
 
-          // 3. Telegram notification
+          // 3. Telegram notification — skip system/ping messages
+          if (SYSTEM_PING_PATTERNS.some(p => lastMsg.toLowerCase().includes(p))) continue
           let telegramMsg = ''
           if (analysis.boundary_alert) {
             telegramMsg += `⚠️ BOUNDARY ALERT (${analysis.boundary_type || 'unknown'})\n${analysis.boundary_alert}\n\n`
@@ -12983,8 +12987,12 @@ async function pollWhatsApp() {
 
         for (const chat of newChats) {
           const name = chat.ZPARTNERNAME
+          const jid = chat.ZCONTACTJID
           const monitored = getWaContacts().some(c => name?.toLowerCase().includes(c.toLowerCase()))
           if (!monitored) {
+            if (SUPPRESS_NEW_CHAT.some(s => name?.toLowerCase().includes(s))) continue
+            if (announcedChats.has(jid)) continue
+            announcedChats.add(jid)
             await sendTelegram(TELEGRAM_OWNER_ID,
               '📱 New WhatsApp chat: ' + name +
               '\n/monitor ' + name + ' to start monitoring'

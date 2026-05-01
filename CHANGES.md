@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-01] momentum-watcher.cjs — DONE
+TASK: fix-whatsapp-telegram-spam
+WHAT: Suppress system/noise contacts from new-chat announcements (blocklist: you/whatsapp/stefania), deduplicate new-chat notifications with announcedChats Set so each JID announced once per session, skip Telegram forward for system ping messages (monitoring active/started/ping/heartbeat/status ok/is alive)
+RESULT: works
+BLOCKERS: none
+
 ## [2026-05-01] ProjectsTab.svelte — DONE
 TASK: fix-version-numbering
 WHAT: Fixed off-by-one in generateVersionName — production and MIX paths used n+1 instead of n, causing gaps (v04→v06) when "+ New Version" was clicked; also removed orphan empty versions from ECHOTRONICO (v06) and L'ODORE DEL MARE (v04) in DB

@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-01] ProjectsTab.svelte — DONE
+TASK: addreflink-get-page-title-get-method
+WHAT: Fixed addRefLink fetch to use GET with ?url= query param instead of POST+JSON body — matches actual watcher endpoint signature
+RESULT: works
+BLOCKERS: none
+
+## [2026-05-01] ProjectsTab.svelte — DONE
 TASK: addreflink-get-page-title
 WHAT: addRefLink now calls watcher /get-page-title for Spotify name resolution; spotifyId extracted upfront; refs built from p.reference_links directly
 RESULT: saves work; name resolution depends on endpoint method matching (see notes)

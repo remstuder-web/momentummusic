@@ -3,41 +3,37 @@
   import { buildMozartContext } from './mozartContext.js'
   import { onMount } from 'svelte'
 
-  let items = $state([])
-  let loading = $state(true)
-  let newName = $state('')
-
+  // ── Subscriptions state ────────────────────────────────────────────────────
+  let subsOpen  = $state(false)
+  let items     = $state([])
+  let loading   = $state(true)
+  let newName   = $state('')
   const RENEWALS = ['monthly','yearly','quarterly','one-time']
-
-  let total = $derived(items.reduce((s, f) => s + (parseFloat(f.amount) || 0), 0))
+  let total = $derived(items.reduce((s,f) => s + (parseFloat(f.amount)||0), 0))
 
   async function load() {
     const { data } = await supabase.from('finances').select('*').order('position')
-    items = data || []
-    loading = false
+    items = data || []; loading = false
   }
-
   async function save(item) {
     await supabase.from('finances').update({
-      name: item.name, amount: item.amount, renewal: item.renewal, notes: item.notes, billing_day: item.billing_day
+      name:item.name, amount:item.amount, renewal:item.renewal,
+      notes:item.notes, billing_day:item.billing_day
     }).eq('id', item.id)
   }
-
   async function add() {
     if (!newName.trim()) return
     const { data } = await supabase.from('finances')
-      .insert({ name: newName.trim(), amount: 0, renewal: 'monthly', notes: '', position: items.length })
+      .insert({name:newName.trim(),amount:0,renewal:'monthly',notes:'',position:items.length})
       .select().single()
-    if (data) items = [...items, { ...data, _exp: true }]
+    if (data) items = [...items, {...data, _exp:true}]
     newName = ''
   }
-
   async function del(id) {
-    if (!confirm('Delete this entry?')) return
+    if (!confirm('Delete?')) return
     await supabase.from('finances').delete().eq('id', id)
     items = items.filter(f => f.id !== id)
   }
-
   async function move(item, dir) {
     const idx = items.findIndex(f => f.id === item.id)
     const ni = idx + dir
@@ -45,442 +41,401 @@
     const a = items[idx], b = items[ni]
     const pa = a.position ?? idx, pb = b.position ?? ni
     a.position = pb; b.position = pa
-    items = [...items].sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
+    items = [...items].sort((x,y) => (x.position??0) - (y.position??0))
     await Promise.all([
-      supabase.from('finances').update({ position: pb }).eq('id', a.id),
-      supabase.from('finances').update({ position: pa }).eq('id', b.id),
+      supabase.from('finances').update({position:pb}).eq('id', a.id),
+      supabase.from('finances').update({position:pa}).eq('id', b.id),
     ])
   }
-
   function toggle(item) { item._exp = !item._exp; items = [...items] }
 
-  function amtStr(f) {
-    return f.amount ? 'CHF ' + parseFloat(f.amount).toFixed(2) + ' / ' + (f.renewal || 'monthly') : ''
+  // ── Phantom status (from Supabase) ────────────────────────────────────────
+  let phantomStatus = $state(null)
+
+  async function loadPhantomStatus() {
+    const { data } = await supabase
+      .from('phantom_status')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    phantomStatus = data || null
   }
 
-  // ── Crypto signal ──────────────────────────────────────────────────────────
-  const MONITORED_COINS = ['BTC','ETH','DOGE','XRP','FLOKI']
-  let cryptoSignal = $state(null)
-  let cryptoLoading = $state(false)
-  let showPolymarket = $state(false)
-  let showTrending = $state(false)
-  const MONITORED_SYMS = new Set(['BTC','ETH','DOGE','XRP','FLOKI'])
-  let allCoinPrices = $state({})
-  let portfolio = $state([])
-  let newCoin = $state('BTC')
-  let newAmount = $state('')
-  let newEntryPrice = $state('')
+  // ── Supabase trades + signals ──────────────────────────────────────────────
+  let recentTrades  = $state([])
+  let recentSignals = $state([])
+  let tradesLoading = $state(false)
 
-  async function loadCryptoSignal() {
-    cryptoLoading = true
-    try {
-      const [sigRes, pricesRes] = await Promise.all([
-        fetch('http://localhost:4242/crypto-signal'),
-        fetch('http://localhost:4242/all-coin-prices')
-      ])
-      cryptoSignal = await sigRes.json()
-      allCoinPrices = await pricesRes.json()
-    } catch(e) {}
-    cryptoLoading = false
-  }
+  let closedTrades = $derived(recentTrades.filter(t => t.result !== 'OPEN'))
+  let openTrades   = $derived(recentTrades.filter(t => t.result === 'OPEN'))
+  let totalPnl     = $derived(closedTrades.reduce((s,t) => s + (t.pnl_usd||0), 0))
+  let winRate = $derived(closedTrades.length
+    ? Math.round(closedTrades.filter(t => t.result==='WIN').length / closedTrades.length * 100)
+    : 0)
+  let botRunning = $derived(recentTrades.some(t =>
+    (Date.now() - new Date(t.opened_at).getTime()) < 10 * 60 * 1000
+  ))
 
-  async function loadPortfolio() {
-    const { data } = await supabase.from('user_settings').select('value').eq('key', 'crypto_portfolio').single()
-    if (data?.value) portfolio = JSON.parse(data.value)
-  }
-
-  async function savePortfolio() {
-    await supabase.from('user_settings').upsert({ key: 'crypto_portfolio', value: JSON.stringify(portfolio) }, { onConflict: 'key' })
-  }
-
-  async function addPortfolioEntry() {
-    if (!newAmount || !newEntryPrice) return
-    portfolio = [...portfolio, {
-      id: Date.now().toString(),
-      coin: newCoin,
-      amount: parseFloat(newAmount),
-      entryPrice: parseFloat(newEntryPrice)
-    }]
-    newAmount = ''; newEntryPrice = ''
-    await savePortfolio()
-  }
-
-  async function removePortfolioEntry(id) {
-    portfolio = portfolio.filter(e => e.id !== id)
-    await savePortfolio()
-  }
-
-  function currentPrice(coin) {
-    if (!cryptoSignal) return 0
-    if (coin === 'BTC') return cryptoSignal.btcPrice || 0
-    if (coin === 'ETH') return cryptoSignal.ethPrice || 0
-    return 0
-  }
-
-  onMount(() => {
-    loadCryptoSignal()
-    loadPortfolio()
-    const interval = setInterval(loadCryptoSignal, 5 * 60 * 1000)
-    return () => clearInterval(interval)
+  // ── Live feed ──────────────────────────────────────────────────────────────
+  let liveFeed = $derived(() => {
+    const events = []
+    for (const t of recentTrades.slice(0, 20)) {
+      events.push({
+        type:     t.result === 'OPEN' ? 'open' : 'close',
+        time:     t.result === 'OPEN' ? t.opened_at : t.closed_at,
+        strategy: t.strategy,
+        side:     t.side,
+        pnl:      t.pnl_usd,
+        result:   t.result,
+        entry:    t.entry_price,
+        size:     t.size_usd,
+      })
+    }
+    for (const s of recentSignals.slice(0, 10)) {
+      events.push({
+        type:     'signal',
+        time:     s.fired_at,
+        strategy: s.strategy,
+        side:     s.direction,
+        acted:    s.acted_on,
+        score:    s.score,
+      })
+    }
+    return events.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 15)
   })
 
-  load()
+  function feedTime(ts) {
+    if (!ts) return ''
+    const d = new Date(ts)
+    const now = new Date()
+    const diff = Math.floor((now - d) / 1000)
+    if (diff < 60)    return diff + 's ago'
+    if (diff < 3600)  return Math.floor(diff/60) + 'm ago'
+    if (diff < 86400) return Math.floor(diff/3600) + 'h ago'
+    return d.toLocaleDateString()
+  }
 
+  async function loadTrades() {
+    tradesLoading = true
+    try {
+      const {data: trades} = await supabase
+        .from('phantom_trades').select('*')
+        .order('opened_at', {ascending: false}).limit(50)
+      recentTrades = trades || []
+      const {data: signals} = await supabase
+        .from('phantom_signals').select('*')
+        .order('fired_at', {ascending: false}).limit(20)
+      recentSignals = signals || []
+    } catch(e) { console.error(e) }
+    tradesLoading = false
+  }
+
+  function formatTime(ts) {
+    if (!ts) return ''
+    return new Date(ts).toLocaleTimeString('de-CH', {hour:'2-digit', minute:'2-digit'})
+  }
+  function formatDate(ts) {
+    if (!ts) return ''
+    const d = new Date(ts)
+    const today = new Date()
+    return d.toDateString()===today.toDateString()
+      ? `Today ${formatTime(ts)}`
+      : d.toLocaleDateString('de-CH', {day:'2-digit', month:'2-digit'}) + ' ' + formatTime(ts)
+  }
+
+  // ── Mozart ─────────────────────────────────────────────────────────────────
   let aiMessages = $state([])
-  let aiInput = $state('')
-  let aiLoading = $state(false)
+  let aiInput    = $state('')
+  let aiLoading  = $state(false)
 
   async function sendAI(rawMsg) {
-    const msg = (typeof rawMsg === 'string' && rawMsg.trim()) ? rawMsg.trim() : aiInput.trim()
+    const msg = (typeof rawMsg==='string' && rawMsg.trim()) ? rawMsg.trim() : aiInput.trim()
     if (!msg || aiLoading) return
-    aiInput = ''
-    aiMessages = [...aiMessages, { role: 'user', content: msg }]
-    aiLoading = true
+    aiInput = ''; aiMessages = [...aiMessages, {role:'user', content:msg}]; aiLoading = true
     const apiKey = localStorage.getItem('mm_api_key') || ''
-    if (!apiKey) { aiMessages = [...aiMessages, { role: 'assistant', content: 'No API key set — add it in Settings ⚙.' }]; aiLoading = false; return }
-    const mozartContext = await buildMozartContext(supabase, {})
+    if (!apiKey) {
+      aiMessages = [...aiMessages, {role:'assistant', content:'No API key — add in Settings.'}]
+      aiLoading = false; return
+    }
+    const ctx = await buildMozartContext(supabase, {})
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, system: mozartContext, messages: aiMessages.slice(-10) })
+        headers: {'Content-Type':'application/json','x-api-key':apiKey,
+                  'anthropic-version':'2023-06-01',
+                  'anthropic-dangerous-direct-browser-access':'true'},
+        body: JSON.stringify({model:'claude-sonnet-4-20250514', max_tokens:400,
+                              system:ctx, messages:aiMessages.slice(-10)})
       })
       const data = await res.json()
-      if (data.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/mozart', model: 'claude-sonnet-4-20250514', input_tokens: data.usage.input_tokens, output_tokens: data.usage.output_tokens, cost_usd: (data.usage.input_tokens * 0.000003) + (data.usage.output_tokens * 0.000015) }) }).catch(() => {})
-      aiMessages = [...aiMessages, { role: 'assistant', content: data.content?.[0]?.text || 'No response.' }]
-    } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
+      aiMessages = [...aiMessages, {role:'assistant', content:data.content?.[0]?.text||'No response.'}]
+    } catch(e) { aiMessages = [...aiMessages, {role:'assistant', content:'Error: '+e.message}] }
     aiLoading = false
   }
 
-  function formatMozartOutput(text) {
-    if (!text) return ''
-    return text
-      .replace(/^## (.+)$/gm, '<div class="moz-header">$1</div>')
-      .replace(/\[GAP\]/g, '<span class="moz-gap">[GAP]</span>')
-      .replace(/\[OK\]/g, '<span class="moz-ok">[OK]</span>')
-      .replace(/\[CONFIRMED\]/g, '<span class="moz-confirmed">[CONFIRMED]</span>')
-      .replace(/\[TENSION\]/g, '<span class="moz-tension">[TENSION]</span>')
-      .replace(/\[OUTDATED\]/g, '<span class="moz-outdated">[OUTDATED]</span>')
-      .replace(/\[NEW\]/g, '<span class="moz-new">[NEW]</span>')
-      .replace(/^[-•] (.+)$/gm, '<div class="moz-bullet">$1</div>')
-      .replace(/^\d+\. (.+)$/gm, '<div class="moz-bullet">$1</div>')
-      .replace(/<div class="moz-header">(Next Step|Next Move)<\/div>\n?/g, '<div class="moz-next-label">NEXT STEP</div>')
-      .replace(/\n\n/g, '<div class="moz-spacer"></div>')
-  }
+  load()
+  onMount(() => {
+    loadPhantomStatus()
+    loadTrades()
+    const pi = setInterval(loadPhantomStatus, 60000)
+    const ti = setInterval(loadTrades, 15000)
+
+    const ps = supabase.channel('phantom_status')
+      .on('postgres_changes', {event:'*', schema:'public', table:'phantom_status'}, () => loadPhantomStatus())
+      .subscribe()
+    const ts = supabase.channel('phantom_trades')
+      .on('postgres_changes', {event:'*', schema:'public', table:'phantom_trades'}, () => loadTrades())
+      .subscribe()
+    const ss = supabase.channel('phantom_signals')
+      .on('postgres_changes', {event:'*', schema:'public', table:'phantom_signals'}, () => loadTrades())
+      .subscribe()
+
+    return () => {
+      clearInterval(pi); clearInterval(ti)
+      supabase.removeChannel(ps); supabase.removeChannel(ts); supabase.removeChannel(ss)
+    }
+  })
 </script>
 
 <div class="tab-layout">
 <div class="tab-main">
-  <div class="sh">Subscriptions &amp; Services</div>
 
-  <div class="add-row">
-    <input class="inp" bind:value={newName} placeholder="Service name..." onkeydown={e => e.key === 'Enter' && add()} />
-    <button class="btn btn-gold" onclick={add}>+ Add</button>
+  <!-- ══ PHANTOM (TOP) ══════════════════════════════════════════════════════ -->
+  <div class="sh" style="display:flex;align-items:center;justify-content:space-between">
+    <span>🖤 PHANTOM</span>
+    <span class="bot-badge {botRunning ? 'running' : 'scanning'}">
+      {botRunning ? 'RUNNING' : 'SCANNING'}
+    </span>
   </div>
 
-  {#if loading}
-    <div class="empty">Loading...</div>
-  {:else if !items.length}
-    <div class="empty">No entries yet.</div>
-  {:else}
-    {#each items as f (f.id)}
-      <div class="sub-card {f._exp ? 'exp' : ''}">
-        <div class="sub-head" onclick={() => toggle(f)}>
-          <div class="reorder-col" onclick={e => e.stopPropagation()}>
-            <button class="reorder-micro" onclick={() => move(f, -1)}>▲</button>
-            <button class="reorder-micro" onclick={() => move(f, 1)}>▼</button>
-          </div>
-          <span class="sub-name">{f.name}</span>
-          {#if f.billing_day}
-            <span class="billing-day">day {f.billing_day}</span>
-          {/if}
-          {#if f.amount}
-            <span class="sub-amt">CHF {parseFloat(f.amount).toFixed(2)}</span>
-            <span class="sub-renewal">{f.renewal || 'monthly'}</span>
-          {/if}
-          <button class="del-btn" onclick={e => { e.stopPropagation(); del(f.id) }}>×</button>
-          <span class="sub-arr">▶</span>
-        </div>
-        {#if f._exp}
-          <div class="sub-body">
-            <div class="field-row">
-              <div class="field-lbl">AMOUNT (CHF)</div>
-              <input class="inp" type="number" step="0.01" placeholder="0.00"
-                value={f.amount || ''}
-                oninput={e => { f.amount = e.target.value; items = [...items]; save(f) }} />
-            </div>
-            <div class="field-row">
-              <div class="field-lbl">RENEWAL</div>
-              <select class="inp" value={f.renewal || 'monthly'} onchange={e => { f.renewal = e.target.value; items = [...items]; save(f) }}>
-                {#each RENEWALS as r}<option value={r}>{r.charAt(0).toUpperCase()+r.slice(1)}</option>{/each}
-              </select>
-            </div>
-            <div class="field-row">
-              <div class="field-lbl">BILLING DAY <span style="font-size:10px;color:#555;font-family:'DM Sans',sans-serif;font-weight:300;text-transform:none;letter-spacing:0">— day of month (1–31)</span></div>
-              <input class="inp" type="number" min="1" max="31" placeholder="e.g. 15"
-                value={f.billing_day || ''}
-                oninput={e => { f.billing_day = e.target.value ? parseInt(e.target.value) : null; items = [...items]; save(f) }} />
-            </div>
-            <div class="field-row">
-              <div class="field-lbl">NOTES</div>
-              <input class="inp" placeholder="Notes..." value={f.notes || ''}
-                onchange={e => { f.notes = e.target.value; items = [...items]; save(f) }} />
-            </div>
-          </div>
-        {/if}
+  {#if phantomStatus}
+    <div class="bot-meta">
+      <div>
+        <div class="bal-label">BALANCE</div>
+        <div class="bal-val">${(phantomStatus.balance??0).toFixed(2)} <span class="bal-unit">USDC</span></div>
       </div>
-    {/each}
-
-    <div class="total-bar">
-      <span class="total-lbl">Total / month</span>
-      <span class="total-amt">CHF {total.toFixed(2)}</span>
+      <div>
+        <div class="bal-label">RISK POOL</div>
+        <div class="bal-val" style="font-size:14px;color:#7a6230">${(phantomStatus.pool_balance??0).toFixed(2)}</div>
+      </div>
+      {#if phantomStatus.last_tick || phantomStatus.updated_at}
+        <div class="bot-lasttick">Last tick<br>{new Date(phantomStatus.last_tick ?? phantomStatus.updated_at).toLocaleTimeString()}</div>
+      {/if}
     </div>
   {/if}
 
-  <!-- CRYPTO SIGNAL -->
-  <div class="crypto-section">
-    <div class="sh" style="margin-top:24px">CRYPTO SIGNAL</div>
-
-    {#if cryptoLoading}
-      <div class="empty" style="padding:16px 0">Loading signals...</div>
-    {:else if cryptoSignal?.ok}
-
-      <div class="signal-block signal-{cryptoSignal.signal.toLowerCase().replace(/ /g,'-')}">
-        <div class="signal-label">{cryptoSignal.emoji} {cryptoSignal.signal}</div>
-        <div class="signal-suggestion">{cryptoSignal.suggestion}</div>
-      </div>
-
-      <div class="price-row">
-        <span class="coin-label">BTC</span>
-        <span class="coin-price">€{Math.round(cryptoSignal.btcPrice).toLocaleString()}</span>
-        <span class="coin-change {cryptoSignal.btcChange24h > 0 ? 'up' : 'down'}">
-          {cryptoSignal.btcChange24h > 0 ? '+' : ''}{cryptoSignal.btcChange24h?.toFixed(1)}%
-        </span>
-      </div>
-      <div class="price-row">
-        <span class="coin-label">ETH</span>
-        <span class="coin-price">€{Math.round(cryptoSignal.ethPrice).toLocaleString()}</span>
-        <span class="coin-change {cryptoSignal.ethChange24h > 0 ? 'up' : 'down'}">
-          {cryptoSignal.ethChange24h > 0 ? '+' : ''}{cryptoSignal.ethChange24h?.toFixed(1)}%
-        </span>
-      </div>
-
-      <div class="indicators">
-        <div class="ind-row">
-          <span class="ind-label">Fear &amp; Greed</span>
-          <span class="ind-val">{cryptoSignal.fearGreed.value} · {cryptoSignal.fearGreed.label}</span>
-        </div>
-        {#if cryptoSignal.funding !== null}
-          <div class="ind-row">
-            <span class="ind-label">Funding Rate</span>
-            <span class="ind-val">{cryptoSignal.funding?.toFixed(3)}%</span>
-          </div>
-        {/if}
-        <div class="ind-row">
-          <span class="ind-label">BTC Dominance</span>
-          <span class="ind-val">{cryptoSignal.dominance}%</span>
-        </div>
-        <div class="ind-row">
-          <span class="ind-label">Altseason</span>
-          <span class="ind-val {cryptoSignal.altseasonSignal === 'ACTIVE' ? 'active' : ''}">{cryptoSignal.altseasonSignal}</span>
-        </div>
-      </div>
-
-      {#if cryptoSignal.reasons?.length}
-        <div class="signal-reasons">
-          {#each cryptoSignal.reasons as reason}
-            <div class="reason-item">· {reason}</div>
-          {/each}
-        </div>
-      {/if}
-
-      {#if cryptoSignal.polymarkets?.length}
-        <button class="poly-toggle" onclick={() => showPolymarket = !showPolymarket}>
-          🎯 POLYMARKET <span class="poly-arr {showPolymarket ? 'open' : ''}">▶</span>
-        </button>
-        {#if showPolymarket}
-          <div class="poly-body">
-            {#each cryptoSignal.polymarkets as m}
-              {@const icon = m.yes_prob > 65 ? '🟢' : m.yes_prob > 45 ? '🟡' : '🔴'}
-              <div class="poly-row">
-                <span class="poly-prob" style="color:{m.yes_prob > 65 ? '#4caf82' : m.yes_prob > 45 ? '#e8a838' : '#e05a4a'}">{m.yes_prob}%</span>
-                <span class="poly-icon">{icon}</span>
-                <span class="poly-q">{m.question}</span>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      {/if}
-
-      {#if cryptoSignal.cg_trending?.trending?.length}
-        {@const cgt = cryptoSignal.cg_trending}
-        {@const cgg = cryptoSignal.cg_global || {}}
-        <button class="poly-toggle" onclick={() => showTrending = !showTrending}>
-          🔍 TRENDING NOW <span class="poly-arr {showTrending ? 'open' : ''}">▶</span>
-          {#if cgt.monitored_trending?.length}
-            <span class="trend-alert">⚡ {cgt.monitored_trending.map(t => t.symbol).join(' ')}</span>
-          {/if}
-        </button>
-        {#if showTrending}
-          <div class="poly-body">
-            {#if cgg.btc_dominance != null}
-              <div class="trend-global">
-                <span class="trend-dom">BTC dom: <b style="color:{cgg.btc_dominance > 55 ? '#e8a838' : cgg.btc_dominance < 45 ? '#4caf82' : '#cec9c1'}">{cgg.btc_dominance.toFixed(1)}%</b></span>
-                {#if cgg.market_cap_change_24h != null}
-                  <span class="trend-mktcap" style="color:{cgg.market_cap_change_24h > 0 ? '#4caf82' : '#e05a4a'}">
-                    Market {cgg.market_cap_change_24h > 0 ? '+' : ''}{cgg.market_cap_change_24h.toFixed(2)}%
-                  </span>
-                {/if}
-              </div>
-            {/if}
-            {#each cgt.trending as t}
-              {@const isMonitored = MONITORED_SYMS.has(t.symbol)}
-              <div class="trend-row {isMonitored ? 'monitored' : ''}">
-                <span class="trend-rank">{isMonitored ? '⚡' : t.rank + '.'}</span>
-                <span class="trend-sym" style="color:{isMonitored ? '#c9a84c' : '#cec9c1'}">{t.symbol}</span>
-                <span class="trend-name">{t.name}</span>
-                {#if t.market_cap_rank}<span class="trend-mcr">#{t.market_cap_rank}</span>{/if}
-              </div>
-            {/each}
-          </div>
-        {/if}
-      {/if}
-
-      <!-- Monitored coins live prices -->
-      {#if Object.keys(allCoinPrices).length}
-        <div class="section-title" style="margin-top:12px;margin-bottom:4px">MONITORED COINS</div>
-        {#each MONITORED_COINS as coin}
-          {@const data = allCoinPrices[coin]}
-          {@const activeTrade = cryptoSignal?.active_trades?.find(t => t.coin === coin)}
-          {#if data}
-            <div class="price-row">
-              <span class="coin-label">{coin}</span>
-              <span class="coin-price">
-                {data.price < 0.01 ? '€' + data.price?.toFixed(6) : '€' + Math.round(data.price).toLocaleString()}
-              </span>
-              <span class="coin-change {data.change24h > 0 ? 'up' : 'down'}">
-                {data.change24h > 0 ? '+' : ''}{data.change24h?.toFixed(1)}%
-              </span>
-              {#if activeTrade}
-                <span style="font-size:9px;color:#c9a84c;font-family:'Space Mono',monospace;margin-left:6px">ACTIVE</span>
-              {/if}
-            </div>
-          {/if}
-        {/each}
-      {/if}
-
-      {#if cryptoSignal.active_trades?.length}
-        <div class="section-title" style="margin-top:12px;margin-bottom:4px">ACTIVE TRADES</div>
-        {#each cryptoSignal.active_trades as trade}
-          {@const fmtEntry = trade.entry_price < 1 ? trade.entry_price?.toFixed(4) : Math.round(trade.entry_price).toLocaleString()}
-          <div class="active-trade-row {(trade.pnl_pct || 0) >= 0 ? 'profit' : 'loss'}"
-            style="border-left: 3px solid {(trade.pnl_pct || 0) >= 5 ? '#00c853' : (trade.pnl_pct || 0) <= -5 ? '#e05a4a' : (trade.pnl_pct || 0) > 0 ? '#4caf82' : '#ff6b35'};padding-left:8px">
-            <span class="coin-label">{trade.coin}</span>
-            <span class="coin-price" style="font-size:11px">entry €{fmtEntry}</span>
-            <span class="coin-change {(trade.pnl_pct || 0) >= 0 ? 'up' : 'down'}" style="margin-left:auto">
-              {(trade.pnl_pct || 0) >= 0 ? '+' : ''}{trade.pnl_pct?.toFixed(2)}%
-              (€{Math.round(trade.pnl_eur || 0)})
-            </span>
-          </div>
-        {/each}
-      {/if}
-
-      {#if cryptoSignal.binanceAction === 'buy'}
-        <a href={cryptoSignal.binanceDeepLink} target="_blank" class="binance-btn">Open Binance →</a>
-      {:else if cryptoSignal.binanceAction === 'sell'}
-        <a href={cryptoSignal.binanceDeepLink} target="_blank" class="binance-btn sell">Sell on Binance →</a>
-      {/if}
-
-      <button class="refresh-btn" onclick={loadCryptoSignal}>↻ Refresh</button>
-    {:else if cryptoSignal}
-      <div class="empty" style="padding:10px 0;font-size:11px;color:#444">Signal unavailable — check watcher</div>
-      <button class="refresh-btn" onclick={loadCryptoSignal}>↻ Retry</button>
+  
+  <!-- ══ LIVE FEED ════════════════════════════════════════════════════════════ -->
+  <div class="sh" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between">
+    <span>LIVE FEED</span>
+    <span class="feed-pulse"></span>
+  </div>
+  <div class="live-feed">
+    {#if liveFeed().length === 0}
+      <div class="feed-empty">Scanning... first signal will appear here</div>
     {/if}
+    {#each liveFeed() as ev}
+      <div class="feed-row {ev.type}">
+        {#if ev.type === 'open'}
+          <span class="feed-icon">🟢</span>
+          <span class="feed-body">
+            <span class="feed-strat">{ev.strategy}</span>
+            <span class="feed-tag {ev.side}">{ev.side?.toUpperCase()}</span>
+            <span class="feed-detail">@ ${ev.entry < 1 ? ev.entry?.toFixed(4) : ev.entry?.toFixed(2)} · ${ev.size?.toFixed(0)}</span>
+          </span>
+          <span class="feed-time">{feedTime(ev.time)}</span>
+        {:else if ev.type === 'close'}
+          <span class="feed-icon">{ev.result === 'WIN' ? '✅' : ev.result === 'STOPPED' ? '🛑' : '❌'}</span>
+          <span class="feed-body">
+            <span class="feed-strat">{ev.strategy}</span>
+            <span class="feed-pnl" style="color:{(ev.pnl??0)>=0?'#4caf82':'#e05a4a'}">{(ev.pnl??0)>=0?'+':''}{(ev.pnl??0).toFixed(2)}</span>
+            <span class="feed-result-tag {ev.result?.toLowerCase()}">{ev.result}</span>
+          </span>
+          <span class="feed-time">{feedTime(ev.time)}</span>
+        {:else if ev.type === 'signal'}
+          <span class="feed-icon">{ev.acted ? '⚡' : '·'}</span>
+          <span class="feed-body">
+            <span class="feed-strat" style="opacity:0.6">{ev.strategy}</span>
+            <span class="feed-tag {ev.side}" style="opacity:0.7">{ev.side?.toUpperCase()}</span>
+            <span class="feed-detail" style="opacity:0.5">{ev.score}/11 · {ev.acted ? 'TRADED' : 'SKIPPED'}</span>
+          </span>
+          <span class="feed-time">{feedTime(ev.time)}</span>
+        {/if}
+      </div>
+    {/each}
+  </div>
 
-    <!-- Live Binance -->
-    {#if cryptoSignal?.binance_portfolio?.length}
-      <div class="sh" style="margin-top:20px">LIVE BINANCE</div>
-      {#each cryptoSignal.binance_portfolio.filter(b => ['BTC','ETH','BNB','EUR','USDT','USDC'].includes(b.coin)) as balance}
-        <div class="price-row">
-          <span class="coin-label">{balance.coin}</span>
-          <span class="coin-price">{balance.total.toFixed(6)}</span>
-          {#if balance.coin === 'BTC' && cryptoSignal.btcPrice}
-            <span class="coin-change up">€{Math.round(balance.total * cryptoSignal.btcPrice).toLocaleString()}</span>
-          {:else if balance.coin === 'ETH' && cryptoSignal.ethPrice}
-            <span class="coin-change up">€{Math.round(balance.total * cryptoSignal.ethPrice).toLocaleString()}</span>
-          {/if}
-          {#if balance.locked > 0}
-            <span style="font-size:9px;color:#444">({balance.locked.toFixed(6)} locked)</span>
+<!-- ══ PERFORMANCE ════════════════════════════════════════════════════════ -->
+  <div class="sh" style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">
+    <span>PERFORMANCE</span>
+    <button class="refresh-btn" onclick={loadTrades}>{tradesLoading ? '...' : '↻'}</button>
+  </div>
+
+  {#if closedTrades.length > 0}
+    <div class="stats-bar">
+      <div class="stat-box">
+        <div class="stat-label">TOTAL P&L</div>
+        <div class="stat-val" style="color:{totalPnl>=0?'#4caf82':'#e05a4a'}">${totalPnl>=0?'+':''}{totalPnl.toFixed(2)}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">WIN RATE</div>
+        <div class="stat-val" style="color:{winRate>=50?'#4caf82':'#c9a84c'}">{winRate}%</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">CLOSED</div>
+        <div class="stat-val">{closedTrades.length}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">OPEN</div>
+        <div class="stat-val" style="color:#c9a84c">{openTrades.length}</div>
+      </div>
+    </div>
+  {:else}
+    <div class="empty-sm">No trades yet — bot is scanning for signals</div>
+  {/if}
+
+  {#if openTrades.length > 0}
+    <div class="section-title" style="margin-top:12px">OPEN POSITIONS</div>
+    {#each openTrades as t}
+      <div class="trade-row open">
+        <span class="trade-strategy">{t.strategy}</span>
+        <span class="trade-side {t.side}">{t.side?.toUpperCase()}</span>
+        <span class="trade-entry">@ ${t.entry_price < 1 ? t.entry_price?.toFixed(4) : t.entry_price?.toFixed(2)}</span>
+        <span class="trade-size">${t.size_usd?.toFixed(0)}</span>
+        <span class="trade-time">{formatTime(t.opened_at)}</span>
+        <span class="trade-result open-badge">OPEN</span>
+      </div>
+    {/each}
+  {/if}
+
+  {#if closedTrades.length > 0}
+    <div class="section-title" style="margin-top:12px">RECENT TRADES</div>
+    {#each closedTrades.slice(0,15) as t}
+      <div class="trade-row">
+        <span class="trade-strategy">{t.strategy}</span>
+        <span class="trade-side {t.side}">{t.side?.toUpperCase()}</span>
+        <span class="trade-entry">@ ${t.entry_price < 1 ? t.entry_price?.toFixed(4) : t.entry_price?.toFixed(2)}</span>
+        <span class="trade-size">${t.size_usd?.toFixed(0)}</span>
+        <span class="trade-pnl" style="color:{(t.pnl_usd??0)>=0?'#4caf82':'#e05a4a'}">{(t.pnl_usd??0)>=0?'+':''}{(t.pnl_usd??0).toFixed(2)}</span>
+        <span class="trade-result {t.result?.toLowerCase()}">{t.result}</span>
+      </div>
+    {/each}
+  {/if}
+
+  {#if recentSignals.length > 0}
+    <div class="section-title" style="margin-top:16px">RECENT SIGNALS</div>
+    {#each recentSignals.slice(0,10) as s}
+      <div class="signal-row">
+        <span class="signal-dot {s.direction}"></span>
+        <span class="signal-strategy">{s.strategy}</span>
+        <span class="signal-dir {s.direction}">{s.direction?.toUpperCase()}</span>
+        <span class="signal-label">{s.risk_label}</span>
+        <span class="signal-score">{s.score}/11</span>
+        <span class="signal-time">{formatDate(s.fired_at)}</span>
+        <span class="signal-acted {s.acted_on?'yes':'no'}">{s.acted_on ? 'TRADED' : 'SKIPPED'}</span>
+      </div>
+    {/each}
+  {/if}
+
+  <!-- ══ SUBSCRIPTIONS (collapsible) ════════════════════════════════════════ -->
+  <div class="sh subs-header" style="margin-top:28px" onclick={()=>subsOpen=!subsOpen}>
+    <span>Subscriptions &amp; Services
+      <span class="subs-total">CHF {total.toFixed(2)}/mo</span>
+    </span>
+    <span class="subs-arrow" class:open={subsOpen}>▶</span>
+  </div>
+
+  {#if subsOpen}
+    <div class="add-row">
+      <input class="inp" bind:value={newName} placeholder="Service name..."
+        onkeydown={e => e.key==='Enter' && add()} />
+      <button class="btn btn-gold" onclick={add}>+ Add</button>
+    </div>
+    {#if loading}
+      <div class="empty">Loading...</div>
+    {:else if !items.length}
+      <div class="empty">No entries yet.</div>
+    {:else}
+      {#each items as f (f.id)}
+        <div class="sub-card {f._exp ? 'exp' : ''}">
+          <div class="sub-head" onclick={() => toggle(f)}>
+            <div class="reorder-col" onclick={e => e.stopPropagation()}>
+              <button class="reorder-micro" onclick={() => move(f,-1)}>▲</button>
+              <button class="reorder-micro" onclick={() => move(f,1)}>▼</button>
+            </div>
+            <span class="sub-name">{f.name}</span>
+            {#if f.billing_day}<span class="billing-day">day {f.billing_day}</span>{/if}
+            {#if f.amount}
+              <span class="sub-amt">CHF {parseFloat(f.amount).toFixed(2)}</span>
+              <span class="sub-renewal">{f.renewal||'monthly'}</span>
+            {/if}
+            <button class="del-btn" onclick={e => { e.stopPropagation(); del(f.id) }}>×</button>
+            <span class="sub-arr">▶</span>
+          </div>
+          {#if f._exp}
+            <div class="sub-body">
+              <div class="field-row">
+                <div class="field-lbl">AMOUNT (CHF)</div>
+                <input class="inp" type="number" step="0.01" value={f.amount||''}
+                  oninput={e => { f.amount=e.target.value; items=[...items]; save(f) }} />
+              </div>
+              <div class="field-row">
+                <div class="field-lbl">RENEWAL</div>
+                <select class="inp" value={f.renewal||'monthly'}
+                  onchange={e => { f.renewal=e.target.value; items=[...items]; save(f) }}>
+                  {#each RENEWALS as r}<option value={r}>{r.charAt(0).toUpperCase()+r.slice(1)}</option>{/each}
+                </select>
+              </div>
+              <div class="field-row">
+                <div class="field-lbl">BILLING DAY</div>
+                <input class="inp" type="number" min="1" max="31" value={f.billing_day||''}
+                  oninput={e => { f.billing_day=e.target.value?parseInt(e.target.value):null; items=[...items]; save(f) }} />
+              </div>
+              <div class="field-row">
+                <div class="field-lbl">NOTES</div>
+                <input class="inp" value={f.notes||''}
+                  onchange={e => { f.notes=e.target.value; items=[...items]; save(f) }} />
+              </div>
+            </div>
           {/if}
         </div>
       {/each}
-      {@const totalEur =
-        (cryptoSignal.binance_portfolio.find(b => b.coin === 'BTC')?.total || 0) * (cryptoSignal.btcPrice || 0) +
-        (cryptoSignal.binance_portfolio.find(b => b.coin === 'ETH')?.total || 0) * (cryptoSignal.ethPrice || 0) +
-        (cryptoSignal.binance_portfolio.find(b => b.coin === 'EUR')?.total || 0) +
-        (cryptoSignal.binance_portfolio.find(b => b.coin === 'USDT')?.total || 0)}
-      <div class="price-row" style="border-top:1px solid #1c1c1c;margin-top:6px;padding-top:6px">
-        <span class="coin-label" style="color:#c9a84c">TOTAL</span>
-        <span class="coin-price" style="color:#c9a84c">€{Math.round(totalEur).toLocaleString()}</span>
+      <div class="total-bar">
+        <span class="total-lbl">Total / month</span>
+        <span class="total-amt">CHF {total.toFixed(2)}</span>
       </div>
-    {:else if cryptoSignal && cryptoSignal.binance_portfolio === null}
-      <div class="sh" style="margin-top:20px">LIVE BINANCE</div>
-      <div class="empty" style="font-size:11px;color:#333;padding:8px 0">Add BINANCE_API_KEY + BINANCE_SECRET_KEY to .env for live balance tracking</div>
     {/if}
-
-    <!-- Portfolio tracker -->
-    <div class="sh" style="margin-top:20px">MY PORTFOLIO</div>
-
-    {#each portfolio as entry}
-      {@const cur = currentPrice(entry.coin)}
-      {@const curVal = Math.round(entry.amount * cur)}
-      {@const pnlPct = cur > 0 ? ((cur - entry.entryPrice) / entry.entryPrice * 100).toFixed(1) : null}
-      <div class="portfolio-row">
-        <span class="p-coin">{entry.coin}</span>
-        <span class="p-amount">{entry.amount}</span>
-        <span class="p-entry">@ €{entry.entryPrice.toLocaleString()}</span>
-        <span class="p-value">€{cur > 0 ? curVal.toLocaleString() : '—'}</span>
-        {#if pnlPct !== null}
-          <span class="p-pnl {parseFloat(pnlPct) >= 0 ? 'up' : 'down'}">{parseFloat(pnlPct) >= 0 ? '+' : ''}{pnlPct}%</span>
-        {/if}
-        <button class="del-btn" onclick={() => removePortfolioEntry(entry.id)}>×</button>
-      </div>
-    {/each}
-
-    <div class="add-row" style="margin-top:8px">
-      <select bind:value={newCoin} class="inp" style="width:auto;flex-shrink:0">
-        <option>BTC</option>
-        <option>ETH</option>
-        <option>SOL</option>
-      </select>
-      <input class="inp" bind:value={newAmount} placeholder="Amount" type="number" step="any" />
-      <input class="inp" bind:value={newEntryPrice} placeholder="Entry €" type="number" step="any" />
-      <button class="btn btn-gold" onclick={addPortfolioEntry}>+</button>
-    </div>
-  </div>
+  {/if}
 
 </div>
+
+<!-- ══ Sidebar ════════════════════════════════════════════════════════════════ -->
 <div class="tab-sidebar">
   <div class="mozart-block">
     <div class="mozart-title-row">
       <div class="mozart-title">ASK MOZART</div>
       {#if aiMessages.length}
-        <button class="clear-chat" onclick={() => aiMessages = []}>Clear</button>
+        <button class="clear-chat" onclick={() => aiMessages=[]}>Clear</button>
       {/if}
     </div>
     <div class="chat-input-row">
-      <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
+      <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..."
+        onkeydown={e => e.key==='Enter' && sendAI()} />
       <button class="btn-gold-sm" onclick={() => sendAI()}>Ask</button>
     </div>
     <div class="chat-out">
       {#each aiMessages as msg}
         <div class="chat-msg {msg.role}">
-          <div class="chat-who">{msg.role==='user'?'You':'Mozart'}</div>
-          <div class="chat-text">{@html msg.role === 'assistant' ? formatMozartOutput(msg.content) : msg.content}</div>
+          <div class="chat-who">{msg.role==='user' ? 'You' : 'Mozart'}</div>
+          <div class="chat-text">{msg.content}</div>
         </div>
       {/each}
       {#if aiLoading}
-        <div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>
+        <div class="chat-msg assistant">
+          <div class="chat-who">Mozart</div>
+          <div class="chat-text dim">...</div>
+        </div>
       {/if}
     </div>
   </div>
@@ -488,124 +443,132 @@
 </div>
 
 <style>
-  .tab-layout { display: grid; grid-template-columns: 1fr 320px; gap: 32px; min-height: calc(100vh - 100px); align-items: start; }
-  .tab-main { display: flex; flex-direction: column; min-width: 0; }
-  .tab-sidebar { border-left: 1px solid #1c1c1c; padding-left: 24px; display: flex; flex-direction: column; }
-  .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); padding-bottom: 6px; border-bottom: 1px solid #303030; margin-bottom: 14px; }
-  .empty { font-family: 'Space Mono', monospace; font-size: 12px; color: #9e9690; padding: 32px 0; text-align: center; }
+  .tab-layout{display:grid;grid-template-columns:1fr 320px;gap:32px;min-height:calc(100vh - 100px);align-items:start}
+  .tab-main{display:flex;flex-direction:column;min-width:0}
+  .tab-sidebar{border-left:1px solid #1c1c1c;padding-left:24px}
 
-  .add-row { display: flex; gap: 8px; margin-bottom: 14px; }
-  .inp { background: #1c1c1c; border: 1px solid #3c3c3c; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 4px 8px; outline: none; border-radius: 3px; transition: border-color .2s; width: 100%; }
-  .inp:focus { border-color: rgba(201,168,76,.5); }
-  .inp::placeholder { color: #9e9690; }
-  .btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 7px 14px; border: none; cursor: pointer; border-radius: 3px; white-space: nowrap; flex-shrink: 0; }
-  .btn-gold { background: #c9a84c; color: #0a0a0a; }
-  .btn-gold:hover { background: #d4b060; }
+  .sh{font-family:'Space Mono',monospace;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:rgba(201,168,76,.75);padding-bottom:6px;border-bottom:1px solid #303030;margin-bottom:14px}
+  .subs-header{cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between}
+  .subs-header:hover{color:rgba(201,168,76,.9)}
+  .subs-total{font-size:10px;color:#555;margin-left:8px;text-transform:none;letter-spacing:0;font-family:'DM Sans',sans-serif}
+  .subs-arrow{font-size:10px;color:#444;transition:transform .2s;display:inline-block}
+  .subs-arrow.open{transform:rotate(90deg)}
 
-  .sub-card { border-bottom: 1px solid #1a1a1a; background: transparent; }
-  .sub-card.exp { border-bottom-color: rgba(201,168,76,.2); }
-  .sub-head { padding: 6px 10px; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; transition: background .15s; }
-  .sub-head:hover { background: rgba(255,255,255,.015); }
-  .sub-card.exp .sub-head { background: rgba(201,168,76,.03); }
-  .sub-name { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; flex: 1; color: #cec9c1; }
-  .sub-card.exp .sub-name { color: #c9a84c; }
-  .billing-day { font-family: 'Space Mono', monospace; font-size: 9px; color: #3a3a3a; flex-shrink: 0; }
-  .sub-amt { font-family: 'Space Mono', monospace; font-size: 11px; color: #cec9c1; flex-shrink: 0; text-align: right; }
-  .sub-card.exp .sub-amt { color: #c9a84c; }
-  .sub-renewal { font-family: 'Space Mono', monospace; font-size: 7px; color: #444; flex-shrink: 0; text-transform: uppercase; letter-spacing: .06em; }
-  .sub-arr { font-size: 9px; color: #444; transition: transform .2s; font-family: 'Space Mono', monospace; flex-shrink: 0; }
-  .sub-card.exp .sub-arr { transform: rotate(90deg); }
+  .empty{font-family:'Space Mono',monospace;font-size:12px;color:#9e9690;padding:32px 0;text-align:center}
+  .empty-sm{font-family:'DM Sans',sans-serif;font-size:11px;color:#444;padding:4px 0 8px}
+  .section-title{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(201,168,76,.45);margin:0 0 4px}
 
-  .reorder-col { display: flex; flex-direction: column; gap: 0; flex-shrink: 0; }
-  .reorder-micro { font-size: 9px; padding: 1px 2px; background: transparent; border: none; color: #252525; cursor: pointer; line-height: 1; }
-  .reorder-micro:hover { color: #555; }
-  .del-btn { background: transparent; border: none; color: #1c1c1c; font-size: 15px; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
-  .del-btn:hover { color: #e05a4a; }
+  .add-row{display:flex;gap:8px;margin-bottom:14px}
+  .inp{background:#1c1c1c;border:1px solid #3c3c3c;color:#f5f1ea;font-family:'DM Sans',sans-serif;font-size:13px;padding:4px 8px;outline:none;border-radius:3px;width:100%}
+  .inp:focus{border-color:rgba(201,168,76,.5)}
+  .btn{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:7px 14px;border:none;cursor:pointer;border-radius:3px;white-space:nowrap;flex-shrink:0}
+  .btn-gold{background:#c9a84c;color:#0a0a0a}
 
-  .sub-body { padding: 8px 10px; border-top: 1px solid #1a1a1a; display: flex; flex-direction: column; gap: 6px; background: #050505; }
-  .field-row { display: flex; flex-direction: column; gap: 4px; }
-  .field-lbl { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: rgba(201,168,76,.5); }
+  .sub-card{border-bottom:1px solid #1a1a1a}
+  .sub-head{padding:6px 10px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+  .sub-head:hover{background:rgba(255,255,255,.015)}
+  .sub-name{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;flex:1;color:#cec9c1}
+  .sub-card.exp .sub-name{color:#c9a84c}
+  .billing-day{font-family:'Space Mono',monospace;font-size:9px;color:#3a3a3a}
+  .sub-amt{font-family:'Space Mono',monospace;font-size:11px;color:#cec9c1}
+  .sub-renewal{font-family:'Space Mono',monospace;font-size:7px;color:#444;text-transform:uppercase}
+  .sub-arr{font-size:9px;color:#444;transition:transform .2s}
+  .sub-card.exp .sub-arr{transform:rotate(90deg)}
+  .reorder-col{display:flex;flex-direction:column}
+  .reorder-micro{font-size:9px;padding:1px 2px;background:transparent;border:none;color:#252525;cursor:pointer}
+  .reorder-micro:hover{color:#555}
+  .del-btn{background:transparent;border:none;color:#1c1c1c;font-size:15px;cursor:pointer;padding:0 2px}
+  .del-btn:hover{color:#e05a4a}
+  .sub-body{padding:8px 10px;border-top:1px solid #1a1a1a;display:flex;flex-direction:column;gap:6px;background:#050505}
+  .field-row{display:flex;flex-direction:column;gap:4px}
+  .field-lbl{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(201,168,76,.5)}
+  .total-bar{border:1px solid rgba(201,168,76,.2);border-radius:3px;padding:8px 12px;background:rgba(201,168,76,.04);display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+  .total-lbl{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#555}
+  .total-amt{font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#c9a84c}
 
-  .total-bar { border: 1px solid rgba(201,168,76,.2); border-radius: 3px; padding: 8px 12px; background: rgba(201,168,76,.04); display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
-  .total-lbl { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #555; }
-  .total-amt { font-family: 'Space Mono', monospace; font-size: 16px; font-weight: 700; color: #c9a84c; }
-  .mozart-block { margin-top: 16px; border-top: 1px solid #1c1c1c; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
-  .mozart-title-row { display: flex; align-items: center; justify-content: space-between; }
-  .mozart-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; }
-  .clear-chat { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
-  .clear-chat:hover { border-color: #555; color: #9e9690; }
-  .chat-out { overflow-y: auto; max-height: 70vh; min-height: 200px; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; scroll-behavior: smooth; }
-  .chat-msg { display: flex; flex-direction: column; gap: 2px; }
-  .chat-who { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
-  .chat-msg.assistant .chat-who { color: #7a6230; }
-  .chat-text { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; line-height: 1.5; }
-  .chat-text.dim { color: #444; }
-  .chat-input-row { display: flex; gap: 6px; }
-  .chat-inp { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; border-radius: 3px; }
-  .chat-inp:focus { border-color: rgba(201,168,76,.4); }
-  .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 7px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
+  /* Bot */
+  .bot-badge{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;padding:2px 7px;border-radius:2px;letter-spacing:.08em}
+  .bot-badge.running{background:rgba(76,175,130,.12);color:#4caf82;border:1px solid rgba(76,175,130,.25)}
+  .bot-badge.scanning{background:rgba(201,168,76,.08);color:#7a6230;border:1px solid rgba(201,168,76,.15)}
+  .live-feed{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+  .feed-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:#111;border:0.5px solid #222;font-size:12px}
+  .feed-row.open{border-color:rgba(76,175,130,0.3)}
+  .feed-row.close{border-color:rgba(201,168,76,0.2)}
+  .feed-row.signal{background:transparent;border-color:#1a1a1a}
+  .feed-icon{font-size:13px;flex-shrink:0}
+  .feed-body{flex:1;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .feed-strat{color:#cec9c1;font-family:'Space Mono',monospace;font-size:11px}
+  .feed-detail{color:#6b6762;font-size:11px}
+  .feed-time{color:#4a4845;font-size:10px;flex-shrink:0}
+  .feed-pnl{font-family:'Space Mono',monospace;font-size:12px;font-weight:700}
+  .feed-tag{font-size:10px;padding:1px 5px;border-radius:3px;font-weight:700}
+  .feed-tag.long{background:rgba(76,175,130,0.15);color:#4caf82}
+  .feed-tag.short{background:rgba(224,90,74,0.15);color:#e05a4a}
+  .feed-result-tag{font-size:10px;padding:1px 5px;border-radius:3px}
+  .feed-result-tag.win{background:rgba(76,175,130,0.15);color:#4caf82}
+  .feed-result-tag.stopped,.feed-result-tag.loss{background:rgba(224,90,74,0.15);color:#e05a4a}
+  .feed-empty{color:#4a4845;font-size:12px;padding:10px;text-align:center}
+  .feed-pulse{width:7px;height:7px;border-radius:50%;background:#4caf82;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+  .bot-meta{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;gap:20px}
+  .bal-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#444;margin-bottom:3px}
+  .bal-val{font-family:'Space Mono',monospace;font-size:20px;font-weight:700;color:#c9a84c}
+  .bal-unit{font-size:11px;color:#7a6230}
+  .bot-lasttick{font-family:'Space Mono',monospace;font-size:9px;color:#444;text-align:right;line-height:1.5}
 
-  /* Crypto */
-  .crypto-section { margin-top: 4px; }
-  .signal-block { padding: 10px 12px; border-radius: 3px; margin-bottom: 10px; border-left: 3px solid #444; }
-  .signal-block.signal-strong-buy { border-left-color: #00c853; background: rgba(0,200,83,.08); }
-  .signal-block.signal-strong-buy .signal-label { color: #00c853; }
-  .signal-block.signal-bullish { border-left-color: #4caf82; background: rgba(76,175,130,.05); }
-  .signal-block.signal-bullish .signal-label { color: #4caf82; }
-  .signal-block.signal-neutral { border-left-color: #f5a623; background: rgba(245,166,35,.05); }
-  .signal-block.signal-neutral .signal-label { color: #f5a623; }
-  .signal-block.signal-bearish { border-left-color: #ff6b35; background: rgba(255,107,53,.05); }
-  .signal-block.signal-bearish .signal-label { color: #ff6b35; }
-  .signal-block.signal-strong-sell { border-left-color: #e05a4a; background: rgba(224,90,74,.08); }
-  .signal-block.signal-strong-sell .signal-label { color: #e05a4a; }
-  .signal-label { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: #cec9c1; margin-bottom: 4px; }
-  .signal-suggestion { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #9e9690; }
-  .active-trade-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-left: 2px solid #333; margin-bottom: 2px; }
-  .active-trade-row.profit { border-left-color: #4caf82; }
-  .active-trade-row.loss { border-left-color: #e05a4a; }
-  .price-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid #111; }
-  .coin-label { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; width: 30px; }
-  .coin-price { font-family: 'Space Mono', monospace; font-size: 13px; color: #cec9c1; flex: 1; }
-  .coin-change { font-family: 'Space Mono', monospace; font-size: 11px; }
-  .coin-change.up { color: #4caf82; }
-  .coin-change.down { color: #e05a4a; }
-  .indicators { margin: 10px 0; }
-  .ind-row { display: flex; justify-content: space-between; padding: 3px 0; font-family: 'DM Sans', sans-serif; font-size: 11px; }
-  .ind-label { color: #555; }
-  .ind-val { color: #9e9690; }
-  .ind-val.active { color: #c9a84c; }
-  .signal-reasons { margin: 8px 0; }
-  .reason-item { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #666; padding: 1px 0; }
-  .binance-btn { display: inline-block; margin-top: 10px; font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: #c9a84c; color: #0a0a0a; padding: 6px 14px; border-radius: 3px; text-decoration: none; letter-spacing: .06em; }
-  .binance-btn:hover { background: #d4b862; }
-  .binance-btn.sell { background: #e05a4a; }
-  .binance-btn.sell:hover { background: #e86f60; }
-  .refresh-btn { display: block; margin-top: 8px; font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #252525; color: #444; padding: 3px 8px; border-radius: 2px; cursor: pointer; }
-  .refresh-btn:hover { color: #9e9690; }
-  .poly-toggle { display: flex; align-items: center; gap: 6px; width: 100%; background: transparent; border: none; border-top: 1px solid #252525; color: rgba(201,168,76,.65); font-family: 'Space Mono', monospace; font-size: 10px; padding: 7px 0 4px; cursor: pointer; margin-top: 8px; }
-  .poly-toggle:hover { color: #c9a84c; }
-  .poly-arr { font-size: 8px; transition: transform .2s; }
-  .poly-arr.open { transform: rotate(90deg); }
-  .poly-body { margin: 4px 0 6px; display: flex; flex-direction: column; gap: 4px; }
-  .poly-row { display: flex; align-items: flex-start; gap: 6px; }
-  .poly-prob { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; min-width: 32px; }
-  .poly-icon { font-size: 10px; }
-  .poly-q { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; line-height: 1.3; }
-  .trend-alert { font-size: 9px; color: #c9a84c; margin-left: auto; }
-  .trend-global { display: flex; gap: 12px; padding: 4px 0 6px; border-bottom: 1px solid #252525; margin-bottom: 4px; }
-  .trend-dom, .trend-mktcap { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #666; }
-  .trend-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
-  .trend-row.monitored { background: rgba(201,168,76,.04); border-radius: 2px; padding: 2px 4px; }
-  .trend-rank { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; min-width: 16px; }
-  .trend-sym { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; min-width: 44px; }
-  .trend-name { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #666; flex: 1; }
-  .trend-mcr { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; }
-  .portfolio-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #111; font-family: 'Space Mono', monospace; font-size: 10px; flex-wrap: wrap; }
-  .p-coin { color: #c9a84c; width: 30px; }
-  .p-amount { color: #cec9c1; }
-  .p-entry { color: #555; }
-  .p-value { color: #cec9c1; margin-left: auto; }
-  .p-pnl { font-size: 10px; }
-  .p-pnl.up { color: #4caf82; }
-  .p-pnl.down { color: #e05a4a; }
+  /* Stats */
+  .stats-bar{display:flex;gap:12px;margin-bottom:12px;padding:10px 14px;background:rgba(201,168,76,.04);border:1px solid rgba(201,168,76,.12);border-radius:3px}
+  .stat-box{display:flex;flex-direction:column;gap:3px;flex:1}
+  .stat-label{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:#555}
+  .stat-val{font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#cec9c1}
+
+  /* Trades */
+  .trade-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #111;font-family:'Space Mono',monospace}
+  .trade-row.open{background:rgba(201,168,76,.03)}
+  .trade-strategy{font-size:9px;color:#9e9690;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .trade-side{font-size:10px;font-weight:700;width:38px;flex-shrink:0}
+  .trade-side.long{color:#4caf82}
+  .trade-side.short{color:#e05a4a}
+  .trade-entry{font-size:9px;color:#cec9c1;flex-shrink:0}
+  .trade-size{font-size:9px;color:#555;width:32px;text-align:right;flex-shrink:0}
+  .trade-pnl{font-size:10px;font-weight:700;width:44px;text-align:right;flex-shrink:0}
+  .trade-time{font-size:9px;color:#444;flex-shrink:0}
+  .trade-result{font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;flex-shrink:0;letter-spacing:.04em}
+  .trade-result.win{background:rgba(76,175,130,.15);color:#4caf82}
+  .trade-result.loss,.trade-result.stopped{background:rgba(224,90,74,.12);color:#e05a4a}
+  .trade-result.open-badge{background:rgba(201,168,76,.1);color:#c9a84c}
+
+  /* Signals */
+  .signal-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #0d0d0d;font-family:'Space Mono',monospace}
+  .signal-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .signal-dot.long{background:#4caf82}
+  .signal-dot.short{background:#e05a4a}
+  .signal-strategy{font-size:9px;color:#9e9690;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .signal-dir{font-size:9px;font-weight:700;width:36px;flex-shrink:0}
+  .signal-dir.long{color:#4caf82}
+  .signal-dir.short{color:#e05a4a}
+  .signal-label{font-size:8px;color:#7a6230;width:70px;flex-shrink:0;overflow:hidden}
+  .signal-score{font-size:9px;color:#555;width:24px;flex-shrink:0}
+  .signal-time{font-size:8px;color:#333;flex-shrink:0}
+  .signal-acted{font-size:8px;padding:1px 4px;border-radius:2px;flex-shrink:0}
+  .signal-acted.yes{background:rgba(76,175,130,.1);color:#4caf82}
+  .signal-acted.no{background:rgba(80,80,80,.1);color:#444}
+
+  /* Mozart */
+  .mozart-block{margin-top:16px;border-top:1px solid #1c1c1c;padding-top:12px;display:flex;flex-direction:column;gap:8px}
+  .mozart-title-row{display:flex;align-items:center;justify-content:space-between}
+  .mozart-title{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.14em;color:rgba(201,168,76,.75)}
+  .clear-chat{font-family:'Space Mono',monospace;font-size:10px;padding:2px 8px;background:transparent;border:1px solid #252525;color:#444;border-radius:2px;cursor:pointer}
+  .chat-out{overflow-y:auto;max-height:70vh;min-height:200px;display:flex;flex-direction:column;gap:8px;padding:4px 0}
+  .chat-msg{display:flex;flex-direction:column;gap:2px}
+  .chat-who{font-family:'Space Mono',monospace;font-size:10px;color:#555}
+  .chat-msg.assistant .chat-who{color:#7a6230}
+  .chat-text{font-family:'DM Sans',sans-serif;font-size:13px;color:#cec9c1;line-height:1.5}
+  .chat-text.dim{color:#444}
+  .chat-input-row{display:flex;gap:6px}
+  .chat-inp{flex:1;background:#1c1c1c;border:1px solid #303030;color:#f5f1ea;font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 10px;outline:none;border-radius:3px}
+  .chat-inp:focus{border-color:rgba(201,168,76,.4)}
+  .btn-gold-sm{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:7px 12px;background:#c9a84c;color:#0a0a0a;border:none;border-radius:3px;cursor:pointer}
+  .refresh-btn{font-family:'Space Mono',monospace;font-size:9px;background:transparent;border:1px solid #252525;color:#444;padding:3px 8px;border-radius:2px;cursor:pointer}
+  .refresh-btn:hover{color:#9e9690;border-color:#444}
 </style>

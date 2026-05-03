@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-03] AbletonMCP/__init__.py — DONE
+TASK: ableton-patch-plugin-subfolder-traversal
+WHAT: Patched AbletonMCP: plugin subfolder traversal via uri field. PATCH 1: URI translation in get_browser_items_at_path — "query:Plugins#AUv2" → "plugins/AUv2" before path splitting, with full category map (AudioFx, MidiEffects, MaxForLive, Plugins, Instruments, Sounds, Drums, Samples, Packs). PATCH 2: _load_instrument_or_effect — inline master track support (track_index == -1 → self._song.master_track). Reload AbletonMCP in Ableton Preferences → MIDI to activate.
+RESULT: grep confirms both patches present at lines 4907 and 1709
+BLOCKERS: none — requires Ableton restart to reload script
+
 ## [2026-05-03] momentum-watcher.cjs — DONE
 TASK: ableton-get-browser-items-for-plugins
 WHAT: All system prompts: use get_browser_items_at_path with path "query:Plugins#VST3|VST|AUv2" for third-party plugins. NEVER browse_path or search_browser for plugins. Executor injection block: covers both browse_path and get_browser_items_at_path — fuzzy matches instruction keywords against item names, falls back to first item, writes item_uri.

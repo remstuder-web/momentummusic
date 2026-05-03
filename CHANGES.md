@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-03] momentum-watcher.cjs — DONE
+TASK: ableton-remove-debug-logs
+WHAT: Removed SEQUENCE STEP DEBUG, LOAD_BROWSER_ITEM PARAMS, SESSION TRACK COUNT console.logs from /ableton-sequence executor.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
 ## [2026-05-03] AbletonMCP/__init__.py + momentum-watcher.cjs — DONE
 TASK: ableton-master-track-and-item-uri
 WHAT: Python: _load_browser_item and _validate_track_index both now handle track_index == -1 → self._song.master_track (special case before the existing out-of-range check). Watcher: URI injection now writes params.item_uri and deletes params.uri (wrong key). All system prompts updated: track_index -1 for master, param key "item_uri" in load_browser_item examples.

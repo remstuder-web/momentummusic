@@ -9715,11 +9715,7 @@ Respond ONLY in JSON:
 
         for (let i = 0; i < pending.length; i++) {
           const command = pending[i]
-          if (command.type === 'load_browser_item') {
-            console.log('SEQUENCE STEP DEBUG:', JSON.stringify(command, null, 2))
-            console.log('LOAD_BROWSER_ITEM PARAMS:', JSON.stringify(command.params, null, 2))
-            console.log('SESSION TRACK COUNT:', command.params.track_index)
-          }
+
           try {
             const response = await sendAbletonTCP(command)
             console.log(`✓ ableton-sequence step ${i + 1}/${pending.length}: ${command.type}`)

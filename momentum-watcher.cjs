@@ -5913,16 +5913,16 @@ async function sendAbletonTCP(command) {
 }
 
 // ── Shared AbletonMCP system prompt ──────────────────────────────────────
-const ABLETON_CMD_LIST = `SESSION: get_session_info, get_session_path, is_session_modified, get_current_view, focus_view, start_playback, stop_playback, start_recording, stop_recording, toggle_arrangement_record, toggle_session_record, capture_midi, set_tempo, set_overdub, jump_to_time, get_playback_position, get_arrangement_length, set_arrangement_loop, health_check, get_cpu_load, undo, redo
-TRACKS: get_track_info, set_track_name, select_track, create_midi_track, create_audio_track, create_group_track, duplicate_track, delete_track, freeze_track, flatten_track, fold_track, unfold_track, unarm_all, set_track_volume, set_track_pan, set_track_mute, set_track_solo, set_track_arm, set_track_color, set_track_monitoring, get_track_monitoring, set_track_input_routing, get_track_input_routing, set_track_output_routing, get_track_output_routing, get_available_inputs, get_available_outputs, get_send_level, set_send_level
-RETURN/MASTER: get_return_tracks, get_return_track_info, set_return_volume, set_return_pan, load_item_to_return, get_master_info, set_master_volume, set_master_pan
-CLIPS: create_clip, delete_clip, duplicate_clip, select_clip, fire_clip, stop_clip, set_clip_name, set_clip_color, get_clip_color, get_clip_loop, set_clip_loop, get_clip_notes, add_notes_to_clip, remove_notes, remove_all_notes, transpose_notes, quantize_clip_notes, humanize_clip_velocity, humanize_clip_timing, get_clip_automation, set_clip_automation, clear_clip_automation, get_clip_gain, set_clip_gain, get_clip_pitch, set_clip_pitch, get_clip_warp_info, set_clip_warp_mode, get_warp_markers, add_warp_marker, delete_warp_marker, commit_groove, apply_groove
-SCENES: get_all_scenes, fire_scene, stop_scene, select_scene, create_scene, duplicate_scene, delete_scene, set_scene_name, get_scene_color, set_scene_color
-DEVICES: get_device_parameters, get_device_by_name, set_device_parameter, toggle_device, delete_device, move_device_left, move_device_right, get_rack_chains, select_rack_chain, load_item_to_track, load_instrument_or_effect, load_drum_kit
-LOCATORS: get_locators, create_locator, delete_locator
-MUSIC: get_scale_notes, generate_bassline, generate_drum_pattern
+const ABLETON_CMD_LIST = `SESSION: get_session_info, get_session_path, is_session_modified, get_current_view, focus_view, start_playback, stop_playback, start_recording, stop_recording, capture_midi, set_tempo, jump_to_time, get_playback_position, health_check, get_cpu_load, undo, redo
+TRACKS: get_track_info, set_track_name, select_track, create_midi_track, create_audio_track, delete_track, duplicate_track, freeze_track, set_track_volume, set_track_pan, set_track_mute, set_track_solo, set_track_arm, set_track_color, get_send_level, set_send_level, get_available_inputs, get_available_outputs
+CLIPS: create_clip, delete_clip, duplicate_clip, fire_clip, stop_clip, set_clip_name, set_clip_color, get_clip_notes, add_notes_to_clip, remove_notes, remove_all_notes, transpose_notes, quantize_clip_notes, humanize_clip_velocity, get_clip_loop, set_clip_loop
+SCENES: get_all_scenes, fire_scene, stop_scene, create_scene, delete_scene, set_scene_name
+DEVICES: get_device_parameters, get_device_by_name, set_device_parameter, toggle_device, delete_device, load_browser_item
 BROWSER: search_browser, get_browser_items_at_path, browse_path
-METRONOME/GROOVE: get_metronome_state, set_metronome, get_groove_pool`
+MASTER: get_master_info, set_master_volume, set_master_pan
+RETURN: get_return_tracks, set_return_volume, set_return_pan
+MUSIC: get_scale_notes, generate_bassline, generate_drum_pattern
+NOTE: To load a plugin (e.g. "API 2500") on the master track, use load_browser_item with the track_index of the master and search for the plugin name.`
 
 // ── HTTP server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {

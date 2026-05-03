@@ -116,7 +116,6 @@
       { name: 'get_return_track_info', hint: 'Get info about return track A' },
       { name: 'set_return_volume', hint: 'Set return track A volume to 0 dB' },
       { name: 'set_return_pan', hint: 'Set return track A pan to center' },
-      { name: 'load_item_to_return', hint: 'Load a reverb to return track A' },
       { name: 'get_master_info', hint: 'Get master track info' },
       { name: 'set_master_volume', hint: 'Set master volume to 0 dB' },
       { name: 'set_master_pan', hint: 'Set master pan to center' },
@@ -178,9 +177,7 @@
       { name: 'move_device_right', hint: 'Move device right in chain on track 1' },
       { name: 'get_rack_chains', hint: 'Get chains of rack on track 1' },
       { name: 'select_rack_chain', hint: 'Select chain 0 in rack on track 1' },
-      { name: 'load_item_to_track', hint: 'Load Reverb to track 1' },
-      { name: 'load_instrument_or_effect', hint: 'Load Analog synth to track 1' },
-      { name: 'load_drum_kit', hint: 'Load 808 Core Kit drum rack to track 1' },
+      { name: 'load_browser_item', hint: 'Load API 2500 plugin on master track' },
     ]},
     { cat: 'LOCATORS', tools: [
       { name: 'get_locators', hint: 'Get all locators in the arrangement' },

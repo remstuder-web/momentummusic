@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-03] momentum-watcher.cjs + DailyTab.svelte — DONE
+TASK: ableton-verified-commands
+WHAT: Replace ABLETON_CMD_LIST with verified working AbletonMCP command names. Remove non-existent commands (toggle_arrangement_record, set_overdub, move_device_left, load_drum_kit, etc.). Replace load_instrument_or_effect/load_item_to_track/load_drum_kit with load_browser_item. Add load_browser_item usage note to system prompts. Remove load_item_to_return chip from DailyTab RETURN/MASTER section.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
+## [2026-05-03] momentum-watcher.cjs + DailyTab.svelte — DONE
 TASK: ableton-tcp-fix-and-sequence
 WHAT: Fix 1: extracted sendAbletonTCP helper with 10s timeout + JSON.parse brace-balance detection (no more newline wait). Fix 2: response displays cleanly from parsed TCP buffer. New: POST /ableton-sequence — Claude plans full step array then executes each command sequentially, returns {ok, steps:[{command,response,ok}]}. UI: mode toggle (Single Command / Full Sequence), sequence shows step-by-step ✓/✗ list with summary.
 RESULT: watcher restarted, ping ok

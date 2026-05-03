@@ -1,27 +1,18 @@
 {
-  "updated": "2026-04-27T13:55:00Z",
-  "last_task": "analyzer-verify",
+  "updated": "2026-05-03T15:38:00Z",
+  "last_task": "references-overhaul",
   "status": "done",
   "working": [
-    "All 15 ANALYZER tab sections confirmed present and in correct location",
-    "Stem tabs: line 3567",
-    "EQ chart (VocalEqChart): line 3691",
-    "Ref picker: line 3576",
-    "Mozart insight: line 3947",
-    "Tonal balance: lines 3720 (non-tonal stems) + 3802 (tonal tab)",
-    "Stereo width: lines 3756 (non-tonal stems) + 3836 (tonal tab)",
-    "Feel metrics bars: line 3894",
-    "Emotional arc: line 3871 (ref track arc segments) + line 4133 (own-mix arc SVG with energy/brightness)",
-    "Credits: line 3923",
-    "Project ref avg markers: line 3910",
-    "SUCCESS MATCH: line 4094",
-    "FEEDBACK HISTORY: line 4165",
-    "TREND CONTEXT: line 4190",
-    "Pro-Q 4 button: line 3702",
-    "Avg refs button: line 3706"
+    "addSongRef: now uses /spotify-track-meta (not oEmbed), adds id field, fires analyze-spotify-track for library sync",
+    "addRefLink: now updates local state immediately (refs appear without refresh), clears input correctly (refLinkInput[p.id]), fires analyze-spotify-track for library sync",
+    "/analyze-spotify-track: upserts to reference_tracks after full analysis (source=user, collection_name=project_ref)",
+    "/analyze-spotify-track: lightweight path — if spotify_id provided without url, upserts metadata stub and returns immediately",
+    "/spotify-track-meta: ensureSpotifyToken() called before Spotify fetch — handles expired tokens via refresh or client credentials fallback",
+    "spotifyTokenExpiresAt tracked in loadSpotifyToken — expiry-aware token management",
+    "pm2 restarted, ping OK, /spotify-track-meta returning title+artist correctly"
   ],
   "broken": [],
   "partial": [],
-  "next": "Ready for browser testing. Open ANALYZER tab on a song with analysis data and verify all sections render correctly.",
-  "notes": "Analyzer tab block: lines 3537-4219. All inside {#if activeSongTab[song.id]==='analyzer'}. @const vars are direct children of the {#if} block (required by Svelte 5). vocal-eq-section div follows the @const declarations."
+  "next": "Test in UI: paste Spotify URL in project References tab and song ref field — both should resolve name immediately and sync to library",
+  "notes": "Previous test 404 was a bad track ID, not a token bug. Token refresh added as defensive measure anyway."
 }

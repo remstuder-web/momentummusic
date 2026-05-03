@@ -1041,7 +1041,16 @@
     const current = p.reference_links || []
     const refs = [...current, newRef]
     await supabase.from('projects').update({ reference_links: refs }).eq('id', p.id)
-    refInput = ''
+    p.reference_links = refs
+    projects = projects.map(proj => proj.id === p.id ? { ...proj, reference_links: refs } : proj)
+    refLinkInput[p.id] = ''
+    if (spotifyId) {
+      fetch('http://localhost:4242/analyze-spotify-track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spotify_id: spotifyId, url: url.trim(), name })
+      }).catch(() => {})
+    }
   }
 
   // Preview audio player for reference links
@@ -1138,24 +1147,28 @@
   }
 
   async function addSongRef(song) {
-    const val = (songRefInput[song.id] || '').trim()
-    if (!val) return
-    songRefInput[song.id] = ''
+    const url = songRefInput[song.id]?.trim()
+    if (!url) return
     let name = ''
-    if (val.includes('spotify')) {
+    let spotifyId = null
+    if (url.includes('spotify.com/track/')) {
+      spotifyId = url.split('/track/')[1].split('?')[0]
       try {
-        const r = await fetch('https://open.spotify.com/oembed?url=' + encodeURIComponent(val))
-        if (r.ok) { const d = await r.json(); name = d.title || '' }
+        const r = await fetch(`http://localhost:4242/spotify-track-meta?id=${spotifyId}`)
+        if (r.ok) { const d = await r.json(); name = d.name || '' }
       } catch(e) {}
     }
-    const newRef = {
-      url: val,
-      name: name || val,
-      spotify_id: val.includes('spotify.com/track/') ? val.split('/track/')[1].split('?')[0] : null,
-      added_at: new Date().toISOString()
+    const newRef = { id: 'r' + Date.now(), url, name, spotify_id: spotifyId, added_at: new Date().toISOString() }
+    const refs = [...(song.reference_links || []), newRef]
+    await updateSongField(song, 'reference_links', refs)
+    if (spotifyId) {
+      fetch('http://localhost:4242/analyze-spotify-track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spotify_id: spotifyId, url, name })
+      }).catch(() => {})
     }
-    const reference_links = [...(song.reference_links||[]), newRef]
-    await updateSongField(song, 'reference_links', reference_links)
+    songRefInput[song.id] = ''
   }
 
   async function removeSongRef(song, urlOrId) {

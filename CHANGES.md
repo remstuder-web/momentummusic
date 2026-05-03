@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-03] ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: references-overhaul
+WHAT: Unified reference name resolution (both project and song refs now use /spotify-track-meta); song refs now have id field; both paths queue to reference_tracks library via /analyze-spotify-track; /analyze-spotify-track upserts to reference_tracks after analysis; lightweight path added for spotify_id-only calls; token expiry tracked + ensureSpotifyToken() added for /spotify-track-meta
+RESULT: works — /spotify-track-meta returns title+artist, refs appear immediately, library sync fires on add
+BLOCKERS: none
+
 ## [2026-05-01] momentum-watcher.cjs + ProjectsTab.svelte — DONE
 TASK: spotify-track-meta-endpoint
 WHAT: Added GET /spotify-track-meta?id=... endpoint — fast Spotify metadata only (no Essentia), returns {title, artist, name}; updated addRefLink to use it instead of broken oEmbed

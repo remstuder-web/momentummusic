@@ -2774,6 +2774,7 @@ console.log('Spotify Secret:', SPOTIFY_CLIENT_SECRET ? 'set' : 'EMPTY')
 // Spotify user OAuth tokens (set after /spotify-auth flow)
 let spotifyUserToken = null
 let spotifyUserRefresh = null
+let spotifyTokenExpiresAt = 0
 
 const SPOTIFY_TOKEN_FILE = path.join(__dirname, '.spotify-token.json')
 
@@ -2784,6 +2785,7 @@ function loadSpotifyToken() {
       if (data.access_token && data.expires_at > Date.now()) {
         spotifyUserToken = data.access_token
         spotifyUserRefresh = data.refresh_token
+        spotifyTokenExpiresAt = data.expires_at
         console.log('✓ Spotify user token loaded from disk, expires in',
           Math.round((data.expires_at - Date.now()) / 60000), 'min')
       } else if (data.refresh_token) {
@@ -2803,6 +2805,23 @@ function saveSpotifyToken(accessToken, refreshToken, expiresIn) {
     }), 'utf8')
     console.log('✓ Spotify token saved to disk')
   } catch(e) { console.warn('Could not save Spotify token:', e.message) }
+}
+
+async function ensureSpotifyToken() {
+  if (spotifyTokenExpiresAt && Date.now() > spotifyTokenExpiresAt) {
+    if (spotifyUserRefresh) {
+      await refreshSpotifyToken()
+    } else {
+      spotifyUserToken = null
+      spotifyTokenExpiresAt = 0
+    }
+  }
+  if (!spotifyUserToken) {
+    try {
+      spotifyUserToken = await getSpotifyToken()
+      spotifyTokenExpiresAt = Date.now() + 3480000 // 58 min
+    } catch(e) { console.warn('ensureSpotifyToken failed:', e.message) }
+  }
 }
 
 async function refreshSpotifyToken() {
@@ -7282,7 +7301,28 @@ ${context}` }]
     req.on('data', d => body += d)
     req.on('end', async () => {
       try {
-        const { url, spotify_id: reqSpotifyId, title: reqTitle, artist: reqArtist } = JSON.parse(body)
+        const { url, spotify_id: reqSpotifyId, title: reqTitle, artist: reqArtist, name: reqName } = JSON.parse(body)
+
+        // Lightweight path: spotify_id provided without url — just upsert metadata stub
+        if (!url && reqSpotifyId) {
+          const parts = (reqName || '').split(' — ')
+          const ltTitle = reqTitle || parts[0] || reqSpotifyId
+          const ltArtist = reqArtist || parts[1] || null
+          const { error: ltErr } = await supabase.from('reference_tracks').upsert({
+            spotify_id: reqSpotifyId,
+            title: ltTitle,
+            artist: ltArtist || '',
+            source: 'project_ref',
+            collection_name: 'project_ref',
+            approved: true
+          }, { onConflict: 'spotify_id' })
+          if (ltErr) console.warn('  lightweight ref upsert error:', ltErr.message)
+          else console.log(`  ✓ lightweight ref saved: ${ltTitle}`)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, lightweight: true, spotify_id: reqSpotifyId }))
+          return
+        }
+
         if (!url) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'No URL' })); return }
 
         // Graceful rate-limit response: queue for background analysis
@@ -7413,6 +7453,32 @@ ${context}` }]
           const _trackEntry = { category: 'reference_current', title: `${track.name} — ${track.artists[0]?.name || ''}`, content: [bpm ? `${Math.round(bpm)}bpm` : null, key ? `${key} ${scale || ''}`.trim() : null, energy ? `nrg ${energy}` : null, loudness ? `${loudness}LUFS` : null, genres.length ? `Genres: ${genres.slice(0,3).join(', ')}` : null].filter(Boolean).join(' · '), confidence: 'medium', source_type: 'spotify', source_url: `https://open.spotify.com/track/${trackId}` }
           setImmediate(() => saveBrainFile(_trackEntry).catch(() => {}))
         }
+        // Upsert to reference_tracks library
+        supabase.from('reference_tracks').upsert({
+          spotify_id: trackId,
+          title: track.name,
+          artist: track.artists.map(a => a.name).join(', '),
+          source: 'user',
+          collection_name: 'project_ref',
+          approved: true,
+          tempo: bpm || null,
+          key: key || null,
+          energy: energy || null,
+          danceability: danceability || null,
+          loudness: loudness || null,
+          valence: valence || null,
+          preview_url: preview_url || null,
+          popularity: track.popularity || null,
+          genres: genres.length ? genres : null,
+          genre_tag: genres[0] || null,
+          camelot: camelot || null,
+          brightness: esExtended.brightness || null,
+          bass_energy: esExtended.bass_energy || null,
+          vocal_pitch_mean: esExtended.vocal_pitch_mean || null,
+        }, { onConflict: 'spotify_id' }).then(({ error: uErr }) => {
+          if (uErr) console.warn('  analyze-spotify-track library upsert error:', uErr.message)
+          else console.log(`  ✓ saved to library: ${track.name}`)
+        }).catch(() => {})
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
           ok: true,
@@ -7987,6 +8053,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     const trackId = new URL('http://x' + req.url).searchParams.get('id')
     if (!trackId) { res.writeHead(400); res.end(JSON.stringify({ error: 'no id' })); return }
     try {
+      await ensureSpotifyToken()
       const r = await spotifyFetch(`https://api.spotify.com/v1/tracks/${trackId}`)
       if (!r.ok) throw new Error(`Spotify ${r.status}`)
       const d = await r.json()
@@ -10206,12 +10273,15 @@ ${chatText.slice(0, 4000)}`
       const mask = (val) => val.length > 4 ? '••••' + val.slice(-4) : (val ? '••••' : '')
       const anthropic = parse('ANTHROPIC_API_KEY')
       const openai = parse('OPENAI_API_KEY')
+      const openrouter = parse('OPENROUTER_API_KEY')
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({
         ANTHROPIC_API_KEY: mask(anthropic),
         OPENAI_API_KEY: mask(openai),
+        OPENROUTER_API_KEY: mask(openrouter),
         ANTHROPIC_API_KEY_RAW: anthropic,
-        OPENAI_API_KEY_RAW: openai
+        OPENAI_API_KEY_RAW: openai,
+        OPENROUTER_API_KEY_RAW: openrouter
       }))
     } catch(e) {
       res.writeHead(500, { 'Content-Type': 'application/json' })

@@ -5926,7 +5926,7 @@ MASTER: get_master_info, set_master_volume, set_master_pan
 RETURN: get_return_tracks, set_return_volume, set_return_pan
 MUSIC: get_scale_notes, generate_bassline, generate_drum_pattern
 IMPORTANT: For master track, ALWAYS use track_index: -1. This is the special index AbletonMCP uses for the master track.
-For loading plugins: use browse_path (not search_browser — that only finds Ableton built-ins). browse_path with path "Plug-ins/VST3", "Plug-ins/VST", or "Plug-ins/AU". Then load_browser_item with the exact uri from results and track_index: -1 for master. The URI param key for load_browser_item is "item_uri" (not "uri").`
+For third-party plugins (VST/AU/VST3): use get_browser_items_at_path with path "query:Plugins#VST3", "query:Plugins#VST", or "query:Plugins#AUv2". Then load_browser_item with the exact uri and track_index: -1 for master. URI param key for load_browser_item is "item_uri" (not "uri"). NEVER use search_browser or browse_path for plugins — only get_browser_items_at_path works.`
 
 // ── HTTP server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
@@ -9651,7 +9651,7 @@ Respond ONLY in JSON:
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 300,
-            system: `You control Ableton Live via JSON commands over TCP. Convert the user instruction into a single JSON command object with { type, params }.\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- volume values must be floats between 0.0 and 1.0\n- uri from search_browser results must be passed exactly as returned\n\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nFor master track operations use track_index: -1 (the special AbletonMCP master index — never use track_count).\nFor load_browser_item the URI param key is "item_uri" (not "uri").\nTo load a plugin: use browse_path with "Plug-ins/VST3", "Plug-ins/VST", or "Plug-ins/AU" — NOT search_browser (that only finds Ableton built-ins, not third-party plugins).\nIf the instruction requires multiple steps (e.g. load a plugin on master), pick the first step only and return that single command.\nReturn ONLY a valid JSON object, no explanation, no markdown.`,
+            system: `You control Ableton Live via JSON commands over TCP. Convert the user instruction into a single JSON command object with { type, params }.\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- volume values must be floats between 0.0 and 1.0\n- uri from search_browser results must be passed exactly as returned\n\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nFor master track operations use track_index: -1 (the special AbletonMCP master index — never use track_count).\nFor load_browser_item the URI param key is "item_uri" (not "uri").\nTo load a third-party plugin (VST/AU/VST3): use get_browser_items_at_path with path "query:Plugins#VST3", "query:Plugins#VST", or "query:Plugins#AUv2". NEVER use search_browser or browse_path for plugins — only get_browser_items_at_path works.\nFor Ableton built-in effects use search_browser.\nIf the instruction requires multiple steps (e.g. load a plugin on master), pick the first step only and return that single command.\nReturn ONLY a valid JSON object, no explanation, no markdown.`,
             messages: [{ role: 'user', content: instruction }]
           })
         })
@@ -9694,7 +9694,7 @@ Respond ONLY in JSON:
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 1500,
-            system: `You are an Ableton Live producer assistant. Convert the user's instruction into a sequence of AbletonMCP commands to execute in order.\n\nReturn ONLY a JSON array of command objects:\n[\n  { "type": "set_tempo", "params": { "tempo": 140 } },\n  { "type": "create_midi_track", "params": { "index": -1 } }\n]\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- For master track, ALWAYS use track_index: -1. This is the special index AbletonMCP uses for the master track. Never use track_count as master index.\n- volume values must be floats between 0.0 and 1.0\n- Use the string placeholder "{{first_uri}}" for a URI from a prior browse_path or search_browser — the executor substitutes the actual URI before sending.\n- For load_browser_item the URI param key is "item_uri" (not "uri").\n\nTo load a plugin on a track:\n  1. { "type": "browse_path", "params": { "path": "Plug-ins/VST3" } }  (or Plug-ins/VST or Plug-ins/AU)\n  2. { "type": "load_browser_item", "params": { "track_index": -1, "item_uri": "{{first_uri}}" } }\nDo NOT use search_browser for plugins — it only finds Ableton built-in devices, not third-party plugins.\nThe executor will match the plugin name from your instruction against browse_path results automatically.\n\nFor more specific paths try: "Plug-ins/VST3", "Plug-ins/VST", "Plug-ins/AU"\n\nThink step by step about what needs to happen first.\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nReturn ONLY the JSON array, no explanation, no markdown.`,
+            system: `You are an Ableton Live producer assistant. Convert the user's instruction into a sequence of AbletonMCP commands to execute in order.\n\nReturn ONLY a JSON array of command objects:\n[\n  { "type": "set_tempo", "params": { "tempo": 140 } },\n  { "type": "create_midi_track", "params": { "index": -1 } }\n]\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- For master track, ALWAYS use track_index: -1. This is the special index AbletonMCP uses for the master track. Never use track_count as master index.\n- volume values must be floats between 0.0 and 1.0\n- Use the string placeholder "{{first_uri}}" for a URI from a prior get_browser_items_at_path — the executor matches the plugin name and substitutes the actual URI before sending.\n- For load_browser_item the URI param key is "item_uri" (not "uri").\n\nTo load a third-party plugin (VST/AU/VST3) on a track:\n  1. { "type": "get_browser_items_at_path", "params": { "path": "query:Plugins#VST3" } }\n     (use query:Plugins#VST for VST2, query:Plugins#AUv2 for Audio Units)\n  2. { "type": "load_browser_item", "params": { "track_index": -1, "item_uri": "{{first_uri}}" } }\nNEVER use search_browser or browse_path for plugins — only get_browser_items_at_path works.\nFor Ableton built-in effects use search_browser.\n\nThink step by step about what needs to happen first.\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nReturn ONLY the JSON array, no explanation, no markdown.`,
             messages: [{ role: 'user', content: instruction }]
           })
         })
@@ -9755,20 +9755,20 @@ Respond ONLY in JSON:
               }
             }
 
-            if (command.type === 'browse_path') {
-              console.log('BROWSE_PATH RESULT DEBUG:', JSON.stringify(response, null, 2))
-              const items = response?.result?.items || response?.result || []
-              const list = Array.isArray(items) ? items : []
-              console.log(`  browse_path returned ${list.length} items`)
+            if (command.type === 'browse_path' || command.type === 'get_browser_items_at_path') {
+              console.log(`${command.type.toUpperCase()} RESULT DEBUG:`, JSON.stringify(response, null, 2))
+              const raw = response?.result?.items || response?.result || []
+              const list = Array.isArray(raw) ? raw : []
+              console.log(`  ${command.type} returned ${list.length} items`)
               if (list.length > 0) {
-                // Fuzzy match: prefer item whose name contains instruction keywords
+                // Fuzzy match against instruction keywords; fall back to first item
                 let match = list.find(item =>
                   instrKeywords.some(kw => (item.name || '').toLowerCase().includes(kw))
                 )
-                if (!match) match = list[0]  // fall back to first item
+                if (!match) match = list[0]
                 const uri = match.uri || match.path || match.id
                 if (uri) {
-                  console.log(`  → browse_path matched: "${match.name}" uri=${uri}`)
+                  console.log(`  → matched: "${match.name}" uri=${uri}`)
                   for (let j = i + 1; j < pending.length; j++) {
                     if (pending[j].type === 'load_browser_item') {
                       pending[j].params.item_uri = uri

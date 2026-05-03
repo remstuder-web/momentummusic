@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-03] momentum-watcher.cjs — DONE
+TASK: ableton-get-browser-items-for-plugins
+WHAT: All system prompts: use get_browser_items_at_path with path "query:Plugins#VST3|VST|AUv2" for third-party plugins. NEVER browse_path or search_browser for plugins. Executor injection block: covers both browse_path and get_browser_items_at_path — fuzzy matches instruction keywords against item names, falls back to first item, writes item_uri.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
+## [2026-05-03] momentum-watcher.cjs — DONE
 TASK: ableton-browse-path-for-plugins
 WHAT: All system prompts updated: use browse_path (not search_browser) for third-party plugins; search_browser only finds Ableton built-ins. Plugin load example updated to 2 steps: browse_path Plug-ins/VST3 → load_browser_item with {{first_uri}}. Executor: added browse_path injection block — after browse_path response, fuzzy-matches items against instruction keywords (stopwords filtered), falls back to first item. Logs BROWSE_PATH RESULT DEBUG + matched item name/uri.
 RESULT: watcher restarted, ping ok

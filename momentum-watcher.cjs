@@ -9707,47 +9707,53 @@ Respond ONLY in JSON:
         catch(e) { throw new Error('Claude returned invalid JSON: ' + rawText.slice(0, 300)) }
         if (!Array.isArray(commands)) throw new Error('Claude did not return an array of commands')
 
-        // Step 2: Execute each command sequentially, injecting values from prior responses
-        const ctx = {}  // accumulated values: track_count, first_uri
-
-        const extractCtx = (type, resp) => {
-          if (!resp || typeof resp !== 'object') return
-          if (type === 'get_session_info' && typeof resp.track_count === 'number') {
-            ctx.track_count = resp.track_count
-          }
-          if (type === 'search_browser') {
-            const list = Array.isArray(resp) ? resp
-              : Array.isArray(resp.results) ? resp.results
-              : Array.isArray(resp.items) ? resp.items
-              : null
-            if (list && list.length > 0) {
-              const uri = list[0].uri || list[0].id || list[0].path
-              if (uri) ctx.first_uri = uri
-            }
-          }
-        }
-
-        const substituteCtx = (command) => {
-          if (!command.params) return command
-          const params = { ...command.params }
-          for (const [k, v] of Object.entries(params)) {
-            if (v === '{{track_count}}' && ctx.track_count !== undefined) params[k] = ctx.track_count
-            else if (v === '{{first_uri}}' && ctx.first_uri !== undefined) params[k] = ctx.first_uri
-          }
-          return { ...command, params }
-        }
-
+        // Step 2: Execute sequentially — after each response, programmatically fix
+        // subsequent load_browser_item params (track_index from get_session_info,
+        // uri from search_browser). Don't trust Claude to get these right.
+        const pending = commands.map(c => ({ ...c, params: { ...(c.params || {}) } }))
         const steps = []
-        for (const rawCommand of commands) {
-          const command = substituteCtx(rawCommand)
+
+        for (let i = 0; i < pending.length; i++) {
+          const command = pending[i]
           try {
             const response = await sendAbletonTCP(command)
-            extractCtx(command.type, response)
+            console.log(`✓ ableton-sequence step ${i + 1}/${pending.length}: ${command.type}`)
+            console.log(`  response:`, JSON.stringify(response))
+
+            // Programmatic injection into any later load_browser_item commands
+            if (command.type === 'get_session_info' && response && typeof response.track_count === 'number') {
+              const trackIdx = parseInt(response.track_count, 10)
+              for (let j = i + 1; j < pending.length; j++) {
+                if (pending[j].type === 'load_browser_item') {
+                  pending[j].params.track_index = trackIdx
+                  console.log(`  → injected track_index=${trackIdx} into step ${j + 1} load_browser_item`)
+                }
+              }
+            }
+
+            if (command.type === 'search_browser') {
+              const list = Array.isArray(response) ? response
+                : Array.isArray(response.results) ? response.results
+                : Array.isArray(response.items) ? response.items
+                : null
+              console.log(`  search_browser raw list:`, JSON.stringify(list))
+              if (list && list.length > 0) {
+                const uri = list[0].uri || list[0].id || list[0].path
+                if (uri) {
+                  for (let j = i + 1; j < pending.length; j++) {
+                    if (pending[j].type === 'load_browser_item') {
+                      pending[j].params.uri = uri
+                      console.log(`  → injected uri=${uri} into step ${j + 1} load_browser_item`)
+                    }
+                  }
+                }
+              }
+            }
+
             steps.push({ command, response, ok: true })
-            console.log(`✓ ableton-sequence step: ${command.type}`)
           } catch(e) {
+            console.error(`✗ ableton-sequence step ${i + 1}/${pending.length}: ${command.type}:`, e.message)
             steps.push({ command, response: null, ok: false, error: e.message })
-            console.error(`✗ ableton-sequence step ${command.type}:`, e.message)
           }
         }
 

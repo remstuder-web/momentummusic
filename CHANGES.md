@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-03] momentum-watcher.cjs — DONE
+TASK: ableton-programmatic-param-injection
+WHAT: /ableton-sequence executor rewritten: replace placeholder-based substituteCtx/extractCtx with index-based programmatic injection. After get_session_info response, parseInt(track_count) is forcefully written to all subsequent load_browser_item params.track_index. After search_browser, first result uri is written to all subsequent load_browser_item params.uri. Full TCP response logged to console per step including raw search_browser list.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
+## [2026-05-03] momentum-watcher.cjs — DONE
 TASK: ableton-numeric-params-and-context-injection
 WHAT: Both system prompts: CRITICAL rule — all numeric params must be actual numbers, never strings (track_index integer, volume 0.0–1.0). Sequence system prompt: {{track_count}} and {{first_uri}} placeholders explained with 3-step plugin-load example. Sequence executor: extractCtx() extracts track_count from get_session_info and first uri from search_browser results; substituteCtx() replaces placeholders with real values before each TCP send.
 RESULT: watcher restarted, ping ok

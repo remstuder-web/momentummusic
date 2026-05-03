@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-03] momentum-watcher.cjs + DailyTab.svelte — DONE
+TASK: ableton-tcp-fix-and-sequence
+WHAT: Fix 1: extracted sendAbletonTCP helper with 10s timeout + JSON.parse brace-balance detection (no more newline wait). Fix 2: response displays cleanly from parsed TCP buffer. New: POST /ableton-sequence — Claude plans full step array then executes each command sequentially, returns {ok, steps:[{command,response,ok}]}. UI: mode toggle (Single Command / Full Sequence), sequence shows step-by-step ✓/✗ list with summary.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
+## [2026-05-03] momentum-watcher.cjs + DailyTab.svelte — DONE
 TASK: ableton-direct-tcp
 WHAT: POST /ableton-command: receives instruction+apiKey, calls Claude (sonnet-4) to convert NL to AbletonMCP JSON command, sends via TCP to port 9877, returns parsed response. DailyTab: removed clipboard copy, added real POST to /ableton-command, loading spinner, response display, collapsible 128-tool browser with clickable chips that fill the textarea.
 RESULT: watcher restarted, ping ok

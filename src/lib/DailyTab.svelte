@@ -50,8 +50,10 @@
 
   let abletonConnected = $state(false)
   let abletonInstruction = $state('')
+  let abletonMode = $state('single')  // 'single' | 'sequence'
   let abletonLoading = $state(false)
   let abletonResponse = $state(null)
+  let abletonSteps = $state([])
 
   const ABLETON_TOOLS = [
     { cat: 'SESSION', tools: [
@@ -1402,13 +1404,26 @@ ${mozartContext}`
     if (!apiKey) { alert('Add your Anthropic API key in Settings first.'); return }
     abletonLoading = true
     abletonResponse = null
+    abletonSteps = []
     try {
-      const r = await fetch('http://localhost:4242/ableton-command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction: text, apiKey })
-      })
-      abletonResponse = await r.json()
+      if (abletonMode === 'sequence') {
+        const r = await fetch('http://localhost:4242/ableton-sequence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruction: text, apiKey })
+        })
+        const data = await r.json()
+        abletonSteps = data.steps || []
+        abletonResponse = { ok: data.ok, _mode: 'sequence' }
+        if (!data.ok && !data.steps) abletonResponse.error = data.error
+      } else {
+        const r = await fetch('http://localhost:4242/ableton-command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruction: text, apiKey })
+        })
+        abletonResponse = await r.json()
+      }
     } catch(e) {
       abletonResponse = { ok: false, error: e.message }
     } finally {
@@ -2037,13 +2052,17 @@ ${mozartContext}`
         <textarea
           class="ableton-textarea"
           rows="4"
-          placeholder="e.g. Set tempo to 128 BPM, create a MIDI track, generate a drum pattern..."
+          placeholder={abletonMode === 'sequence' ? 'e.g. Set tempo to 140, create a MIDI track, generate a drum pattern, arm it for recording...' : 'e.g. Set tempo to 128 BPM, create a MIDI track, generate a drum pattern...'}
           bind:value={abletonInstruction}
         ></textarea>
-        <button class="ableton-send-btn {abletonLoading ? 'loading' : ''}" onclick={sendToAbleton} disabled={abletonLoading}>
-          {#if abletonLoading}<span class="ableton-spinner"></span>Sending...{:else}Send to Ableton{/if}
-        </button>
-        {#if abletonResponse}
+        <div class="ableton-mode-row">
+          <button class="ableton-mode-btn {abletonMode === 'single' ? 'active' : ''}" onclick={() => { abletonMode = 'single'; abletonResponse = null; abletonSteps = [] }}>Single Command</button>
+          <button class="ableton-mode-btn {abletonMode === 'sequence' ? 'active' : ''}" onclick={() => { abletonMode = 'sequence'; abletonResponse = null; abletonSteps = [] }}>🎵 Full Sequence</button>
+          <button class="ableton-send-btn {abletonLoading ? 'loading' : ''}" onclick={sendToAbleton} disabled={abletonLoading}>
+            {#if abletonLoading}<span class="ableton-spinner"></span>{abletonMode === 'sequence' ? 'Planning...' : 'Sending...'}{:else}Send{/if}
+          </button>
+        </div>
+        {#if abletonResponse && abletonResponse._mode !== 'sequence'}
           <div class="ableton-response {abletonResponse.ok ? 'ok' : 'err'}">
             {#if abletonResponse.ok}
               <div class="ableton-response-cmd">→ {abletonResponse.command?.type}</div>
@@ -2052,6 +2071,27 @@ ${mozartContext}`
               <div class="ableton-response-error">✗ {abletonResponse.error}</div>
             {/if}
           </div>
+        {/if}
+        {#if abletonSteps.length > 0}
+          <div class="ableton-seq-results">
+            {#each abletonSteps as step, i}
+              <div class="ableton-seq-step {step.ok ? 'ok' : 'err'}">
+                <span class="ableton-seq-icon">{step.ok ? '✓' : '✗'}</span>
+                <span class="ableton-seq-type">{step.command?.type}</span>
+                {#if !step.ok && step.error}
+                  <span class="ableton-seq-err">{step.error}</span>
+                {:else if step.response !== null && step.response !== undefined}
+                  <span class="ableton-seq-peek">{typeof step.response === 'object' ? JSON.stringify(step.response).slice(0, 60) : String(step.response).slice(0, 60)}</span>
+                {/if}
+              </div>
+            {/each}
+            <div class="ableton-seq-summary {abletonSteps.every(s=>s.ok) ? 'ok' : 'partial'}">
+              {abletonSteps.filter(s=>s.ok).length}/{abletonSteps.length} steps completed
+            </div>
+          </div>
+        {/if}
+        {#if abletonResponse && abletonResponse._mode === 'sequence' && abletonResponse.error}
+          <div class="ableton-response err"><div class="ableton-response-error">✗ {abletonResponse.error}</div></div>
         {/if}
       {/if}
 
@@ -2976,7 +3016,11 @@ ${mozartContext}`
   .ableton-textarea { width: 100%; background: #111; border: 1px solid #252525; border-radius: 3px; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 8px 10px; resize: vertical; outline: none; box-sizing: border-box; }
   .ableton-textarea:focus { border-color: rgba(201,168,76,.4); }
   .ableton-textarea::placeholder { color: #333; }
-  .ableton-send-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.35); color: #c9a84c; padding: 6px 16px; border-radius: 2px; cursor: pointer; margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; }
+  .ableton-mode-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .ableton-mode-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; background: transparent; border: 1px solid #303030; color: #555; padding: 5px 10px; border-radius: 2px; cursor: pointer; white-space: nowrap; }
+  .ableton-mode-btn.active { background: rgba(201,168,76,.12); border-color: rgba(201,168,76,.45); color: #c9a84c; }
+  .ableton-mode-btn:hover:not(.active) { border-color: #444; color: #9e9690; }
+  .ableton-send-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.35); color: #c9a84c; padding: 5px 14px; border-radius: 2px; cursor: pointer; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .ableton-send-btn:hover:not(:disabled) { background: rgba(201,168,76,.18); }
   .ableton-send-btn:disabled { opacity: .6; cursor: not-allowed; }
   .ableton-spinner { width: 10px; height: 10px; border: 2px solid rgba(201,168,76,.3); border-top-color: #c9a84c; border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
@@ -2987,6 +3031,20 @@ ${mozartContext}`
   .ableton-response-cmd { padding: 5px 8px; color: #4caf82; background: rgba(76,175,130,.06); border-bottom: 1px solid rgba(76,175,130,.15); }
   .ableton-response-pre { margin: 0; padding: 8px; color: #cec9c1; background: #0d0d0d; font-size: 9.5px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
   .ableton-response-error { padding: 8px; color: #e57373; background: rgba(229,115,115,.06); }
+  .ableton-seq-results { margin-top: 8px; border: 1px solid #252525; border-radius: 3px; overflow: hidden; }
+  .ableton-seq-step { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; border-bottom: 1px solid #1a1a1a; font-family: 'Space Mono', monospace; font-size: 9.5px; }
+  .ableton-seq-step:last-of-type { border-bottom: none; }
+  .ableton-seq-step.ok { background: rgba(76,175,130,.03); }
+  .ableton-seq-step.err { background: rgba(229,115,115,.04); }
+  .ableton-seq-icon { flex-shrink: 0; width: 12px; }
+  .ableton-seq-step.ok .ableton-seq-icon { color: #4caf82; }
+  .ableton-seq-step.err .ableton-seq-icon { color: #e57373; }
+  .ableton-seq-type { color: #c9a84c; flex-shrink: 0; }
+  .ableton-seq-peek { color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .ableton-seq-err { color: #e57373; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ableton-seq-summary { padding: 5px 8px; font-family: 'Space Mono', monospace; font-size: 9px; border-top: 1px solid #252525; }
+  .ableton-seq-summary.ok { color: #4caf82; background: rgba(76,175,130,.05); }
+  .ableton-seq-summary.partial { color: #e57373; background: rgba(229,115,115,.04); }
   .add-inp::placeholder { color: #555; }
   .add-inp.url { flex: 2; min-width: 120px; }
   .add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 5px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }

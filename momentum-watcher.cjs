@@ -9574,6 +9574,91 @@ Respond ONLY in JSON:
     return
   }
 
+  // ── POST /ableton-command — Natural language → Claude → AbletonMCP TCP ──
+  if (req.method === 'POST' && req.url === '/ableton-command') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', async () => {
+      try {
+        const { instruction, apiKey } = JSON.parse(body || '{}')
+        if (!instruction) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing instruction' })); return }
+        if (!apiKey) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing apiKey' })); return }
+
+        // Step 1: Convert natural language to AbletonMCP JSON command via Claude
+        const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 300,
+            system: `You control Ableton Live via JSON commands over TCP. Convert the user instruction into a single JSON command object with { type, params }.
+
+Available commands:
+SESSION: get_session_info, get_session_path, is_session_modified, get_current_view, focus_view, start_playback, stop_playback, start_recording, stop_recording, toggle_arrangement_record, toggle_session_record, capture_midi, set_tempo, set_overdub, jump_to_time, get_playback_position, get_arrangement_length, set_arrangement_loop, health_check, get_cpu_load, undo, redo
+TRACKS: get_track_info, set_track_name, select_track, create_midi_track, create_audio_track, create_group_track, duplicate_track, delete_track, freeze_track, flatten_track, fold_track, unfold_track, unarm_all, set_track_volume, set_track_pan, set_track_mute, set_track_solo, set_track_arm, set_track_color, set_track_monitoring, get_track_monitoring, set_track_input_routing, get_track_input_routing, set_track_output_routing, get_track_output_routing, get_available_inputs, get_available_outputs, get_send_level, set_send_level
+RETURN/MASTER: get_return_tracks, get_return_track_info, set_return_volume, set_return_pan, load_item_to_return, get_master_info, set_master_volume, set_master_pan
+CLIPS: create_clip, delete_clip, duplicate_clip, select_clip, fire_clip, stop_clip, set_clip_name, set_clip_color, get_clip_color, get_clip_loop, set_clip_loop, get_clip_notes, add_notes_to_clip, remove_notes, remove_all_notes, transpose_notes, quantize_clip_notes, humanize_clip_velocity, humanize_clip_timing, get_clip_automation, set_clip_automation, clear_clip_automation, get_clip_gain, set_clip_gain, get_clip_pitch, set_clip_pitch, get_clip_warp_info, set_clip_warp_mode, get_warp_markers, add_warp_marker, delete_warp_marker, commit_groove, apply_groove
+SCENES: get_all_scenes, fire_scene, stop_scene, select_scene, create_scene, duplicate_scene, delete_scene, set_scene_name, get_scene_color, set_scene_color
+DEVICES: get_device_parameters, get_device_by_name, set_device_parameter, toggle_device, delete_device, move_device_left, move_device_right, get_rack_chains, select_rack_chain, load_item_to_track, load_instrument_or_effect, load_drum_kit
+LOCATORS: get_locators, create_locator, delete_locator
+MUSIC: get_scale_notes, generate_bassline, generate_drum_pattern
+BROWSER: search_browser, get_browser_items_at_path, browse_path
+METRONOME/GROOVE: get_metronome_state, set_metronome, get_groove_pool
+
+Return ONLY a valid JSON object, no explanation, no markdown.`,
+            messages: [{ role: 'user', content: instruction }]
+          })
+        })
+
+        const cd = await claudeRes.json()
+        if (!claudeRes.ok) throw new Error(cd.error?.message || 'Claude API error')
+        const rawText = (cd.content?.[0]?.text || '').trim()
+        let command
+        try { command = JSON.parse(rawText) }
+        catch(e) { throw new Error('Claude returned invalid JSON: ' + rawText.slice(0, 200)) }
+
+        // Step 2: Send command to AbletonMCP via TCP on port 9877
+        const net = require('net')
+        const aResponse = await new Promise((resolve, reject) => {
+          const socket = new net.Socket()
+          let buf = ''
+          let settled = false
+          const done = (err, val) => {
+            if (settled) return; settled = true
+            socket.destroy()
+            err ? reject(err) : resolve(val)
+          }
+          socket.setTimeout(8000)
+          socket.on('data', d => {
+            buf += d.toString()
+            const nl = buf.indexOf('\n')
+            if (nl !== -1) done(null, buf.slice(0, nl).trim())
+          })
+          socket.on('end', () => done(null, buf.trim()))
+          socket.on('close', () => done(null, buf.trim()))
+          socket.on('error', e => done(e))
+          socket.on('timeout', () => done(new Error('TCP timeout — AbletonMCP not running on port 9877?')))
+          socket.connect(9877, '127.0.0.1', () => {
+            socket.write(JSON.stringify(command) + '\n')
+          })
+        })
+
+        let parsed
+        try { parsed = JSON.parse(aResponse) } catch(e) { parsed = aResponse }
+
+        console.log(`✓ ableton-command: ${command.type}`)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, command, response: parsed }))
+      } catch(e) {
+        console.error('ableton-command error:', e.message)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /extract-acapella — Demucs vocal separation + trim to onset ──
   if (req.method === 'POST' && req.url === '/extract-acapella') {
     res.setHeader('Access-Control-Allow-Origin', '*')

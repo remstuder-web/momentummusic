@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-03] momentum-watcher.cjs + DailyTab.svelte — DONE
+TASK: ableton-direct-tcp
+WHAT: POST /ableton-command: receives instruction+apiKey, calls Claude (sonnet-4) to convert NL to AbletonMCP JSON command, sends via TCP to port 9877, returns parsed response. DailyTab: removed clipboard copy, added real POST to /ableton-command, loading spinner, response display, collapsible 128-tool browser with clickable chips that fill the textarea.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
 ## [2026-05-03] DailyTab.svelte + momentum-watcher.cjs — DONE
 TASK: ableton-control-helper
 WHAT: Added ABLETON CONTROL helper block to DailyTab helpers section. Status dot pings GET /ableton-status every 30s (TCP check on port 9877). Send button copies instruction to clipboard with "Paste in Claude Desktop" message. Added GET /ableton-status endpoint to watcher.

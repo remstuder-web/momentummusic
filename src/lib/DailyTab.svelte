@@ -50,7 +50,157 @@
 
   let abletonConnected = $state(false)
   let abletonInstruction = $state('')
-  let abletonCopied = $state(false)
+  let abletonLoading = $state(false)
+  let abletonResponse = $state(null)
+
+  const ABLETON_TOOLS = [
+    { cat: 'SESSION', tools: [
+      { name: 'get_session_info', hint: 'Get info about the current session' },
+      { name: 'get_session_path', hint: 'Get the current session file path' },
+      { name: 'is_session_modified', hint: 'Check if session has unsaved changes' },
+      { name: 'get_current_view', hint: 'Get the current view' },
+      { name: 'focus_view', hint: 'Focus the arrangement view' },
+      { name: 'start_playback', hint: 'Start playback' },
+      { name: 'stop_playback', hint: 'Stop playback' },
+      { name: 'start_recording', hint: 'Start recording' },
+      { name: 'stop_recording', hint: 'Stop recording' },
+      { name: 'toggle_arrangement_record', hint: 'Toggle arrangement recording on' },
+      { name: 'toggle_session_record', hint: 'Toggle session recording on' },
+      { name: 'capture_midi', hint: 'Capture MIDI from last played notes' },
+      { name: 'set_tempo', hint: 'Set tempo to 128 BPM' },
+      { name: 'set_overdub', hint: 'Enable overdub recording' },
+      { name: 'jump_to_time', hint: 'Jump to bar 1 beat 1' },
+      { name: 'get_playback_position', hint: 'Get the current playback position' },
+      { name: 'get_arrangement_length', hint: 'Get the total arrangement length' },
+      { name: 'set_arrangement_loop', hint: 'Set arrangement loop from bar 1 to bar 8' },
+      { name: 'health_check', hint: 'Check AbletonMCP health status' },
+      { name: 'get_cpu_load', hint: 'Get current CPU load' },
+      { name: 'undo', hint: 'Undo the last action' },
+      { name: 'redo', hint: 'Redo the last undone action' },
+    ]},
+    { cat: 'TRACKS', tools: [
+      { name: 'get_track_info', hint: 'Get info about track 1' },
+      { name: 'set_track_name', hint: 'Rename track 1 to Kick' },
+      { name: 'select_track', hint: 'Select track 1' },
+      { name: 'create_midi_track', hint: 'Create a new MIDI track' },
+      { name: 'create_audio_track', hint: 'Create a new audio track' },
+      { name: 'create_group_track', hint: 'Create a group track' },
+      { name: 'duplicate_track', hint: 'Duplicate track 1' },
+      { name: 'delete_track', hint: 'Delete track 1' },
+      { name: 'freeze_track', hint: 'Freeze track 1' },
+      { name: 'flatten_track', hint: 'Flatten track 1' },
+      { name: 'fold_track', hint: 'Fold track 1' },
+      { name: 'unfold_track', hint: 'Unfold track 1' },
+      { name: 'unarm_all', hint: 'Unarm all tracks' },
+      { name: 'set_track_volume', hint: 'Set track 1 volume to 0 dB' },
+      { name: 'set_track_pan', hint: 'Set track 1 pan to center' },
+      { name: 'set_track_mute', hint: 'Mute track 1' },
+      { name: 'set_track_solo', hint: 'Solo track 1' },
+      { name: 'set_track_arm', hint: 'Arm track 1 for recording' },
+      { name: 'set_track_color', hint: 'Set track 1 color to blue' },
+      { name: 'set_track_monitoring', hint: 'Set track 1 monitoring to auto' },
+      { name: 'get_track_monitoring', hint: 'Get monitoring mode of track 1' },
+      { name: 'set_track_input_routing', hint: 'Set track 1 input routing' },
+      { name: 'get_track_input_routing', hint: 'Get input routing of track 1' },
+      { name: 'set_track_output_routing', hint: 'Set track 1 output routing' },
+      { name: 'get_track_output_routing', hint: 'Get output routing of track 1' },
+      { name: 'get_available_inputs', hint: 'Get all available audio inputs' },
+      { name: 'get_available_outputs', hint: 'Get all available audio outputs' },
+      { name: 'get_send_level', hint: 'Get send A level on track 1' },
+      { name: 'set_send_level', hint: 'Set send A level on track 1 to 0.5' },
+    ]},
+    { cat: 'RETURN/MASTER', tools: [
+      { name: 'get_return_tracks', hint: 'Get all return tracks' },
+      { name: 'get_return_track_info', hint: 'Get info about return track A' },
+      { name: 'set_return_volume', hint: 'Set return track A volume to 0 dB' },
+      { name: 'set_return_pan', hint: 'Set return track A pan to center' },
+      { name: 'load_item_to_return', hint: 'Load a reverb to return track A' },
+      { name: 'get_master_info', hint: 'Get master track info' },
+      { name: 'set_master_volume', hint: 'Set master volume to 0 dB' },
+      { name: 'set_master_pan', hint: 'Set master pan to center' },
+    ]},
+    { cat: 'CLIPS', tools: [
+      { name: 'create_clip', hint: 'Create a 4-bar MIDI clip on track 1 slot 0' },
+      { name: 'delete_clip', hint: 'Delete clip on track 1 slot 0' },
+      { name: 'duplicate_clip', hint: 'Duplicate clip on track 1 slot 0' },
+      { name: 'select_clip', hint: 'Select clip on track 1 slot 0' },
+      { name: 'fire_clip', hint: 'Fire clip on track 1 slot 0' },
+      { name: 'stop_clip', hint: 'Stop clip on track 1 slot 0' },
+      { name: 'set_clip_name', hint: 'Rename clip on track 1 slot 0 to Intro' },
+      { name: 'set_clip_color', hint: 'Set clip color to red' },
+      { name: 'get_clip_color', hint: 'Get color of clip on track 1 slot 0' },
+      { name: 'get_clip_loop', hint: 'Get loop settings of clip on track 1 slot 0' },
+      { name: 'set_clip_loop', hint: 'Set clip loop to 4 bars' },
+      { name: 'get_clip_notes', hint: 'Get notes in clip on track 1 slot 0' },
+      { name: 'add_notes_to_clip', hint: 'Add a C3 note at beat 1 for 1 bar to clip' },
+      { name: 'remove_notes', hint: 'Remove notes from beat 1 to 2 in clip' },
+      { name: 'remove_all_notes', hint: 'Remove all notes from clip on track 1 slot 0' },
+      { name: 'transpose_notes', hint: 'Transpose all notes up by 12 semitones' },
+      { name: 'quantize_clip_notes', hint: 'Quantize notes to 1/16 note grid' },
+      { name: 'humanize_clip_velocity', hint: 'Humanize note velocities by 20%' },
+      { name: 'humanize_clip_timing', hint: 'Humanize note timing by 10ms' },
+      { name: 'get_clip_automation', hint: 'Get automation data from clip' },
+      { name: 'set_clip_automation', hint: 'Set volume automation in clip' },
+      { name: 'clear_clip_automation', hint: 'Clear all automation from clip' },
+      { name: 'get_clip_gain', hint: 'Get gain of clip on track 1 slot 0' },
+      { name: 'set_clip_gain', hint: 'Set clip gain to 0 dB' },
+      { name: 'get_clip_pitch', hint: 'Get pitch of clip on track 1 slot 0' },
+      { name: 'set_clip_pitch', hint: 'Pitch clip up 2 semitones' },
+      { name: 'get_clip_warp_info', hint: 'Get warp info of clip on track 1 slot 0' },
+      { name: 'set_clip_warp_mode', hint: 'Set clip warp mode to Complex' },
+      { name: 'get_warp_markers', hint: 'Get warp markers of clip' },
+      { name: 'add_warp_marker', hint: 'Add a warp marker at beat 1' },
+      { name: 'delete_warp_marker', hint: 'Delete warp marker at beat 1' },
+      { name: 'commit_groove', hint: 'Commit groove to clip' },
+      { name: 'apply_groove', hint: 'Apply MPC groove to clip' },
+    ]},
+    { cat: 'SCENES', tools: [
+      { name: 'get_all_scenes', hint: 'Get all scenes' },
+      { name: 'fire_scene', hint: 'Fire scene 1' },
+      { name: 'stop_scene', hint: 'Stop scene 1' },
+      { name: 'select_scene', hint: 'Select scene 1' },
+      { name: 'create_scene', hint: 'Create a new scene' },
+      { name: 'duplicate_scene', hint: 'Duplicate scene 1' },
+      { name: 'delete_scene', hint: 'Delete scene 1' },
+      { name: 'set_scene_name', hint: 'Rename scene 1 to Drop' },
+      { name: 'get_scene_color', hint: 'Get color of scene 1' },
+      { name: 'set_scene_color', hint: 'Set scene 1 color to green' },
+    ]},
+    { cat: 'DEVICES', tools: [
+      { name: 'get_device_parameters', hint: 'Get all parameters of device on track 1' },
+      { name: 'get_device_by_name', hint: 'Get Compressor device on track 1' },
+      { name: 'set_device_parameter', hint: 'Set attack on Compressor to 10ms' },
+      { name: 'toggle_device', hint: 'Toggle device on/off on track 1' },
+      { name: 'delete_device', hint: 'Delete device 0 from track 1' },
+      { name: 'move_device_left', hint: 'Move device left in chain on track 1' },
+      { name: 'move_device_right', hint: 'Move device right in chain on track 1' },
+      { name: 'get_rack_chains', hint: 'Get chains of rack on track 1' },
+      { name: 'select_rack_chain', hint: 'Select chain 0 in rack on track 1' },
+      { name: 'load_item_to_track', hint: 'Load Reverb to track 1' },
+      { name: 'load_instrument_or_effect', hint: 'Load Analog synth to track 1' },
+      { name: 'load_drum_kit', hint: 'Load 808 Core Kit drum rack to track 1' },
+    ]},
+    { cat: 'LOCATORS', tools: [
+      { name: 'get_locators', hint: 'Get all locators in the arrangement' },
+      { name: 'create_locator', hint: 'Create a locator called Drop at bar 33' },
+      { name: 'delete_locator', hint: 'Delete the locator at bar 33' },
+    ]},
+    { cat: 'MUSIC', tools: [
+      { name: 'get_scale_notes', hint: 'Get notes in A minor scale' },
+      { name: 'generate_bassline', hint: 'Generate a bassline in A minor at 128 BPM' },
+      { name: 'generate_drum_pattern', hint: 'Generate a drum pattern at 128 BPM' },
+    ]},
+    { cat: 'BROWSER', tools: [
+      { name: 'search_browser', hint: 'Search browser for reverb plugins' },
+      { name: 'get_browser_items_at_path', hint: 'Get browser items at Instruments/Analog' },
+      { name: 'browse_path', hint: 'Browse to Drums/808 folder in browser' },
+    ]},
+    { cat: 'METRONOME/GROOVE', tools: [
+      { name: 'get_metronome_state', hint: 'Get metronome on/off state' },
+      { name: 'set_metronome', hint: 'Turn metronome on' },
+      { name: 'get_groove_pool', hint: 'Get all grooves in the groove pool' },
+    ]},
+  ]
   let reminders = $state([])
   let subReminders = $state([]) // weekly submission nudges
   let tasksOpen = $state(true)
@@ -1247,12 +1397,23 @@ ${mozartContext}`
 
   async function sendToAbleton() {
     const text = abletonInstruction.trim()
-    if (!text) return
+    if (!text || abletonLoading) return
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    if (!apiKey) { alert('Add your Anthropic API key in Settings first.'); return }
+    abletonLoading = true
+    abletonResponse = null
     try {
-      await navigator.clipboard.writeText(text)
-      abletonCopied = true
-      setTimeout(() => { abletonCopied = false }, 3000)
-    } catch { abletonCopied = false }
+      const r = await fetch('http://localhost:4242/ableton-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction: text, apiKey })
+      })
+      abletonResponse = await r.json()
+    } catch(e) {
+      abletonResponse = { ok: false, error: e.message }
+    } finally {
+      abletonLoading = false
+    }
   }
 
   // loadStaticData MUST complete before load() so customs/helpers aren't lost to the state spread
@@ -1860,15 +2021,37 @@ ${mozartContext}`
           <span class="ableton-dot {abletonConnected ? 'on' : 'off'}"></span>
           <span class="ableton-status-text {abletonConnected ? 'on' : 'off'}">{abletonConnected ? 'Ableton connected' : 'Ableton offline'}</span>
         </div>
+        <details class="ableton-tools-details">
+          <summary class="ableton-tools-summary">📋 Browse tools</summary>
+          <div class="ableton-tools-panel">
+            {#each ABLETON_TOOLS as cat}
+              <div class="ableton-cat-label">{cat.cat}</div>
+              <div class="ableton-chips">
+                {#each cat.tools as tool}
+                  <button class="ableton-chip" onclick={() => { abletonInstruction = tool.hint }}>{tool.name}</button>
+                {/each}
+              </div>
+            {/each}
+          </div>
+        </details>
         <textarea
           class="ableton-textarea"
           rows="4"
-          placeholder="e.g. Create a MIDI track, set BPM to 128, add a kick pattern on beat 1 and 3..."
+          placeholder="e.g. Set tempo to 128 BPM, create a MIDI track, generate a drum pattern..."
           bind:value={abletonInstruction}
         ></textarea>
-        <button class="ableton-send-btn" onclick={sendToAbleton}>Send to Ableton</button>
-        {#if abletonCopied}
-          <div class="ableton-copied-msg">Copied! Paste in Claude Desktop to execute.</div>
+        <button class="ableton-send-btn {abletonLoading ? 'loading' : ''}" onclick={sendToAbleton} disabled={abletonLoading}>
+          {#if abletonLoading}<span class="ableton-spinner"></span>Sending...{:else}Send to Ableton{/if}
+        </button>
+        {#if abletonResponse}
+          <div class="ableton-response {abletonResponse.ok ? 'ok' : 'err'}">
+            {#if abletonResponse.ok}
+              <div class="ableton-response-cmd">→ {abletonResponse.command?.type}</div>
+              <pre class="ableton-response-pre">{JSON.stringify(abletonResponse.response, null, 2)}</pre>
+            {:else}
+              <div class="ableton-response-error">✗ {abletonResponse.error}</div>
+            {/if}
+          </div>
         {/if}
       {/if}
 
@@ -2781,12 +2964,29 @@ ${mozartContext}`
   .ableton-status-text { font-family: 'Space Mono', monospace; font-size: 10px; }
   .ableton-status-text.on { color: #4caf82; }
   .ableton-status-text.off { color: #555; }
+  .ableton-tools-details { margin-bottom: 8px; }
+  .ableton-tools-summary { font-family: 'Space Mono', monospace; font-size: 10px; color: rgba(201,168,76,.75); cursor: pointer; padding: 4px 0; user-select: none; }
+  .ableton-tools-summary::-webkit-details-marker { color: rgba(201,168,76,.5); }
+  .ableton-tools-panel { background: #111; border: 1px solid #252525; border-radius: 3px; padding: 10px; margin-top: 6px; max-height: 280px; overflow-y: auto; }
+  .ableton-cat-label { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(201,168,76,.6); text-transform: uppercase; letter-spacing: .06em; margin: 8px 0 4px; }
+  .ableton-cat-label:first-child { margin-top: 0; }
+  .ableton-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .ableton-chip { font-family: 'Space Mono', monospace; font-size: 9px; background: rgba(201,168,76,.07); border: 1px solid rgba(201,168,76,.2); color: #c9a84c; padding: 3px 7px; border-radius: 2px; cursor: pointer; line-height: 1.4; }
+  .ableton-chip:hover { background: rgba(201,168,76,.18); border-color: rgba(201,168,76,.45); }
   .ableton-textarea { width: 100%; background: #111; border: 1px solid #252525; border-radius: 3px; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 8px 10px; resize: vertical; outline: none; box-sizing: border-box; }
   .ableton-textarea:focus { border-color: rgba(201,168,76,.4); }
   .ableton-textarea::placeholder { color: #333; }
-  .ableton-send-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.35); color: #c9a84c; padding: 6px 16px; border-radius: 2px; cursor: pointer; margin-top: 6px; }
-  .ableton-send-btn:hover { background: rgba(201,168,76,.18); }
-  .ableton-copied-msg { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; margin-top: 6px; }
+  .ableton-send-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.35); color: #c9a84c; padding: 6px 16px; border-radius: 2px; cursor: pointer; margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; }
+  .ableton-send-btn:hover:not(:disabled) { background: rgba(201,168,76,.18); }
+  .ableton-send-btn:disabled { opacity: .6; cursor: not-allowed; }
+  .ableton-spinner { width: 10px; height: 10px; border: 2px solid rgba(201,168,76,.3); border-top-color: #c9a84c; border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ableton-response { margin-top: 8px; border-radius: 3px; font-family: 'Space Mono', monospace; font-size: 10px; overflow: hidden; }
+  .ableton-response.ok { border: 1px solid rgba(76,175,130,.3); }
+  .ableton-response.err { border: 1px solid rgba(229,115,115,.3); }
+  .ableton-response-cmd { padding: 5px 8px; color: #4caf82; background: rgba(76,175,130,.06); border-bottom: 1px solid rgba(76,175,130,.15); }
+  .ableton-response-pre { margin: 0; padding: 8px; color: #cec9c1; background: #0d0d0d; font-size: 9.5px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  .ableton-response-error { padding: 8px; color: #e57373; background: rgba(229,115,115,.06); }
   .add-inp::placeholder { color: #555; }
   .add-inp.url { flex: 2; min-width: 120px; }
   .add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 5px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }

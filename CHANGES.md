@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-03] momentum-watcher.cjs — DONE
+TASK: ableton-browser-timeout-and-master-index
+WHAT: sendAbletonTCP: SLOW_ABLETON_COMMANDS list gets 30s timeout (search_browser, browse_path, load_browser_item), others keep 10s. ABLETON_CMD_LIST: added master track index guidance (use get_session_info to get track_count, master = track_count index). Both system prompts updated: /ableton-command picks first step only for multi-step instructions; /ableton-sequence explicitly plans 3-step plugin-load flow.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
 ## [2026-05-03] momentum-watcher.cjs + DailyTab.svelte — DONE
 TASK: ableton-verified-commands
 WHAT: Replace ABLETON_CMD_LIST with verified working AbletonMCP command names. Remove non-existent commands (toggle_arrangement_record, set_overdub, move_device_left, load_drum_kit, etc.). Replace load_instrument_or_effect/load_item_to_track/load_drum_kit with load_browser_item. Add load_browser_item usage note to system prompts. Remove load_item_to_return chip from DailyTab RETURN/MASTER section.

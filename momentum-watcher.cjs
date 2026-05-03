@@ -5869,8 +5869,11 @@ async function analyzeVocalEqUrl(url, songId, label) {
 }
 
 // ── AbletonMCP TCP helper — send one command, return parsed response ──────
+const SLOW_ABLETON_COMMANDS = ['search_browser', 'get_browser_items_at_path', 'browse_path', 'load_browser_item']
+
 async function sendAbletonTCP(command) {
   const net = require('net')
+  const timeout = SLOW_ABLETON_COMMANDS.includes(command.type) ? 30000 : 10000
   return new Promise((resolve, reject) => {
     const socket = new net.Socket()
     let buf = ''
@@ -5893,8 +5896,8 @@ async function sendAbletonTCP(command) {
     }
 
     timer = setTimeout(
-      () => done(new Error('TCP timeout — AbletonMCP not responding on port 9877')),
-      10000
+      () => done(new Error(`TCP timeout (${timeout / 1000}s) — AbletonMCP not responding on port 9877`)),
+      timeout
     )
     socket.on('data', d => { buf += d.toString(); tryComplete() })
     socket.on('end', () => {
@@ -5922,7 +5925,8 @@ BROWSER: search_browser, get_browser_items_at_path, browse_path
 MASTER: get_master_info, set_master_volume, set_master_pan
 RETURN: get_return_tracks, set_return_volume, set_return_pan
 MUSIC: get_scale_notes, generate_bassline, generate_drum_pattern
-NOTE: To load a plugin (e.g. "API 2500") on the master track, use load_browser_item with the track_index of the master and search for the plugin name.`
+IMPORTANT: For master track operations, first call get_master_info to get the correct track index. The master track index is typically -1 or accessed differently. For load_browser_item on master, use get_session_info first to find track_count — the master is at index track_count (after all regular tracks).
+For loading plugins: 1. search_browser with query = plugin name  2. get the uri from results  3. load_browser_item with the uri and correct track_index`
 
 // ── HTTP server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
@@ -9647,7 +9651,7 @@ Respond ONLY in JSON:
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 300,
-            system: `You control Ableton Live via JSON commands over TCP. Convert the user instruction into a single JSON command object with { type, params }.\n\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nReturn ONLY a valid JSON object, no explanation, no markdown.`,
+            system: `You control Ableton Live via JSON commands over TCP. Convert the user instruction into a single JSON command object with { type, params }.\n\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nIf the instruction requires multiple steps (e.g. load a plugin on master), pick the first step only and return that single command.\nReturn ONLY a valid JSON object, no explanation, no markdown.`,
             messages: [{ role: 'user', content: instruction }]
           })
         })
@@ -9690,7 +9694,7 @@ Respond ONLY in JSON:
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 1500,
-            system: `You are an Ableton Live producer assistant. Convert the user's instruction into a sequence of AbletonMCP commands to execute in order.\n\nReturn ONLY a JSON array of command objects:\n[\n  { "type": "set_tempo", "params": { "tempo": 140 } },\n  { "type": "create_midi_track", "params": { "index": -1 } }\n]\n\nThink step by step about what needs to happen first.\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nReturn ONLY the JSON array, no explanation, no markdown.`,
+            system: `You are an Ableton Live producer assistant. Convert the user's instruction into a sequence of AbletonMCP commands to execute in order.\n\nReturn ONLY a JSON array of command objects:\n[\n  { "type": "set_tempo", "params": { "tempo": 140 } },\n  { "type": "create_midi_track", "params": { "index": -1 } }\n]\n\nThink step by step about what needs to happen first. For loading a plugin on the master track, always use 3 steps: 1. get_session_info (to get track_count for the master index)  2. search_browser (find the plugin uri)  3. load_browser_item (use track_index = track_count, use uri from step 2 — substitute the expected value directly since you cannot read prior results).\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nReturn ONLY the JSON array, no explanation, no markdown.`,
             messages: [{ role: 'user', content: instruction }]
           })
         })

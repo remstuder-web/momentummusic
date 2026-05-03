@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-03] momentum-watcher.cjs — DONE
+TASK: ableton-uri-injection-and-master-index
+WHAT: URI injection fixed: now uses response?.result?.results?.[0] directly (not list-sniffing). Master track index changed from {{track_count}} to hard-coded -2 in all prompts (sequence 2-step plan, ABLETON_CMD_LIST note, single-command prompt). get_session_info step removed from plugin-load sequence — no longer needed. Logs: INJECTED URI shows actual value, fallback message when results empty.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
+## [2026-05-03] momentum-watcher.cjs — DONE
 TASK: ableton-short-browser-queries
 WHAT: /ableton-sequence system prompt: added browser search guidance — use short plugin-name-only queries ("API 2500" not "waves api 2500"), add browse_path "Plug-ins" step if search may return 0 results.
 RESULT: watcher restarted, ping ok

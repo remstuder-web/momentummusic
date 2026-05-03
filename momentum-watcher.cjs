@@ -5925,8 +5925,8 @@ BROWSER: search_browser, get_browser_items_at_path, browse_path
 MASTER: get_master_info, set_master_volume, set_master_pan
 RETURN: get_return_tracks, set_return_volume, set_return_pan
 MUSIC: get_scale_notes, generate_bassline, generate_drum_pattern
-IMPORTANT: For master track operations, first call get_master_info to get the correct track index. The master track index is typically -1 or accessed differently. For load_browser_item on master, use get_session_info first to find track_count — the master is at index track_count (after all regular tracks).
-For loading plugins: 1. search_browser with query = plugin name  2. get the uri from results  3. load_browser_item with the uri and correct track_index`
+IMPORTANT: For master track, ALWAYS use track_index: -2. This is the special index AbletonMCP uses for the master track. Never use track_count or any other value.
+For loading plugins on master: 1. search_browser with SHORT query (plugin name only, no manufacturer)  2. load_browser_item with track_index: -2 and the uri from search results`
 
 // ── HTTP server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
@@ -9651,7 +9651,7 @@ Respond ONLY in JSON:
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 300,
-            system: `You control Ableton Live via JSON commands over TCP. Convert the user instruction into a single JSON command object with { type, params }.\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- volume values must be floats between 0.0 and 1.0\n- uri from search_browser results must be passed exactly as returned\n\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nIf the instruction requires multiple steps (e.g. load a plugin on master), pick the first step only and return that single command.\nReturn ONLY a valid JSON object, no explanation, no markdown.`,
+            system: `You control Ableton Live via JSON commands over TCP. Convert the user instruction into a single JSON command object with { type, params }.\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- volume values must be floats between 0.0 and 1.0\n- uri from search_browser results must be passed exactly as returned\n\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nFor master track operations use track_index: -2 (the special AbletonMCP master index — never use track_count).\nIf the instruction requires multiple steps (e.g. load a plugin on master), pick the first step only and return that single command.\nReturn ONLY a valid JSON object, no explanation, no markdown.`,
             messages: [{ role: 'user', content: instruction }]
           })
         })
@@ -9694,7 +9694,7 @@ Respond ONLY in JSON:
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 1500,
-            system: `You are an Ableton Live producer assistant. Convert the user's instruction into a sequence of AbletonMCP commands to execute in order.\n\nReturn ONLY a JSON array of command objects:\n[\n  { "type": "set_tempo", "params": { "tempo": 140 } },\n  { "type": "create_midi_track", "params": { "index": -1 } }\n]\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- volume values must be floats between 0.0 and 1.0\n- Exception: use the string placeholder "{{track_count}}" for the master track index and "{{first_uri}}" for a URI from a prior search_browser — the executor substitutes actual values before sending each command.\n\nFor loading a plugin on the master track, always plan 3 steps:\n  1. { "type": "get_session_info", "params": {} }\n  2. { "type": "search_browser", "params": { "query": "<plugin name>" } }\n  3. { "type": "load_browser_item", "params": { "track_index": "{{track_count}}", "uri": "{{first_uri}}" } }\n\nFor load_browser_item / search_browser:\n- Search with SHORT queries — "API 2500" not "waves api 2500"\n- Use just the plugin name without the manufacturer\n- If search may return 0 results, add a browse_path step first: { "type": "browse_path", "params": { "path": "Plug-ins" } } to list available plugins\n\nThink step by step about what needs to happen first.\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nReturn ONLY the JSON array, no explanation, no markdown.`,
+            system: `You are an Ableton Live producer assistant. Convert the user's instruction into a sequence of AbletonMCP commands to execute in order.\n\nReturn ONLY a JSON array of command objects:\n[\n  { "type": "set_tempo", "params": { "tempo": 140 } },\n  { "type": "create_midi_track", "params": { "index": -1 } }\n]\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- For master track, ALWAYS use track_index: -2. This is the special index AbletonMCP uses for the master track. Never use track_count as master index.\n- volume values must be floats between 0.0 and 1.0\n- Use the string placeholder "{{first_uri}}" for a URI from a prior search_browser — the executor substitutes the actual URI before sending.\n\nFor loading a plugin on the master track, always plan 2 steps:\n  1. { "type": "search_browser", "params": { "query": "<plugin name>" } }\n  2. { "type": "load_browser_item", "params": { "track_index": -2, "uri": "{{first_uri}}" } }\n\nFor load_browser_item / search_browser:\n- Search with SHORT queries — "API 2500" not "waves api 2500"\n- Use just the plugin name without the manufacturer\n- If search may return 0 results, add a browse_path step first: { "type": "browse_path", "params": { "path": "Plug-ins" } } to list available plugins\n\nThink step by step about what needs to happen first.\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nReturn ONLY the JSON array, no explanation, no markdown.`,
             messages: [{ role: 'user', content: instruction }]
           })
         })
@@ -9717,6 +9717,8 @@ Respond ONLY in JSON:
           const command = pending[i]
           if (command.type === 'load_browser_item') {
             console.log('SEQUENCE STEP DEBUG:', JSON.stringify(command, null, 2))
+            console.log('LOAD_BROWSER_ITEM PARAMS:', JSON.stringify(command.params, null, 2))
+            console.log('SESSION TRACK COUNT:', command.params.track_index)
           }
           try {
             const response = await sendAbletonTCP(command)
@@ -9738,22 +9740,18 @@ Respond ONLY in JSON:
 
             if (command.type === 'search_browser') {
               console.log('SEARCH RESULT DEBUG:', JSON.stringify(response, null, 2))
-              const inner = resultData || {}
-              const list = Array.isArray(inner) ? inner
-                : Array.isArray(inner.results) ? inner.results
-                : Array.isArray(inner.items) ? inner.items
-                : null
-              console.log(`  search_browser raw list:`, JSON.stringify(list))
-              if (list && list.length > 0) {
-                const uri = list[0].uri || list[0].id || list[0].path
-                if (uri) {
-                  for (let j = i + 1; j < pending.length; j++) {
-                    if (pending[j].type === 'load_browser_item') {
-                      pending[j].params.uri = uri
-                      console.log(`  → injected uri=${uri} into step ${j + 1} load_browser_item`)
-                    }
+              const searchResult = response?.result?.results?.[0]
+              if (searchResult) {
+                const uri = searchResult.uri || searchResult.path || searchResult.id || JSON.stringify(searchResult)
+                console.log('INJECTED URI:', uri)
+                for (let j = i + 1; j < pending.length; j++) {
+                  if (pending[j].type === 'load_browser_item') {
+                    pending[j].params.uri = uri
+                    console.log(`  → injected uri=${uri} into step ${j + 1} load_browser_item`)
                   }
                 }
+              } else {
+                console.log('SEARCH RESULT DEBUG: no results found in response.result.results')
               }
             }
 

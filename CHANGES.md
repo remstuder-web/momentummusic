@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-03] momentum-watcher.cjs — DONE
+TASK: ableton-short-browser-queries
+WHAT: /ableton-sequence system prompt: added browser search guidance — use short plugin-name-only queries ("API 2500" not "waves api 2500"), add browse_path "Plug-ins" step if search may return 0 results.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
+## [2026-05-03] momentum-watcher.cjs — DONE
 TASK: ableton-fix-response-nesting
 WHAT: Logs revealed AbletonMCP wraps all responses as {status, result:{...}}. Fixed both injection paths to unwrap via response.result before extracting track_count and search results list. Added SEARCH RESULT DEBUG and SEQUENCE STEP DEBUG logs. search_browser was returning results:[] because query was wrong AND list extraction was looking at response.results instead of response.result.results.
 RESULT: watcher restarted, ping ok

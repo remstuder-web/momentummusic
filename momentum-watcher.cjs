@@ -12830,6 +12830,7 @@ const WHATSAPP_DB_PATH = '/Users/remo/Library/Group Containers/group.net.whatsap
 const COREDATA_EPOCH_OFFSET = 978307200
 let whatsappDbPath = null
 let lastWhatsAppCheck = Date.now() - 3600000 // Unix ms — 1 hour ago
+const whatsappBuffer = {} // { [contactName]: { messages: [], jid, firstMessageAt, lastMessageAt } }
 
 function readWhatsAppMessages(dbPath, since) {
   if (!Database) throw new Error('better-sqlite3 not available')
@@ -12949,96 +12950,16 @@ async function pollWhatsApp() {
       const conversation = msgs.map(m => (m.is_from_me ? 'Remo' : contact) + ': ' + m.text).join('\n')
       const lastMsg = incomingMsgs[incomingMsgs.length - 1].text
 
-      // Deep psychological + business analysis via Sonnet (personal chats only)
+      // Personal chat — buffer messages, flush in batch after quiet period
       if (!jid.includes('@g.us') && !jid.includes('@status') && conversation.length > 20) {
-        try {
-          const { analysis, usage } = await analyzeArtistMessage(contact, conversation, lastMsg)
-
-          // 1. Update contact profile in brain (upsert by title)
-          const existingProfile = await fetch(
-            `${SUPABASE_URL}/rest/v1/brain_knowledge?category=eq.contact_profile&title=eq.Profile%3A%20${encodeURIComponent(contact)}&limit=1`,
-            { headers: sbHeaders }
-          ).then(r => r.json()).catch(() => [])
-
-          const profileContent = (analysis.profile_update || '') +
-            '\n\nLast contact: ' + new Date().toLocaleDateString()
-
-          if (existingProfile[0]?.id) {
-            await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?id=eq.${existingProfile[0].id}`, {
-              method: 'PATCH',
-              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-              body: JSON.stringify({ content: profileContent })
-            }).catch(() => {})
-          } else {
-            await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge`, {
-              method: 'POST',
-              headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-              body: JSON.stringify({
-                category: 'contact_profile',
-                title: 'Profile: ' + contact,
-                content: profileContent,
-                entry_type_v2: 'knowledge',
-                confidence: 'medium',
-                source_type: 'whatsapp',
-                active: true
-              })
-            }).catch(() => {})
-          }
-
-          // 2. Save to inbox with full analysis metadata
-          await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
-            method: 'POST',
-            headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-            body: JSON.stringify({
-              type: 'message',
-              song_title: `WhatsApp: ${contact}`,
-              message: lastMsg.slice(0, 500),
-              patch_name: 'Artist Intel',
-              read: false,
-              metadata: {
-                from: contact,
-                platform: 'whatsapp',
-                real_intent: analysis.real_intent,
-                psychological_state: analysis.psychological_state,
-                boundary_alert: analysis.boundary_alert,
-                boundary_type: analysis.boundary_type,
-                best_next_step: analysis.best_next_step,
-                response_suggestion: analysis.response_suggestion,
-                urgency: analysis.urgency,
-                business_assessment: analysis.business_assessment
-              }
-            })
-          }).catch(() => {})
-
-          // 3. Telegram notification — skip system/ping messages
-          if (SYSTEM_PING_PATTERNS.some(p => lastMsg.toLowerCase().includes(p))) continue
-          let telegramMsg = ''
-          if (analysis.boundary_alert) {
-            telegramMsg += `⚠️ BOUNDARY ALERT (${analysis.boundary_type || 'unknown'})\n${analysis.boundary_alert}\n\n`
-          }
-          telegramMsg += `📱 ${contact} (${analysis.urgency || 'medium'} urgency)\n\n`
-          telegramMsg += `💬 "${lastMsg.slice(0, 100)}"\n\n`
-          if (analysis.real_intent) telegramMsg += `🎯 Real intent: ${analysis.real_intent}\n`
-          if (analysis.psychological_state) telegramMsg += `🧠 State: ${analysis.psychological_state}\n`
-          if (analysis.business_assessment) telegramMsg += `💼 Business: ${analysis.business_assessment}\n\n`
-          if (analysis.best_next_step) telegramMsg += `✅ Next step: ${analysis.best_next_step}\n`
-          if (analysis.response_suggestion) telegramMsg += `💡 Suggested reply: ${analysis.response_suggestion}`
-          await sendTelegram(TELEGRAM_OWNER_ID, telegramMsg).catch(() => {})
-
-          // 4. Track cost
-          await fetch(`http://127.0.0.1:${PORT}/track-cost`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              endpoint: 'whatsapp-analysis',
-              model: 'claude-sonnet-4-20250514',
-              input_tokens: usage?.input_tokens || 0,
-              output_tokens: usage?.output_tokens || 0,
-              cost_usd: ((usage?.input_tokens || 0) * 0.000003) + ((usage?.output_tokens || 0) * 0.000015)
-            })
-          }).catch(() => {})
-
-        } catch(e) { console.warn('WhatsApp analysis error:', e.message) }
+        if (!whatsappBuffer[contact]) {
+          whatsappBuffer[contact] = { messages: [], jid, firstMessageAt: Date.now(), lastMessageAt: Date.now() }
+        }
+        whatsappBuffer[contact].messages.push(
+          ...incomingMsgs.map(m => ({ text: m.text, date: m.date, is_from_me: false }))
+        )
+        whatsappBuffer[contact].lastMessageAt = Date.now()
+        console.log(`WhatsApp buffered ${incomingMsgs.length} msg(s) from ${contact} (total: ${whatsappBuffer[contact].messages.length})`)
       } else if (jid.includes('@g.us') && !jid.includes('@status') && conversation.length > 0) {
         // Group chat — save to inbox without deep analysis
         await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
@@ -13095,6 +13016,119 @@ async function pollWhatsApp() {
     // Convert CoreData seconds back to Unix ms for next poll
     lastWhatsAppCheck = (newMsgs[0].date + COREDATA_EPOCH_OFFSET) * 1000
   } catch(e) { console.warn('pollWhatsApp error:', e.message) }
+}
+
+async function sendWhatsappSummary(contactName, messages) {
+  if (!messages.length) return
+  try {
+    const thread = messages
+      .sort((a, b) => a.date - b.date)
+      .map(m => {
+        const ts = new Date((m.date + COREDATA_EPOCH_OFFSET) * 1000).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
+        return `[${ts}] ${contactName}: ${m.text}`
+      })
+      .join('\n')
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 600,
+        system: `You are a relationship intelligence advisor for Remo, a professional music producer. Be direct and practical. Format responses as structured JSON only.`,
+        messages: [{
+          role: 'user',
+          content: `Analyze this WhatsApp conversation from ${contactName} (music industry contact).
+Messages:
+${thread}
+
+Return JSON:
+{
+  "summary": "2-3 sentence summary of what was discussed",
+  "real_intent": "what do they actually want",
+  "tone": "emotional tone / energy",
+  "opportunities": "any music collaboration or business opportunities",
+  "recommended_response": "how Remo should respond",
+  "urgency": "low|medium|high"
+}`
+        }]
+      })
+    })
+
+    if (!res.ok) throw new Error(`Claude API ${res.status}`)
+    const d = await res.json()
+    const raw = (d.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
+    const jsonMatch = raw.match(/\{[\s\S]*\}/)
+    const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
+
+    const minutesSinceLast = Math.round((Date.now() - (whatsappBuffer[contactName]?.lastMessageAt || Date.now())) / 60000)
+
+    // Telegram summary
+    let telegramMsg = `📱 *${contactName}* (${messages.length} messages, last ${minutesSinceLast}min ago)\n\n`
+    if (analysis.summary)              telegramMsg += `📋 *Summary:* ${analysis.summary}\n`
+    if (analysis.real_intent)          telegramMsg += `🎯 *Intent:* ${analysis.real_intent}\n`
+    if (analysis.tone)                 telegramMsg += `🎭 *Tone:* ${analysis.tone}\n`
+    if (analysis.opportunities)        telegramMsg += `💡 *Opportunity:* ${analysis.opportunities}\n`
+    if (analysis.recommended_response) telegramMsg += `↩️ *Respond:* ${analysis.recommended_response}\n`
+    if (analysis.urgency)              telegramMsg += `⚡ *Urgency:* ${analysis.urgency}`
+    await sendTelegram(TELEGRAM_OWNER_ID, telegramMsg).catch(() => {})
+
+    // Save to inbox
+    await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        type: 'whatsapp_summary',
+        song_title: `WhatsApp: ${contactName}`,
+        message: analysis.summary || thread.slice(0, 300),
+        patch_name: 'Artist Intel',
+        read: false,
+        metadata: {
+          from: contactName,
+          platform: 'whatsapp',
+          message_count: messages.length,
+          real_intent: analysis.real_intent,
+          tone: analysis.tone,
+          opportunities: analysis.opportunities,
+          recommended_response: analysis.recommended_response,
+          urgency: analysis.urgency
+        }
+      })
+    }).catch(() => {})
+
+    // Track cost
+    if (d.usage) {
+      await fetch(`http://127.0.0.1:${PORT}/track-cost`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: 'whatsapp-summary',
+          model: 'claude-sonnet-4-20250514',
+          input_tokens: d.usage.input_tokens || 0,
+          output_tokens: d.usage.output_tokens || 0,
+          cost_usd: ((d.usage.input_tokens || 0) * 0.000003) + ((d.usage.output_tokens || 0) * 0.000015)
+        })
+      }).catch(() => {})
+    }
+
+    console.log(`✓ WhatsApp summary sent for ${contactName} (${messages.length} messages)`)
+  } catch(e) { console.warn('sendWhatsappSummary error:', e.message) }
+}
+
+async function flushWhatsappBuffer() {
+  const now = Date.now()
+  for (const [contactName, data] of Object.entries(whatsappBuffer)) {
+    const minutesSinceLast = (now - data.lastMessageAt) / 60000
+    const minutesSinceFirst = (now - data.firstMessageAt) / 60000
+    if (minutesSinceLast >= 30 || minutesSinceFirst >= 60) {
+      await sendWhatsappSummary(contactName, data.messages)
+      delete whatsappBuffer[contactName]
+    }
+  }
 }
 
 // ── Brain connection finder — module scope so endpoint + scheduler can both call it ──
@@ -13257,6 +13291,7 @@ server.listen(PORT, '127.0.0.1', () => {
     whatsappDbPath = WHATSAPP_DB_PATH
     console.log('✓ WhatsApp DB found:', whatsappDbPath)
     setInterval(pollWhatsApp, 120000)
+    setInterval(flushWhatsappBuffer, 5 * 60 * 1000)
   } else {
     exec(`find /Users/remo/Library -name "ChatStorage.sqlite" -path "*whatsapp*" 2>/dev/null`, (err, stdout) => {
       const p = stdout.trim().split('\n').filter(Boolean)[0]
@@ -13264,6 +13299,7 @@ server.listen(PORT, '127.0.0.1', () => {
         whatsappDbPath = p
         console.log('✓ WhatsApp DB found:', whatsappDbPath)
         setInterval(pollWhatsApp, 120000)
+        setInterval(flushWhatsappBuffer, 5 * 60 * 1000)
       } else {
         console.log('⚠ WhatsApp DB not found — /setup-whatsapp to configure')
       }

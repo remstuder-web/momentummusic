@@ -52,7 +52,8 @@
   let showVocalEq = $state({}) // kept for legacy compat — not actively used
   let vocalComparison = $state({}) // song.id -> comparison result
   let activeStem = $state({}) // song.id -> 'vocals' | 'drums' | 'bass' | 'other'
-  let selectedRefId = $state({}) // song.id -> reference_track_id (string)
+  let selectedRefId = $state({}) // song.id -> primary reference_track_id (string)
+  let selectedRefs = $state({}) // song.id -> string[] of selected ref ids (ordered, for chart multi-overlay)
   let refTrackOptions = $state([]) // ref tracks that have EQ curves available
   let refSearch = $state({}) // song.id -> library search string
   let refPickerOpen = $state({}) // song.id -> bool
@@ -352,13 +353,29 @@
   async function handleProdDrop(e, song) {
     e.preventDefault(); song._prodDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
-    try { await saveSongAudio(file, song, 'production', e.altKey) } catch(err) { alert('Error: ' + err.message) }
+    try {
+      await saveSongAudio(file, song, 'production', e.altKey)
+      const wd = workData(song)
+      const vLabel = wd.versions?.find(v => v.id === wd.active_version_id)?.name || 'prod'
+      fetch('http://localhost:4242/analyze-vocal-eq', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'mix', song_id: song.id, label: vLabel })
+      }).catch(() => {})
+    } catch(err) { alert('Error: ' + err.message) }
   }
 
   async function handleMixDrop(e, song) {
     e.preventDefault(); song._mixDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
-    try { await saveSongAudio(file, song, 'mixing', e.altKey) } catch(err) { alert('Error: ' + err.message) }
+    try {
+      await saveSongAudio(file, song, 'mixing', e.altKey)
+      const wd = workData(song)
+      const vLabel = wd.versions?.find(v => v.id === wd.active_version_id)?.name || 'mix'
+      fetch('http://localhost:4242/analyze-vocal-eq', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'mix', song_id: song.id, label: vLabel })
+      }).catch(() => {})
+    } catch(err) { alert('Error: ' + err.message) }
   }
 
   async function handleInstrumentalDrop(e, song) {
@@ -2189,12 +2206,17 @@
       ...(libraryTracks || []).filter(r => !priorityIds.has(r.id)).map(r => ({ ...r, _section: 'LIBRARY', _rt_id: r.id }))
     ]
 
-    // Auto-select first project/song ref if none selected yet
+    // Auto-select first project ref, else song ref, else library ref
     if (!selectedRefId[songId] && refTrackOptions.length) {
-      const firstPriority = refTrackOptions.find(r => r._section === 'PROJECT' || r._section === 'SONG')
+      const firstPriority = refTrackOptions.find(r => r._section === 'PROJECT')
+        || refTrackOptions.find(r => r._section === 'SONG')
+        || refTrackOptions[0]
       if (firstPriority) {
-        selectedRefId[songId] = String(firstPriority._rt_id ?? firstPriority.id)
+        const refId = String(firstPriority._rt_id ?? firstPriority.id)
+        selectedRefId[songId] = refId
         selectedRefId = { ...selectedRefId }
+        selectedRefs[songId] = [refId]
+        selectedRefs = { ...selectedRefs }
         loadMozartInsight(songId, firstPriority)
       }
     }
@@ -2236,6 +2258,15 @@
     mozartInsight = { ...mozartInsight, [songId]: null }
     mozartInsightLoading = { ...mozartInsightLoading, [songId]: true }
     const song = songs.find(s => s.id === songId)
+    const wd = workData(song)
+    const latestA = (wd?.versions || [])
+      .filter(v => v.analysis)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]?.analysis
+    const selIds = selectedRefs[songId]?.length ? selectedRefs[songId] : [String(refTrack._rt_id ?? refTrack.id)]
+    const refDataList = selIds.map(id => refTrackOverride[id] || refTrackOptions.find(r => String(r._rt_id ?? r.id) === id)).filter(Boolean)
+    const refsText = refDataList.map(rt =>
+      `${rt.artist || '?'} — ${rt.title || rt.name || '?'} | BPM: ${rt.tempo ? Math.round(rt.tempo) : '?'} | Key: ${rt.key || '?'} | Energy: ${rt.energy != null ? Math.round(rt.energy * 100) + '%' : '?'}${rt.genre_tag ? ' | Genre: ' + rt.genre_tag : ''}`
+    ).join('\n') || `${refTrack.artist || 'Unknown'} — ${refTrack.title || refTrack.name || '?'}`
     try {
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -2244,7 +2275,7 @@
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 500,
           system: `You are Mozart, expert music producer advisor.
-Compare producer's current mix to the reference track.
+Compare producer's current mix to the reference tracks.
 Return JSON only:
 {
   "strategic": ["point 1", "point 2", "point 3"],
@@ -2253,9 +2284,15 @@ Return JSON only:
 }`,
           messages: [{
             role: 'user',
-            content: 'My mix: ' + (song?.title || song?.code || 'current') +
-              '\nReference: ' + (refTrack.artist || 'Unknown') + ' — ' + refTrack.title +
-              '\nCompare and give strategic + creative direction.'
+            content: `My mix: ${song?.title || song?.code || 'current'}
+BPM: ${latestA?.bpm ? Math.round(latestA.bpm) : '?'} | Key: ${latestA?.key || '?'} | LUFS: ${latestA?.loudness_lufs != null ? latestA.loudness_lufs.toFixed(1) : '?'}
+Energy: ${latestA?.energy != null ? Math.round(latestA.energy * 100) + '%' : '?'} | Brightness: ${latestA?.brightness != null ? Math.round(latestA.brightness * 100) + '%' : '?'}
+
+References selected:
+${refsText}
+
+Give specific strategic and creative direction comparing my mix to these references.
+Focus on: energy match, tonal balance, arrangement density, commercial positioning.`
           }]
         })
       })
@@ -2419,18 +2456,28 @@ Return JSON only:
 
   function selectRefFromPicker(songId, r) {
     const refId = String(r._rt_id ?? r.id)
-    selectedRefId[songId] = refId
-    selectedRefId = { ...selectedRefId }
-    refPickerOpen[songId] = false
-    refPickerOpen = { ...refPickerOpen }
-    refSearch[songId] = ''
-    refSearch = { ...refSearch }
+    const current = selectedRefs[songId] || []
+    const idx = current.indexOf(refId)
+    if (idx >= 0) {
+      // Deselect — remove from list
+      selectedRefs[songId] = current.filter(id => id !== refId)
+      if (selectedRefId[songId] === refId) {
+        selectedRefId[songId] = selectedRefs[songId][0] || ''
+        selectedRefId = { ...selectedRefId }
+      }
+    } else {
+      // Select — add to list, becomes primary
+      selectedRefs[songId] = [...current, refId]
+      selectedRefId[songId] = refId
+      selectedRefId = { ...selectedRefId }
+      if (r._rt_id || r.id) loadRefAnalysis(r._rt_id ?? r.id)
+      loadMozartInsight(songId, r)
+      loadProjectRefAverage(songId)
+      if (r.spotify_id) autoVocalStyle(songId, r.spotify_id)
+    }
+    selectedRefs = { ...selectedRefs }
+    // Picker stays open (toggle/checkbox style — click outside to close)
     loadVocalEq(songId)
-    if (r._rt_id || r.id) loadRefAnalysis(r._rt_id ?? r.id)
-    loadMozartInsight(songId, r)
-    loadProjectRefAverage(songId)
-    if (r.spotify_id) autoVocalStyle(songId, r.spotify_id)
-    console.log('Selected ref:', r.artist, r.title, 'id:', refId)
   }
 
   async function loadProjectRefAverage(songId) {
@@ -3595,6 +3642,8 @@ Return JSON only:
                   {@const songCurves = vocalEqCurves[song.id] || []}
                   {@const stemKey = activeStem[song.id] || 'mix'}
                   {@const selectedRef = selectedRefId[song.id] || ''}
+                  {@const selectedRefsArr = selectedRefs[song.id] || []}
+                  {@const REF_COLORS = ['#c9a84c', '#4cc9a8', '#c94c4c', '#9a4cc9']}
                   {@const isMixTab = stemKey === 'mix'}
                   {@const mixCurveData = isMixTab
                     ? songCurves.find(c => c.source_type === 'mix')
@@ -3603,10 +3652,14 @@ Return JSON only:
                     ? (songCurves.find(c => String(c.reference_track_id) === selectedRef && (isMixTab ? (!c.stem_type || c.stem_type === 'mix' || c.stem_type === 'vocals') : c.stem_type === stemKey)) ||
                        songCurves.find(c => c.source_type === 'reference' && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey)))
                     : songCurves.find(c => c.source_type === 'reference' && (isMixTab ? (!c.stem_type || c.stem_type === 'mix') : c.stem_type === stemKey))}
-                  {@const refCurves = songCurves.filter(c => c.source_type === 'reference' && c.stem_type === stemKey && !c.reference_track_id)}
                   {@const mixCurves = songCurves.filter(c => c.source_type === 'mix' && c.stem_type === stemKey)}
                   {@const mixCurve = mixCurveData?.curve && typeof mixCurveData.curve === 'object' ? mixCurveData.curve : null}
-                  {@const refCurve = refCurveData?.curve && typeof refCurveData.curve === 'object' ? refCurveData.curve : null}
+                  {@const refCurvesArr = selectedRefsArr.map(refId => {
+                    const cd = isMixTab
+                      ? (songCurves.find(c => String(c.reference_track_id) === refId && (!c.stem_type || c.stem_type === 'mix' || c.stem_type === 'vocals')) || songCurves.find(c => c.source_type === 'reference' && (!c.stem_type || c.stem_type === 'mix')))
+                      : songCurves.find(c => String(c.reference_track_id) === refId && c.stem_type === stemKey)
+                    return cd?.curve && typeof cd.curve === 'object' ? cd.curve : null
+                  })}
                   {@const selectedRefTrack = selectedRef ? (refTrackOverride[selectedRef] || refTrackOptions.find(r => String(r._rt_id ?? r.id) === selectedRef) || null) : null}
                   {@const cmp = vocalComparison[song.id]}
                   {@const refLoading = vocalEqLoading[song.id]}
@@ -3649,62 +3702,69 @@ Return JSON only:
                             {/if}
                           </div>
                         </div>
-                        <!-- Right: Library search dropdown -->
+                        <!-- Right: Library search dropdown (multi-select toggle) -->
                         <div class="ref-input-col" onclick={e => e.stopPropagation()}>
                           <div class="ref-input-label">LIBRARY</div>
                           <div class="ref-picker-wrap">
+                            <!-- Selected ref tags with colored dots -->
+                            {#if selectedRefsArr.length}
+                              <div class="ref-selected-tags">
+                                {#each selectedRefsArr as refId, ri}
+                                  {@const sel = refTrackOverride[refId] || refTrackOptions.find(r => String(r._rt_id ?? r.id) === refId)}
+                                  {#if sel}
+                                    <span class="ref-selected-tag" style="border-color:{REF_COLORS[ri] ?? REF_COLORS[0]}">
+                                      <span class="ref-tag-dot" style="background:{REF_COLORS[ri] ?? REF_COLORS[0]}"></span>
+                                      {(sel.artist || '').split(' ')[0]} — {(sel.title || sel.name || '').slice(0, 14)}
+                                      <button onclick={() => selectRefFromPicker(song.id, sel)}>×</button>
+                                    </span>
+                                  {/if}
+                                {/each}
+                              </div>
+                            {/if}
                             <div class="ref-picker-input-row">
-                              {#if selectedRef}
-                                {@const sel = refTrackOptions.find(r => String(r._rt_id ?? r.id) === selectedRef)}
-                                {#if sel}
-                                  <span class="ref-selected-badge">
-                                    {sel.artist} — {sel.title || sel.name}
-                                    <button onclick={() => {
-                                      selectedRefId[song.id] = ''
-                                      selectedRefId = { ...selectedRefId }
-                                      refSearch[song.id] = ''
-                                      refSearch = { ...refSearch }
-                                    }}>×</button>
-                                  </span>
-                                {/if}
-                              {:else}
-                                <input
-                                  class="ref-search-input"
-                                  placeholder="Search library..."
-                                  value={refSearch[song.id] || ''}
-                                  oninput={e => { refSearch[song.id] = e.currentTarget.value; refSearch = { ...refSearch } }}
-                                  onfocus={() => { refPickerOpen[song.id] = true; refPickerOpen = { ...refPickerOpen } }}
-                                />
-                              {/if}
+                              <input
+                                class="ref-search-input"
+                                placeholder="Search to add refs..."
+                                value={refSearch[song.id] || ''}
+                                oninput={e => { refSearch[song.id] = e.currentTarget.value; refSearch = { ...refSearch } }}
+                                onfocus={() => { refPickerOpen[song.id] = true; refPickerOpen = { ...refPickerOpen } }}
+                              />
                             </div>
-                            {#if refPickerOpen[song.id] && !selectedRef}
+                            {#if refPickerOpen[song.id]}
                               {@const q = (refSearch[song.id] || '').toLowerCase()}
                               {@const filteredLibrary = refTrackOptions.filter(r => r._section === 'LIBRARY' && (!q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q) || (r.genre_tag||'').toLowerCase().includes(q) || (r.playlist_name||'').toLowerCase().includes(q))).sort((a, b) => {
-                                if (a._section === 'PROJECT') return -1
-                                if (b._section === 'PROJECT') return 1
                                 return (a.playlist_name||'zzz').localeCompare(b.playlist_name||'zzz')
                               }).slice(0, 100)}
                               <div class="ref-picker-list">
                                 {#if projectRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)).length}
-                                  <div class="ref-picker-section">PROJECT REFS</div>
+                                  <div class="ref-picker-section">— PROJECT REFS —</div>
                                   {#each projectRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)) as r}
-                                    <div class="ref-picker-item" onclick={() => selectRefFromPicker(song.id, r)}>
+                                    {@const rId = String(r._rt_id ?? r.id)}
+                                    {@const rIdx = selectedRefsArr.indexOf(rId)}
+                                    <div class="ref-picker-item {rIdx >= 0 ? 'selected' : ''}" onclick={() => selectRefFromPicker(song.id, r)}>
+                                      <span class="ref-dot" style="background:{rIdx >= 0 ? (REF_COLORS[rIdx] ?? REF_COLORS[0]) : 'transparent'}; border-color:{rIdx >= 0 ? (REF_COLORS[rIdx] ?? REF_COLORS[0]) : '#444'}"></span>
                                       <span class="ref-item-name">{r.artist} — {r.title || r.name}</span>
                                       {#if r.playlist_name}<span class="ref-item-tag gold">{r.playlist_name}</span>{/if}
                                     </div>
                                   {/each}
                                 {/if}
                                 {#if songRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)).length}
-                                  <div class="ref-picker-section">SONG REFS</div>
+                                  <div class="ref-picker-section">— SONG REFS —</div>
                                   {#each songRefs.filter(r => !q || (r.artist||'').toLowerCase().includes(q) || (r.title||'').toLowerCase().includes(q)) as r}
-                                    <div class="ref-picker-item" onclick={() => selectRefFromPicker(song.id, r)}>
+                                    {@const rId = String(r._rt_id ?? r.id)}
+                                    {@const rIdx = selectedRefsArr.indexOf(rId)}
+                                    <div class="ref-picker-item {rIdx >= 0 ? 'selected' : ''}" onclick={() => selectRefFromPicker(song.id, r)}>
+                                      <span class="ref-dot" style="background:{rIdx >= 0 ? (REF_COLORS[rIdx] ?? REF_COLORS[0]) : 'transparent'}; border-color:{rIdx >= 0 ? (REF_COLORS[rIdx] ?? REF_COLORS[0]) : '#444'}"></span>
                                       <span class="ref-item-name">{r.artist} — {r.title || r.name}</span>
                                     </div>
                                   {/each}
                                 {/if}
-                                <div class="ref-picker-section">LIBRARY ({filteredLibrary.length})</div>
+                                <div class="ref-picker-section">— LIBRARY ({filteredLibrary.length}) —</div>
                                 {#each filteredLibrary as r}
-                                  <div class="ref-picker-item" onclick={() => selectRefFromPicker(song.id, r)}>
+                                  {@const rId = String(r._rt_id ?? r.id)}
+                                  {@const rIdx = selectedRefsArr.indexOf(rId)}
+                                  <div class="ref-picker-item {rIdx >= 0 ? 'selected' : ''}" onclick={() => selectRefFromPicker(song.id, r)}>
+                                    <span class="ref-dot" style="background:{rIdx >= 0 ? (REF_COLORS[rIdx] ?? REF_COLORS[0]) : 'transparent'}; border-color:{rIdx >= 0 ? (REF_COLORS[rIdx] ?? REF_COLORS[0]) : '#444'}"></span>
                                     <span class="ref-item-name">{r.artist || 'Unknown'} — {r.title}</span>
                                     <div class="ref-item-meta">
                                       {#if r.playlist_name}<span class="ref-item-tag gold">{r.playlist_name}</span>{/if}
@@ -3764,12 +3824,11 @@ Return JSON only:
                       <!-- 4. EQ Chart -->
                       <VocalEqChart
                         mixCurve={mixCurve}
-                        refCurve={refCurve}
+                        refCurves={refCurvesArr}
                         avgCurve={avgRefCurve[song.id] ?? null}
                         mixLabel={mixCurveData?.label ?? ''}
-                        refLabel={refCurveData?.label ?? ''}
                         isMixTab={isMixTab}
-                        tonalBalance={selectedRefTrack?.tonal_balance ?? null}
+                        tonalBalance={selectedRefsArr.length === 0 ? (selectedRefTrack?.tonal_balance ?? null) : null}
                       />
 
                       <!-- 5. Action buttons -->
@@ -4978,12 +5037,17 @@ Return JSON only:
   .ref-search-input { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 5px 9px; border-radius: 3px; outline: none; min-width: 0; }
   .ref-search-input:focus { border-color: #c9a84c; }
   .ref-search-input::placeholder { color: #333; }
-  .ref-selected-badge { font-family: 'Space Mono', monospace; font-size: 8px; color: #c9a84c; border: 1px solid rgba(201,168,76,.3); padding: 2px 7px; border-radius: 2px; display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-  .ref-selected-badge button { background: none; border: none; color: #c9a84c; cursor: pointer; padding: 0; font-size: 12px; line-height: 1; flex-shrink: 0; }
+  .ref-selected-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+  .ref-selected-tag { font-family: 'Space Mono', monospace; font-size: 8px; color: #cec9c1; border: 1px solid #444; padding: 2px 6px 2px 4px; border-radius: 2px; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .ref-selected-tag button { background: none; border: none; color: #666; cursor: pointer; padding: 0 0 0 2px; font-size: 11px; line-height: 1; }
+  .ref-selected-tag button:hover { color: #cec9c1; }
+  .ref-tag-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .ref-dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #444; flex-shrink: 0; }
   .ref-picker-list { position: absolute; top: 100%; left: 0; right: 0; background: #1a1a1a; border: 1px solid #303030; border-radius: 3px; max-height: 280px; overflow-y: auto; z-index: 100; margin-top: 2px; }
   .ref-picker-section { font-family: 'Space Mono', monospace; font-size: 8px; color: rgba(201,168,76,.5); padding: 5px 10px 3px; letter-spacing: .1em; border-top: 1px solid #252525; position: sticky; top: 0; background: #1a1a1a; }
   .ref-picker-section:first-child { border-top: none; }
-  .ref-picker-item { padding: 5px 10px; cursor: pointer; border-bottom: 1px solid #111; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .ref-picker-item { padding: 5px 10px; cursor: pointer; border-bottom: 1px solid #111; display: flex; align-items: center; gap: 8px; }
+  .ref-picker-item.selected { background: rgba(255,255,255,0.03); }
   .ref-picker-item:hover { background: #222; }
   .ref-item-name { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #cec9c1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ref-item-meta { display: flex; gap: 3px; align-items: center; flex-shrink: 0; }

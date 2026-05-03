@@ -1,18 +1,18 @@
 <script>
-  let { mixCurve = null, refCurve = null, avgCurve = null, mixLabel = '', refLabel = '', isMixTab = false, tonalBalance = null } = $props()
+  let { mixCurve = null, refCurves = [], avgCurve = null, mixLabel = '', isMixTab = false, tonalBalance = null } = $props()
 
-  const REF_COLOR = '#c9a84c'
+  const REF_COLORS = ['#c9a84c', '#4cc9a8', '#c94c4c', '#9a4cc9']
   const MIX_COLOR = 'rgba(255,255,255,0.85)'
   const AVG_COLOR = 'rgba(100,149,237,0.55)'
 
   // Keep last non-null values so chart doesn't blank out during async reloads
   let lastMixCurve = $state(null)
-  let lastRefCurve = $state(null)
+  let lastRefCurves = $state([])
 
   $effect(() => { if (mixCurve != null) lastMixCurve = mixCurve })
   $effect(() => {
-    if (refCurve === null) lastRefCurve = null // explicit clear when user deselects ref
-    else if (refCurve != null) lastRefCurve = refCurve
+    if (refCurves.length === 0) lastRefCurves = []
+    else if (refCurves.some(c => c != null)) lastRefCurves = refCurves
   })
 
   // Convert any curve format to array of dB values
@@ -64,12 +64,20 @@
   }
 
   const displayMix = $derived(arrayToFreqObj(normalizePeak(getCurveArray(mixCurve ?? lastMixCurve))))
-  const displayRef = $derived.by(() => {
-    const real = refCurve ?? lastRefCurve
-    if (real) return arrayToFreqObj(normalizePeak(getCurveArray(real)))
-    const synthetic = syntheticCurveFromTonal(tonalBalance)
-    return synthetic ? arrayToFreqObj(normalizePeak(synthetic)) : null
+
+  const displayRefs = $derived.by(() => {
+    const active = (refCurves.some(c => c != null) ? refCurves : lastRefCurves)
+    const resolved = active.map(curve =>
+      curve ? arrayToFreqObj(normalizePeak(getCurveArray(curve))) : null
+    ).filter(r => r !== null)
+    // If no real curves but tonal balance exists, fall back to synthetic
+    if (!resolved.length && tonalBalance) {
+      const syn = syntheticCurveFromTonal(tonalBalance)
+      if (syn) return [arrayToFreqObj(normalizePeak(syn))]
+    }
+    return resolved
   })
+
   const displayAvg = $derived(arrayToFreqObj(normalizePeak(getCurveArray(avgCurve))))
 
   const ISO_FREQS = [
@@ -123,7 +131,7 @@
   // Dynamic Y-axis
   const dbRange = $derived((() => {
     const mixVals = displayMix ? ISO_FREQS.filter(f => displayMix[String(f)] !== undefined).map(f => displayMix[String(f)]) : []
-    const refVals = displayRef ? ISO_FREQS.filter(f => displayRef[String(f)] !== undefined).map(f => displayRef[String(f)]) : []
+    const refVals = displayRefs.flatMap(dr => dr ? ISO_FREQS.filter(f => dr[String(f)] !== undefined).map(f => dr[String(f)]) : [])
     const avgVals = displayAvg ? ISO_FREQS.filter(f => displayAvg[String(f)] !== undefined).map(f => displayAvg[String(f)]) : []
     const izVals = isMixTab ? IZOTOPE_2024.map(([,avg]) => iZotopeNorm(avg)) : []
     const all = [...mixVals, ...refVals, ...avgVals, ...izVals].filter(v => isFinite(v))
@@ -202,18 +210,19 @@
       <path d={makeIzotopePath()} fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,4" clip-path="url(#{clipId})" />
     {/if}
 
-    <!-- Average ref curve — dashed blue, behind individual ref -->
+    <!-- Average ref curve — dashed blue, behind individual refs -->
     {#if displayAvg}
       <polyline points={curveToPoints(displayAvg)} fill="none" stroke={AVG_COLOR} stroke-width="1"
         stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4,3" clip-path="url(#{clipId})" />
     {/if}
 
-    <!-- Reference curve (behind mix) — gold -->
-    {#if displayRef}
-      <polygon points={curveToArea(displayRef)} fill="rgba(201,168,76,0.05)" clip-path="url(#{clipId})" />
-      <polyline points={curveToPoints(displayRef)} fill="none" stroke={REF_COLOR} stroke-width="1.5"
+    <!-- Reference curves (behind mix) — one per selected ref, each in a different color -->
+    {#each displayRefs as displayRef, ri}
+      {@const color = REF_COLORS[ri] ?? REF_COLORS[0]}
+      <polygon points={curveToArea(displayRef)} fill="{color}0D" clip-path="url(#{clipId})" />
+      <polyline points={curveToPoints(displayRef)} fill="none" stroke={color} stroke-width="1.5"
         stroke-linejoin="round" stroke-linecap="round" opacity="0.7" clip-path="url(#{clipId})" />
-    {/if}
+    {/each}
 
     <!-- Mix curve (always on top when data exists) — bright white -->
     {#if displayMix}
@@ -223,17 +232,18 @@
     {/if}
 
     <!-- Legend -->
-    {#if displayRef}
-      <line x1={PAD_L + 4} y1={PAD_T + 8} x2={PAD_L + 18} y2={PAD_T + 8} stroke={REF_COLOR} stroke-width="1.5" opacity="0.7" />
-      <text x={PAD_L + 22} y={PAD_T + 11.5} font-size="9" fill={REF_COLOR} font-family="Space Mono, monospace" opacity="0.7">{refLabel || 'REF'}</text>
-    {/if}
+    {#each displayRefs as displayRef, ri}
+      {@const color = REF_COLORS[ri] ?? REF_COLORS[0]}
+      <line x1={PAD_L + 4 + ri * 56} y1={PAD_T + 8} x2={PAD_L + 16 + ri * 56} y2={PAD_T + 8} stroke={color} stroke-width="1.5" opacity="0.7" />
+      <text x={PAD_L + 20 + ri * 56} y={PAD_T + 11.5} font-size="9" fill={color} font-family="Space Mono, monospace" opacity="0.7">R{ri + 1}</text>
+    {/each}
     {#if displayMix}
-      {@const legendX = displayRef ? PAD_L + 4 + 88 : PAD_L + 4}
+      {@const legendX = W - PAD_R - 90}
       <line x1={legendX} y1={PAD_T + 8} x2={legendX + 14} y2={PAD_T + 8} stroke={MIX_COLOR} stroke-width="2" />
       <text x={legendX + 18} y={PAD_T + 11.5} font-size="9" fill="rgba(255,255,255,0.8)" font-family="Space Mono, monospace">{mixLabel || 'MY MIX'}</text>
     {/if}
     {#if displayAvg}
-      {@const avgX = W - PAD_R - 88}
+      {@const avgX = W - PAD_R - 170}
       <line x1={avgX} y1={PAD_T + 8} x2={avgX + 14} y2={PAD_T + 8} stroke={AVG_COLOR} stroke-width="1" stroke-dasharray="4,3" />
       <text x={avgX + 18} y={PAD_T + 11.5} font-size="9" fill={AVG_COLOR} font-family="Space Mono, monospace">AVG REFS</text>
     {/if}

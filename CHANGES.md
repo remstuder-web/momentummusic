@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-03] momentum-watcher.cjs — DONE
+TASK: ableton-browse-path-for-plugins
+WHAT: All system prompts updated: use browse_path (not search_browser) for third-party plugins; search_browser only finds Ableton built-ins. Plugin load example updated to 2 steps: browse_path Plug-ins/VST3 → load_browser_item with {{first_uri}}. Executor: added browse_path injection block — after browse_path response, fuzzy-matches items against instruction keywords (stopwords filtered), falls back to first item. Logs BROWSE_PATH RESULT DEBUG + matched item name/uri.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
+## [2026-05-03] momentum-watcher.cjs — DONE
 TASK: ableton-remove-debug-logs
 WHAT: Removed SEQUENCE STEP DEBUG, LOAD_BROWSER_ITEM PARAMS, SESSION TRACK COUNT console.logs from /ableton-sequence executor.
 RESULT: watcher restarted, ping ok

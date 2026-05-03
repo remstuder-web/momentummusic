@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-03] AbletonMCP/__init__.py + momentum-watcher.cjs — DONE
+TASK: ableton-master-track-and-item-uri
+WHAT: Python: _load_browser_item and _validate_track_index both now handle track_index == -1 → self._song.master_track (special case before the existing out-of-range check). Watcher: URI injection now writes params.item_uri and deletes params.uri (wrong key). All system prompts updated: track_index -1 for master, param key "item_uri" in load_browser_item examples.
+RESULT: watcher restarted, ping ok. Reload AbletonMCP in Ableton Preferences → MIDI to pick up Python change.
+BLOCKERS: none
+
 ## [2026-05-03] momentum-watcher.cjs — DONE
 TASK: ableton-uri-injection-and-master-index
 WHAT: URI injection fixed: now uses response?.result?.results?.[0] directly (not list-sniffing). Master track index changed from {{track_count}} to hard-coded -2 in all prompts (sequence 2-step plan, ABLETON_CMD_LIST note, single-command prompt). get_session_info step removed from plugin-load sequence — no longer needed. Logs: INJECTED URI shows actual value, fallback message when results empty.

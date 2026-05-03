@@ -276,7 +276,11 @@
       : null
   )
   let freeBalance      = $derived(phantomStatus?.balance ?? 0)
-  let inPositions      = $derived(openTrades.reduce((s,t) => s + (t.size_usd||0), 0))
+  let inPositions      = $derived(
+    phantomStatus?.total_equity != null && phantomStatus?.balance != null
+      ? phantomStatus.total_equity - phantomStatus.balance
+      : openTrades.reduce((s,t) => s + (t.size_usd||0), 0)
+  )
   let currentEquity    = $derived(phantomStatus?.total_equity != null ? phantomStatus.total_equity : freeBalance + inPositions)
   let equitySyncing    = $derived(!phantomStatus || freeBalance === 0)
   let monthCarryIncome = $derived(
@@ -337,7 +341,11 @@
   let depositSaving   = $state(false)
 
   let totalDeposited    = $derived(deposits.reduce((s,d) => s + (parseFloat(d.amount)||0), 0))
-  let netPnlVsDeposited = $derived(totalDeposited > 0 && freeBalance > 0 ? currentEquity - totalDeposited : null)
+  let netPnlVsDeposited = $derived(
+    totalDeposited > 0 && phantomStatus?.total_equity != null
+      ? phantomStatus.total_equity - totalDeposited
+      : null
+  )
 
   async function loadDeposits() {
     const { data } = await supabase
@@ -809,7 +817,7 @@
       <span class="et-val">{equitySyncing ? '—' : '$' + (phantomStatus?.balance ?? 0).toFixed(2)}</span>
     </div>
     <div class="et-row">
-      <span class="et-lbl">In positions <span style="font-family:'DM Sans',sans-serif;font-size:9px;color:#555;text-transform:none;letter-spacing:0">sum of open size_usd</span></span>
+      <span class="et-lbl">In positions <span style="font-family:'DM Sans',sans-serif;font-size:9px;color:#555;text-transform:none;letter-spacing:0">total_equity − balance</span></span>
       <span class="et-val" style="color:{inPositions>0?'#c9a84c':'#555'}">{inPositions>0 ? '$'+inPositions.toFixed(2) : '—'}</span>
     </div>
     <div class="et-row et-highlight">

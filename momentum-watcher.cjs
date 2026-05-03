@@ -9651,7 +9651,7 @@ Respond ONLY in JSON:
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 300,
-            system: `You control Ableton Live via JSON commands over TCP. Convert the user instruction into a single JSON command object with { type, params }.\n\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nIf the instruction requires multiple steps (e.g. load a plugin on master), pick the first step only and return that single command.\nReturn ONLY a valid JSON object, no explanation, no markdown.`,
+            system: `You control Ableton Live via JSON commands over TCP. Convert the user instruction into a single JSON command object with { type, params }.\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- volume values must be floats between 0.0 and 1.0\n- uri from search_browser results must be passed exactly as returned\n\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nIf the instruction requires multiple steps (e.g. load a plugin on master), pick the first step only and return that single command.\nReturn ONLY a valid JSON object, no explanation, no markdown.`,
             messages: [{ role: 'user', content: instruction }]
           })
         })
@@ -9694,7 +9694,7 @@ Respond ONLY in JSON:
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 1500,
-            system: `You are an Ableton Live producer assistant. Convert the user's instruction into a sequence of AbletonMCP commands to execute in order.\n\nReturn ONLY a JSON array of command objects:\n[\n  { "type": "set_tempo", "params": { "tempo": 140 } },\n  { "type": "create_midi_track", "params": { "index": -1 } }\n]\n\nThink step by step about what needs to happen first. For loading a plugin on the master track, always use 3 steps: 1. get_session_info (to get track_count for the master index)  2. search_browser (find the plugin uri)  3. load_browser_item (use track_index = track_count, use uri from step 2 — substitute the expected value directly since you cannot read prior results).\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nReturn ONLY the JSON array, no explanation, no markdown.`,
+            system: `You are an Ableton Live producer assistant. Convert the user's instruction into a sequence of AbletonMCP commands to execute in order.\n\nReturn ONLY a JSON array of command objects:\n[\n  { "type": "set_tempo", "params": { "tempo": 140 } },\n  { "type": "create_midi_track", "params": { "index": -1 } }\n]\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- volume values must be floats between 0.0 and 1.0\n- Exception: use the string placeholder "{{track_count}}" for the master track index and "{{first_uri}}" for a URI from a prior search_browser — the executor substitutes actual values before sending each command.\n\nFor loading a plugin on the master track, always plan 3 steps:\n  1. { "type": "get_session_info", "params": {} }\n  2. { "type": "search_browser", "params": { "query": "<plugin name>" } }\n  3. { "type": "load_browser_item", "params": { "track_index": "{{track_count}}", "uri": "{{first_uri}}" } }\n\nThink step by step about what needs to happen first.\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nReturn ONLY the JSON array, no explanation, no markdown.`,
             messages: [{ role: 'user', content: instruction }]
           })
         })
@@ -9707,11 +9707,42 @@ Respond ONLY in JSON:
         catch(e) { throw new Error('Claude returned invalid JSON: ' + rawText.slice(0, 300)) }
         if (!Array.isArray(commands)) throw new Error('Claude did not return an array of commands')
 
-        // Step 2: Execute each command sequentially via TCP
+        // Step 2: Execute each command sequentially, injecting values from prior responses
+        const ctx = {}  // accumulated values: track_count, first_uri
+
+        const extractCtx = (type, resp) => {
+          if (!resp || typeof resp !== 'object') return
+          if (type === 'get_session_info' && typeof resp.track_count === 'number') {
+            ctx.track_count = resp.track_count
+          }
+          if (type === 'search_browser') {
+            const list = Array.isArray(resp) ? resp
+              : Array.isArray(resp.results) ? resp.results
+              : Array.isArray(resp.items) ? resp.items
+              : null
+            if (list && list.length > 0) {
+              const uri = list[0].uri || list[0].id || list[0].path
+              if (uri) ctx.first_uri = uri
+            }
+          }
+        }
+
+        const substituteCtx = (command) => {
+          if (!command.params) return command
+          const params = { ...command.params }
+          for (const [k, v] of Object.entries(params)) {
+            if (v === '{{track_count}}' && ctx.track_count !== undefined) params[k] = ctx.track_count
+            else if (v === '{{first_uri}}' && ctx.first_uri !== undefined) params[k] = ctx.first_uri
+          }
+          return { ...command, params }
+        }
+
         const steps = []
-        for (const command of commands) {
+        for (const rawCommand of commands) {
+          const command = substituteCtx(rawCommand)
           try {
             const response = await sendAbletonTCP(command)
+            extractCtx(command.type, response)
             steps.push({ command, response, ok: true })
             console.log(`✓ ableton-sequence step: ${command.type}`)
           } catch(e) {

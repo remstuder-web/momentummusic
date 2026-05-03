@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-03] momentum-watcher.cjs — DONE
+TASK: ableton-numeric-params-and-context-injection
+WHAT: Both system prompts: CRITICAL rule — all numeric params must be actual numbers, never strings (track_index integer, volume 0.0–1.0). Sequence system prompt: {{track_count}} and {{first_uri}} placeholders explained with 3-step plugin-load example. Sequence executor: extractCtx() extracts track_count from get_session_info and first uri from search_browser results; substituteCtx() replaces placeholders with real values before each TCP send.
+RESULT: watcher restarted, ping ok
+BLOCKERS: none
+
+## [2026-05-03] momentum-watcher.cjs — DONE
 TASK: ableton-browser-timeout-and-master-index
 WHAT: sendAbletonTCP: SLOW_ABLETON_COMMANDS list gets 30s timeout (search_browser, browse_path, load_browser_item), others keep 10s. ABLETON_CMD_LIST: added master track index guidance (use get_session_info to get track_count, master = track_count index). Both system prompts updated: /ableton-command picks first step only for multi-step instructions; /ableton-sequence explicitly plans 3-step plugin-load flow.
 RESULT: watcher restarted, ping ok

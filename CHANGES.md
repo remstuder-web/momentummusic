@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-03] momentum-watcher.cjs — DONE
+TASK: ableton-fix-response-nesting
+WHAT: Logs revealed AbletonMCP wraps all responses as {status, result:{...}}. Fixed both injection paths to unwrap via response.result before extracting track_count and search results list. Added SEARCH RESULT DEBUG and SEQUENCE STEP DEBUG logs. search_browser was returning results:[] because query was wrong AND list extraction was looking at response.results instead of response.result.results.
+RESULT: watcher restarted, ping ok
+BLOCKERS: search_browser returning empty results for "waves api 2500" — plugin may not be indexed or query needs different format
+
+## [2026-05-03] momentum-watcher.cjs — DONE
 TASK: ableton-programmatic-param-injection
 WHAT: /ableton-sequence executor rewritten: replace placeholder-based substituteCtx/extractCtx with index-based programmatic injection. After get_session_info response, parseInt(track_count) is forcefully written to all subsequent load_browser_item params.track_index. After search_browser, first result uri is written to all subsequent load_browser_item params.uri. Full TCP response logged to console per step including raw search_browser list.
 RESULT: watcher restarted, ping ok

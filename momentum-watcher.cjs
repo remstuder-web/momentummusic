@@ -9715,14 +9715,19 @@ Respond ONLY in JSON:
 
         for (let i = 0; i < pending.length; i++) {
           const command = pending[i]
+          if (command.type === 'load_browser_item') {
+            console.log('SEQUENCE STEP DEBUG:', JSON.stringify(command, null, 2))
+          }
           try {
             const response = await sendAbletonTCP(command)
             console.log(`✓ ableton-sequence step ${i + 1}/${pending.length}: ${command.type}`)
             console.log(`  response:`, JSON.stringify(response))
 
             // Programmatic injection into any later load_browser_item commands
-            if (command.type === 'get_session_info' && response && typeof response.track_count === 'number') {
-              const trackIdx = parseInt(response.track_count, 10)
+            // AbletonMCP wraps all responses as { status, result: { ... } }
+            const resultData = (response && response.result) ? response.result : response
+            if (command.type === 'get_session_info' && resultData && typeof resultData.track_count === 'number') {
+              const trackIdx = parseInt(resultData.track_count, 10)
               for (let j = i + 1; j < pending.length; j++) {
                 if (pending[j].type === 'load_browser_item') {
                   pending[j].params.track_index = trackIdx
@@ -9732,9 +9737,11 @@ Respond ONLY in JSON:
             }
 
             if (command.type === 'search_browser') {
-              const list = Array.isArray(response) ? response
-                : Array.isArray(response.results) ? response.results
-                : Array.isArray(response.items) ? response.items
+              console.log('SEARCH RESULT DEBUG:', JSON.stringify(response, null, 2))
+              const inner = resultData || {}
+              const list = Array.isArray(inner) ? inner
+                : Array.isArray(inner.results) ? inner.results
+                : Array.isArray(inner.items) ? inner.items
                 : null
               console.log(`  search_browser raw list:`, JSON.stringify(list))
               if (list && list.length > 0) {

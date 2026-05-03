@@ -47,6 +47,10 @@
   let acapellaLoading = $state(false)
   let acapellaResult = $state(null)
   let acapellaDragging = $state(false)
+
+  let abletonConnected = $state(false)
+  let abletonInstruction = $state('')
+  let abletonCopied = $state(false)
   let reminders = $state([])
   let subReminders = $state([]) // weekly submission nudges
   let tasksOpen = $state(true)
@@ -1233,6 +1237,24 @@ ${mozartContext}`
     acapellaFile = null
   }
 
+  async function checkAbletonStatus() {
+    try {
+      const r = await fetch('http://localhost:4242/ableton-status')
+      const d = await r.json()
+      abletonConnected = !!d.connected
+    } catch { abletonConnected = false }
+  }
+
+  async function sendToAbleton() {
+    const text = abletonInstruction.trim()
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      abletonCopied = true
+      setTimeout(() => { abletonCopied = false }, 3000)
+    } catch { abletonCopied = false }
+  }
+
   // loadStaticData MUST complete before load() so customs/helpers aren't lost to the state spread
   ;(async () => { await loadStaticData(); load() })()
   ;(async () => { await loadInbox() })()
@@ -1285,10 +1307,14 @@ ${mozartContext}`
     }
     document.addEventListener('click', onInlineClick)
 
+    checkAbletonStatus()
+    const abletonPoll = setInterval(checkAbletonStatus, 30000)
+
     return () => {
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisible)
       document.removeEventListener('click', onInlineClick)
+      clearInterval(abletonPoll)
     }
   })
 </script>
@@ -1826,6 +1852,23 @@ ${mozartContext}`
               <div style="color:#e57373;font-size:11px">{acapellaResult.error}</div>
             {/if}
           </div>
+        {/if}
+
+        <!-- ABLETON CONTROL -->
+        <div class="normalizer-title" style="margin-top:16px">ABLETON CONTROL</div>
+        <div class="ableton-status-row">
+          <span class="ableton-dot {abletonConnected ? 'on' : 'off'}"></span>
+          <span class="ableton-status-text {abletonConnected ? 'on' : 'off'}">{abletonConnected ? 'Ableton connected' : 'Ableton offline'}</span>
+        </div>
+        <textarea
+          class="ableton-textarea"
+          rows="4"
+          placeholder="e.g. Create a MIDI track, set BPM to 128, add a kick pattern on beat 1 and 3..."
+          bind:value={abletonInstruction}
+        ></textarea>
+        <button class="ableton-send-btn" onclick={sendToAbleton}>Send to Ableton</button>
+        {#if abletonCopied}
+          <div class="ableton-copied-msg">Copied! Paste in Claude Desktop to execute.</div>
         {/if}
       {/if}
 
@@ -2731,6 +2774,19 @@ ${mozartContext}`
   .result-row { display: flex; gap: 8px; align-items: baseline; }
   .result-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; letter-spacing: .08em; width: 56px; flex-shrink: 0; }
   .result-val { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; }
+  .ableton-status-row { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; }
+  .ableton-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .ableton-dot.on { background: #4caf82; box-shadow: 0 0 4px rgba(76,175,130,.6); }
+  .ableton-dot.off { background: #555; }
+  .ableton-status-text { font-family: 'Space Mono', monospace; font-size: 10px; }
+  .ableton-status-text.on { color: #4caf82; }
+  .ableton-status-text.off { color: #555; }
+  .ableton-textarea { width: 100%; background: #111; border: 1px solid #252525; border-radius: 3px; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 8px 10px; resize: vertical; outline: none; box-sizing: border-box; }
+  .ableton-textarea:focus { border-color: rgba(201,168,76,.4); }
+  .ableton-textarea::placeholder { color: #333; }
+  .ableton-send-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.35); color: #c9a84c; padding: 6px 16px; border-radius: 2px; cursor: pointer; margin-top: 6px; }
+  .ableton-send-btn:hover { background: rgba(201,168,76,.18); }
+  .ableton-copied-msg { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; margin-top: 6px; }
   .add-inp::placeholder { color: #555; }
   .add-inp.url { flex: 2; min-width: 120px; }
   .add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 5px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }

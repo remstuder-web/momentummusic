@@ -9553,6 +9553,27 @@ Respond ONLY in JSON:
     return
   }
 
+  // ── GET /ableton-status — TCP ping to AbletonMCP socket on port 9877 ──
+  if (req.method === 'GET' && req.url === '/ableton-status') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const net = require('net')
+    const socket = new net.Socket()
+    let done = false
+    const finish = (connected) => {
+      if (done) return
+      done = true
+      socket.destroy()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ connected }))
+    }
+    socket.setTimeout(1500)
+    socket.once('connect', () => finish(true))
+    socket.once('error', () => finish(false))
+    socket.once('timeout', () => finish(false))
+    socket.connect(9877, '127.0.0.1')
+    return
+  }
+
   // ── POST /extract-acapella — Demucs vocal separation + trim to onset ──
   if (req.method === 'POST' && req.url === '/extract-acapella') {
     res.setHeader('Access-Control-Allow-Origin', '*')

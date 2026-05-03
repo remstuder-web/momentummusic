@@ -1,5 +1,23 @@
 # CHANGES
 
+## [2026-05-03] DailyTab.svelte + momentum-watcher.cjs — DONE
+TASK: ableton-control-helper
+WHAT: Added ABLETON CONTROL helper block to DailyTab helpers section. Status dot pings GET /ableton-status every 30s (TCP check on port 9877). Send button copies instruction to clipboard with "Paste in Claude Desktop" message. Added GET /ableton-status endpoint to watcher.
+RESULT: works — /ableton-status returns connected:true (AbletonMCP socket detected on 9877)
+BLOCKERS: none
+
+## [2026-05-03] ProjectsTab.svelte + VocalEqChart.svelte — DONE
+TASK: analyzer-overhaul
+WHAT: Part 1 — fire-and-forget /analyze-vocal-eq after prod/mix drop. Part 2 — auto-select priority: PROJECT → SONG → LIBRARY. Part 3 — multi-ref chart overlay: selectedRefs[] per song, toggle picker with colored dots, VocalEqChart accepts refCurves[] array (4 colors: gold/teal/coral/purple). Part 4 — Mozart insight now passes real BPM/Key/LUFS/Energy/Brightness + all selected refs data. Part 5 — /generate-proq4-preset confirmed working (returns error only when curves missing, correct behavior).
+RESULT: 0 compile errors, watcher restarted, ping ok
+BLOCKERS: none
+
+## [2026-05-03] momentum-watcher.cjs — DONE
+TASK: whatsapp-batch-monitoring
+WHAT: WhatsApp monitoring no longer fires Claude + Telegram per message. Messages are buffered in whatsappBuffer per contact, flushed every 5 min. Summary fires when quiet 30min or buffer 60min old. sendWhatsappSummary calls Sonnet with batch prompt, sends one structured Telegram message, saves as type='whatsapp_summary' to inbox.
+RESULT: works — watcher restarted, ping ok
+BLOCKERS: none
+
 ## [2026-05-03] ProjectsTab.svelte + momentum-watcher.cjs — DONE
 TASK: references-overhaul
 WHAT: Unified reference name resolution (both project and song refs now use /spotify-track-meta); song refs now have id field; both paths queue to reference_tracks library via /analyze-spotify-track; /analyze-spotify-track upserts to reference_tracks after analysis; lightweight path added for spotify_id-only calls; token expiry tracked + ensureSpotifyToken() added for /spotify-track-meta

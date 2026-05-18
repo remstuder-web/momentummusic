@@ -9890,9 +9890,11 @@ Respond ONLY in JSON:
         const brightness = analysis.brightness != null ? analysis.brightness.toFixed(2) : 'N/A'
         const rhythmicDensity = analysis.onset_rate != null ? analysis.onset_rate.toFixed(2) : 'N/A'
 
-        sendEvt({ step: 'Generating 5 MIDI files...' })
+        sendEvt({ step: 'Generating 3 MIDI files...' })
 
-        const claudePrompt = `You are an expert music producer and composer. Analyze this reference track data and generate 5 new MIDI ideas in the same style.
+        const claudePrompt = `CRITICAL: You must complete the full JSON array. Never truncate. Keep each sequence to maximum 20 notes so you fit within limits.
+
+You are an expert music producer and composer. Analyze this reference track data and generate 3 new MIDI ideas in the same style.
 
 REFERENCE TRACK ANALYSIS:
 - Key: ${key} ${mode}
@@ -9910,18 +9912,18 @@ From this analysis, understand:
 - The emotional tone (dark/bright, tense/relaxed, aggressive/gentle)
 - The register (where do the chords sit, where does the melody sit)
 
-Now generate 5 MIDI sequences that feel like NEW IDEAS inspired by this reference — same style, same vibe, same key, but original.
+Now generate 3 MIDI sequences that feel like NEW IDEAS inspired by this reference — same style, same vibe, same key, but original.
 
 Each sequence must:
 - Combine BOTH chords AND lead melody in one file (like the reference)
 - Stay in ${key} ${mode}
 - Match the BPM feel of ${bpm}
 - Reflect the energy and brightness of the reference
-- Have minimum 30 notes (chords + melody combined)
+- Maximum 20 notes total (chords + melody combined)
 - Chord velocities 55-75 (background), melody velocities 80-100 (front)
 - 8 bars total (1 beat = 1.0, 1 bar = 4.0)
 
-Make each of the 5 ideas feel distinct from each other while staying true to the reference style — vary the rhythm, the chord voicing, the melodic movement, but keep the same emotional world.
+Make each of the 3 ideas feel distinct from each other while staying true to the reference style — vary the rhythm, the chord voicing, the melodic movement, but keep the same emotional world.
 
 Return ONLY a valid JSON array, no markdown, no explanation:
 [
@@ -9932,13 +9934,13 @@ Return ONLY a valid JSON array, no markdown, no explanation:
     ]
   }
 ]
-Pitch is MIDI note number (60 = C4). Start and duration are in beats. Minimum 30 notes per sequence.`
+Pitch is MIDI note number (60 = C4). Start and duration are in beats. Maximum 20 notes per sequence.`
 
         const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: 'claude-haiku-4-5-20251001', max_tokens: 4000,
+            model: 'claude-sonnet-4-20250514', max_tokens: 8000,
             messages: [{ role: 'user', content: claudePrompt }]
           })
         })
@@ -9974,7 +9976,7 @@ ticks = 480
 tempo = int(round(60_000_000 / bpm))
 files = []
 
-for i, seq in enumerate(sequences[:5]):
+for i, seq in enumerate(sequences[:3]):
     mid = MidiFile(ticks_per_beat=ticks)
     track = MidiTrack()
     mid.tracks.append(track)

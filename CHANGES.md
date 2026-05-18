@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-18] momentum-watcher.cjs — DONE
+TASK: midi-generator-sonnet-3seq
+WHAT: Switch back to claude-sonnet-4-20250514, max_tokens 8000, 3 sequences, max 20 notes/seq, CRITICAL prefix on prompt
+RESULT: fits within limits, higher quality output
+BLOCKERS: none
+
+## [2026-05-18] momentum-watcher.cjs — DONE
 TASK: midi-generator-prompt-overhaul
 WHAT: Replace Claude prompt with reference-driven style extraction — analyzes harmonic/melodic/rhythmic character, generates 5 ideas with chords+melody combined, min 30 notes, velocity layering
 RESULT: richer, more contextual MIDI output

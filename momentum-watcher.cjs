@@ -9920,7 +9920,7 @@ No explanation, no markdown, just the JSON array.`
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514', max_tokens: 8192,
+            model: 'claude-haiku-4-5-20251001', max_tokens: 4000,
             messages: [{ role: 'user', content: claudePrompt }]
           })
         })

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-18] momentum-watcher.cjs — DONE
+TASK: midi-generator-model-switch
+WHAT: Switch MIDI generator from claude-sonnet-4-20250514 to claude-haiku-4-5-20251001, max_tokens 8192→4000
+RESULT: ~$0.01/run instead of ~$0.12
+BLOCKERS: none
+
 ## [2026-05-18] DailyTab.svelte + momentum-watcher.cjs + analyze_audio.py — DONE
 TASK: midi-from-reference
 WHAT: Added MIDI FROM REFERENCE helper — drop audio, analyze tonal structure via Essentia (--midi-prep flag), call Claude Sonnet to generate 10 MIDI sequences, write .mid files to Desktop via mido

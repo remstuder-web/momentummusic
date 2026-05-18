@@ -3004,7 +3004,7 @@ async function buildStatusResponse() {
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
     'GET /instrumentals/:filename', 'GET /stems/:filename',
     'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /speak',
-    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-ref-now', 'POST /analyze-stems', 'POST /extract-acapella', 'POST /analyze-youtube-track',
+    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-ref-now', 'POST /analyze-stems', 'POST /extract-acapella', 'POST /generate-midi-from-reference', 'POST /analyze-youtube-track',
     'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
     'POST /launch-claude-code', 'POST /launch-claude-overnight',
     'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
@@ -9836,6 +9836,178 @@ Respond ONLY in JSON:
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: e.message }))
       }
+    })
+    return
+  }
+
+  // ── POST /generate-midi-from-reference ──────────────────────────────────────
+  if (req.method === 'POST' && req.url === '/generate-midi-from-reference') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+
+    const sendEvt = (data) => { try { res.write(`data: ${JSON.stringify(data)}\n\n`) } catch {} }
+
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      let tmpFile = null
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString())
+        const { file_data, ext, filename, apiKey } = body
+        if (!file_data) throw new Error('file_data required')
+        if (!apiKey) throw new Error('apiKey required — set it in Settings')
+
+        const safeExt = (ext || 'wav').replace(/[^a-z0-9]/gi, '').slice(0, 10)
+        tmpFile = `/tmp/midi_ref_${Date.now()}.${safeExt}`
+        fs.writeFileSync(tmpFile, Buffer.from(file_data, 'base64'))
+        const baseName = (filename || 'track').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 24)
+
+        sendEvt({ step: 'Analyzing frequency spectrum...' })
+
+        const PYTHON = '/opt/homebrew/bin/python3.11'
+        const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
+        let analysis = {}
+        try {
+          const raw = execSync(
+            `"${PYTHON}" "${ANALYZE_SCRIPT}" ${shellEscape(tmpFile)} --midi-prep 2>/dev/null`,
+            { encoding: 'utf8', timeout: 180000 }
+          ).trim()
+          analysis = JSON.parse(raw)
+        } catch(e) {
+          throw new Error('Audio analysis failed: ' + e.message.slice(0, 200))
+        }
+
+        sendEvt({ step: 'Detecting key + scale...' })
+        sendEvt({ step: 'Extracting chord progression...' })
+        sendEvt({ step: 'Analyzing melodic contour...' })
+
+        const key = analysis.key || 'C'
+        const mode = analysis.scale || 'major'
+        const bpm = analysis.bpm || 120
+        const chords = (analysis.chord_progression || []).slice(0, 8).join(' → ') || 'unknown'
+        const contourNotes = (analysis.melodic_contour || []).slice(0, 16).map(p => p.note).join(' ') || 'N/A'
+        const energy = analysis.energy != null ? analysis.energy.toFixed(2) : 'N/A'
+        const brightness = analysis.brightness != null ? analysis.brightness.toFixed(2) : 'N/A'
+        const rhythmicDensity = analysis.onset_rate != null ? analysis.onset_rate.toFixed(2) : 'N/A'
+
+        sendEvt({ step: 'Generating 10 MIDI files...' })
+
+        const claudePrompt = `You are a music producer and MIDI composer. Based on this audio analysis:
+
+Key: ${key} ${mode}
+BPM: ${bpm}
+Chord progression: ${chords}
+Melodic contour: ${contourNotes}
+Energy: ${energy}
+Brightness: ${brightness}
+Rhythmic density: ${rhythmicDensity}
+
+Generate 10 different MIDI note sequences in the style of this reference.
+Each sequence should be 8 bars long at ${bpm} BPM.
+Vary the sequences — some melodic, some rhythmic, some harmonic.
+Keep them in the key of ${key} ${mode}.
+
+Return ONLY a JSON array of 10 sequences, each with:
+{
+  "name": "descriptive name",
+  "notes": [{ "pitch": 60, "start": 0.0, "duration": 0.5, "velocity": 80 }]
+}
+Pitch is MIDI note number (60 = C4).
+Start and duration are in beats.
+No explanation, no markdown, just the JSON array.`
+
+        const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514', max_tokens: 8192,
+            messages: [{ role: 'user', content: claudePrompt }]
+          })
+        })
+        const claudeData = await claudeRes.json()
+        const rawText = claudeData.content?.[0]?.text || ''
+        if (!rawText) throw new Error('Empty response from Claude: ' + JSON.stringify(claudeData).slice(0, 200))
+
+        let sequences
+        try {
+          const jsonMatch = rawText.match(/\[[\s\S]*\]/)
+          if (!jsonMatch) throw new Error('No JSON array in response')
+          sequences = JSON.parse(jsonMatch[0])
+          if (!Array.isArray(sequences) || sequences.length === 0) throw new Error('Invalid sequences array')
+        } catch(e) {
+          throw new Error('Failed to parse Claude response: ' + e.message)
+        }
+
+        const midiScript = `
+import sys, json, os
+import mido
+from mido import MidiFile, MidiTrack, Message, MetaMessage
+
+data = json.loads(sys.argv[1])
+sequences = data['sequences']
+bpm = float(data['bpm'])
+desktop = os.path.expanduser('~/Desktop')
+base = data['base']
+ticks = 480
+tempo = int(round(60_000_000 / bpm))
+files = []
+
+for i, seq in enumerate(sequences[:10]):
+    mid = MidiFile(ticks_per_beat=ticks)
+    track = MidiTrack()
+    mid.tracks.append(track)
+    track.append(MetaMessage('set_tempo', tempo=tempo, time=0))
+    name = str(seq.get('name', f'seq{i+1}'))
+    track.append(MetaMessage('track_name', name=name[:30], time=0))
+    notes = sorted(seq.get('notes', []), key=lambda n: n.get('start', 0))
+    events = []
+    for n in notes:
+        pitch = max(0, min(127, int(n.get('pitch', 60))))
+        st = int(n.get('start', 0) * ticks)
+        dur = max(1, int(n.get('duration', 0.5) * ticks))
+        vel = max(1, min(127, int(n.get('velocity', 80))))
+        events.append((st, 'note_on', pitch, vel))
+        events.append((st + dur, 'note_off', pitch, 0))
+    events.sort(key=lambda e: e[0])
+    cur = 0
+    for ev in events:
+        t, msg_type, p, v = ev
+        track.append(Message(msg_type, note=p, velocity=v, time=t - cur))
+        cur = t
+    safe = ''.join(c if c.isalnum() or c in '-_' else '_' for c in name)[:20]
+    fname = f'MIDI_{base}_{i+1:02d}_{safe}.mid'
+    mid.save(os.path.join(desktop, fname))
+    files.append(fname)
+
+print(json.dumps({'files': files}))
+`
+        const midiScriptPath = `/tmp/gen_midi_${Date.now()}.py`
+        fs.writeFileSync(midiScriptPath, midiScript)
+        const midiArg = JSON.stringify({ sequences, bpm, base: baseName })
+        let midiOut
+        try {
+          midiOut = execSync(
+            `"${PYTHON}" "${midiScriptPath}" ${shellEscape(midiArg)} 2>&1`,
+            { encoding: 'utf8', timeout: 30000 }
+          ).trim()
+        } catch(e) { throw new Error('MIDI generation failed: ' + e.message.slice(0, 200)) }
+
+        let files = []
+        try { files = JSON.parse(midiOut).files } catch { throw new Error('MIDI script error: ' + midiOut.slice(0, 300)) }
+
+        try { fs.unlinkSync(tmpFile); tmpFile = null } catch {}
+        try { fs.unlinkSync(midiScriptPath) } catch {}
+
+        sendEvt({ step: 'Saved to Desktop' })
+        sendEvt({ done: true, ok: true, files, analysis: { key: `${key} ${mode}`, bpm, chords, energy, brightness } })
+        console.log(`✓ MIDI from reference: ${files.length} files → Desktop (${baseName})`)
+
+      } catch(e) {
+        console.error('generate-midi-from-reference error:', e.message)
+        sendEvt({ error: e.message })
+        if (tmpFile) try { fs.unlinkSync(tmpFile) } catch {}
+      }
+      res.end()
     })
     return
   }

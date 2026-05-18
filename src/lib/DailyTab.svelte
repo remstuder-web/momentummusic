@@ -48,6 +48,12 @@
   let acapellaResult = $state(null)
   let acapellaDragging = $state(false)
 
+  let midiFile = $state(null)
+  let midiLoading = $state(false)
+  let midiResult = $state(null)
+  let midiDragging = $state(false)
+  let midiSteps = $state([])
+
   let abletonConnected = $state(false)
   let abletonInstruction = $state('')
   let abletonMode = $state('single')  // 'single' | 'sequence'
@@ -1386,6 +1392,58 @@ ${mozartContext}`
     acapellaFile = null
   }
 
+  function handleMidiDrop(e) {
+    e.preventDefault()
+    midiDragging = false
+    const file = e.dataTransfer.files[0]
+    if (file) { midiFile = file; midiResult = null; midiSteps = [] }
+  }
+
+  async function runMidiGenerate() {
+    if (!midiFile || midiLoading) return
+    midiLoading = true
+    midiResult = null
+    midiSteps = []
+    const apiKey = localStorage.getItem('mm_api_key') || ''
+    const base64 = await new Promise(res => {
+      const reader = new FileReader()
+      reader.onload = () => res(reader.result.split(',')[1])
+      reader.readAsDataURL(midiFile)
+    })
+    const ext = midiFile.name.split('.').pop().toLowerCase()
+    const filename = midiFile.name.replace(/\.[^.]+$/, '')
+    try {
+      const response = await fetch('http://localhost:4242/generate-midi-from-reference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_data: base64, ext, filename, apiKey })
+      })
+      const reader2 = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader2.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const event = JSON.parse(line.slice(6))
+            if (event.step) midiSteps = [...midiSteps, event.step]
+            if (event.done) { midiResult = event; midiLoading = false }
+            if (event.error) { midiResult = { ok: false, error: event.error }; midiLoading = false }
+          } catch {}
+        }
+      }
+    } catch(e) {
+      midiResult = { ok: false, error: e.message }
+      midiLoading = false
+    }
+    midiFile = null
+  }
+
   async function checkAbletonStatus() {
     try {
       const r = await fetch('http://localhost:4242/ableton-status')
@@ -2023,6 +2081,56 @@ ${mozartContext}`
               <div style="font-family:'Space Mono',monospace;font-size:9px;color:#4caf82;margin-top:6px">✓ Saved to Desktop</div>
             {:else}
               <div style="color:#e57373;font-size:11px">{acapellaResult.error}</div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- MIDI FROM REFERENCE -->
+        <div class="normalizer-title" style="margin-top:16px">MIDI FROM REFERENCE</div>
+        <div class="helper-sub">Drop audio → analyze tonal structure → generate 10 MIDI sequences to Desktop</div>
+
+        <div class="acapella-drop {midiDragging ? 'dragging' : ''}"
+          ondragover={e => { e.preventDefault(); midiDragging = true }}
+          ondragleave={() => midiDragging = false}
+          ondrop={handleMidiDrop}>
+          {#if midiLoading}
+            <div class="acapella-loading">● Analyzing{midiSteps.length ? ` · step ${midiSteps.length}/6` : '...'}</div>
+          {:else if midiFile}
+            <div class="acapella-ready">
+              📁 {midiFile.name}
+              <button class="extract-btn" onclick={runMidiGenerate}>Analyze &amp; Generate MIDIs</button>
+            </div>
+          {:else}
+            <div class="acapella-placeholder">
+              🎹 Drop any audio file — WAV, MP3, AIFF
+              <span style="font-size:9px;color:#252525">analyzed temporarily · never saved</span>
+            </div>
+          {/if}
+        </div>
+
+        {#if midiSteps.length > 0 || midiResult}
+          <div class="midi-progress">
+            {#each midiSteps as step}
+              <div class="midi-step">✓ {step}</div>
+            {/each}
+            {#if midiLoading && midiSteps.length < 6}
+              <div class="midi-step pending">◌ Processing...</div>
+            {/if}
+          </div>
+        {/if}
+
+        {#if midiResult}
+          <div class="acapella-result" style="margin-top:6px">
+            {#if midiResult.ok}
+              {#each (midiResult.files || []) as fname, i}
+                <div class="result-row">
+                  <span class="result-label">{String(i+1).padStart(2,'0')}</span>
+                  <span class="result-val">{fname}</span>
+                </div>
+              {/each}
+              <div style="font-family:'Space Mono',monospace;font-size:9px;color:#4caf82;margin-top:6px">✓ Saved to Desktop</div>
+            {:else}
+              <div style="color:#e57373;font-size:11px">{midiResult.error}</div>
             {/if}
           </div>
         {/if}
@@ -2994,6 +3102,9 @@ ${mozartContext}`
   .result-row { display: flex; gap: 8px; align-items: baseline; }
   .result-label { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; letter-spacing: .08em; width: 56px; flex-shrink: 0; }
   .result-val { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; }
+  .midi-progress { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+  .midi-step { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; }
+  .midi-step.pending { color: #444; }
   .ableton-status-row { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; }
   .ableton-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
   .ableton-dot.on { background: #4caf82; box-shadow: 0 0 4px rgba(76,175,130,.6); }

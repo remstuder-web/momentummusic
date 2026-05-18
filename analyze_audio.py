@@ -432,4 +432,55 @@ except Exception as e:
     results['crest_factor_per_band'] = None
     print('stereo/tonal error:', str(e), file=sys.stderr)
 
+# Extended tonal analysis for MIDI generation (--midi-prep flag)
+if '--midi-prep' in sys.argv:
+    try:
+        frame_size_c = 4096
+        hop_size_c = 2048
+        hpcp_frames = []
+        for i in range(0, len(audio) - frame_size_c, hop_size_c):
+            frame = audio[i:i+frame_size_c]
+            windowed = es.Windowing(type='blackmanharris62')(frame)
+            spectrum = es.Spectrum()(windowed)
+            peaks_freq, peaks_mag = es.SpectralPeaks()(spectrum)
+            if len(peaks_freq) > 0:
+                hpcp_frame = es.HPCP()(peaks_freq, peaks_mag)
+            else:
+                hpcp_frame = np.zeros(12, dtype='float32')
+            hpcp_frames.append(hpcp_frame)
+        if hpcp_frames:
+            chords, _ = es.ChordsDetection()(np.array(hpcp_frames, dtype='float32'))
+            deduped = []
+            for ch in chords:
+                ch_str = str(ch)
+                if not deduped or deduped[-1] != ch_str:
+                    deduped.append(ch_str)
+            results['chord_progression'] = deduped[:20]
+        else:
+            results['chord_progression'] = []
+    except Exception as e:
+        results['chord_progression'] = []
+        print(f'chord error: {e}', file=sys.stderr)
+
+    try:
+        pe = es.PredominantPitchMelodia(frameSize=2048, hopSize=128)
+        pv, pc = pe(audio)
+        hop_s = 128.0 / 44100.0
+        step_mc = max(1, int(0.5 / hop_s))
+        note_names_mc = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+        contour = []
+        for i in range(0, len(pv), step_mc):
+            p = float(pv[i])
+            c_val = float(pc[i])
+            if p > 80 and c_val > 0.5:
+                mn = int(round(12 * math.log2(p / 440.0) + 69))
+                mn = max(0, min(127, mn))
+                label = note_names_mc[mn % 12] + str(mn // 12 - 1)
+                contour.append({'hz': round(p, 1), 'midi': mn, 'note': label, 'time': round(i * hop_s, 2)})
+        results['melodic_contour'] = contour[:32]
+    except Exception:
+        results['melodic_contour'] = []
+
+    results['rhythmic_density'] = results.get('onset_rate')
+
 print(json.dumps(results))

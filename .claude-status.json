@@ -1,18 +1,17 @@
 {
-  "updated": "2026-05-03T15:38:00Z",
-  "last_task": "references-overhaul",
+  "updated": "2026-05-18T10:18:00Z",
+  "last_task": "midi-from-reference",
   "status": "done",
   "working": [
-    "addSongRef: now uses /spotify-track-meta (not oEmbed), adds id field, fires analyze-spotify-track for library sync",
-    "addRefLink: now updates local state immediately (refs appear without refresh), clears input correctly (refLinkInput[p.id]), fires analyze-spotify-track for library sync",
-    "/analyze-spotify-track: upserts to reference_tracks after full analysis (source=user, collection_name=project_ref)",
-    "/analyze-spotify-track: lightweight path — if spotify_id provided without url, upserts metadata stub and returns immediately",
-    "/spotify-track-meta: ensureSpotifyToken() called before Spotify fetch — handles expired tokens via refresh or client credentials fallback",
-    "spotifyTokenExpiresAt tracked in loadSpotifyToken — expiry-aware token management",
-    "pm2 restarted, ping OK, /spotify-track-meta returning title+artist correctly"
+    "MIDI FROM REFERENCE helper in DailyTab HELPERS section",
+    "POST /generate-midi-from-reference SSE endpoint in watcher",
+    "analyze_audio.py --midi-prep flag (chord progression + melodic contour)",
+    "mido installed (pip3 install mido --break-system-packages)",
+    "10 MIDI files written to ~/Desktop as MIDI_{name}_{n}_{seq}.mid",
+    "6-step SSE progress stream in UI"
   ],
   "broken": [],
   "partial": [],
-  "next": "Test in UI: paste Spotify URL in project References tab and song ref field — both should resolve name immediately and sync to library",
-  "notes": "Previous test 404 was a bad track ID, not a token bug. Token refresh added as defensive measure anyway."
+  "next": "Test with a real audio file — drop WAV/MP3 into MIDI FROM REFERENCE drop zone",
+  "notes": "Claude API key must be set in Settings (mm_api_key). Uses claude-sonnet-4-20250514. mido 1.3.3 installed."
 }

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-18] DailyTab.svelte + momentum-watcher.cjs + analyze_audio.py — DONE
+TASK: midi-from-reference
+WHAT: Added MIDI FROM REFERENCE helper — drop audio, analyze tonal structure via Essentia (--midi-prep flag), call Claude Sonnet to generate 10 MIDI sequences, write .mid files to Desktop via mido
+RESULT: works — SSE progress stream, 6 steps, files saved to ~/Desktop as MIDI_{name}_{n}_{seq}.mid
+BLOCKERS: none
+
 ## [2026-05-10] vercel.json — DONE
 TASK: vercel-cache-headers
 WHAT: Created vercel.json with Cache-Control headers — immutable 1yr for /_app/* and /assets/*, must-revalidate for all other routes

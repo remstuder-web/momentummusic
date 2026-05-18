@@ -9902,12 +9902,16 @@ Energy: ${energy}
 Brightness: ${brightness}
 Rhythmic density: ${rhythmicDensity}
 
-Generate 10 different MIDI note sequences in the style of this reference.
+Generate 5 different MIDI note sequences in the style of this reference.
 Each sequence should be 8 bars long at ${bpm} BPM.
 Vary the sequences — some melodic, some rhythmic, some harmonic.
 Keep them in the key of ${key} ${mode}.
 
-Return ONLY a JSON array of 10 sequences, each with:
+CRITICAL: Return valid JSON only. No trailing commas.
+Keep each sequence to maximum 32 notes to stay within limits.
+8 bars does not mean 8 notes per bar — keep it sparse and musical.
+
+Return ONLY a JSON array of 5 sequences, each with:
 {
   "name": "descriptive name",
   "notes": [{ "pitch": 60, "start": 0.0, "duration": 0.5, "velocity": 80 }]
@@ -9925,14 +9929,18 @@ No explanation, no markdown, just the JSON array.`
           })
         })
         const claudeData = await claudeRes.json()
-        const rawText = claudeData.content?.[0]?.text || ''
-        if (!rawText) throw new Error('Empty response from Claude: ' + JSON.stringify(claudeData).slice(0, 200))
+        const claudeText = claudeData.content?.[0]?.text || ''
+        if (!claudeText) throw new Error('Empty response from Claude: ' + JSON.stringify(claudeData).slice(0, 200))
 
         let sequences
         try {
-          const jsonMatch = rawText.match(/\[[\s\S]*\]/)
-          if (!jsonMatch) throw new Error('No JSON array in response')
-          sequences = JSON.parse(jsonMatch[0])
+          const raw = claudeText
+            .replace(/```json|```/g, '')
+            .trim()
+          const start = raw.indexOf('[')
+          const end = raw.lastIndexOf(']')
+          if (start === -1 || end === -1) throw new Error('No JSON array found')
+          sequences = JSON.parse(raw.slice(start, end + 1))
           if (!Array.isArray(sequences) || sequences.length === 0) throw new Error('Invalid sequences array')
         } catch(e) {
           throw new Error('Failed to parse Claude response: ' + e.message)
@@ -9952,7 +9960,7 @@ ticks = 480
 tempo = int(round(60_000_000 / bpm))
 files = []
 
-for i, seq in enumerate(sequences[:10]):
+for i, seq in enumerate(sequences[:5]):
     mid = MidiFile(ticks_per_beat=ticks)
     track = MidiTrack()
     mid.tracks.append(track)

@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-18] momentum-watcher.cjs — DONE
+TASK: midi-generator-json-fix
+WHAT: Robust JSON parsing (strip backticks, first[ to last]), 5 files instead of 10, max 32 notes/sequence in prompt
+RESULT: less likely to get cut off or parse-fail
+BLOCKERS: none
+
+## [2026-05-18] momentum-watcher.cjs — DONE
 TASK: midi-generator-model-switch
 WHAT: Switch MIDI generator from claude-sonnet-4-20250514 to claude-haiku-4-5-20251001, max_tokens 8192→4000
 RESULT: ~$0.01/run instead of ~$0.12

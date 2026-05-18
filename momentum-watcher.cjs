@@ -9890,35 +9890,49 @@ Respond ONLY in JSON:
         const brightness = analysis.brightness != null ? analysis.brightness.toFixed(2) : 'N/A'
         const rhythmicDensity = analysis.onset_rate != null ? analysis.onset_rate.toFixed(2) : 'N/A'
 
-        sendEvt({ step: 'Generating 10 MIDI files...' })
+        sendEvt({ step: 'Generating 5 MIDI files...' })
 
-        const claudePrompt = `You are a music producer and MIDI composer. Based on this audio analysis:
+        const claudePrompt = `You are an expert music producer and composer. Analyze this reference track data and generate 5 new MIDI ideas in the same style.
 
-Key: ${key} ${mode}
-BPM: ${bpm}
-Chord progression: ${chords}
-Melodic contour: ${contourNotes}
-Energy: ${energy}
-Brightness: ${brightness}
-Rhythmic density: ${rhythmicDensity}
+REFERENCE TRACK ANALYSIS:
+- Key: ${key} ${mode}
+- BPM: ${bpm}
+- Chord progression: ${chords}
+- Melodic contour: ${contourNotes}
+- Energy level: ${energy}
+- Brightness: ${brightness}
+- Rhythmic density: ${rhythmicDensity}
 
-Generate 5 different MIDI note sequences in the style of this reference.
-Each sequence should be 8 bars long at ${bpm} BPM.
-Vary the sequences — some melodic, some rhythmic, some harmonic.
-Keep them in the key of ${key} ${mode}.
+From this analysis, understand:
+- The harmonic language (what chords, what intervals, what tension)
+- The melodic character (how the melody moves, step-wise or jumpy, long or short notes)
+- The rhythmic feel (dense or sparse, syncopated or straight)
+- The emotional tone (dark/bright, tense/relaxed, aggressive/gentle)
+- The register (where do the chords sit, where does the melody sit)
 
-CRITICAL: Return valid JSON only. No trailing commas.
-Keep each sequence to maximum 32 notes to stay within limits.
-8 bars does not mean 8 notes per bar — keep it sparse and musical.
+Now generate 5 MIDI sequences that feel like NEW IDEAS inspired by this reference — same style, same vibe, same key, but original.
 
-Return ONLY a JSON array of 5 sequences, each with:
-{
-  "name": "descriptive name",
-  "notes": [{ "pitch": 60, "start": 0.0, "duration": 0.5, "velocity": 80 }]
-}
-Pitch is MIDI note number (60 = C4).
-Start and duration are in beats.
-No explanation, no markdown, just the JSON array.`
+Each sequence must:
+- Combine BOTH chords AND lead melody in one file (like the reference)
+- Stay in ${key} ${mode}
+- Match the BPM feel of ${bpm}
+- Reflect the energy and brightness of the reference
+- Have minimum 30 notes (chords + melody combined)
+- Chord velocities 55-75 (background), melody velocities 80-100 (front)
+- 8 bars total (1 beat = 1.0, 1 bar = 4.0)
+
+Make each of the 5 ideas feel distinct from each other while staying true to the reference style — vary the rhythm, the chord voicing, the melodic movement, but keep the same emotional world.
+
+Return ONLY a valid JSON array, no markdown, no explanation:
+[
+  {
+    "name": "descriptive_name_reflecting_the_idea",
+    "notes": [
+      {"pitch": 60, "start": 0.0, "duration": 2.0, "velocity": 65}
+    ]
+  }
+]
+Pitch is MIDI note number (60 = C4). Start and duration are in beats. Minimum 30 notes per sequence.`
 
         const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -9989,16 +10003,28 @@ for i, seq in enumerate(sequences[:5]):
 
 print(json.dumps({'files': files}))
 `
+        const execAsync = require('util').promisify(exec)
+
+        const midoCheck = await execAsync(`"${PYTHON}" -c "import mido; print(mido.__version__)"`)
+          .catch(() => ({ stdout: 'NOT INSTALLED' }))
+        console.log('mido version:', midoCheck.stdout.trim())
+
         const midiScriptPath = `/tmp/gen_midi_${Date.now()}.py`
         fs.writeFileSync(midiScriptPath, midiScript)
         const midiArg = JSON.stringify({ sequences, bpm, base: baseName })
         let midiOut
         try {
-          midiOut = execSync(
-            `"${PYTHON}" "${midiScriptPath}" ${shellEscape(midiArg)} 2>&1`,
-            { encoding: 'utf8', timeout: 30000 }
-          ).trim()
-        } catch(e) { throw new Error('MIDI generation failed: ' + e.message.slice(0, 200)) }
+          const { stdout, stderr } = await execAsync(
+            `"${PYTHON}" "${midiScriptPath}" ${shellEscape(midiArg)}`,
+            { maxBuffer: 10 * 1024 * 1024 }
+          )
+          if (stderr) console.log('MIDI Python stderr:', stderr)
+          midiOut = stdout.trim()
+        } catch(e) {
+          console.error('MIDI Python error:', e.message)
+          if (e.stderr) console.error('MIDI Python stderr:', e.stderr)
+          throw new Error('MIDI generation failed: ' + e.message.slice(0, 200))
+        }
 
         let files = []
         try { files = JSON.parse(midiOut).files } catch { throw new Error('MIDI script error: ' + midiOut.slice(0, 300)) }

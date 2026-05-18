@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-05-18] momentum-watcher.cjs — DONE
+TASK: midi-generator-prompt-overhaul
+WHAT: Replace Claude prompt with reference-driven style extraction — analyzes harmonic/melodic/rhythmic character, generates 5 ideas with chords+melody combined, min 30 notes, velocity layering
+RESULT: richer, more contextual MIDI output
+BLOCKERS: none
+
+## [2026-05-18] momentum-watcher.cjs — DONE
 TASK: midi-generator-json-fix
 WHAT: Robust JSON parsing (strip backticks, first[ to last]), 5 files instead of 10, max 32 notes/sequence in prompt
 RESULT: less likely to get cut off or parse-fail

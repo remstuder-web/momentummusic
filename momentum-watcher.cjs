@@ -9853,88 +9853,124 @@ Respond ONLY in JSON:
       let tmpFile = null
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString())
-        const { file_data, ext, filename, apiKey } = body
+        const { file_data, filename, apiKey } = body
         if (!file_data) throw new Error('file_data required')
         if (!apiKey) throw new Error('apiKey required — set it in Settings')
 
-        const safeExt = (ext || 'wav').replace(/[^a-z0-9]/gi, '').slice(0, 10)
-        tmpFile = `/tmp/midi_ref_${Date.now()}.${safeExt}`
+        tmpFile = `/tmp/midi_ref_${Date.now()}.mid`
         fs.writeFileSync(tmpFile, Buffer.from(file_data, 'base64'))
         const baseName = (filename || 'track').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 24)
 
-        sendEvt({ step: 'Analyzing frequency spectrum...' })
+        sendEvt({ step: 'Parsing MIDI file...' })
 
         const PYTHON = '/opt/homebrew/bin/python3.11'
-        const ANALYZE_SCRIPT = path.join(__dirname, 'analyze_audio.py')
-        let analysis = {}
+        const execAsync = require('util').promisify(exec)
+
+        const parseScript = `
+import sys, json
+import mido
+
+mid = mido.MidiFile(sys.argv[1])
+ticks = mid.ticks_per_beat
+tempo = 500000
+key_sig = None
+for track in mid.tracks:
+    for msg in track:
+        if msg.type == 'set_tempo':
+            tempo = msg.tempo
+        elif msg.type == 'key_signature':
+            key_sig = msg.key
+
+bpm = round(60_000_000 / tempo, 1)
+notes = []
+for track in mid.tracks:
+    abs_tick = 0
+    active = {}
+    for msg in track:
+        abs_tick += msg.time
+        beat = abs_tick / ticks
+        if msg.type == 'note_on' and msg.velocity > 0:
+            active[msg.note] = (beat, msg.velocity)
+        elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+            if msg.note in active:
+                s, v = active.pop(msg.note)
+                notes.append({'pitch': msg.note, 'start': round(s, 3), 'duration': round(max(0.0625, beat - s), 3), 'velocity': v})
+
+notes.sort(key=lambda n: n['start'])
+
+def to_note(p):
+    return ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][p % 12] + str(p // 12 - 1)
+
+if notes:
+    pitches = [n['pitch'] for n in notes]
+    vels = [n['velocity'] for n in notes]
+    mn, mx = min(pitches), max(pitches)
+    mnv, mxv = min(vels), max(vels)
+else:
+    mn, mx, mnv, mxv = 60, 72, 64, 100
+
+chords, used = [], set()
+for i, n in enumerate(notes):
+    if i in used: continue
+    cl = [n]
+    for j in range(i+1, len(notes)):
+        if j not in used and abs(notes[j]['start'] - n['start']) <= 0.05:
+            cl.append(notes[j]); used.add(j)
+    used.add(i)
+    if len(cl) >= 2:
+        chords.append({'pitches': [c['pitch'] for c in cl], 'start': round(n['start'], 3)})
+
+chord_beats = {round(c['start'], 3) for c in chords}
+melody = [n for n in notes if round(n['start'], 3) not in chord_beats][:20]
+onsets = sorted(set(round(n['start'] % 4.0, 2) for n in notes))[:16]
+
+print(json.dumps({'bpm': bpm, 'key': key_sig, 'note_count': len(notes),
+    'min_pitch': mn, 'max_pitch': mx, 'min_note': to_note(mn), 'max_note': to_note(mx),
+    'min_vel': mnv, 'max_vel': mxv, 'chords': chords[:12], 'melody': melody, 'onsets': onsets}))
+`
+        const parseScriptPath = `/tmp/parse_midi_${Date.now()}.py`
+        fs.writeFileSync(parseScriptPath, parseScript)
+        let analysis
         try {
-          const raw = execSync(
-            `"${PYTHON}" "${ANALYZE_SCRIPT}" ${shellEscape(tmpFile)} --midi-prep 2>/dev/null`,
-            { encoding: 'utf8', timeout: 180000 }
-          ).trim()
-          analysis = JSON.parse(raw)
+          const { stdout, stderr } = await execAsync(
+            `"${PYTHON}" "${parseScriptPath}" ${shellEscape(tmpFile)}`,
+            { maxBuffer: 10 * 1024 * 1024 }
+          )
+          if (stderr) console.log('MIDI parse stderr:', stderr)
+          analysis = JSON.parse(stdout.trim())
         } catch(e) {
-          throw new Error('Audio analysis failed: ' + e.message.slice(0, 200))
+          throw new Error('MIDI parsing failed: ' + e.message.slice(0, 200))
+        } finally {
+          try { fs.unlinkSync(parseScriptPath) } catch {}
         }
 
-        sendEvt({ step: 'Detecting key + scale...' })
-        sendEvt({ step: 'Extracting chord progression...' })
-        sendEvt({ step: 'Analyzing melodic contour...' })
+        sendEvt({ step: 'Extracting patterns...' })
 
-        const key = analysis.key || 'C'
-        const mode = analysis.scale || 'major'
-        const bpm = analysis.bpm || 120
-        const chords = (analysis.chord_progression || []).slice(0, 8).join(' → ') || 'unknown'
-        const contourNotes = (analysis.melodic_contour || []).slice(0, 16).map(p => p.note).join(' ') || 'N/A'
-        const energy = analysis.energy != null ? analysis.energy.toFixed(2) : 'N/A'
-        const brightness = analysis.brightness != null ? analysis.brightness.toFixed(2) : 'N/A'
-        const rhythmicDensity = analysis.onset_rate != null ? analysis.onset_rate.toFixed(2) : 'N/A'
+        const { bpm, key: keySig, note_count, min_pitch, max_pitch, min_note, max_note, min_vel, max_vel, chords, melody, onsets } = analysis
+        const chordsStr = (chords || []).slice(0, 8).map(c => `[${c.pitches.join(',')}] at beat ${c.start}`).join(', ') || 'none detected'
+        const melodyStr = (melody || []).slice(0, 12).map(n => `pitch ${n.pitch} beat ${n.start} dur ${n.duration}`).join(', ') || 'none detected'
+        const rhythmStr = (onsets || []).join(', ') || 'N/A'
 
-        sendEvt({ step: 'Generating 3 MIDI files...' })
+        sendEvt({ step: 'Generating 5 MIDI sequences...' })
 
-        const claudePrompt = `CRITICAL: You must complete the full JSON array. Never truncate. Keep each sequence to maximum 20 notes so you fit within limits.
+        const claudePrompt = `Here is a MIDI file analysis:
+BPM: ${bpm}
+Total notes: ${note_count}
+Pitch range: ${min_pitch} - ${max_pitch} (${min_note} - ${max_note})
+Velocity range: ${min_vel} - ${max_vel}${keySig ? `\nKey signature: ${keySig}` : ''}
+Chord clusters found: ${chordsStr}
+Melodic phrases: ${melodyStr}
+Rhythmic pattern (beat onsets within bar): ${rhythmStr}
 
-You are an expert music producer and composer. Analyze this reference track data and generate 3 new MIDI ideas in the same style.
+Generate 5 new MIDI sequences inspired by this.
+Same style, same emotional world, original ideas.
+Each must have chords + melody combined, minimum 24 notes.
+Stay in same key and BPM feel.
 
-REFERENCE TRACK ANALYSIS:
-- Key: ${key} ${mode}
-- BPM: ${bpm}
-- Chord progression: ${chords}
-- Melodic contour: ${contourNotes}
-- Energy level: ${energy}
-- Brightness: ${brightness}
-- Rhythmic density: ${rhythmicDensity}
-
-From this analysis, understand:
-- The harmonic language (what chords, what intervals, what tension)
-- The melodic character (how the melody moves, step-wise or jumpy, long or short notes)
-- The rhythmic feel (dense or sparse, syncopated or straight)
-- The emotional tone (dark/bright, tense/relaxed, aggressive/gentle)
-- The register (where do the chords sit, where does the melody sit)
-
-Now generate 3 MIDI sequences that feel like NEW IDEAS inspired by this reference — same style, same vibe, same key, but original.
-
-Each sequence must:
-- Combine BOTH chords AND lead melody in one file (like the reference)
-- Stay in ${key} ${mode}
-- Match the BPM feel of ${bpm}
-- Reflect the energy and brightness of the reference
-- Maximum 20 notes total (chords + melody combined)
-- Chord velocities 55-75 (background), melody velocities 80-100 (front)
-- 8 bars total (1 beat = 1.0, 1 bar = 4.0)
-
-Make each of the 3 ideas feel distinct from each other while staying true to the reference style — vary the rhythm, the chord voicing, the melodic movement, but keep the same emotional world.
-
-Return ONLY a valid JSON array, no markdown, no explanation:
-[
-  {
-    "name": "descriptive_name_reflecting_the_idea",
-    "notes": [
-      {"pitch": 60, "start": 0.0, "duration": 2.0, "velocity": 65}
-    ]
-  }
-]
-Pitch is MIDI note number (60 = C4). Start and duration are in beats. Maximum 20 notes per sequence.`
+Return ONLY JSON array:
+[{"name": "descriptive_name", "notes": [{"pitch": 60, "start": 0.0, "duration": 0.5, "velocity": 80}]}]
+Maximum 20 notes per sequence to fit in context.
+Pitch is MIDI note number (60=C4). Start and duration in beats. Chord velocities 55-75, melody velocities 80-100.`
 
         const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -9950,9 +9986,7 @@ Pitch is MIDI note number (60 = C4). Start and duration are in beats. Maximum 20
 
         let sequences
         try {
-          const raw = claudeText
-            .replace(/```json|```/g, '')
-            .trim()
+          const raw = claudeText.replace(/```json|```/g, '').trim()
           const start = raw.indexOf('[')
           const end = raw.lastIndexOf(']')
           if (start === -1 || end === -1) throw new Error('No JSON array found')
@@ -9976,7 +10010,7 @@ ticks = 480
 tempo = int(round(60_000_000 / bpm))
 files = []
 
-for i, seq in enumerate(sequences[:3]):
+for i, seq in enumerate(sequences[:5]):
     mid = MidiFile(ticks_per_beat=ticks)
     track = MidiTrack()
     mid.tracks.append(track)
@@ -10005,12 +10039,6 @@ for i, seq in enumerate(sequences[:3]):
 
 print(json.dumps({'files': files}))
 `
-        const execAsync = require('util').promisify(exec)
-
-        const midoCheck = await execAsync(`"${PYTHON}" -c "import mido; print(mido.__version__)"`)
-          .catch(() => ({ stdout: 'NOT INSTALLED' }))
-        console.log('mido version:', midoCheck.stdout.trim())
-
         const midiScriptPath = `/tmp/gen_midi_${Date.now()}.py`
         fs.writeFileSync(midiScriptPath, midiScript)
         const midiArg = JSON.stringify({ sequences, bpm, base: baseName })
@@ -10020,23 +10048,24 @@ print(json.dumps({'files': files}))
             `"${PYTHON}" "${midiScriptPath}" ${shellEscape(midiArg)}`,
             { maxBuffer: 10 * 1024 * 1024 }
           )
-          if (stderr) console.log('MIDI Python stderr:', stderr)
+          if (stderr) console.log('MIDI gen stderr:', stderr)
           midiOut = stdout.trim()
         } catch(e) {
-          console.error('MIDI Python error:', e.message)
-          if (e.stderr) console.error('MIDI Python stderr:', e.stderr)
+          console.error('MIDI gen error:', e.message)
+          if (e.stderr) console.error('MIDI gen stderr:', e.stderr)
           throw new Error('MIDI generation failed: ' + e.message.slice(0, 200))
+        } finally {
+          try { fs.unlinkSync(midiScriptPath) } catch {}
         }
 
         let files = []
         try { files = JSON.parse(midiOut).files } catch { throw new Error('MIDI script error: ' + midiOut.slice(0, 300)) }
 
         try { fs.unlinkSync(tmpFile); tmpFile = null } catch {}
-        try { fs.unlinkSync(midiScriptPath) } catch {}
 
         sendEvt({ step: 'Saved to Desktop' })
-        sendEvt({ done: true, ok: true, files, analysis: { key: `${key} ${mode}`, bpm, chords, energy, brightness } })
-        console.log(`✓ MIDI from reference: ${files.length} files → Desktop (${baseName})`)
+        sendEvt({ done: true, ok: true, files, analysis: { bpm, key: keySig, noteCount: note_count } })
+        console.log(`✓ MIDI from MIDI reference: ${files.length} files → Desktop (${baseName})`)
 
       } catch(e) {
         console.error('generate-midi-from-reference error:', e.message)

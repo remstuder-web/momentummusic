@@ -1396,7 +1396,7 @@ ${mozartContext}`
     e.preventDefault()
     midiDragging = false
     const file = e.dataTransfer.files[0]
-    if (file) { midiFile = file; midiResult = null; midiSteps = [] }
+    if (file && /\.mid$/i.test(file.name)) { midiFile = file; midiResult = null; midiSteps = [] }
   }
 
   async function runMidiGenerate() {
@@ -2087,14 +2087,14 @@ ${mozartContext}`
 
         <!-- MIDI FROM REFERENCE -->
         <div class="normalizer-title" style="margin-top:16px">MIDI FROM REFERENCE</div>
-        <div class="helper-sub">Drop audio → analyze tonal structure → generate 10 MIDI sequences to Desktop</div>
+        <div class="helper-sub">Drop a MIDI file to generate 5 new ideas in the same style</div>
 
         <div class="acapella-drop {midiDragging ? 'dragging' : ''}"
           ondragover={e => { e.preventDefault(); midiDragging = true }}
           ondragleave={() => midiDragging = false}
           ondrop={handleMidiDrop}>
           {#if midiLoading}
-            <div class="acapella-loading">● Analyzing{midiSteps.length ? ` · step ${midiSteps.length}/6` : '...'}</div>
+            <div class="acapella-loading">● Generating{midiSteps.length ? ` · step ${midiSteps.length}/4` : '...'}</div>
           {:else if midiFile}
             <div class="acapella-ready">
               📁 {midiFile.name}
@@ -2102,8 +2102,8 @@ ${mozartContext}`
             </div>
           {:else}
             <div class="acapella-placeholder">
-              🎹 Drop any audio file — WAV, MP3, AIFF
-              <span style="font-size:9px;color:#252525">analyzed temporarily · never saved</span>
+              🎹 Drop a .mid file — chords + melody → 5 new sequences
+              <span style="font-size:9px;color:#444">analyzed temporarily · never saved</span>
             </div>
           {/if}
         </div>
@@ -2113,7 +2113,7 @@ ${mozartContext}`
             {#each midiSteps as step}
               <div class="midi-step">✓ {step}</div>
             {/each}
-            {#if midiLoading && midiSteps.length < 6}
+            {#if midiLoading && midiSteps.length < 4}
               <div class="midi-step pending">◌ Processing...</div>
             {/if}
           </div>

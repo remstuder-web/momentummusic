@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-05-21] momentum-watcher.cjs + src/lib/DailyTab.svelte — DONE
+TASK: midi-generator-rewrite-midi-input
+WHAT: Rewrite MIDI FROM REFERENCE to accept .mid input instead of audio; parse MIDI with mido (BPM, key, note density, chord clusters, melodic phrases, rhythmic pattern), send to Claude Sonnet, generate 5 .mid files to Desktop
+RESULT: works
+BLOCKERS: none
+
 ## [2026-05-18] momentum-watcher.cjs — DONE
 TASK: midi-generator-sonnet-3seq
 WHAT: Switch back to claude-sonnet-4-20250514, max_tokens 8000, 3 sequences, max 20 notes/seq, CRITICAL prefix on prompt

@@ -8,11 +8,6 @@
 
   let projects = $state([])
   let songs = $state([])
-  let sanityItems = $state([])
-  let sanityChecks = $state({})
-  let sanityText = $state("")
-  let tipSections = $state([])
-  let tipsText = $state("")
   let cards = $state([])
   let releasedSongIds = $state([])
   let loading = $state(true)
@@ -27,9 +22,6 @@
   const MIN_LOG_MINUTES = 5
 
   let selectedListenBg = $state('stars')  // 'stars' or 'void'
-  let openTipSectionId = $state(null)
-  let activeTipSectionId = $state(null)
-  let activeTipText = $state("")
   let cardIdx = $state(0)
   let audioBlobUrls = $state({})
   let prodBlobUrls = {}  // song.id -> blob URL for production audio (module-level, survives tab switch)
@@ -77,8 +69,6 @@
   let trendLoading = $state(false)
   let trendFit = $state({})
   let trendFitLoading = $state({})
-  let finishingChecklist = $state([])
-  let checkedItems = $state({})
   let mozartAnalyzeOpen = $state({}) // song.id -> bool
   let mozartTrackQuery = $state({}) // song.id -> string
   let mozartAnalysis = $state({}) // song.id -> { loading, ok, error }
@@ -652,9 +642,6 @@
   }
   let fbInput = $state({})
   let deadlinesOpen = $state(false)
-  let sanityOpen = $state(false)
-  let tipsOpen = $state(false)
-
   // ── Timer ─────────────────────────────────────────────────────────
   let timerSec     = $state(0)
   let timerTarget  = $state(0)
@@ -716,9 +703,7 @@
 
   const PROJ_SONG_STAGES = [
     { id: 'production',   label: 'PRODUCTION',   prefix: 'PR' },
-    { id: 'mix_prep',     label: 'MIX PREP',      prefix: 'MP' },
     { id: 'mixing',       label: 'MIXING',        prefix: 'MR' },
-    { id: 'mastering',    label: 'MASTERING',     prefix: 'MA' },
     { id: 'stems',        label: 'STEMS',         prefix: 'ST' },
   ]
 
@@ -747,9 +732,7 @@
   const STAGES = [
     { id: 'demo',         label: 'DEMO' },
     { id: 'production',   label: 'PRODUCTION', hasSent: true, hasVersions: true, versionType: 'production' },
-    { id: 'mix_prep',     label: 'MIX PREP' },
     { id: 'mixing',       label: 'MIXING', hasSent: true, hasVersions: true, versionType: 'mixing' },
-    { id: 'mastering',    label: 'MASTERING' },
   ]
 
   const RELEASE_CHECKLIST = [
@@ -763,17 +746,12 @@
     { id: 'date',         label: 'Release date confirmed' },
   ]
 
-  const STAGE_TIP_MAP = {
-    demo: 1, production: 2, instrumental: 2, mix_prep: 5, mixing: 5, mastering: 5
-  }
-
   const COLORS = ['#c9a84c','#9b6fd4','#4a9fd4','#4caf82','#e05a4a','#e07a4a','#4ac9c9','#c94a9f','#888']
 
   let selectedProject = $derived(projects.find(p => p.id === selectedProjectId) || null)
   let sortedProjects = $derived(projects.slice().sort((a,b) => (a.artist||'').localeCompare(b.artist||'') || (a.name||'').localeCompare(b.name||'')))
   let projectSongs = $derived(songs.filter(s => s.project_id === selectedProjectId && !getArchived(s)).sort((a,b) => (a.title||a.code||'').localeCompare(b.title||b.code||'')))
   let expandedSong = $derived(songs.find(s => s.id === expandedSongId) || null)
-  let rightTips = $derived(getRightTips())
   let timerDisplay = $derived(timerTarget > 0
     ? formatTime(Math.max(0, timerTarget - timerSec))
     : formatTime(timerSec)
@@ -784,12 +762,6 @@
 
   function getArchived(song) { return !!(song.work_data?.archived) }
 
-  function getRightTips() {
-    if (!expandedSong) return []
-    const wd = workData(expandedSong)
-    const stageNum = STAGE_TIP_MAP[wd.current_stage] || 2
-    return tipSections.filter(s => s.stage_num === stageNum)
-  }
   function getProjectDeadlines() {
     if (!selectedProject) return []
     return (selectedProject.deadlines||[]).filter(d=>!d.done).sort((a,b)=>(a.date||'').localeCompare(b.date||''))
@@ -801,11 +773,9 @@
 
   async function load() {
     try {
-      const [projRes, songsRes, sanityRes, tipsRes, cardsRes, releasesRes, refRes] = await Promise.all([
+      const [projRes, songsRes, cardsRes, releasesRes, refRes] = await Promise.all([
         supabase.from('projects').select('*, reference_links').neq('status','archived').order('position'),
         supabase.from('songs').select('id,title,code,project_id,work_data,position,key,tempo,tags,reference_links,audio_path,notes,feedback,status,release_date,spotify_url').not('project_id','is',null).order('position'),
-        supabase.from('work_checklist').select('*').eq('stage_num',6).order('position'),
-        supabase.from('work_tip_sections').select('*, work_tips(*)').order('stage_num').order('position'),
         supabase.from('work_cards').select('*').order('position'),
         supabase.from('releases').select('song_id,song_code'),
         supabase.from('reference_tracks').select('tempo,energy,danceability,loudness,brightness,valence').neq('collection_name','my_productions'),
@@ -815,12 +785,6 @@
       const lastSong = localStorage.getItem('momentum_last_song')
       if (lastSong) expandedSongId = Number(lastSong)
       audioTick++
-      sanityItems = sanityRes.data || []
-      sanityText = sanityItems.map(i => i.item).join('\n')
-      tipSections = tipsRes.data || []
-      tipsText = tipSections.map(s =>
-        '## ' + s.label + '\n' + (s.work_tips||[]).map(t => t.tip).join('\n')
-      ).join('\n\n')
       cards = cardsRes.data || []
       const refs = refRes.data || []
       if (refs.length) {
@@ -925,7 +889,6 @@
       project_info:    wd.project_info    || '',
       current_stage:   wd.current_stage   || 'production',
       archived:        wd.archived        || false,
-      sent_to_mastering: wd.sent_to_mastering || false,
       stems_received:  wd.stems_received  || false,
       stems_zip:       wd.stems_zip       || '',
       stems_sent:      wd.stems_sent      || false,
@@ -947,9 +910,7 @@
         demo:         { done: false, ...(wd.stages?.demo         || {}) },
         production:   { done: false, sent: false, ...(wd.stages?.production   || {}) },
         instrumental: { done: false, ...(wd.stages?.instrumental || {}) },
-        mix_prep:     { done: false, ...(wd.stages?.mix_prep     || {}) },
         mixing:       { done: false, sent: false, ...(wd.stages?.mixing       || {}) },
-        mastering:    { done: false, ...(wd.stages?.mastering    || {}) },
       },
       versions:          wd.versions          || [],
       active_version_id: wd.active_version_id || null,
@@ -967,35 +928,8 @@
     await supabase.from('songs').update({ work_data: song.work_data }).eq('id', song.id)
   }
 
-  // Save currently active tip section before switching away
-  async function saveActiveTips() {
-    if (!activeTipSectionId) return
-    // Read directly from DOM textarea to get latest unsaved content
-    const ta = document.querySelector('.tips-active-ta')
-    const text = ta ? ta.value : activeTipText
-    if (!text && !activeTipText) return
-    const sec = tipSections.find(s => s.id === activeTipSectionId)
-    if (!sec) return
-    const lines = text.split('\n').map(l => l.trimEnd())
-    while (lines.length && lines[lines.length-1] === '') lines.pop()
-    const tips = (sec.work_tips||[]).sort((a,b)=>a.position-b.position)
-    for (let i = 0; i < lines.length; i++) {
-      if (tips[i]) {
-        if (tips[i].tip !== lines[i] || tips[i].position !== i)
-          await supabase.from('work_tips').update({ tip: lines[i], position: i }).eq('id', tips[i].id)
-      } else await supabase.from('work_tips').insert({ tip: lines[i], section_id: activeTipSectionId, position: i })
-    }
-    for (let i = lines.length; i < tips.length; i++) await supabase.from('work_tips').delete().eq('id', tips[i].id)
-    const { data } = await supabase.from('work_tip_sections').select('*, work_tips(*)').eq('id', activeTipSectionId).single()
-    if (data) tipSections = tipSections.map(s => s.id === data.id ? data : s)
-  }
-
   function setStage(song, stageId) {
-    saveActiveTips()
     saveWorkData(song, wd => { wd.current_stage = stageId })
-    openTipSectionId = null
-    activeTipSectionId = null
-    activeTipText = ''
   }
   function toggleStageDone(song, stageId) {
     saveWorkData(song, wd => {
@@ -1012,10 +946,6 @@
   function saveProjectInfo(song, text) {
     saveWorkData(song, wd => { wd.project_info = text })
   }
-  function sendToMastering(song) {
-    saveWorkData(song, wd => { wd.sent_to_mastering = !wd.sent_to_mastering })
-  }
-
   let activeInfoTab = $state('notes')
   let refLinkInput = $state({}) // project.id -> input value
   let refsOpen = $state({})    // project.id -> bool
@@ -1254,66 +1184,6 @@
     songs = songs.filter(s => s.id !== song.id)
     if (expandedSongId === song.id) expandedSongId = null
   }
-  // Save checklist textarea back to work_checklist table
-  async function saveSanityText(text) {
-    sanityText = text
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-    // Update existing rows, add new ones, delete removed ones
-    for (let i = 0; i < lines.length; i++) {
-      if (sanityItems[i]) {
-        if (sanityItems[i].item !== lines[i]) {
-          await supabase.from('work_checklist').update({ item: lines[i] }).eq('id', sanityItems[i].id)
-          sanityItems[i].item = lines[i]
-        }
-      } else {
-        const { data } = await supabase.from('work_checklist').insert({ item: lines[i], position: i, stage_num: 6 }).select().single()
-        if (data) sanityItems.push(data)
-      }
-    }
-    // Delete rows beyond current line count
-    for (let i = lines.length; i < sanityItems.length; i++) {
-      await supabase.from('work_checklist').delete().eq('id', sanityItems[i].id)
-    }
-    sanityItems = sanityItems.slice(0, lines.length)
-  }
-
-  // Save tips textarea back to work_tip_sections / work_tips tables
-  async function saveTipsText(text) {
-    tipsText = text
-    const blocks = text.split(/\n(?=##\s)/)
-    for (let bi = 0; bi < blocks.length; bi++) {
-      const block = blocks[bi].trim()
-      if (!block) continue
-      const firstLine = block.split('\n')[0]
-      const label = firstLine.replace(/^##\s*/, '').trim()
-      const tipLines = block.split('\n').slice(1).map(l => l.trim()).filter(Boolean)
-      const sec = tipSections[bi]
-      if (sec) {
-        if (sec.label !== label) {
-          await supabase.from('work_tip_sections').update({ label }).eq('id', sec.id)
-          sec.label = label
-        }
-        const tips = sec.work_tips || []
-        for (let ti = 0; ti < tipLines.length; ti++) {
-          if (tips[ti]) {
-            if (tips[ti].tip !== tipLines[ti]) {
-              await supabase.from('work_tips').update({ tip: tipLines[ti] }).eq('id', tips[ti].id)
-              tips[ti].tip = tipLines[ti]
-            }
-          } else {
-            const { data } = await supabase.from('work_tips').insert({ tip: tipLines[ti], section_id: sec.id, position: ti }).select().single()
-            if (data) tips.push(data)
-          }
-        }
-        for (let ti = tipLines.length; ti < tips.length; ti++) {
-          await supabase.from('work_tips').delete().eq('id', tips[ti].id)
-        }
-        sec.work_tips = tips.slice(0, tipLines.length)
-      }
-    }
-    tipSections = [...tipSections]
-  }
-
   async function archiveProject(p) {
     if (!confirm('Archive "' + p.name + '"?')) return
     await supabase.from('projects').update({ status: 'archived', archived_at: new Date().toISOString() }).eq('id', p.id)
@@ -2718,21 +2588,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
     }
   }
 
-  async function loadFinishingChecklist() {
-    const { data } = await supabase
-      .from('brain_knowledge')
-      .select('content')
-      .eq('category', 'checklist_70')
-      .eq('title', 'Finishing Checklist — Latest')
-      .maybeSingle()
-    if (data?.content) {
-      try { finishingChecklist = JSON.parse(data.content) }
-      catch(e) { console.error('checklist parse:', e.message) }
-    }
-  }
-
-  onMount(() => { loadFinishingChecklist() })
-
   onDestroy(() => stopWorkTimer(true))
 
   if (typeof document !== 'undefined') {
@@ -2743,7 +2598,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   }
 
   async function expandSong(song, isExpanding) {
-    saveActiveTips(); activeTipSectionId = null; activeTipText = ''
     if (isExpanding) {
       startWorkTimer(song)
       loadSongWorkLogs(song.id)
@@ -2945,7 +2799,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
     {#each sortedProjects as p}
       <div class="proj-item {selectedProjectId === p.id ? 'sel' : ''}">
-        <button class="proj-btn" onclick={() => { saveActiveTips(); activeTipSectionId = null; activeTipText = ''; selectedProjectId = p.id; localStorage.setItem('mm_last_project_id', p.id); expandedSongId = null; audioTick++ }}>
+        <button class="proj-btn" onclick={() => { selectedProjectId = p.id; localStorage.setItem('mm_last_project_id', p.id); expandedSongId = null; audioTick++ }}>
           <div class="proj-dot" style="background:{p.color}"></div>
           <div class="proj-info">
             {#if p.artist}<span class="proj-artist">{p.artist}</span>{/if}
@@ -3053,7 +2907,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
           {@const bestAudio = bestAudioSrc(song)}
           {@const lv = lastVersion(song)}
 
-          <div class="song-card {expanded?'exp':''} {wd.sent_to_mastering?'mastering':''}">
+          <div class="song-card {expanded?'exp':''}">
             <div class="song-head">
               <div class="reorder-btns">
                 <button class="reorder-btn" onclick={e => moveSong(e, song, -1)}>▲</button>
@@ -4236,7 +4090,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 <!-- Song footer: Move to Demos | Send to Artist (hidden on prod/mix) | Delete -->
                 <div class="song-footer-row">
                   <button class="sfooter-btn move" onclick={() => moveSongToDemo(song)}>← Move to Demos</button>
-                  {#if wd.current_stage !== 'production' && wd.current_stage !== 'mixing' && wd.current_stage !== 'mastering' && wd.current_stage !== 'stems'}
+                  {#if wd.current_stage !== 'production' && wd.current_stage !== 'mixing' && wd.current_stage !== 'stems'}
                     <button class="sfooter-btn send {wd.versions?.length && wd.versions.find(v=>v.id===wd.active_version_id)?.sent_to_artist ? 'sent' : ''}"
                       onclick={() => { const v = wd.versions?.find(v=>v.id===wd.active_version_id) || wd.versions?.[wd.versions.length-1]; if(v) sendToArtist(song,v.id) }}>
                       ✉ Send to Artist
@@ -4291,107 +4145,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
       {/if}
       {#if timerDoneMsg}
         <div class="timer-done-banner">{timerDoneMsg}</div>
-      {/if}
-    </div>
-
-    <!-- Checklist 70% -->
-    <div class="right-section">
-      <button class="right-section-head" onclick={() => sanityOpen=!sanityOpen}>
-        <span class="right-section-title">CHECKLIST 70%</span>
-        <span class="right-arr {sanityOpen?'open':''}">▶</span>
-      </button>
-      {#if sanityOpen}
-        <div class="checklist-panel">
-          {#if finishingChecklist.length === 0}
-            <div class="checklist-empty">
-              Loading questions...
-              <button onclick={loadFinishingChecklist}>retry</button>
-            </div>
-          {:else}
-            {@const phases = [...new Set(finishingChecklist.map(i => i.phase))]}
-            {#each phases as phase}
-              <div class="checklist-phase-group">
-                <div class="checklist-phase-label">{phase}</div>
-                {#each finishingChecklist.filter(i => i.phase === phase) as item}
-                  <div class="checklist-item {checkedItems[item.question] ? 'done' : ''}">
-                    <input type="checkbox"
-                      checked={checkedItems[item.question] || false}
-                      onchange={() => {
-                        checkedItems[item.question] = !checkedItems[item.question]
-                        checkedItems = {...checkedItems}
-                      }} />
-                    <div class="checklist-content">
-                      <div class="checklist-q">{item.question}</div>
-                      {#if item.why}
-                        <div class="checklist-why">{item.why}</div>
-                      {/if}
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/each}
-            <button class="reset-btn" onclick={() => checkedItems = {}}>
-              Reset all
-            </button>
-          {/if}
-        </div>
-      {/if}
-    </div>
-
-    <!-- Tips -->
-    <div class="right-section">
-      <button class="right-section-head" onclick={() => tipsOpen=!tipsOpen}>
-        <span class="right-section-title">TIPS</span>
-        <span class="right-arr {tipsOpen?'open':''}">▶</span>
-      </button>
-      {#if tipsOpen}
-        {#each tipSections as sec (sec.id)}
-        <div class="tip-sec-block">
-          <button class="tip-sec-head" onclick={async () => {
-            if (openTipSectionId === sec.id) {
-              await saveActiveTips()
-              openTipSectionId = null
-              activeTipSectionId = null
-              activeTipText = ''
-            } else {
-              await saveActiveTips()
-              openTipSectionId = sec.id
-              activeTipSectionId = sec.id
-              activeTipText = (sec.work_tips||[]).sort((a,b)=>a.position-b.position).map(t=>t.tip).join('\n')
-            }
-          }}>
-            <span>{sec.label}</span>
-            <span class="arr-sm {openTipSectionId===sec.id?'open':''}">▶</span>
-          </button>
-          {#if openTipSectionId === sec.id}
-            <textarea class="tips-edit-ta tips-active-ta"
-              use:setVal={activeTipText}
-              onblur={async e => {
-                const text = e.target.value
-                const sectionId = activeTipSectionId
-                const savedSec = tipSections.find(s => s.id === sectionId)
-                if (!savedSec) return
-                const lines = text.split('\n').map(l => l.trimEnd())
-                while (lines.length && lines[lines.length-1] === '') lines.pop()
-                const tips = (savedSec.work_tips||[]).sort((a,b)=>a.position-b.position)
-                for (let i = 0; i < lines.length; i++) {
-                  if (tips[i]) {
-                    if (tips[i].tip !== lines[i] || tips[i].position !== i)
-                      await supabase.from('work_tips').update({ tip: lines[i], position: i }).eq('id', tips[i].id)
-                  } else {
-                    await supabase.from('work_tips').insert({ tip: lines[i], section_id: sectionId, position: i })
-                  }
-                }
-                for (let i = lines.length; i < tips.length; i++) await supabase.from('work_tips').delete().eq('id', tips[i].id)
-                const { data } = await supabase.from('work_tip_sections').select('*, work_tips(*)').eq('id', sectionId).single()
-                if (data) {
-                  tipSections = tipSections.map(s => s.id === data.id ? data : s)
-                  activeTipText = (data.work_tips||[]).sort((a,b)=>a.position-b.position).map(t=>t.tip).join('\n')
-                }
-              }}></textarea>
-          {/if}
-        </div>
-      {/each}
       {/if}
     </div>
 
@@ -4603,7 +4356,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   /* Song cards */
   .song-card { border: 1px solid #1c1c1c; border-radius: 4px; overflow: hidden; }
   .song-card.exp { border-color: rgba(201,168,76,.4); }
-  .song-card.mastering { border-color: rgba(155,111,212,.4); }
   .song-head { display: flex; align-items: center; gap: 9px; padding: 11px 14px; background: #1c1c1c; }
   .song-card.exp .song-head { background: #252525; }
   .song-head-left { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; cursor: pointer; overflow: hidden; }
@@ -4646,7 +4398,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .player-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: #4a9fd4; letter-spacing: .08em; flex-shrink: 0; }
   .version-badge { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 2px; border: 1px solid #303030; color: #555; flex-shrink: 0; }
   .version-badge.sent { color: #4caf82; border-color: rgba(76,175,130,.4); background: rgba(76,175,130,.08); }
-  .mastering-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 2px; color: #9b6fd4; border: 1px solid rgba(155,111,212,.4); background: rgba(155,111,212,.06); flex-shrink: 0; }
   .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; }
   .audio-ref { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
   .audio-drop-sm { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; padding: 3px 8px; border: 1px dashed #303030; border-radius: 3px; cursor: copy; transition: border-color .15s; }
@@ -4673,9 +4424,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .stage-box.done .stage-name-btn { color: #4caf82; }
   .sent-ckb { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 2px 6px; background: transparent; border: 1px solid #303030; color: #444; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .sent-ckb.sent { color: #4caf82; border-color: rgba(76,175,130,.4); background: rgba(76,175,130,.08); }
-  .btn-mastering { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 6px 11px; background: transparent; border: 1px solid rgba(155,111,212,.4); color: #9b6fd4; border-radius: 3px; cursor: pointer; margin-left: auto; }
-  .btn-mastering.active { background: rgba(155,111,212,.1); }
-  .btn-mastering:hover { background: rgba(155,111,212,.08); }
   .stems-ckb-wrap { display: flex; align-items: center; gap: 6px; cursor: pointer; flex-shrink: 0; }
   .stems-ckb-wrap .stage-ckb.on { background: rgba(76,175,130,.15); border-color: #4caf82; color: #4caf82; }
   .stems-label { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .1em; color: #9e9690; }
@@ -4854,28 +4602,10 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .right-arr { font-size: 10px; color: #555; transition: transform .2s; font-family: 'Space Mono', monospace; }
   .right-arr.open { transform: rotate(90deg); }
 
-  .checklist-panel { padding: 8px 14px 10px; border-bottom: 1px solid #1a1a1a; margin-bottom: 4px; }
-  .checklist-phase-group { margin-bottom: 10px; }
-  .checklist-phase-label { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: rgba(201,168,76,.5); letter-spacing: .12em; margin-bottom: 5px; padding-bottom: 3px; border-bottom: 1px solid #1a1a1a; }
-  .checklist-item { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid #111; align-items: flex-start; }
-  .checklist-item.done .checklist-q { color: #333; text-decoration: line-through; }
-  .checklist-item input[type=checkbox] { margin-top: 3px; accent-color: #c9a84c; flex-shrink: 0; }
-  .checklist-content { display: flex; flex-direction: column; gap: 2px; }
-  .checklist-q { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #cec9c1; line-height: 1.5; }
-  .checklist-why { font-family: 'DM Sans', sans-serif; font-size: 9px; color: #444; font-style: italic; margin-top: 2px; }
-  .checklist-empty { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #333; font-style: italic; padding: 6px 0; display: flex; gap: 8px; align-items: center; }
-  .checklist-empty button { background: none; border: 1px solid #252525; color: #555; font-size: 9px; padding: 2px 6px; cursor: pointer; border-radius: 2px; }
-  .reset-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #1a1a1a; color: #333; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 8px; }
-  .reset-btn:hover { color: #555; border-color: #252525; }
   .sanity-list { padding: 10px 14px; display: flex; flex-direction: column; gap: 5px; max-height: 320px; overflow-y: auto; }
   .sanity-row { display: flex; align-items: flex-start; gap: 9px; padding: 5px 0; border-bottom: 1px solid #0f0f0f; }
   .sanity-row.checked { opacity: .35; }
   .sanity-add-row { display: flex; gap: 6px; padding: 8px 0 4px; }
-  .tip-sec-block { border-bottom: 1px solid #1a1a1a; }
-  .tip-sec-head { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 7px 0; background: transparent; border: none; cursor: pointer; font-family: 'Space Mono', monospace; font-size: 11px; color: #555; text-align: left; transition: color .15s; }
-  .tip-sec-head:hover { color: #9e9690; }
-  .arr-sm { font-size: 9px; transition: transform .2s; }
-  .arr-sm.open { transform: rotate(90deg); }
   .sanity-text { font-size: 13px; color: #cec9c1; line-height: 1.55; flex: 1; }
   .sanity-row.checked .sanity-text { text-decoration: line-through; color: #555; }
   .sanity-edit { font-size: 13px; color: #cec9c1; line-height: 1.55; flex: 1; background: transparent; border: none; outline: none; font-family: inherit; width: 100%; cursor: text; }
@@ -4903,8 +4633,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .tip-sel-btn.on { border-color: rgba(201,168,76,.4); color: #c9a84c; background: rgba(201,168,76,.05); }
   .tip-hint { font-family: "Space Mono", monospace; font-size: 11px; color: #333; padding: 8px 0; }
   .tips-active-ta { min-height: 220px; }
-  .tips-edit-ta { width: 100%; min-height: 180px; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 3px; color: #cec9c1; font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 300; line-height: 1.7; padding: 10px; resize: vertical; overflow: auto; outline: none; box-sizing: border-box; }
-  .tips-edit-ta:focus { border-color: #252525; color: #9e9690; }
   .tip-dash { flex-shrink: 0; color: #555; }
   .tip-edit { font-size: 14px; color: #9e9690; line-height: 1.7; flex: 1; background: transparent; border: none; outline: none; font-family: inherit; cursor: text; }
   .tip-edit:hover { background: rgba(255,255,255,.03); border-radius: 2px; }

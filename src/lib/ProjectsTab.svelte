@@ -29,6 +29,8 @@
   let instrBlobUrls = {} // song.id -> blob URL for instrumental audio
   let instrPendingName = {} // song.id -> filename being saved (shows immediately)
   let audioTick = $state(0) // increment to force header player re-render
+  let currentlyPlaying = null
+  let hoveredSongId = null
   let activeSongTab = $state({})
   let lyricsOpen = $state({})
   let undoStack = $state([])
@@ -622,6 +624,32 @@
   }
 
   // Best available audio src for header player — mixing > production only
+  function handlePlay(event) {
+    const audio = event.target
+    if (currentlyPlaying && currentlyPlaying !== audio) {
+      currentlyPlaying.pause()
+      currentlyPlaying.currentTime = 0
+    }
+    currentlyPlaying = audio
+  }
+
+  function handleKeydown(e) {
+    if (e.code !== 'Space' || !hoveredSongId) return
+    e.preventDefault()
+    const audio = document.querySelector(`audio[data-song-id="${hoveredSongId}"]`)
+    if (!audio) return
+    if (audio.paused) {
+      if (currentlyPlaying && currentlyPlaying !== audio) {
+        currentlyPlaying.pause()
+        currentlyPlaying.currentTime = 0
+      }
+      audio.play()
+      currentlyPlaying = audio
+    } else {
+      audio.pause()
+    }
+  }
+
   function bestAudioSrc(song) {
     const wd = workData(song)
     if (mixBlobUrls[song.id]) return { src: mixBlobUrls[song.id], label: 'MIX' }
@@ -2570,7 +2598,8 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
     }
   }
 
-  onDestroy(() => stopWorkTimer(true))
+  onMount(() => window.addEventListener('keydown', handleKeydown))
+  onDestroy(() => { stopWorkTimer(true); window.removeEventListener('keydown', handleKeydown) })
 
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
@@ -2908,7 +2937,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
           {@const lv = lastVersion(song)}
 
           <div class="song-card {expanded?'exp':''}">
-            <div class="song-head">
+            <div class="song-head" onmouseenter={() => hoveredSongId = song.id} onmouseleave={() => hoveredSongId = null}>
               <div class="reorder-btns">
                 <button class="reorder-btn" onclick={e => moveSong(e, song, -1)}>▲</button>
                 <button class="reorder-btn" onclick={e => moveSong(e, song, 1)}>▼</button>
@@ -2916,14 +2945,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
               <!-- LEFT: info + pills, grows -->
               <div class="song-head-left" onclick={() => expandSong(song, !expanded)}>
                 <div class="song-info">
-                  <div class="code-stars-row">
-                    <div class="stars" onclick={e => e.stopPropagation()}>
-                      {#each [1,2,3] as n}
-                        <button class="star {(song.rating||0) >= n ? 'on' : ''}"
-                          onclick={() => { updateSongField(song, 'rating', (song.rating||0) === n ? 0 : n) }}>★</button>
-                      {/each}
-                    </div>
-                  </div>
                   <input class="song-title-input" value={song.title||''} placeholder="Add title..."
                     onclick={e => e.stopPropagation()}
                     onchange={e => { updateSongField(song, 'title', e.target.value); renameSongAudioFiles(song, e.target.value) }}
@@ -2953,20 +2974,29 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   {#if lv}
                     <span class="version-badge {lv.sent_to_artist?'sent':''}">{lv.name}</span>
                   {/if}
+                  <div class="stars" onclick={e => e.stopPropagation()}>
+                    {#each [1,2,3] as n}
+                      <button class="star {(song.rating||0) >= n ? 'on' : ''}"
+                        onclick={() => { updateSongField(song, 'rating', (song.rating||0) === n ? 0 : n) }}>★</button>
+                    {/each}
+                  </div>
                 </div>
                 <div class="song-player-slot">
                   {#key audioTick}
                     {#if bestAudio}
                       <div class="player-wrap-head" onpointerdown={e => e.stopPropagation()}>
-                        <audio class="mini-player" controls preload="none" src={bestAudio.src}></audio>
+                        <audio class="mini-player" controls preload="none" src={bestAudio.src}
+                          data-song-id={song.id} onplay={handlePlay}></audio>
                       </div>
                     {:else if blobUrl}
                       <div class="player-wrap-head" onpointerdown={e => e.stopPropagation()}>
-                        <audio class="mini-player" controls preload="none" src={blobUrl}></audio>
+                        <audio class="mini-player" controls preload="none" src={blobUrl}
+                          data-song-id={song.id} onplay={handlePlay}></audio>
                       </div>
                     {:else if songAudioBlobUrls[song.id]}
                       <div class="player-wrap-head" onpointerdown={e => e.stopPropagation()}>
-                        <audio class="mini-player" controls preload="none" src={songAudioBlobUrls[song.id]}></audio>
+                        <audio class="mini-player" controls preload="none" src={songAudioBlobUrls[song.id]}
+                          data-song-id={song.id} onplay={handlePlay}></audio>
                       </div>
                     {:else if song.audio_path}
                       <div class="audio-drop-sm"
@@ -3044,7 +3074,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     {releasedSongIds.includes(song.id)||releasedSongIds.includes(song.code) ? 'RELEASED ✓' : 'RELEASE'}
                   </button>
                   <!-- LOG tab flush right -->
-                  <button class="log-tab-btn {activeSongTab[song.id]==='log'?'on':''}"
+                  <button class="log-tab-btn {activeSongTab[song.id]==='log'?'on':''}" style="margin-left: auto"
                     onclick={() => { activeSongTab = {...activeSongTab, [song.id]: activeSongTab[song.id]==='log' ? null : 'log'} }}>
                     LOG
                   </button>
@@ -4528,7 +4558,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .session-acc { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; }
   .timer-done-banner { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: #0a0a0a; background: #4caf82; border-radius: 3px; padding: 6px 12px; text-align: center; animation: fadeout 4s forwards; }
   @keyframes fadeout { 0%{opacity:1} 70%{opacity:1} 100%{opacity:0} }
-  .log-tab-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .1em; padding: 3px 10px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; margin-left: auto; }
+  .log-tab-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .1em; padding: 3px 10px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
   .log-tab-btn:hover { border-color: #c9a84c; color: #c9a84c; }
   .log-tab-btn.on { border-color: rgba(201,168,76,.5); color: #c9a84c; background: rgba(201,168,76,.06); }
   .release-stage-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .1em; padding: 3px 10px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }

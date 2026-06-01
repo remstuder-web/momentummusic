@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/ProjectsTab.svelte — DONE
+TASK: ANALYZER/RELEASE after STEMS, stars in header, spacebar play on hover
+WHAT: (1) Removed margin-left:auto from .log-tab-btn CSS; added style="margin-left:auto" inline on LOG button only — ANALYZER and RELEASE now sit flush after STEMS, LOG stays flush right. (2) Removed stars .code-stars-row block from .song-info; added stars div inside .song-head-badges after version-badge. (3) Added currentlyPlaying+hoveredSongId state, handlePlay+handleKeydown functions. onMount registers keydown, onDestroy removes it. song-head gets onmouseenter/leave. All 3 <audio> elements get data-song-id+onplay.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-01] ProjectsTab.svelte + momentum-watcher.cjs — DONE
 TASK: Fix artist spaces preserved in filename, remove code from project headers
 WHAT: (1) All artistClean computations: removed .replace(/\s+/g,'_') so "Pilar Vega"→"PILAR VEGA" (space kept). Applied to saveSongAudio overwrite+non-overwrite, handleInstrumentalDrop, handleStemsZipDrop, getPublicFilename (ProjectsTab) and migration endpoint + watcher getPublicFilename. (2) Removed <span class="song-code">{song.code}</span> from project song header. (3) Updated migration endpoint to also match already-migrated files by work_data reverse lookup, not just code-prefix — enables re-running to correct any format issue. Re-ran migration: 13 files renamed (PILAR_VEGA→PILAR VEGA etc.), 10 DB rows updated. 2 untracked orphan files renamed directly with mv.

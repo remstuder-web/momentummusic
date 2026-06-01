@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-01] src/lib/DemoTab.svelte — DONE
+TASK: Fixed alignment for metadata in collapsed header
+WHAT: Moved key/bpm/AUTO/FROZEN out of head-left into head-right (new head-pills div, min-width 110px, right-aligned). head-left now contains only code-wrap + expanded-only head-meta. head-right min-width 380px, flex-shrink 0. song-title truncates with ellipsis at 280px. collab + notes preview only shown when expanded (inside head-meta).
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-01] src/lib/DemoTab.svelte — DONE
 TASK: Hide tags in collapsed demo card header
 WHAT: Tags wrapped in {#if isExpanded} — only visible when card is open. Collapsed header shows code, title, key, BPM, collab, notes preview, AUTO, FROZEN badges only.
 RESULT: builds clean

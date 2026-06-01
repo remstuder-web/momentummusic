@@ -1022,28 +1022,24 @@
                 </div>
                 {#if song.title}<span class="song-title">{song.title}</span>{/if}
               </div>
-              <div class="head-meta">
-                {#if isExpanded}
+              {#if isExpanded}
+                <div class="head-meta">
                   {#each (song.tags || []).slice(0,3) as tag}
                     <span class="tag-sm">{tag}</span>
                   {/each}
-                {/if}
-                {#if song.key}<span class="meta-pill">{song.key}</span>{/if}
-                {#if song.tempo}<span class="meta-pill">{song.tempo} BPM</span>{/if}
-                {#if song.work_data?.collaborator}<span class="meta-pill collab-pill">feat. {song.work_data.collaborator}</span>{/if}
-                {#if song.notes}
-                  <span class="notes-preview">{song.notes.slice(0,60)}{song.notes.length>60?'…':''}</span>
-                {/if}
-                {#if song.work_data?.auto_detected}
-                  <span class="auto-badge">AUTO</span>
-                {/if}
-                {#if song.work_data?.frozen}
-                  <span class="frozen-badge">FROZEN</span>
-                {/if}
-              </div>
+                  {#if song.work_data?.collaborator}<span class="meta-pill collab-pill">feat. {song.work_data.collaborator}</span>{/if}
+                  {#if song.notes}<span class="notes-preview">{song.notes.slice(0,60)}{song.notes.length>60?'…':''}</span>{/if}
+                </div>
+              {/if}
             </div>
 
             <div class="head-right" onclick={e => e.stopPropagation()}>
+              <div class="head-pills">
+                {#if song.key}<span class="meta-pill">{song.key}</span>{/if}
+                {#if song.tempo}<span class="meta-pill">{song.tempo} BPM</span>{/if}
+                {#if song.work_data?.auto_detected}<span class="auto-badge">AUTO</span>{/if}
+                {#if song.work_data?.frozen}<span class="frozen-badge">FROZEN</span>{/if}
+              </div>
               <div class="head-badges" onclick={e => e.stopPropagation()}>
                 <div class="s-wrap">
                   <button class="s-btn {song.work_data?.frozen ? 'frozen-disabled' : selectedForSub.has(song.id) ? 'sel' : songBatchCount[song.id] >= 2 ? 'multi-batch' : songBatchCount[song.id] === 1 ? 'in-batch' : ''}"
@@ -1490,10 +1486,11 @@
   .card-head { padding: 0 14px; height: 52px; display: flex; align-items: center; gap: 10px; cursor: pointer; background: #1c1c1c; user-select: none; transition: background .15s; overflow: visible; position: relative; }
   .card-head:hover { background: #252525; }
   .card.exp .card-head { background: #252525; }
-  .head-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; overflow: hidden; }
-  .head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; width: 420px; justify-content: flex-end; }
+  .head-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .head-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 380px; justify-content: flex-end; }
+  .head-pills { display: flex; align-items: center; gap: 4px; flex-shrink: 0; min-width: 110px; justify-content: flex-end; }
   .player-slot { width: 250px; flex-shrink: 0; display: flex; align-items: center; }
-  .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; width: 150px; justify-content: flex-end; }
+  .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .notes-preview { font-size: 10px; color: #444; font-style: italic; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
   .code-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 90px; flex-shrink: 0; }
   .code-stars-row { display: flex; align-items: center; gap: 6px; }
@@ -1502,7 +1499,7 @@
   .star.on { color: #4caf82; }
   .star:hover { color: #4caf82; }
   .code { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; color: #c9a84c; }
-  .song-title { font-size: 12px; color: #9e9690; }
+  .song-title { font-size: 12px; color: #9e9690; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
   .head-meta { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; align-items: center; min-width: 0; overflow: hidden; }
   .tag-sm { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 2px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.2); color: #c9a84c; }
   .meta-pill { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 2px; background: #252525; border: 1px solid #303030; color: #9e9690; }

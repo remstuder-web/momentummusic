@@ -1905,25 +1905,34 @@ async function runEssentiaAnalysis(filePath) {
 
 function parseDemoFilename(filename) {
   const nameNoExt = filename.replace(/\.[^.]+$/, '')
-  let title = nameNoExt, bpm = null
-  const bpmMatch = nameNoExt.match(/\b(\d{2,3})\s*bpm\b/i)
-  if (bpmMatch) { bpm = parseInt(bpmMatch[1]); title = title.replace(bpmMatch[0], '').trim() }
-  const numMatch = title.match(/^(\d+)[\s_-]+(.+)/)
-  if (numMatch) title = numMatch[2]
-  title = title.replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim()
-  return { title, bpm }
+  const parts = nameNoExt.split('_')
+  let code = null, bpm = null
+
+  // First segment: code if 6-8 digit number
+  if (parts.length > 1 && /^\d{6,8}$/.test(parts[0])) {
+    code = parts.shift()
+  }
+
+  // Last segment: BPM if it matches NNNbpm
+  if (parts.length > 0 && /^\d{2,3}bpm$/i.test(parts[parts.length - 1])) {
+    bpm = parseInt(parts.pop())
+  }
+
+  const title = parts.join(' ').trim() || nameNoExt
+  return { code, title, bpm }
 }
 
 async function generateDemoCode() {
   const now = new Date()
   const yy = String(now.getFullYear()).slice(2)
   const mm = String(now.getMonth()+1).padStart(2,'0')
-  const dd = String(now.getDate()).padStart(2,'0')
-  const prefix = yy+mm+dd
+  const prefix = yy + mm
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=code&code=like.${prefix}%25`, { headers: sbHeaders })
     const data = await r.json()
-    const existing = (Array.isArray(data) ? data : []).map(s => parseInt((s.code||'').slice(6)) || 0)
+    const existing = (Array.isArray(data) ? data : [])
+      .filter(s => s.code && s.code.length === 6)
+      .map(s => parseInt(s.code.slice(4)) || 0)
     const max = existing.length ? Math.max(...existing) : 0
     return prefix + String(max + 1).padStart(2,'0')
   } catch(e) { return prefix + '01' }
@@ -6214,6 +6223,71 @@ async function restore(input) {
       if (fs.existsSync(oldPath) && oldfile !== newfile) { fs.renameSync(oldPath, newPath); console.log(`  ✓ Renamed: ${oldfile} → ${newfile}`) }
       res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }))
     } catch(err) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: err.message })) }
+    return
+  }
+
+  // ── POST /rename-demo — rename demo file + update archive + Supabase ────
+  if (req.method === 'POST' && req.url === '/rename-demo') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      try {
+        const { song_id, old_filename, new_title } = JSON.parse(Buffer.concat(chunks).toString())
+        if (!song_id || !old_filename || !new_title?.trim()) {
+          res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing fields' })); return
+        }
+
+        // Fetch current song data for BPM and code
+        const songRes = await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song_id}&select=code,tempo&limit=1`, { headers: sbHeaders })
+        const rows = await songRes.json()
+        const song = Array.isArray(rows) ? rows[0] : null
+
+        const ext = path.extname(old_filename)
+        const safe = s => (s||'').replace(/[<>:"/\\|?*]/g,'').trim()
+        const code = song?.code || (old_filename.split('_')[0] || '')
+        const bpm = song?.tempo
+
+        // Build new filename: CODE_TITLE_BPMbpm.ext or CODE_TITLE.ext
+        const titlePart = safe(new_title.trim())
+        const new_filename = bpm
+          ? `${safe(code)}_${titlePart}_${bpm}bpm${ext}`
+          : `${safe(code)}_${titlePart}${ext}`
+
+        // Update Supabase FIRST (before file rename, to avoid chokidar re-fire)
+        await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song_id}`, {
+          method: 'PATCH',
+          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ title: new_title.trim(), audio_path: new_filename })
+        })
+
+        if (new_filename !== old_filename) {
+          // Rename in DEMOS_DIR
+          const oldPath = path.join(DEMOS_DIR, old_filename)
+          const newPath = path.join(DEMOS_DIR, new_filename)
+          if (fs.existsSync(oldPath)) {
+            fs.renameSync(oldPath, newPath)
+            console.log(`  ✓ Demo renamed: ${old_filename} → ${new_filename}`)
+          }
+
+          // Update 29TH AVENUE archive: remove old, copy new
+          try {
+            const archiveOld = path.join(ARCHIVE_29TH, old_filename)
+            const archiveNew = path.join(ARCHIVE_29TH, new_filename)
+            if (fs.existsSync(archiveOld)) fs.unlinkSync(archiveOld)
+            if (fs.existsSync(newPath)) {
+              if (!fs.existsSync(ARCHIVE_29TH)) fs.mkdirSync(ARCHIVE_29TH, { recursive: true })
+              await fs.promises.copyFile(newPath, archiveNew)
+            }
+          } catch(e) { console.warn('⚠ Archive rename failed:', e.message) }
+        }
+
+        res.end(JSON.stringify({ ok: true, new_filename }))
+      } catch(e) {
+        console.error('rename-demo error:', e.message)
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
     return
   }
 
@@ -13848,8 +13922,8 @@ server.listen(PORT, '127.0.0.1', () => {
         const chkData = await chk.json()
         if (Array.isArray(chkData) && chkData.length) { console.log(`⏭  Demo already in DB: ${filename}`); return }
 
-        const { title, bpm: filenameBpm } = parseDemoFilename(filename)
-        const code = await generateDemoCode()
+        const { code: parsedCode, title, bpm: filenameBpm } = parseDemoFilename(filename)
+        const code = (parsedCode && /^\d{6}$/.test(parsedCode)) ? parsedCode : await generateDemoCode()
         const { bpm: essBpm, key } = await runEssentiaAnalysis(filePath)
         const bpm = filenameBpm || essBpm
 

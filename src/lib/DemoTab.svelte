@@ -70,7 +70,6 @@
   let loading = $state(true)
   let expandedId = $state(null)
   function toggleDemo(song) {
-    if (expandedId === song.id) renameDemoAudio(song, song.title)
     expandedId = expandedId === song.id ? null : song.id
     showBatchPicker = {}
   }
@@ -118,17 +117,31 @@
   let showHeaderGenrePicker = $state(false)
 
   async function renameDemoAudio(song, newTitle) {
-    if (!song.audio_path) return
-    const ext = song.audio_path.slice(song.audio_path.lastIndexOf('.'))
-      const safe = s => (s||'').replace(/[<>:"/\\|?*]/g,'').trim()
-    const newName = newTitle ? safe(song.code) + '_' + safe(newTitle) + '_v00' + ext : song.code + '_v00' + ext
-    if (newName === song.audio_path) return
+    if (!song.audio_path || !newTitle?.trim()) return
     try {
-      await fetch(`http://localhost:4242/rename-audio?dir=demo&oldfile=${encodeURIComponent(song.audio_path)}&newfile=${encodeURIComponent(newName)}`, {
-        method: 'POST'
+      const res = await fetch('http://localhost:4242/rename-demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ song_id: song.id, old_filename: song.audio_path, new_title: newTitle.trim() })
       })
+      const result = await res.json()
+      if (result.ok && result.new_filename && result.new_filename !== song.audio_path) {
+        song.audio_path = result.new_filename
+        songs = [...songs]
+      }
     } catch(e) {}
-    await updateField(song, 'audio_path', newName)
+  }
+
+  async function handleTitleChange(song, newTitle) {
+    const trimmed = newTitle.trim()
+    if (!trimmed || trimmed === (song.title || '').trim()) return
+    song.title = trimmed
+    songs = [...songs]
+    if (song.audio_path) {
+      await renameDemoAudio(song, trimmed)
+    } else {
+      await supabase.from('songs').update({ title: trimmed }).eq('id', song.id)
+    }
   }
 
   async function loadAvailableGenres() {
@@ -225,6 +238,14 @@
     song[field] = value
     songs = [...songs]
     await supabase.from('songs').update({ [field]: value }).eq('id', song.id)
+  }
+
+  async function updateCollaborator(song, name) {
+    const work_data = { ...(song.work_data || {}), collaborator: name.trim() || undefined }
+    if (!name.trim()) delete work_data.collaborator
+    song.work_data = work_data
+    songs = [...songs]
+    await supabase.from('songs').update({ work_data }).eq('id', song.id)
   }
 
   async function updateTempo(song, newTempo) {
@@ -714,10 +735,11 @@
     const now = new Date()
     const yy = String(now.getFullYear()).slice(2)
     const mm = String(now.getMonth()+1).padStart(2,'0')
-    const dd = String(now.getDate()).padStart(2,'0')
-    const prefix = yy+mm+dd
+    const prefix = yy + mm
     const { data } = await supabase.from('songs').select('code').like('code', prefix+'%')
-    const existing = (data||[]).map(s => parseInt(s.code.slice(6)) || 0)
+    const existing = (data||[])
+      .filter(s => s.code && s.code.length === 6)
+      .map(s => parseInt(s.code.slice(4)) || 0)
     const max = existing.length ? Math.max(...existing) : 0
     return prefix + String(max + 1).padStart(2,'0')
   }
@@ -883,6 +905,7 @@
                 {/each}
                 {#if song.key}<span class="meta-pill">{song.key}</span>{/if}
                 {#if song.tempo}<span class="meta-pill">{song.tempo} BPM</span>{/if}
+                {#if song.work_data?.collaborator}<span class="meta-pill collab-pill">feat. {song.work_data.collaborator}</span>{/if}
                 {#if song.notes}
                   <span class="notes-preview">{song.notes.slice(0,60)}{song.notes.length>60?'…':''}</span>
                 {/if}
@@ -951,9 +974,14 @@
                 <div class="field" style="flex:2">
                   <label style="display:flex;align-items:center;gap:6px">
                     TITLE
-                    <button class="btn-rand-title" onclick={() => updateField(song, 'title', randomTitle())} title="Random title">✦</button>
+                    <button class="btn-rand-title" onclick={() => handleTitleChange(song, randomTitle())} title="Random title">✦</button>
                   </label>
-                  <input class="inp-sm" placeholder="Working title..." value={song.title || ''} onchange={e => updateField(song, 'title', e.target.value)} />
+                  <input class="inp-sm" placeholder="Working title..." value={song.title || ''}
+                    onchange={e => handleTitleChange(song, e.target.value)}
+                    onkeydown={e => e.key === 'Enter' && e.target.blur()} />
+                  {#if song.audio_path}
+                    <div class="filename-hint">{song.audio_path}</div>
+                  {/if}
                 </div>
                 <div class="field" style="flex:2">
                   <label>AUDIO</label>
@@ -993,6 +1021,12 @@
                       <span class="bpm-alt" onclick={() => updateTempo(song, song.tempo * 2)}>2× {song.tempo * 2}</span>
                     {/if}
                   </div>
+                </div>
+                <div class="field" style="flex:1;width:auto;min-width:80px">
+                  <label>FEAT.</label>
+                  <input class="inp-sm" placeholder="Collaborator..."
+                    value={song.work_data?.collaborator || ''}
+                    onchange={e => updateCollaborator(song, e.target.value)} />
                 </div>
                 {#if song.audio_path}
                   <button class="reanalyze-btn {song._analyzing ? 'loading' : ''}" onclick={() => reAnalyzeSong(song)}
@@ -1423,6 +1457,8 @@
   .tag-sm { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 2px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.2); color: #c9a84c; }
   .meta-pill { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 2px; background: #252525; border: 1px solid #303030; color: #9e9690; }
   .auto-badge { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 2px; color: #4caf82; border: 1px solid rgba(76,175,130,.35); background: rgba(76,175,130,.06); flex-shrink: 0; }
+  .collab-pill { color: rgba(201,168,76,.85) !important; border-color: rgba(201,168,76,.25) !important; }
+  .filename-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #3a3a3a; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .status-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .1em; padding: 3px 8px; border-radius: 2px; border: 1px solid; flex-shrink: 0; }
   .arr { font-size: 11px; color: #9e9690; transition: transform .2s; flex-shrink: 0; }
   .card.exp .arr { transform: rotate(90deg); }

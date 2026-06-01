@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-01] momentum-watcher.cjs — DONE
+TASK: Change demo code format to YYNNN (5 digits), year-sequential
+WHAT: generateNextDemoCode() rewritten: yy prefix (e.g. '26'), scans DEMOS_DIR for /^(\d{5})_/ with matching prefix, queries Supabase filtered to yy%, memMax guard checks same year prefix, nextNNN padded to 3 digits, newCode = yy+NNN (26001–26999, resets each year). /next-song-code endpoint updated with same YYNNN logic. parseDemoFilename regex widened to /^(\d{5,6})_/ (reads both legacy 6-digit and new 5-digit). Step-2 code validity check widened to /^\d{5,6}$/. SENT watcher add+unlink guards widened to /^\d{5,6}/. Verified: /next-song-code returns 26001 on clean year.
+RESULT: watcher running clean, /next-song-code → {"ok":true,"code":"26001"}
+BLOCKERS: none
+
+## [2026-06-01] momentum-watcher.cjs — DONE
 TASK: Fix demo code generation: month-aware, NN resets each month
 WHAT: generateNextDemoCode() now builds code as YYMMNN. Derives currentMonthPrefix (e.g. '2606'). Scans DEMOS_DIR and Supabase filtered to that prefix only — extracts NN (last 2 chars of 6-digit code). lastAssignedCode changed from integer to string; memMax only applied when prefix matches (prevents bleed across month boundary). nextNN = max(fileMax, dbMax, memMax) + 1, padded to 2 digits. First demo each month resets to NN=01.
 RESULT: watcher running clean, no orphans

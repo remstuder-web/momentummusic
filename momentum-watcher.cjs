@@ -1947,8 +1947,8 @@ async function runEssentiaAnalysis(filePath) {
 function parseDemoFilename(filename) {
   const nameNoExt = filename.replace(/\.[^.]+$/, '')
 
-  // Check for leading 6-digit code
-  const codeMatch = nameNoExt.match(/^(\d{6})_(.*)$/)
+  // Check for leading 5- or 6-digit code (5=YYNNN new format, 6=YYMMNN legacy)
+  const codeMatch = nameNoExt.match(/^(\d{5,6})_(.*)$/)
   let code = null, rest = nameNoExt
   if (codeMatch) { code = codeMatch[1]; rest = codeMatch[2] }
 
@@ -10296,25 +10296,28 @@ print(json.dumps({'files': files}))
     res.setHeader('Content-Type', 'application/json')
     res.setHeader('Access-Control-Allow-Origin', '*')
     try {
-      // Scan DEMOS_DIR for highest 6-digit code
-      let maxFromFiles = 0
+      // Code format: YYNNN (5 digits) — year prefix + 3-digit sequential
+      const yy = String(new Date().getFullYear()).slice(2)
+      // Scan DEMOS_DIR for highest NNN this year
+      let fileMax = 0
       try {
         const files = fs.readdirSync(DEMOS_DIR)
         for (const f of files) {
-          const m = f.match(/^(\d{6})_/)
-          if (m) { const n = parseInt(m[1]); if (n > maxFromFiles) maxFromFiles = n }
+          const m = f.match(/^(\d{5})_/)
+          if (m && m[1].startsWith(yy)) { const n = parseInt(m[1].slice(2)); if (n > fileMax) fileMax = n }
         }
       } catch(e) {}
-      // Query songs table for highest 6-digit code
-      let maxFromDb = 0
+      // Query songs table for highest NNN this year
+      let dbMax = 0
       try {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=code&code=like.2%25&order=code.desc&limit=1`, { headers: sbHeaders })
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=code&code=like.${yy}%25&order=code.desc&limit=1`, { headers: sbHeaders })
         const rows = await r.json()
-        if (Array.isArray(rows) && rows[0]?.code && /^\d{6}$/.test(rows[0].code)) {
-          maxFromDb = parseInt(rows[0].code)
+        if (Array.isArray(rows) && rows[0]?.code && /^\d{5}$/.test(rows[0].code) && rows[0].code.startsWith(yy)) {
+          dbMax = parseInt(rows[0].code.slice(2))
         }
       } catch(e) {}
-      const next = String(Math.max(maxFromFiles, maxFromDb, 260600) + 1)
+      const nextNNN = Math.max(fileMax, dbMax) + 1
+      const next = yy + String(nextNNN).padStart(3, '0')
       res.end(JSON.stringify({ ok: true, code: next }))
     } catch(e) {
       res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
@@ -14036,45 +14039,42 @@ server.listen(PORT, '127.0.0.1', () => {
 
   // ── Mutex for code generation — prevents duplicate codes on bulk drop ──────
   let codeGenerationLock = false
-  let lastAssignedCode = ''  // 6-char string e.g. '260801' — month-aware high-water mark
+  let lastAssignedCode = ''  // 5-char string e.g. '26035' — year-aware high-water mark
 
   async function generateNextDemoCode() {
     while (codeGenerationLock) await new Promise(r => setTimeout(r, 50))
     codeGenerationLock = true
     try {
-      const now = new Date()
-      const yy = String(now.getFullYear()).slice(2)
-      const mm = String(now.getMonth() + 1).padStart(2, '0')
-      const prefix = yy + mm  // e.g. '2608'
+      const yy = String(new Date().getFullYear()).slice(2)  // e.g. '26'
 
-      // Highest NN used this month in DEMOS_DIR
+      // Highest NNN used this year in DEMOS_DIR
       const dirFiles = fs.readdirSync(DEMOS_DIR)
-      const fileNNs = dirFiles
-        .map(f => { const m = f.match(/^(\d{6})_/); return m ? m[1] : null })
-        .filter(c => c && c.startsWith(prefix))
-        .map(c => parseInt(c.slice(4)))
-      const fileMax = fileNNs.length ? Math.max(...fileNNs) : 0
+      const fileNNNs = dirFiles
+        .map(f => { const m = f.match(/^(\d{5})_/); return m ? m[1] : null })
+        .filter(c => c && c.startsWith(yy))
+        .map(c => parseInt(c.slice(2)))
+      const fileMax = fileNNNs.length ? Math.max(...fileNNNs) : 0
 
-      // Highest NN used this month in Supabase
+      // Highest NNN used this year in Supabase
       let dbMax = 0
       try {
         const r = await fetch(
-          `${SUPABASE_URL}/rest/v1/songs?select=code&code=like.${prefix}%25&order=code.desc&limit=1`,
+          `${SUPABASE_URL}/rest/v1/songs?select=code&code=like.${yy}%25&order=code.desc&limit=1`,
           { headers: sbHeaders }
         )
         const rows = await r.json()
-        if (Array.isArray(rows) && rows[0]?.code && rows[0].code.startsWith(prefix)) {
-          dbMax = parseInt(rows[0].code.slice(4))
+        if (Array.isArray(rows) && rows[0]?.code && /^\d{5}$/.test(rows[0].code) && rows[0].code.startsWith(yy)) {
+          dbMax = parseInt(rows[0].code.slice(2))
         }
       } catch(e) {}
 
-      // In-memory high-water mark — only relevant when same month
-      const memMax = (lastAssignedCode && lastAssignedCode.startsWith(prefix))
-        ? parseInt(lastAssignedCode.slice(4))
+      // In-memory high-water mark — only relevant for same year
+      const memMax = (lastAssignedCode && lastAssignedCode.startsWith(yy))
+        ? parseInt(lastAssignedCode.slice(2))
         : 0
 
-      const nextNN = Math.max(fileMax, dbMax, memMax) + 1
-      const newCode = prefix + String(nextNN).padStart(2, '0')
+      const nextNNN = Math.max(fileMax, dbMax, memMax) + 1
+      const newCode = yy + String(nextNNN).padStart(3, '0')
       lastAssignedCode = newCode
       return newCode
     } finally {
@@ -14116,7 +14116,7 @@ server.listen(PORT, '127.0.0.1', () => {
         const { code: parsedCode, title: parsedTitle, bpm: filenameBpm } = parseDemoFilename(filename)
 
         // ── Step 2: Code — mutex-protected to prevent duplicates on bulk drop ──
-        let code = (parsedCode && /^\d{6}$/.test(parsedCode)) ? parsedCode : null
+        let code = (parsedCode && /^\d{5,6}$/.test(parsedCode)) ? parsedCode : null
         if (!code) {
           code = await generateNextDemoCode()
         }
@@ -14294,7 +14294,7 @@ server.listen(PORT, '127.0.0.1', () => {
 
   // ── SENT_DIR watcher — /P2P/29TH AVENUE/SENT/ ────────────────────────────
   // New folder → create patches row. File add/remove → sync dropped_files.
-  // Only files whose basename starts with a 6-digit code are tracked.
+  // Only files whose basename starts with a 5- or 6-digit code are tracked.
   if (!fs.existsSync(SENT_DIR)) { try { fs.mkdirSync(SENT_DIR, { recursive: true }) } catch(e) {} }
 
   async function getSentPatch(folderName) {
@@ -14339,7 +14339,7 @@ server.listen(PORT, '127.0.0.1', () => {
     .on('add', async filePath => {
       const filename = path.basename(filePath)
       const folderName = path.basename(path.dirname(filePath))
-      if (!(/^\d{6}/.test(filename))) return  // only 6-digit code files
+      if (!(/^\d{5,6}/.test(filename))) return  // only 5- or 6-digit code files
       const ext = path.extname(filename).toLowerCase()
       if (!['.wav','.mp3','.aiff','.aif','.m4a','.flac'].includes(ext)) return
       try {
@@ -14364,7 +14364,7 @@ server.listen(PORT, '127.0.0.1', () => {
     .on('unlink', async filePath => {
       const filename = path.basename(filePath)
       const folderName = path.basename(path.dirname(filePath))
-      if (!(/^\d{6}/.test(filename))) return
+      if (!(/^\d{5,6}/.test(filename))) return
       try {
         const patch = await getSentPatch(folderName)
         if (!patch) return

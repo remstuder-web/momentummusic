@@ -390,10 +390,15 @@
     const ext  = file.name.slice(file.name.lastIndexOf('.'))
     const artistClean = (artist || '').toUpperCase().replace(/[<>:"/\\|?*]/g, '').trim()
     const titlePart = safe(song.title || song.code || '')
+
+    // Parse version from dropped filename (V01, v02, _01., etc.)
+    const vMatch = file.name.match(/[_\s]v?(\d{2})[_\s\.]/i)
+    const versionNum = vMatch ? vMatch[1] : '01'
+    const vLabel = 'V' + versionNum
+
     const filename = artistClean
-      ? `${artistClean}_${titlePart}_INST_V01${ext}`
-      : `${titlePart}_INST_V01${ext}`
-    const vLabel = 'V01'
+      ? `${artistClean}_${titlePart}_INST_${vLabel}${ext}`
+      : `${titlePart}_INST_${vLabel}${ext}`
     const oldfile = wd.instr_audio || ''
 
     // Show filename immediately before async work

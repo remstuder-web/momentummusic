@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/lib/ProjectsTab.svelte — DONE
+TASK: Instrumental drop: use version number from dropped filename
+WHAT: handleInstrumentalDrop: parse version via /[_\s]v?(\d{2})[_\s\.]/i on file.name. versionNum = match group or '01' fallback. vLabel = 'V' + versionNum. filename uses vLabel instead of hardcoded 'V01'. No watcher changes — it accepts any filename as-is.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] DemoTab.svelte + ProjectsTab.svelte — DONE
 TASK: Single shared Audio instance, custom mini player UI — definitive audio exhaustion fix
 WHAT: Both tabs: removed all DOM <audio> elements. Single sharedPlayer = new Audio() created lazily via getSharedPlayer(). State: currentSongId/isPlaying/currentTime/duration as $state. playSong(songId, src): toggle-safe, switches src only on new song. formatTime() helper. onDestroy: pause+src=''+null. Error handler retries via /audio-compat/. Keydown: resolves src from songs array, calls playSong(). Custom mini-player UI: ▶/⏸ button + time display + seek range input (active song shows live time, inactive shows 0:00). CSS: .mini-player, .seek-bar, .seek-bar-empty. DemoTab: uses audioSrc(song) for src. ProjectsTab: uses bestAudio?.src || blobUrl || songAudioBlobUrls.

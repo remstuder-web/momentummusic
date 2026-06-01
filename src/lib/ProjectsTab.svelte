@@ -674,11 +674,12 @@
   }
 
   function playSong(songId, src) {
-    if (!src) return
+    console.log('[ProjectsTab] playSong called:', songId, src)
+    if (!src) { console.warn('[ProjectsTab] playSong: no src — bailing'); return }
     const player = getSharedPlayer()
     const id = String(songId)
     if (currentSongId === id) {
-      if (player.paused) player.play().catch(() => {})
+      if (player.paused) player.play().catch(e => console.error('[ProjectsTab] play() rejected:', e))
       else player.pause()
       return
     }
@@ -687,7 +688,7 @@
     player.currentTime = 0
     currentSongId = id
     player.load()
-    player.play().catch(() => {})
+    player.play().catch(e => console.error('[ProjectsTab] play() rejected:', e))
   }
 
   function formatAudioTime(s) {
@@ -3055,7 +3056,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   {#if bestAudio?.src || blobUrl || songAudioBlobUrls[song.id]}
                     {@const songSrc = bestAudio?.src || blobUrl || songAudioBlobUrls[song.id]}
                     <div class="mini-player {currentSongId === String(song.id) ? 'active' : ''}">
-                      <button onclick={() => playSong(song.id, songSrc)}>
+                      <button onclick={() => { console.log('[ProjectsTab] play button clicked — song:', song.id, 'src:', songSrc, 'bestAudio:', bestAudio, 'blobUrl:', blobUrl); playSong(song.id, songSrc) }}>
                         {currentSongId === String(song.id) && isPlaying ? '⏸' : '▶'}
                       </button>
                       <span class="time">
@@ -4270,7 +4271,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 {/if}
 
 <style>
-  .layout { display: grid; grid-template-columns: 230px 1fr 500px; gap: 0; min-height: calc(100vh - 60px); }
+  .layout { display: grid; grid-template-columns: 230px 1fr 200px; gap: 0; min-height: calc(100vh - 60px); }
   .empty { font-family: 'Space Mono', monospace; font-size: 14px; color: #555; padding: 32px 0; text-align: center; }
   .empty-sm { font-family: 'Space Mono', monospace; font-size: 13px; color: #444; padding: 4px 0; }
 

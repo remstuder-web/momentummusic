@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/lib/DemoTab.svelte + src/lib/ProjectsTab.svelte — DONE
+TASK: Fix audio player stability: single manager, no src reset, catch AbortError
+WHAT: Replaced scattered audio state (currentlyPlaying, ensureAudioLoaded, handlePlay, handleKeydown) with: currentAudio (single ref), playAudio() (toggle-safe, src-guard, AbortError catch), stopAll() (onDestroy cleanup), loadSrcIfEmpty() (only sets src if truly empty — checks src===window.location.href and getAttribute('src')===''), audioTracker Svelte action (programmatic play listener, correctly destroyed on unmount — replaces onplay={handlePlay} in template). keydownHandler closure created in onMount (never duplicated). Both files: all onplay= template attributes removed, onpointerdown calls loadSrcIfEmpty(), use:audioTracker on all audio elements. ProjectsTab onDestroy now also calls stopAll().
+RESULT: builds clean, no stale references
+BLOCKERS: none
+
 ## [2026-06-02] src/lib/DemoTab.svelte — DONE
 TASK: Fix player width match, restore SAMPLE position, player grows left
 WHAT: (1) HTML: moved open-preview-btn outside player-wrap (now sibling outside player-slot inside {#key} block) so audio fills full 280px. (2) CSS: .demo-meta-right → position:absolute left:415px, pointer-events:none — restores fixed center position matching old grid col2 start. (3) .head-buttons → margin-left:auto anchors right section to right edge; player grows leftward into gap. (4) .player-wrap → width:100% (no flex:1 1 0). Both .mini-player rules unified to height:40px width:100%.

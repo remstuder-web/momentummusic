@@ -342,8 +342,20 @@
   }
 
   // On mount: increment audioTick so audio server URLs render for existing songs
-  onMount(() => { audioTick++; window.addEventListener('keydown', handleKeydown) })
-  onDestroy(() => window.removeEventListener('keydown', handleKeydown))
+  onMount(() => {
+    audioTick++
+    keydownHandler = (e) => {
+      if (e.code !== 'Space' || !hoveredSongId) return
+      e.preventDefault()
+      const audio = document.querySelector(`audio[data-song-id="${hoveredSongId}"]`)
+      if (audio) playAudio(audio)
+    }
+    window.addEventListener('keydown', keydownHandler)
+  })
+  onDestroy(() => {
+    if (keydownHandler) { window.removeEventListener('keydown', keydownHandler); keydownHandler = null }
+    stopAll()
+  })
   function openInPreview(song) {
     if (!song.audio_path) return
     // Write a trigger JSON to Downloads — watcher opens the file in QuickTime
@@ -923,8 +935,9 @@
   let aiInput = $state('')
   let aiMessages = $state([])
   let aiLoading = $state(false)
-  let currentlyPlaying = null
+  let currentAudio = null
   let hoveredSongId = null
+  let keydownHandler = null
 
   function handleAudioError(e) {
     const audio = e.target
@@ -936,37 +949,35 @@
     audio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
   }
 
-  function ensureAudioLoaded(audio) {
-    audio.preload = 'auto'
-    if (!audio.currentSrc) audio.src = audio.dataset.src || ''
+  function loadSrcIfEmpty(audio) {
+    const isEmpty = !audio.src || audio.src === window.location.href || audio.getAttribute('src') === ''
+    if (isEmpty) { audio.src = audio.dataset.src || ''; audio.preload = 'auto' }
   }
 
-  function handlePlay(event) {
-    const audio = event.target
-    audio.preload = 'auto'
-    if (currentlyPlaying && currentlyPlaying !== audio) {
-      currentlyPlaying.pause()
-      currentlyPlaying.currentTime = 0
+  function playAudio(audio) {
+    if (currentAudio === audio) {
+      if (audio.paused) audio.play().catch(e => { if (e.name !== 'AbortError') console.warn('Audio play error:', e) })
+      else audio.pause()
+      return
     }
-    currentlyPlaying = audio
+    if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0 }
+    loadSrcIfEmpty(audio)
+    currentAudio = audio
+    audio.play().catch(e => { if (e.name !== 'AbortError') console.warn('Audio play error:', e) })
   }
 
-  function handleKeydown(e) {
-    if (e.code !== 'Space' || !hoveredSongId) return
-    e.preventDefault()
-    const audio = document.querySelector(`audio[data-song-id="${hoveredSongId}"]`)
-    if (!audio) return
-    if (audio.paused) {
-      if (currentlyPlaying && currentlyPlaying !== audio) {
-        currentlyPlaying.pause()
-        currentlyPlaying.currentTime = 0
-      }
-      ensureAudioLoaded(audio)
-      audio.play()
-      currentlyPlaying = audio
-    } else {
-      audio.pause()
+  function stopAll() {
+    if (currentAudio) { currentAudio.pause(); currentAudio = null }
+  }
+
+  function audioTracker(node) {
+    const onPlay = () => {
+      if (currentAudio && currentAudio !== node) { currentAudio.pause(); currentAudio.currentTime = 0 }
+      currentAudio = node
+      node.preload = 'auto'
     }
+    node.addEventListener('play', onPlay)
+    return { destroy() { node.removeEventListener('play', onPlay) } }
   }
 
   async function sendAI() {
@@ -1145,13 +1156,13 @@
                 {@const src = audioSrc(song)}
                 <div class="player-slot">
                   {#if src}
-                    <div class="player-wrap" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) ensureAudioLoaded(a) }}>
+                    <div class="player-wrap" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) loadSrcIfEmpty(a) }}>
                       <audio class="mini-player" controls preload="none"
                         src=""
                         data-src={src}
                         data-song-id={song.id}
-                        onplay={handlePlay}
                         onerror={handleAudioError}
+                        use:audioTracker
                         use:applyGain={song.id}></audio>
                     </div>
                   {:else if song.audio_path}

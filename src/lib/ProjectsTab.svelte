@@ -3021,15 +3021,14 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                       <button onclick={() => playSong(song.id, songSrc)}>
                         {currentSongId === String(song.id) && isPlaying ? '⏸' : '▶'}
                       </button>
-                      {#if currentSongId === String(song.id)}
-                        <span class="time">{formatAudioTime(currentTime)} / {formatAudioTime(duration)}</span>
-                        <input type="range" class="seek-bar"
-                          min="0" max={duration || 100} value={currentTime}
-                          oninput={e => { if (sharedPlayer) sharedPlayer.currentTime = Number(e.target.value) }} />
-                      {:else}
-                        <span class="time">0:00</span>
-                        <div class="seek-bar-empty"></div>
-                      {/if}
+                      <span class="time">
+                        {currentSongId === String(song.id) ? formatAudioTime(currentTime) + ' / ' + formatAudioTime(duration) : '0:00'}
+                      </span>
+                      <input type="range" class="seek-bar"
+                        min="0"
+                        max={currentSongId === String(song.id) ? (duration || 100) : 100}
+                        value={currentSongId === String(song.id) ? currentTime : 0}
+                        oninput={e => { if (sharedPlayer) sharedPlayer.currentTime = +e.target.value }} />
                     </div>
                   {/if}
                 </div>
@@ -4376,13 +4375,12 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .song-card.exp .song-head { background: #252525; }
   .song-head-left { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; cursor: pointer; overflow: hidden; }
   .song-head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; width: 460px; justify-content: flex-end; }
-  .mini-player { display: flex; align-items: center; gap: 6px; width: 100%; }
+  .mini-player { display: flex; align-items: center; gap: 6px; width: 240px; flex-shrink: 0; }
   .mini-player button { background: none; border: none; color: #9e9690; cursor: pointer; font-size: 14px; padding: 2px 4px; flex-shrink: 0; }
   .mini-player.active button { color: #f5f1ea; }
-  .mini-player .time { font-size: 10px; font-family: 'Space Mono', monospace; color: #555; min-width: 72px; flex-shrink: 0; }
+  .mini-player .time { font-size: 10px; font-family: 'Space Mono', monospace; color: #555; width: 80px; flex-shrink: 0; text-align: right; }
   .mini-player.active .time { color: #9e9690; }
   .seek-bar { flex: 1; height: 3px; accent-color: #c9a84c; cursor: pointer; min-width: 0; }
-  .seek-bar-empty { flex: 1; height: 3px; background: #252525; border-radius: 2px; min-width: 0; }
   .song-head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .song-player-slot { width: 280px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-start; }
   .reorder-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }

@@ -4271,7 +4271,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 {/if}
 
 <style>
-  .layout { display: grid; grid-template-columns: 230px 1fr 200px; gap: 0; min-height: calc(100vh - 60px); }
+  .layout { display: grid; grid-template-columns: 230px 1fr 300px; gap: 0; min-height: calc(100vh - 60px); }
   .empty { font-family: 'Space Mono', monospace; font-size: 14px; color: #555; padding: 32px 0; text-align: center; }
   .empty-sm { font-family: 'Space Mono', monospace; font-size: 13px; color: #444; padding: 4px 0; }
 

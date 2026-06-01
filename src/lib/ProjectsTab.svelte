@@ -634,8 +634,14 @@
     audio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
   }
 
+  function ensureAudioLoaded(audio) {
+    audio.preload = 'auto'
+    if (!audio.currentSrc) audio.src = audio.dataset.src || ''
+  }
+
   function handlePlay(event) {
     const audio = event.target
+    audio.preload = 'auto'
     if (currentlyPlaying && currentlyPlaying !== audio) {
       currentlyPlaying.pause()
       currentlyPlaying.currentTime = 0
@@ -653,7 +659,7 @@
         currentlyPlaying.pause()
         currentlyPlaying.currentTime = 0
       }
-      if (!audio.currentSrc) audio.src = audio.dataset.src || ''
+      ensureAudioLoaded(audio)
       audio.play()
       currentlyPlaying = audio
     } else {
@@ -2998,19 +3004,19 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 <div class="song-player-slot">
                   {#key audioTick}
                     {#if bestAudio}
-                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
+                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) ensureAudioLoaded(a) }}>
                         <audio class="mini-player" controls preload="none" src=""
                           data-src={bestAudio.src}
                           data-song-id={song.id} onplay={handlePlay} onerror={handleAudioError}></audio>
                       </div>
                     {:else if blobUrl}
-                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
+                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) ensureAudioLoaded(a) }}>
                         <audio class="mini-player" controls preload="none" src=""
                           data-src={blobUrl}
                           data-song-id={song.id} onplay={handlePlay} onerror={handleAudioError}></audio>
                       </div>
                     {:else if songAudioBlobUrls[song.id]}
-                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
+                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) ensureAudioLoaded(a) }}>
                         <audio class="mini-player" controls preload="none" src=""
                           data-src={songAudioBlobUrls[song.id]}
                           data-song-id={song.id} onplay={handlePlay} onerror={handleAudioError}></audio>
@@ -4368,9 +4374,9 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .song-head { display: flex; align-items: center; gap: 9px; padding: 11px 14px; background: #1c1c1c; }
   .song-card.exp .song-head { background: #252525; }
   .song-head-left { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; cursor: pointer; overflow: hidden; }
-  .song-head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; width: 420px; justify-content: flex-end; }
+  .song-head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; width: 460px; justify-content: flex-end; }
   .song-head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-  .song-player-slot { width: 240px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-start; }
+  .song-player-slot { width: 280px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-start; }
   .reorder-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
   .reorder-btn { font-size: 10px; padding: 2px 4px; background: transparent; border: none; color: #444; cursor: pointer; }
   .reorder-btn:hover { color: #c9a84c; }

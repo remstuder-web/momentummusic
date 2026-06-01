@@ -936,8 +936,14 @@
     audio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
   }
 
+  function ensureAudioLoaded(audio) {
+    audio.preload = 'auto'
+    if (!audio.currentSrc) audio.src = audio.dataset.src || ''
+  }
+
   function handlePlay(event) {
     const audio = event.target
+    audio.preload = 'auto'
     if (currentlyPlaying && currentlyPlaying !== audio) {
       currentlyPlaying.pause()
       currentlyPlaying.currentTime = 0
@@ -955,7 +961,7 @@
         currentlyPlaying.pause()
         currentlyPlaying.currentTime = 0
       }
-      if (!audio.currentSrc) audio.src = audio.dataset.src || ''
+      ensureAudioLoaded(audio)
       audio.play()
       currentlyPlaying = audio
     } else {
@@ -1139,7 +1145,7 @@
                 {@const src = audioSrc(song)}
                 <div class="player-slot">
                   {#if src}
-                    <div class="player-wrap" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
+                    <div class="player-wrap" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) ensureAudioLoaded(a) }}>
                       <audio class="mini-player" controls preload="none"
                         src=""
                         data-src={src}
@@ -1668,7 +1674,7 @@
   .btn-release { font-family: 'Space Mono', monospace; font-size: 10px; padding: 3px 8px; background: transparent; border: 1px solid rgba(224,90,74,.4); color: #e05a4a; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .btn-release:hover { background: rgba(224,90,74,.08); }
 
-  .mini-player { height: 40px; flex-shrink: 0; max-width: 220px; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
+  .mini-player { height: 40px; flex-shrink: 0; max-width: 320px; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
   .audio-ref { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
   .audio-ref.clickable { background: transparent; border: none; cursor: pointer; padding: 0; color: #4a9fd4; }
   .audio-ref.clickable:hover { color: #c9a84c; }
@@ -1804,8 +1810,8 @@
   .contact-opt:hover { background: #1c1c1c; color: #c9a84c; }
   .contact-group-label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .12em; color: #4caf82; padding: 10px 12px 5px; text-transform: uppercase; border-bottom: 1px solid #252525; border-top: 1px solid #1a1a1a; background: #0f0f0f; margin-top: 2px; }
   .contact-opt.sel { color: #4a9fd4; background: rgba(74,159,212,.06); }
-  .player-wrap { display: flex; align-items: center; flex-shrink: 0; min-width: 220px; }
-  .mini-player { height: 40px; width: 100%; max-width: 220px; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
+  .player-wrap { display: flex; align-items: center; flex-shrink: 0; min-width: 320px; }
+  .mini-player { height: 40px; width: 100%; max-width: 320px; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
   .btn-send { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; padding: 10px 20px; background: rgba(74,159,212,.1); border: 1px solid rgba(74,159,212,.4); color: #4a9fd4; border-radius: 3px; cursor: pointer; width: 100%; }
   .btn-send:hover { background: rgba(74,159,212,.18); }
   .patch-count { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; }

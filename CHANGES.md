@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-02] src/lib/DemoTab.svelte + src/lib/ProjectsTab.svelte — DONE
+TASK: Audio player: full load on play, fix scrubbing, wider player
+WHAT: Added ensureAudioLoaded(audio) helper: sets preload='auto' + conditionally sets src from dataset.src if !currentSrc. handlePlay: adds audio.preload='auto' (enables buffering immediately on play event). handleKeydown: calls ensureAudioLoaded() before audio.play(). onpointerdown handlers: replaced inline src-set with ensureAudioLoaded(a) call (all 4 handlers across both files). CSS: DemoTab .player-wrap min-width 220→320px, .mini-player max-width 220→320px (both rules). ProjectsTab .song-player-slot 240→280px, .song-head-right 420→460px.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] src/lib/DemoTab.svelte + src/lib/ProjectsTab.svelte — DONE
 TASK: Tone down audio player: less white, more grey
 WHAT: Added filter: invert(0.85) brightness(0.7) contrast(0.9) to .mini-player in both files. DemoTab has two .mini-player definitions (one for card player, one for patches section) — both updated via replace_all. ProjectsTab has one. Filter inverts the browser's white chrome to dark grey while keeping the layout intact.
 RESULT: builds clean

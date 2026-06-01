@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DailyTab.svelte + momentum-watcher.cjs — DONE
+TASK: daily-tab-restructure-whatsapp-ondemand
+WHAT: Removed PRIVATE tab; restructured Daily tab into 3 sections (TRENDS & NEWS → WHATSAPP → ROUTINE/HELPERS); moved agent buttons + inbox to always-visible section 1; replaced auto-polled WhatsApp inbox messages with on-demand contact analysis (dropdown + Analyze button); disabled flushWhatsappBuffer setInterval; added POST /analyze-whatsapp-contact endpoint (reads last 20 msgs from SQLite, calls Claude Haiku, returns summary/real_intent/tone/opportunities/recommended_response/urgency — no Telegram send)
+RESULT: works — clean build, watcher healthy
+BLOCKERS: none
+
 ## [2026-06-01] src/routes/+page.svelte, src/lib/DailyTab.svelte, momentum-watcher.cjs — DONE
 TASK: cleanup-remove-notes-tab-daily-calendar
 WHAT: Removed Notes tab entirely; removed Tasks section + calendar/week/year plan view + today-section from Daily tab; removed sidebar calendar widget; removed Apple Notes endpoints (GET/POST/PATCH/DELETE /notes, /notes/reorder, /apple-notes, /apple-notes-sync) + setInterval + notes table startup check from watcher; cleaned ~400 lines of dead script code (addTask, buildCal, upcomingTasks, reminders, resolveTaskPrefix, etc.)

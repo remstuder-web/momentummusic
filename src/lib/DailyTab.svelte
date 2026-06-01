@@ -8,7 +8,7 @@
 
   let state = $state({
     date: today, ticks: {}, customs: [], healthChecks: {}, healthTicks: {},
-    helpers: [], helperTicks: {}, privateItems: [], privateTicks: {},
+    helpers: [], helperTicks: {},
     checkItems: [], checkTicks: {}
   })
 
@@ -322,11 +322,11 @@
       projectSongs = songMap
       const { data } = await supabase.from('daily_state').select('*').eq('date', today).maybeSingle()
 
-      // Fallback for private_items, check_items (still per-day)
+      // Fallback for check_items (still per-day)
       let fallback = null
-      if (!data?.private_items?.length && !data?.check_items?.length) {
+      if (!data?.check_items?.length) {
         const { data: fb } = await supabase.from('daily_state')
-          .select('helper_ticks, private_items, private_ticks, check_items, check_ticks')
+          .select('helper_ticks, check_items, check_ticks')
           .neq('date', today)
           .order('id', { ascending: false }).limit(1).maybeSingle()
         fallback = fb
@@ -337,16 +337,12 @@
           ticks: data.ticks||{},
           healthChecks: data.health_checks||[], healthTicks: data.health_ticks||{},
           helperTicks: data.helper_ticks||{},
-          privateItems: data.private_items?.length ? data.private_items : (fallback?.private_items||[]),
-          privateTicks: data.private_ticks||{},
           checkItems: data.check_items?.length ? data.check_items : (fallback?.check_items||[]),
           checkTicks: data.check_ticks||{}
         }
       } else if (fallback) {
         state = { ...state,
           helperTicks: {},
-          privateItems: fallback?.private_items||[],
-          privateTicks: {},
           checkItems: fallback?.check_items||[],
           checkTicks: {}
         }
@@ -370,8 +366,7 @@
     await supabase.from('daily_state').upsert({
       date: today,
       ticks: state.ticks,
-      health_ticks: state.healthTicks,
-      private_ticks: state.privateTicks
+      health_ticks: state.healthTicks
     }, { onConflict: 'date' })
   }
 
@@ -395,7 +390,6 @@
   }
 
   let newHelper = $state(''), newHelperUrl = $state('')
-  let newPrivate = $state(''), newPrivateUrl = $state('')
   let helperSearchInputs = $state({})
 
   function getHelperSearchConfig(url) {
@@ -425,19 +419,6 @@
     const tmp = arr[idx]; arr[idx] = arr[ni]; arr[ni] = tmp; state.helpers = arr; await saveHelpers()
   }
 
-  async function tickPrivate(id) { state.privateTicks = {...state.privateTicks, [id]: !state.privateTicks[id]}; await save() }
-  async function addPrivate() {
-    if (!newPrivate.trim()) return
-    state.privateItems = [...(state.privateItems||[]), { id: 'p'+Date.now(), label: newPrivate.trim(), url: newPrivateUrl.trim() }]
-    newPrivate = ''; newPrivateUrl = ''; await save()
-  }
-  async function delPrivate(id) { state.privateItems = (state.privateItems||[]).filter(p => p.id !== id); await save() }
-  async function movePrivate(id, dir) {
-    const arr = [...(state.privateItems||[])]
-    const idx = arr.findIndex(p => p.id === id), ni = idx + dir
-    if (ni < 0 || ni >= arr.length) return
-    const tmp = arr[idx]; arr[idx] = arr[ni]; arr[ni] = tmp; state.privateItems = arr; await save()
-  }
   async function moveCustom(id, dir) {
     const arr = [...(state.customs||[])]
     const idx = arr.findIndex(c => c.id === id)
@@ -481,14 +462,40 @@
   let agentLastRun = $state({})
   let todayBriefing = $derived(inboxItems.find(n => n.type === 'briefing' && n.created_at?.slice(0,10) === todayISO))
   let pressItems = $derived(inboxItems.filter(n => n.type === 'press' && n.created_at?.slice(0,10) === todayISO).slice(0, 3))
-  let whatsappItems = $derived(inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp'))
-
-  const routineOnlyTypes = ['briefing', 'scout', 'pulse_check', 'chart', 'scout_articles']
-  let visibleInbox = $derived(
-    inboxItems.filter(n => routineOnlyTypes.includes(n.type) ? activeSection === 'routine' : true)
-  )
   let scoutingArtists = $state(false)
-  let whatsappName = $state('')
+
+  // WhatsApp on-demand analysis
+  let waContacts = $state([])
+  let waSelectedContact = $state('')
+  let waAnalyzing = $state(false)
+  let waResult = $state(null)
+  let waError = $state('')
+
+  async function loadWaContacts() {
+    try {
+      const r = await fetch('http://localhost:4242/whatsapp-contacts')
+      const d = await r.json()
+      if (d.ok) waContacts = (d.contacts || []).filter(c => c.monitored && !c.is_group)
+    } catch(e) {}
+  }
+
+  async function analyzeWaContact() {
+    if (!waSelectedContact || waAnalyzing) return
+    waAnalyzing = true
+    waResult = null
+    waError = ''
+    try {
+      const r = await fetch('http://localhost:4242/analyze-whatsapp-contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactName: waSelectedContact })
+      })
+      const d = await r.json()
+      if (d.ok) waResult = d
+      else waError = d.error || 'Analysis failed'
+    } catch(e) { waError = e.message }
+    waAnalyzing = false
+  }
 
   function timeAgo(iso) {
     const mins = Math.round((Date.now() - new Date(iso)) / 60000)
@@ -1027,6 +1034,7 @@ ${mozartContext}`
   ;(async () => { await loadInbox() })()
   loadCheckOut()
   loadGoals()
+  loadWaContacts()
 
   onMount(() => {
     syncDownloadNotifications()
@@ -1086,13 +1094,300 @@ ${mozartContext}`
   <!-- LEFT COLUMN -->
   <div class="main">
 
-    <!-- ROUTINE / HEALTH -->
+
+    <!-- SECTION 1: TRENDS & NEWS -->
+    <div class="section-block">
+      <div class="sh">TRENDS & NEWS</div>
+
+      <div class="agent-row">
+        <div class="agent-btn-wrap">
+          <button class="briefing-btn agent-brief {generatingBriefing?'loading':''}" onclick={() => generateBriefing()}>
+            {generatingBriefing ? '✦ Generating...' : '✦ Morning Briefing'}
+          </button>
+          {#if agentLastRun.briefing}<div class="agent-last-run">{timeAgo(agentLastRun.briefing)}</div>{/if}
+        </div>
+        <div class="agent-btn-wrap">
+          <button class="briefing-btn agent-scout {scoutingArtists?'loading':''}" onclick={() => scoutArtists()}>
+            {scoutingArtists ? '✦ Scouting...' : '✦ Scout'}
+          </button>
+          {#if agentLastRun.scout}<div class="agent-last-run">{timeAgo(agentLastRun.scout)}</div>{/if}
+        </div>
+      </div>
+
+      {#if todayBriefing}
+        <div class="today-briefing-block">
+          <div class="today-briefing-header">
+            <button class="inbox-del-btn" onclick={() => deleteInboxItem(todayBriefing.id)}>×</button>
+            <span class="inbox-type-badge br">✦ AI</span>
+            <span class="today-briefing-label">TODAY'S BRIEFING</span>
+            {#if todayBriefing.message}
+              <button class="inbox-speak-btn {speakingId === todayBriefing.id ? 'playing' : ''}" onclick={() => speakText(todayBriefing.id, todayBriefing.message)} title={speakingId === todayBriefing.id ? 'Stop' : 'Read aloud'}>
+                {speakingId === todayBriefing.id ? '■' : '▶'}
+              </button>
+            {/if}
+          </div>
+          <div class="agent-output">{@html parseAgentOutput(todayBriefing.message)}</div>
+        </div>
+      {/if}
+
+      <!-- Aktuelle Refs -->
+      {#if inboxItems.some(n => n.type === 'reference')}
+        <div class="year-today-sep" style="margin-bottom:6px">AKTUELLE REFS</div>
+        {#each inboxItems.filter(n => n.type === 'reference') as item (item.id)}
+          <div class="inbox-item ref-item">
+            <div class="ref-item-header">
+              <span class="ref-badge">REF</span>
+              <span class="ref-name">{item.message}</span>
+              {#if item.metadata?.bpm}
+                <span class="ref-meta">{Math.round(item.metadata.bpm)}bpm{item.metadata.camelot ? ' · ' + item.metadata.camelot : ''}</span>
+              {/if}
+              <button class="del-btn" onclick={() => deleteInboxItem(item.id)}>×</button>
+            </div>
+            <div class="ref-expires">surfaces for {Math.max(0, Math.round((new Date(item.metadata?.expires) - Date.now()) / 86400000))} more days</div>
+          </div>
+        {/each}
+      {/if}
+
+      <!-- Inbox stream (no WhatsApp auto-poll messages) -->
+      {#each [inboxItems.filter(n => n.type !== 'message' && n.type !== 'reference')] as inboxStream}
+      {#if !inboxStream.length}
+        <p class="empty-sm" style="padding:10px 0;color:#333">No notifications yet. Run an agent or send a listen link.</p>
+      {:else}
+        {@const todayInbox = inboxStream.filter(n => n.created_at?.slice(0,10) === todayISO && !(n.type === 'briefing' && n.id === todayBriefing?.id))}
+        {@const olderInbox = inboxStream.filter(n => n.created_at?.slice(0,10) !== todayISO)}
+        <div class="inbox-scroll">
+          {#if todayInbox.length}
+            <div class="year-today-sep">TODAY</div>
+            {#each todayInbox as n (n.id)}
+              <div class="inbox-item {n.read ? 'read' : 'unread'}">
+                <div class="inbox-item-header">
+                  {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing' || n.type === 'scout'}<span class="inbox-type-badge br">✦ AI</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
+                  <span class="inbox-code">{n.song_code}</span>
+                  {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
+                  <span class="inbox-title">{n.song_title}</span>
+                  <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
+                  {#if !n.read}<span class="inbox-new-dot"></span>{/if}
+                  {#if (n.type === 'briefing' || n.type === 'scout') && n.message}
+                    <button class="inbox-speak-btn {speakingId === n.id ? 'playing' : ''}" onclick={() => speakText(n.id, n.message)} title={speakingId === n.id ? 'Stop' : 'Read aloud'}>
+                      {speakingId === n.id ? '■' : '▶'}
+                    </button>
+                  {/if}
+                  <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
+                </div>
+                {#if n.type === 'briefing' || n.type === 'scout'}
+                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*?(?=\n## )/m, '').trim() : n.message}
+                  {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
+                    <div class="chart-grid">
+                      {#each [
+                        {key:'spotify_global', label:'🌍 SPOTIFY GLOBAL'},
+                        {key:'spotify_de', label:'🇩🇪 SPOTIFY DE'},
+                        {key:'tiktok', label:'📱 TIKTOK'},
+                        {key:'youtube', label:'▶ YOUTUBE'}
+                      ] as chart}
+                        {#if chart.key === 'tiktok'}
+                          <div class="tiktok-col">
+                            <div class="chart-title">{chart.label}</div>
+                            {#each (n.metadata.tiktok || []) as t, i}
+                              <div class="chart-track-row">
+                                <span class="chart-pos">{i+1}</span>
+                                <div class="chart-track-info">
+                                  {#if typeof t === 'string'}
+                                    <span class="chart-track-artist">{t}</span>
+                                  {:else}
+                                    <span class="chart-track-artist">{t.artist || ''}</span>
+                                    <span class="chart-track-title-text">{t.title || ''}</span>
+                                  {/if}
+                                </div>
+                                <div class="chart-track-actions">
+                                  {#if typeof t !== 'string' && t.spotify_id}
+                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
+                                  {/if}
+                                  {#if typeof t !== 'string'}
+                                    {#if !librarySpotifyIds.has(t.spotify_id)}
+                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                                    {:else}
+                                      <span class="in-library-badge">✓</span>
+                                    {/if}
+                                  {/if}
+                                </div>
+                              </div>
+                            {/each}
+                          </div>
+                        {:else}
+                          <div class="chart-col">
+                            <div class="chart-title">{chart.label}</div>
+                            {#each (n.metadata[chart.key] || []) as t, i}
+                              <div class="chart-track-row">
+                                <span class="chart-pos">{i+1}</span>
+                                <div class="chart-track-info">
+                                  {#if typeof t === 'string'}
+                                    <span class="chart-track-artist">{t}</span>
+                                  {:else}
+                                    <span class="chart-track-artist">{t.artist || ''}</span>
+                                    <span class="chart-track-title-text">{t.title || ''}</span>
+                                  {/if}
+                                </div>
+                                <div class="chart-track-actions">
+                                  {#if typeof t !== 'string' && t.spotify_id}
+                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
+                                  {/if}
+                                  {#if typeof t !== 'string'}
+                                    {#if !librarySpotifyIds.has(t.spotify_id)}
+                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                                    {:else}
+                                      <span class="in-library-badge">✓</span>
+                                    {/if}
+                                  {/if}
+                                </div>
+                              </div>
+                            {/each}
+                          </div>
+                        {/if}
+                      {/each}
+                    </div>
+                  {/if}
+                  {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
+                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\W/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
+                    {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
+                    {#if uniqueScoutTracks.length}
+                      <div class="suggested-tracks">
+                        <div class="chart-title" style="margin-bottom:6px">ALSO MENTIONED</div>
+                        {#each uniqueScoutTracks as t}
+                          <div class="chart-track-row">
+                            <div class="chart-track-info">
+                              <span class="chart-track-artist">{t.artist || ''}</span>
+                              <span class="chart-track-title-text">{t.title || ''}</span>
+                            </div>
+                            <div class="chart-track-actions">
+                              {#if !librarySpotifyIds.has(t.spotify_id)}
+                                <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                              {:else}
+                                <span class="in-library-badge">✓</span>
+                              {/if}
+                            </div>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                  {/if}
+                  <div class="agent-output">{@html parseAgentOutput(scoutMsg)}</div>
+                {:else if n.type === 'scout_articles'}
+                  <div class="articles-block">
+                    <div class="articles-header" onclick={() => openArticles[n.id] = !openArticles[n.id]}>
+                      <span class="articles-count">{n.metadata?.article_count || '?'} sources</span>
+                      <span class="articles-toggle">{openArticles[n.id] ? '▲' : '▼'}</span>
+                    </div>
+                    {#if openArticles[n.id]}
+                      <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
+                    {/if}
+                  </div>
+                {:else}
+                  <div class="inbox-msg">{n.message}</div>
+                {/if}
+                {#if n.patch_name}<div class="inbox-patch">via {n.patch_name}</div>{/if}
+              </div>
+            {/each}
+          {:else}
+            <p class="empty-sm" style="padding:8px 0;color:#333">Nothing today.</p>
+          {/if}
+          {#if olderInbox.length}
+            <div class="year-today-sep" style="margin-top:10px;opacity:.4">EARLIER</div>
+            {#each olderInbox as n (n.id)}
+              <div class="inbox-item read" style="opacity:.35">
+                <div class="inbox-item-header">
+                  {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing'}<span class="inbox-type-badge br">✦ AI</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
+                  <span class="inbox-code">{n.song_code}</span>
+                  {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
+                  <span class="inbox-title">{n.song_title}</span>
+                  <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
+                  <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
+                </div>
+                {#if n.type === 'briefing' || n.type === 'scout'}
+                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*?(?=\n## )/m, '').trim() : n.message}
+                  <div class="agent-output">{@html parseAgentOutput(scoutMsg)}</div>
+                {:else}
+                  <div class="inbox-msg">{n.message}</div>
+                {/if}
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+      {/each}
+    </div>
+
+    <!-- SECTION 2: WHATSAPP ANALYSIS (on-demand) -->
+    <div class="section-block">
+      <div class="sh">WHATSAPP</div>
+      {#if waContacts.length === 0}
+        <p class="empty-sm" style="color:#444">No monitored contacts. Add contacts in Settings ⚙.</p>
+      {:else}
+        <div class="wa-analyze-row">
+          <select class="wa-contact-sel" bind:value={waSelectedContact}>
+            <option value="">— Select contact —</option>
+            {#each waContacts as c (c.jid)}
+              <option value={c.name}>{c.name}</option>
+            {/each}
+          </select>
+          <button class="briefing-btn {waAnalyzing ? 'loading' : ''}" onclick={analyzeWaContact} disabled={!waSelectedContact || waAnalyzing}>
+            {waAnalyzing ? 'Analyzing...' : 'Analyze Conversation'}
+          </button>
+        </div>
+        {#if waError}
+          <p class="empty-sm" style="color:#e05a4a;margin-top:6px">{waError}</p>
+        {/if}
+        {#if waResult}
+          <div class="wa-result">
+            {#if waResult.urgency}
+              <div class="wa-result-row">
+                <span class="wa-result-label">URGENCY</span>
+                <span class="wa-urgency-val urgency-{waResult.urgency}">{waResult.urgency.toUpperCase()}</span>
+              </div>
+            {/if}
+            {#if waResult.summary}
+              <div class="wa-result-section">
+                <div class="wa-result-label">SUMMARY</div>
+                <div class="wa-result-text">{waResult.summary}</div>
+              </div>
+            {/if}
+            {#if waResult.real_intent}
+              <div class="wa-result-section">
+                <div class="wa-result-label">REAL INTENT</div>
+                <div class="wa-result-text">{waResult.real_intent}</div>
+              </div>
+            {/if}
+            {#if waResult.tone}
+              <div class="wa-result-section">
+                <div class="wa-result-label">TONE</div>
+                <div class="wa-result-text">{waResult.tone}</div>
+              </div>
+            {/if}
+            {#if waResult.opportunities}
+              <div class="wa-result-section">
+                <div class="wa-result-label">OPPORTUNITIES</div>
+                <div class="wa-result-text">{waResult.opportunities}</div>
+              </div>
+            {/if}
+            {#if waResult.recommended_response}
+              <div class="wa-result-section">
+                <div class="wa-result-label">RECOMMENDED RESPONSE</div>
+                <div class="wa-result-text wa-reply-wrap">
+                  <span class="wa-reply-text">{waResult.recommended_response}</span>
+                  <button class="wa-copy-btn" onclick={() => navigator.clipboard.writeText(waResult.recommended_response)}>Copy</button>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      {/if}
+    </div>
+
+    <!-- SECTION 3: ROUTINE / HELPERS -->
     <div class="section-block">
 
       <div class="sections">
         <button class="sec-tab {activeSection==='routine'?'on':''}" onclick={() => activeSection='routine'}>ROUTINE</button>
         <button class="sec-tab {activeSection==='helpers'?'on':''}" onclick={() => activeSection='helpers'}>HELPERS</button>
-<button class="sec-tab {activeSection==='private'?'on':''}" onclick={() => activeSection='private'}>PRIVATE</button>
       </div>
 
       {#if activeSection === 'routine'}
@@ -1427,403 +1722,8 @@ ${mozartContext}`
         {/if}
       {/if}
 
-      {#if activeSection === 'private'}
-        {#each (state.privateItems||[]) as item (item.id)}
-          <div class="check-item {state.privateTicks[item.id]?'done':''}">
-            <button class="ckb blue" onclick={() => tickPrivate(item.id)}>{state.privateTicks[item.id]?'✓':''}</button>
-            {#if item.url}
-              <a href={item.url} target="_blank" class="item-label">{item.label}</a>
-            {:else}
-              <span class="item-label">{item.label}</span>
-            {/if}
-            <div class="reorder-col"><button class="reorder-micro" onclick={() => movePrivate(item.id,-1)}>▲</button><button class="reorder-micro" onclick={() => movePrivate(item.id,1)}>▼</button></div>
-            <button class="del-btn" onclick={() => delPrivate(item.id)}>×</button>
-          </div>
-        {/each}
-        <div class="add-row">
-          <input class="add-inp" bind:value={newPrivate} placeholder="New private item..." onkeydown={e=>e.key==='Enter'&&addPrivate()} />
-          <input class="add-inp url" bind:value={newPrivateUrl} placeholder="URL (optional)..." />
-          <button class="add-btn" onclick={addPrivate}>+</button>
-        </div>
-      {/if}
-
-      {#if activeSection === 'routine'}
-        <!-- Agent buttons row -->
-        <div class="agent-row">
-          <div class="agent-btn-wrap">
-            <button class="briefing-btn agent-brief {generatingBriefing?'loading':''}" onclick={() => generateBriefing()}>
-              {generatingBriefing ? '✦ Generating...' : '✦ Morning Briefing'}
-            </button>
-            {#if agentLastRun.briefing}<div class="agent-last-run">{timeAgo(agentLastRun.briefing)}</div>{/if}
-          </div>
-          <div class="agent-btn-wrap">
-            <button class="briefing-btn agent-scout {scoutingArtists?'loading':''}" onclick={() => scoutArtists()}>
-              {scoutingArtists ? '✦ Scouting...' : '✦ Scout'}
-            </button>
-            {#if agentLastRun.scout}<div class="agent-last-run">{timeAgo(agentLastRun.scout)}</div>{/if}
-          </div>
-        </div>
-
-        <!-- Today's briefing — auto-expanded at top -->
-        {#if todayBriefing}
-          <div class="today-briefing-block">
-            <div class="today-briefing-header">
-              <button class="inbox-del-btn" onclick={() => deleteInboxItem(todayBriefing.id)}>×</button>
-              <span class="inbox-type-badge br">✦ AI</span>
-              <span class="today-briefing-label">TODAY'S BRIEFING</span>
-              {#if todayBriefing.message}
-                <button class="inbox-speak-btn {speakingId === todayBriefing.id ? 'playing' : ''}" onclick={() => speakText(todayBriefing.id, todayBriefing.message)} title={speakingId === todayBriefing.id ? 'Stop' : 'Read aloud'}>
-                  {speakingId === todayBriefing.id ? '■' : '▶'}
-                </button>
-              {/if}
-            </div>
-            <div class="agent-output">{@html parseAgentOutput(todayBriefing.message)}</div>
-          </div>
-        {/if}
-      {/if}
-
-      <!-- Aktuelle Refs -->
-      {#if inboxItems.some(n => n.type === 'reference')}
-        <div class="year-today-sep" style="margin-bottom:6px">AKTUELLE REFS</div>
-        {#each inboxItems.filter(n => n.type === 'reference') as item (item.id)}
-          <div class="inbox-item ref-item">
-            <div class="ref-item-header">
-              <span class="ref-badge">REF</span>
-              <span class="ref-name">{item.message}</span>
-              {#if item.metadata?.bpm}
-                <span class="ref-meta">{Math.round(item.metadata.bpm)}bpm{item.metadata.camelot ? ' · ' + item.metadata.camelot : ''}</span>
-              {/if}
-              <button class="del-btn" onclick={() => deleteInboxItem(item.id)}>×</button>
-            </div>
-            <div class="ref-expires">surfaces for {Math.max(0, Math.round((new Date(item.metadata?.expires) - Date.now()) / 86400000))} more days</div>
-          </div>
-        {/each}
-      {/if}
-
-      <!-- Messages section (WhatsApp) -->
-      {#if whatsappItems.length}
-        <div class="year-today-sep" style="margin-bottom:6px">MESSAGES</div>
-      {/if}
-      {#each inboxItems.filter(n => n.type === 'message' && n.metadata?.platform === 'whatsapp') as item (item.id)}
-        <div class="inbox-item whatsapp-item {item.metadata?.boundary_alert ? 'boundary' : ''} {item.metadata?.urgency === 'high' ? 'urgent' : ''}">
-          {#if item.metadata?.boundary_alert}
-            <div class="boundary-alert">
-              ⚠ {item.metadata.boundary_type?.toUpperCase()} BOUNDARY:
-              {item.metadata.boundary_alert}
-            </div>
-          {/if}
-          <div class="notif-header">
-            <span class="notif-from">{item.metadata?.from || 'Unknown'}</span>
-            {#if item.metadata?.urgency && item.metadata.urgency !== 'low'}
-              <span class="notif-urgency {item.metadata.urgency}">{item.metadata.urgency}</span>
-            {/if}
-            <span style="margin-left:auto;font-size:9px;color:#444">{new Date(item.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
-            <button class="del-btn" onclick={() => deleteInboxItem(item.id)}>×</button>
-          </div>
-          <div class="notif-message">"{item.message?.slice(0,120)}"</div>
-          {#if item.metadata?.real_intent}
-            <div class="notif-real-intent">→ {item.metadata.real_intent}</div>
-          {/if}
-          {#if item.metadata?.best_next_step}
-            <div class="notif-next-step">✓ {item.metadata.best_next_step}</div>
-          {/if}
-          {#if item.metadata?.response_suggestion}
-            <div class="notif-suggestion">
-              💬 {item.metadata.response_suggestion}
-              <button class="copy-btn" onclick={() => navigator.clipboard.writeText(item.metadata.response_suggestion)}>Copy</button>
-            </div>
-          {/if}
-        </div>
-      {/each}
-
-      <!-- Inbox stream -->
-      {#if !visibleInbox.filter(n => n.metadata?.platform !== 'whatsapp').length}
-        <p class="empty-sm" style="padding:10px 0;color:#333">No notifications yet. Run an agent or send a listen link.</p>
-      {:else}
-        {@const todayInbox = visibleInbox.filter(n => n.metadata?.platform !== 'whatsapp' && n.type !== 'reference' && n.created_at?.slice(0,10) === todayISO && !(n.type === 'briefing' && n.id === todayBriefing?.id))}
-        {@const olderInbox = visibleInbox.filter(n => n.metadata?.platform !== 'whatsapp' && n.type !== 'reference' && n.created_at?.slice(0,10) !== todayISO)}
-        <div class="inbox-scroll">
-          {#if todayInbox.length}
-            <div class="year-today-sep">TODAY</div>
-            {#each todayInbox as n (n.id)}
-              <div class="inbox-item {n.read ? 'read' : 'unread'}">
-                <div class="inbox-item-header">
-                  {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing' || n.type === 'scout'}<span class="inbox-type-badge br">✦ AI</span>{:else if n.metadata?.real_intent}<span class="inbox-type-badge wa">📱</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
-                  <span class="inbox-code">{n.song_code}</span>
-                  {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
-                  <span class="inbox-title">{n.song_title}</span>
-                  {#if n.metadata?.urgency}<span class="wa-urgency-badge {n.metadata.urgency}">{n.metadata.urgency}</span>{/if}
-                  <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
-                  {#if !n.read}<span class="inbox-new-dot"></span>{/if}
-                  {#if (n.type === 'briefing' || n.type === 'scout') && n.message}
-                    <button class="inbox-speak-btn {speakingId === n.id ? 'playing' : ''}" onclick={() => speakText(n.id, n.message)} title={speakingId === n.id ? 'Stop' : 'Read aloud'}>
-                      {speakingId === n.id ? '■' : '▶'}
-                    </button>
-                  {/if}
-                  <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
-                </div>
-                {#if n.type === 'briefing' || n.type === 'scout'}
-                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*?(?=\n## )/m, '').trim() : n.message}
-                  {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
-                    <div class="chart-grid">
-                      {#each [
-                        {key:'spotify_global', label:'🌍 SPOTIFY GLOBAL'},
-                        {key:'spotify_de', label:'🇩🇪 SPOTIFY DE'},
-                        {key:'tiktok', label:'📱 TIKTOK'},
-                        {key:'youtube', label:'▶ YOUTUBE'}
-                      ] as chart}
-                        {#if chart.key === 'tiktok'}
-                          <div class="tiktok-col">
-                            <div class="chart-title">{chart.label}</div>
-                            {#each (n.metadata.tiktok || []) as t, i}
-                              <div class="chart-track-row">
-                                <span class="chart-pos">{i+1}</span>
-                                <div class="chart-track-info">
-                                  {#if typeof t === 'string'}
-                                    <span class="chart-track-artist">{t}</span>
-                                  {:else}
-                                    <span class="chart-track-artist">{t.artist || ''}</span>
-                                    <span class="chart-track-title-text">{t.title || ''}</span>
-                                  {/if}
-                                </div>
-                                <div class="chart-track-actions">
-                                  {#if typeof t !== 'string' && t.spotify_id}
-                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
-                                  {/if}
-                                  {#if typeof t !== 'string'}
-                                    {#if !librarySpotifyIds.has(t.spotify_id)}
-                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                                    {:else}
-                                      <span class="in-library-badge">✓</span>
-                                    {/if}
-                                  {/if}
-                                </div>
-                              </div>
-                            {/each}
-                          </div>
-                        {:else}
-                          <div class="chart-col">
-                            <div class="chart-title">{chart.label}</div>
-                            {#each (n.metadata[chart.key] || []) as t, i}
-                              <div class="chart-track-row">
-                                <span class="chart-pos">{i+1}</span>
-                                <div class="chart-track-info">
-                                  {#if typeof t === 'string'}
-                                    <span class="chart-track-artist">{t}</span>
-                                  {:else}
-                                    <span class="chart-track-artist">{t.artist || ''}</span>
-                                    <span class="chart-track-title-text">{t.title || ''}</span>
-                                  {/if}
-                                </div>
-                                <div class="chart-track-actions">
-                                  {#if typeof t !== 'string' && t.spotify_id}
-                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
-                                  {/if}
-                                  {#if typeof t !== 'string'}
-                                    {#if !librarySpotifyIds.has(t.spotify_id)}
-                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                                    {:else}
-                                      <span class="in-library-badge">✓</span>
-                                    {/if}
-                                  {/if}
-                                </div>
-                              </div>
-                            {/each}
-                          </div>
-                        {/if}
-                      {/each}
-                    </div>
-                  {/if}
-                  {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
-                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\W/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
-                    {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
-                    {#if uniqueScoutTracks.length}
-                      <div class="suggested-tracks">
-                        <div class="chart-title" style="margin-bottom:6px">ALSO MENTIONED</div>
-                        {#each uniqueScoutTracks as t}
-                          <div class="chart-track-row">
-                            <div class="chart-track-info">
-                              <span class="chart-track-artist">{t.artist || ''}</span>
-                              <span class="chart-track-title-text">{t.title || ''}</span>
-                            </div>
-                            <div class="chart-track-actions">
-                              {#if !librarySpotifyIds.has(t.spotify_id)}
-                                <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                              {:else}
-                                <span class="in-library-badge">✓</span>
-                              {/if}
-                            </div>
-                          </div>
-                        {/each}
-                      </div>
-                    {/if}
-                  {/if}
-                  <div class="agent-output">{@html parseAgentOutput(scoutMsg)}</div>
-                {:else if n.type === 'scout_articles'}
-                  <div class="articles-block">
-                    <div class="articles-header" onclick={() => openArticles[n.id] = !openArticles[n.id]}>
-                      <span class="articles-count">{n.metadata?.article_count || '?'} sources</span>
-                      <span class="articles-toggle">{openArticles[n.id] ? '▲' : '▼'}</span>
-                    </div>
-                    {#if openArticles[n.id]}
-                      <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
-                    {/if}
-                  </div>
-                {:else if n.metadata?.real_intent}
-                  {@const m = n.metadata}
-                  <div class="wa-analysis {m.boundary_alert ? 'has-boundary' : ''}">
-                    {#if m.boundary_alert}
-                      <div class="wa-boundary">⚠ {m.boundary_type ? m.boundary_type.toUpperCase() + ' ' : ''}BOUNDARY: {m.boundary_alert}</div>
-                    {/if}
-                    {#if m.real_intent}<div class="wa-field intent">Real intent: {m.real_intent}</div>{/if}
-                    {#if m.psychological_state}<div class="wa-field state">State: {m.psychological_state}</div>{/if}
-                    {#if m.business_assessment}<div class="wa-field biz">Business: {m.business_assessment}</div>{/if}
-                    {#if m.best_next_step}<div class="wa-field next">Next step: {m.best_next_step}</div>{/if}
-                    {#if m.response_suggestion}
-                      <div class="wa-reply-wrap">
-                        <span class="wa-reply-text">{m.response_suggestion}</span>
-                        <button class="wa-copy-btn" onclick={() => navigator.clipboard.writeText(m.response_suggestion)}>Copy</button>
-                      </div>
-                    {/if}
-                  </div>
-                {:else}
-                  <div class="inbox-msg">{n.message}</div>
-                {/if}
-                {#if n.patch_name}<div class="inbox-patch">via {n.patch_name}</div>{/if}
-              </div>
-            {/each}
-          {:else}
-            <p class="empty-sm" style="padding:8px 0;color:#333">Nothing today.</p>
-          {/if}
-          {#if olderInbox.length}
-            <div class="year-today-sep" style="margin-top:10px;opacity:.4">EARLIER</div>
-            {#each olderInbox as n (n.id)}
-              <div class="inbox-item read" style="opacity:.35">
-                <div class="inbox-item-header">
-                  {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing'}<span class="inbox-type-badge br">✦ AI</span>{:else if n.metadata?.real_intent}<span class="inbox-type-badge wa">📱</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
-                  <span class="inbox-code">{n.song_code}</span>
-                  {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
-                  <span class="inbox-title">{n.song_title}</span>
-                  <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
-                  <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
-                </div>
-                {#if n.type === 'briefing' || n.type === 'scout'}
-                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*?(?=\n## )/m, '').trim() : n.message}
-                  {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
-                    <div class="chart-grid">
-                      {#each [
-                        {key:'spotify_global', label:'🌍 SPOTIFY GLOBAL'},
-                        {key:'spotify_de', label:'🇩🇪 SPOTIFY DE'},
-                        {key:'tiktok', label:'📱 TIKTOK'},
-                        {key:'youtube', label:'▶ YOUTUBE'}
-                      ] as chart}
-                        {#if chart.key === 'tiktok'}
-                          <div class="tiktok-col">
-                            <div class="chart-title">{chart.label}</div>
-                            {#each (n.metadata.tiktok || []) as t, i}
-                              <div class="chart-track-row">
-                                <span class="chart-pos">{i+1}</span>
-                                <div class="chart-track-info">
-                                  {#if typeof t === 'string'}
-                                    <span class="chart-track-artist">{t}</span>
-                                  {:else}
-                                    <span class="chart-track-artist">{t.artist || ''}</span>
-                                    <span class="chart-track-title-text">{t.title || ''}</span>
-                                  {/if}
-                                </div>
-                                <div class="chart-track-actions">
-                                  {#if typeof t !== 'string' && t.spotify_id}
-                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
-                                  {/if}
-                                  {#if typeof t !== 'string'}
-                                    {#if !librarySpotifyIds.has(t.spotify_id)}
-                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                                    {:else}
-                                      <span class="in-library-badge">✓</span>
-                                    {/if}
-                                  {/if}
-                                </div>
-                              </div>
-                            {/each}
-                          </div>
-                        {:else}
-                          <div class="chart-col">
-                            <div class="chart-title">{chart.label}</div>
-                            {#each (n.metadata[chart.key] || []) as t, i}
-                              <div class="chart-track-row">
-                                <span class="chart-pos">{i+1}</span>
-                                <div class="chart-track-info">
-                                  {#if typeof t === 'string'}
-                                    <span class="chart-track-artist">{t}</span>
-                                  {:else}
-                                    <span class="chart-track-artist">{t.artist || ''}</span>
-                                    <span class="chart-track-title-text">{t.title || ''}</span>
-                                  {/if}
-                                </div>
-                                <div class="chart-track-actions">
-                                  {#if typeof t !== 'string' && t.spotify_id}
-                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
-                                  {/if}
-                                  {#if typeof t !== 'string'}
-                                    {#if !librarySpotifyIds.has(t.spotify_id)}
-                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                                    {:else}
-                                      <span class="in-library-badge">✓</span>
-                                    {/if}
-                                  {/if}
-                                </div>
-                              </div>
-                            {/each}
-                          </div>
-                        {/if}
-                      {/each}
-                    </div>
-                  {/if}
-                  {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
-                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\W/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
-                    {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
-                    {#if uniqueScoutTracks.length}
-                      <div class="suggested-tracks">
-                        <div class="chart-title" style="margin-bottom:6px">ALSO MENTIONED</div>
-                        {#each uniqueScoutTracks as t}
-                          <div class="chart-track-row">
-                            <div class="chart-track-info">
-                              <span class="chart-track-artist">{t.artist || ''}</span>
-                              <span class="chart-track-title-text">{t.title || ''}</span>
-                            </div>
-                            <div class="chart-track-actions">
-                              {#if !librarySpotifyIds.has(t.spotify_id)}
-                                <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                              {:else}
-                                <span class="in-library-badge">✓</span>
-                              {/if}
-                            </div>
-                          </div>
-                        {/each}
-                      </div>
-                    {/if}
-                  {/if}
-                  <div class="agent-output">{@html parseAgentOutput(scoutMsg)}</div>
-                {:else if n.type === 'scout_articles'}
-                  <div class="articles-block">
-                    <div class="articles-header" onclick={() => openArticles[n.id] = !openArticles[n.id]}>
-                      <span class="articles-count">{n.metadata?.article_count || '?'} sources</span>
-                      <span class="articles-toggle">{openArticles[n.id] ? '▲' : '▼'}</span>
-                    </div>
-                    {#if openArticles[n.id]}
-                      <div class="agent-output">{@html parseAgentOutput(n.message)}</div>
-                    {/if}
-                  </div>
-                {:else}
-                  <div class="inbox-msg">{n.message}</div>
-                {/if}
-              </div>
-            {/each}
-          {/if}
-        </div>
-      {/if}
-
     </div>
+
   </div>
 
   <div class="side">
@@ -2029,6 +1929,18 @@ ${mozartContext}`
   .wa-reply-text { font-size: 11px; color: #cec9c1; flex: 1; line-height: 1.5; }
   .wa-copy-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 2px 7px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .wa-copy-btn:hover { color: #c9a84c; border-color: #c9a84c; }
+  .wa-analyze-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .wa-contact-sel { background: #0a0a0a; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; border-radius: 3px; flex: 1; min-width: 140px; }
+  .wa-contact-sel:focus { border-color: rgba(201,168,76,.4); }
+  .wa-result { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 12px; background: #111; border-radius: 4px; border: 1px solid #252525; }
+  .wa-result-row { display: flex; align-items: center; gap: 8px; }
+  .wa-result-section { display: flex; flex-direction: column; gap: 3px; }
+  .wa-result-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; color: rgba(201,168,76,.6); text-transform: uppercase; }
+  .wa-result-text { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; line-height: 1.6; }
+  .wa-urgency-val { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 2px; }
+  .wa-urgency-val.urgency-high { background: rgba(224,90,74,.15); color: #e05a4a; }
+  .wa-urgency-val.urgency-medium { background: rgba(201,168,76,.15); color: #c9a84c; }
+  .wa-urgency-val.urgency-low { background: rgba(76,175,130,.1); color: #4caf82; }
 
   /* WhatsApp MESSAGES section */
   .ref-item { border-left: 2px solid #c9a84c; background: rgba(201,168,76,.03); padding: 6px 10px; margin-bottom: 5px; border-radius: 0 3px 3px 0; }

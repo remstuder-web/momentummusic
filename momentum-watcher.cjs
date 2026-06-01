@@ -11092,6 +11092,100 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── POST /analyze-whatsapp-contact — on-demand conversation analysis ─────────
+  if (req.method === 'POST' && req.url === '/analyze-whatsapp-contact') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const { contactName } = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!contactName?.trim()) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'contactName required' })); return }
+        const dbPath = whatsappDbPath || WHATSAPP_DB_PATH
+        if (!Database) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: 'better-sqlite3 not available' })); return }
+        if (!fs.existsSync(dbPath)) { res.writeHead(404); res.end(JSON.stringify({ ok: false, error: 'WhatsApp DB not found' })); return }
+
+        const apiKey = process.env.ANTHROPIC_API_KEY
+        if (!apiKey) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: 'No ANTHROPIC_API_KEY set' })); return }
+
+        // Read last 20 messages for this contact
+        const db = new Database(dbPath, { readonly: true, fileMustExist: true })
+        let msgs
+        try {
+          msgs = db.prepare(`
+            SELECT m.ZTEXT AS text, m.ZMESSAGEDATE AS date, m.ZISFROMME AS is_from_me,
+                   s.ZPARTNERNAME AS partner_name, s.ZCONTACTJID AS jid
+            FROM ZWAMESSAGE m
+            JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK
+            WHERE (s.ZPARTNERNAME LIKE ? OR s.ZCONTACTJID LIKE ?)
+              AND m.ZTEXT IS NOT NULL AND m.ZTEXT != ''
+            ORDER BY m.ZMESSAGEDATE DESC
+            LIMIT 20
+          `).all(`%${contactName.trim()}%`, `%${contactName.trim()}%`)
+        } finally { db.close() }
+
+        if (!msgs?.length) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: `No messages found for "${contactName}"` }))
+          return
+        }
+
+        // Format messages (oldest first for Claude)
+        const formatted = msgs.slice().reverse().map(m => {
+          const who = m.is_from_me ? 'Remo' : (m.partner_name || contactName)
+          const ts = new Date((m.date + 978307200) * 1000).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          return `[${ts}] ${who}: ${m.text}`
+        }).join('\n')
+
+        const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 600,
+            system: `You are a relationship intelligence advisor for Remo, a professional music producer. Analyze conversations concisely and return ONLY valid JSON — no other text.`,
+            messages: [{
+              role: 'user',
+              content: `Analyze this WhatsApp conversation with ${contactName} (last ${msgs.length} messages). Return JSON with these exact keys:
+{
+  "summary": "2-3 sentence summary of the conversation",
+  "real_intent": "what they actually want or are trying to achieve",
+  "tone": "emotional tone (e.g. friendly, pushy, anxious, professional)",
+  "opportunities": "any business or creative opportunities visible in this conversation",
+  "recommended_response": "suggested next message from Remo if a reply is needed, or null",
+  "urgency": "high | medium | low"
+}
+
+Conversation:
+${formatted}`
+            }]
+          })
+        })
+        const claudeData = await claudeRes.json()
+        const raw = claudeData.content?.[0]?.text || ''
+        let analysis
+        try {
+          const jsonMatch = raw.match(/\{[\s\S]*\}/)
+          analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { summary: raw, real_intent: '', tone: '', opportunities: '', recommended_response: null, urgency: 'medium' }
+        } catch(e) {
+          analysis = { summary: raw, real_intent: '', tone: '', opportunities: '', recommended_response: null, urgency: 'medium' }
+        }
+
+        if (claudeData.usage) fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
+          method: 'POST', headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ endpoint: 'analyze-whatsapp-contact', model: 'claude-haiku-4-5-20251001', input_tokens: claudeData.usage.input_tokens, output_tokens: claudeData.usage.output_tokens, cost_usd: (claudeData.usage.input_tokens * 0.00000025) + (claudeData.usage.output_tokens * 0.00000125) })
+        }).catch(() => {})
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, contact: contactName, message_count: msgs.length, ...analysis }))
+      } catch(e) {
+        console.error('analyze-whatsapp-contact error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── GET /whatsapp-backfill ────────────────────────────────────────────────
   if (req.method === 'GET' && req.url.startsWith('/whatsapp-backfill')) {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -13612,7 +13706,7 @@ server.listen(PORT, '127.0.0.1', () => {
     whatsappDbPath = WHATSAPP_DB_PATH
     console.log('✓ WhatsApp DB found:', whatsappDbPath)
     setInterval(pollWhatsApp, 120000)
-    setInterval(flushWhatsappBuffer, 5 * 60 * 1000)
+    // flushWhatsappBuffer disabled — on-demand analysis via /analyze-whatsapp-contact instead
   } else {
     exec(`find /Users/remo/Library -name "ChatStorage.sqlite" -path "*whatsapp*" 2>/dev/null`, (err, stdout) => {
       const p = stdout.trim().split('\n').filter(Boolean)[0]

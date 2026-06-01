@@ -665,7 +665,7 @@
     player.play().catch(() => {})
   }
 
-  function formatTime(s) {
+  function formatAudioTime(s) {
     if (!s || isNaN(s)) return '0:00'
     const m = Math.floor(s / 60)
     const sec = Math.floor(s % 60)
@@ -3022,7 +3022,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                         {currentSongId === String(song.id) && isPlaying ? '⏸' : '▶'}
                       </button>
                       {#if currentSongId === String(song.id)}
-                        <span class="time">{formatTime(currentTime)} / {formatTime(duration)}</span>
+                        <span class="time">{formatAudioTime(currentTime)} / {formatAudioTime(duration)}</span>
                         <input type="range" class="seek-bar"
                           min="0" max={duration || 100} value={currentTime}
                           oninput={e => { if (sharedPlayer) sharedPlayer.currentTime = Number(e.target.value) }} />

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte — DONE
+TASK: S button quick submission selection + floating bar
+WHAT: S button now toggles song into/out of pending selection (green fill = selected, outline = not). Floating bar appears at screen bottom when songs selected: "X songs selected → [Create Submission]". Create Submission builds patches row (code-only name, status open, dropped_files with prev_sent from patch_songs), inserts patch_songs rows, clears selection, shows toast. Old picker dropdown removed. Toast auto-dismisses after 4s.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-01] momentum-watcher.cjs — DONE
 TASK: Demo auto-tag expanded tag vocabulary
 WHAT: Tag prompt now includes instrumentation tags (guitar, piano, strings, orchestral, brass, flute, organic, synthesizer, vintage) + genre tags (rap, pop, hiphop) alongside existing mood/genre vocabulary; prompt updated to say "genre, mood, or instrumentation"

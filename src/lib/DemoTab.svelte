@@ -71,7 +71,6 @@
   let expandedId = $state(null)
   function toggleDemo(song) {
     expandedId = expandedId === song.id ? null : song.id
-    showBatchPicker = {}
   }
   let tagInput = $state({})
   let refInput = $state({})
@@ -769,7 +768,9 @@
   let songsInBatches = $derived(new Set(Object.keys(songBatchCount).map(Number)))
   let freeSongs = $derived(songs.filter(s => !songsInBatches.has(s.id)))
   let projectSongsForBatch = $derived(projectSongsAll.filter(s => !songsInBatches.has(s.id)))
-  let showBatchPicker = $state({})
+  let selectedForSub = $state(new Set())
+  let toast = $state(null)
+  let toastTimer = null
   let showContactPicker = $state({})
   let allTagsInSystem = $derived(
     [...new Set(songs.flatMap(s => s.tags || []))].sort()
@@ -786,6 +787,56 @@
 
   function openSpotifyPopup(url) {
     window.open(url, 'spotify_preview', 'width=400,height=600,left=100,top=100,toolbar=no,menubar=no')
+  }
+
+  function showToast(msg) {
+    if (toastTimer) clearTimeout(toastTimer)
+    toast = msg
+    toastTimer = setTimeout(() => { toast = null }, 4000)
+  }
+
+  function toggleSubSelect(songId) {
+    const next = new Set(selectedForSub)
+    if (next.has(songId)) next.delete(songId)
+    else next.add(songId)
+    selectedForSub = next
+  }
+
+  async function createSubmissionFromSelection() {
+    if (!selectedForSub.size) return
+    const code = await generateSubmissionCode()
+    const selectedSongs = songs.filter(s => selectedForSub.has(s.id))
+
+    // Build dropped_files with prev_sent from existing patch_songs
+    const dropFiles = []
+    for (const song of selectedSongs) {
+      let prev_sent = []
+      const { data: ps } = await supabase.from('patch_songs')
+        .select('patches(name, status)').eq('song_id', song.id)
+      prev_sent = (ps || []).filter(r => r.patches?.status === 'sent').map(r => r.patches?.name).filter(Boolean)
+      dropFiles.push({
+        filename: song.audio_path || '',
+        title:    song.title || song.code || '',
+        code:     song.code || '',
+        bpm:      song.tempo || null,
+        song_id:  song.id,
+        prev_sent
+      })
+    }
+
+    const { data: patch, error } = await supabase.from('patches')
+      .insert({ name: code, status: 'open', artist: '', contact_id: null, dropped_files: dropFiles })
+      .select().single()
+    if (error || !patch) { showToast('Error creating submission'); return }
+
+    if (selectedSongs.length) {
+      await supabase.from('patch_songs').insert(selectedSongs.map(s => ({ patch_id: patch.id, song_id: s.id })))
+    }
+
+    patches = [{ ...patch, songs: selectedSongs }, ...patches]
+    subDropFiles = { ...subDropFiles, [patch.id]: dropFiles }
+    selectedForSub = new Set()
+    showToast(`Submission ${code} created — fill in details in Submissions tab`)
   }
 
   // Mozart
@@ -833,7 +884,7 @@
   onDestroy(() => clearInterval(pollInterval))
 </script>
 
-<svelte:window onclick={() => { if (Object.values(showBatchPicker).some(Boolean)) showBatchPicker = {}; if (showPatchArtistPicker) showPatchArtistPicker = false; if (Object.values(showGenrePicker).some(Boolean)) showGenrePicker = {}; if (showTagDropdown) showTagDropdown = false }} />
+<svelte:window onclick={() => { if (Object.values(showGenrePicker).some(Boolean)) showGenrePicker = {}; if (showTagDropdown) showTagDropdown = false }} />
 <div class="demo-layout">
 <div class="demo-main">
 
@@ -960,29 +1011,9 @@
             <div class="head-right" onclick={e => e.stopPropagation()}>
               <div class="head-badges" onclick={e => e.stopPropagation()}>
                 <div class="s-wrap">
-                  {#if showBatchPicker[song.id]}
-                    {@const openSubs = [...patches]
-                      .filter(p => p.status !== 'sent' && p.status !== 'deleted')
-                      .sort((a,b) => (a.songs.length === 0 ? -1 : 1) - (b.songs.length === 0 ? -1 : 1) || (a.created_at > b.created_at ? -1 : 1))}
-                    <div class="s-picker-above" onclick={e => e.stopPropagation()}>
-                      {#if openSubs.length}
-                        <div class="s-pick-list">
-                          {#each openSubs as sub}
-                            {@const bContact = connections.find(c => c.id == sub.contact_id)}
-                            <button class="s-pick-opt" onclick={() => { addSongToPatch(sub, song); showBatchPicker = {...showBatchPicker, [song.id]: false} }}>
-                              <span class="s-pick-name">{sub.name}</span>
-                              {#if bContact}<span class="s-pick-contact">→ {bContact.name}</span>{/if}
-                              <span class="s-pick-count">{sub.songs.length} songs</span>
-                            </button>
-                          {/each}
-                        </div>
-                      {:else}
-                        <div class="s-pick-empty">No open submissions — create one first</div>
-                      {/if}
-                    </div>
-                  {/if}
-                  <button class="s-btn {songBatchCount[song.id] >= 2 ? 'multi-batch' : songBatchCount[song.id] === 1 ? 'in-batch' : ''}"
-                    onclick={e => { e.stopPropagation(); showBatchPicker = {...showBatchPicker, [song.id]: !showBatchPicker[song.id]} }}>S</button>
+                  <button class="s-btn {selectedForSub.has(song.id) ? 'sel' : songBatchCount[song.id] >= 2 ? 'multi-batch' : songBatchCount[song.id] === 1 ? 'in-batch' : ''}"
+                    onclick={e => { e.stopPropagation(); toggleSubSelect(song.id) }}
+                    title={selectedForSub.has(song.id) ? 'Deselect' : 'Select for submission'}>S</button>
                 </div>
               </div>
               {#key audioTick}
@@ -1311,6 +1342,19 @@
 </div>
 
 </div><!-- end demo-layout -->
+
+{#if selectedForSub.size > 0 && view === 'demos'}
+  <div class="sub-float-bar">
+    <span class="sub-float-count">{selectedForSub.size} {selectedForSub.size === 1 ? 'song' : 'songs'} selected</span>
+    <span class="sub-float-arrow">→</span>
+    <button class="sub-float-create" onclick={createSubmissionFromSelection}>Create Submission</button>
+    <button class="sub-float-clear" onclick={() => selectedForSub = new Set()}>✕</button>
+  </div>
+{/if}
+
+{#if toast}
+  <div class="toast">{toast}</div>
+{/if}
 
 {#if showPatchModal}
   <div class="modal-bg" onclick={() => { showPatchModal = false; newPatchContact = ''; showNewPatchContactPicker = false }}>
@@ -1653,4 +1697,17 @@
   .new-demo-dropzone.drag-over .new-demo-drop-hint { color: #4caf82; }
   .demo-add-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; white-space: nowrap; }
   .demo-add-btn:hover { background: #d4b660; }
+
+  .s-btn.sel { background: #4caf82; border-color: #4caf82; color: #0a0a0a; }
+  .s-btn.sel:hover { background: #3d9e72; border-color: #3d9e72; }
+
+  .sub-float-bar { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: #1c1c1c; border: 1px solid rgba(201,168,76,.4); border-radius: 6px; box-shadow: 0 8px 32px rgba(0,0,0,.7); z-index: 200; white-space: nowrap; }
+  .sub-float-count { font-family: 'Space Mono', monospace; font-size: 12px; color: #cec9c1; }
+  .sub-float-arrow { font-family: 'Space Mono', monospace; font-size: 14px; color: #555; }
+  .sub-float-create { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; padding: 8px 18px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
+  .sub-float-create:hover { background: #d4b660; }
+  .sub-float-clear { background: transparent; border: none; color: #555; font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; }
+  .sub-float-clear:hover { color: #9e9690; }
+
+  .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); padding: 10px 20px; background: #252525; border: 1px solid #4caf82; border-radius: 4px; font-family: 'Space Mono', monospace; font-size: 12px; color: #4caf82; z-index: 300; box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none; white-space: nowrap; }
 </style>

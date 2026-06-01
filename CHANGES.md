@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-01] src/lib/DemoTab.svelte — DONE
+TASK: Fix submission duplication + editable artist/connection
+WHAT: (1) Deduplicate song list render — compute dfSongIds from dropped_files, filter patch.songs to exclude already-shown songs; patch_songs rows kept for in-batch indicator. (2) Added patch-meta-edit section at top of every expanded patch: artist name input (saves on blur) + connection select (saves on change), both always editable with placeholder text.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-01] src/lib/DemoTab.svelte — DONE
 TASK: S button quick submission selection + floating bar
 WHAT: S button now toggles song into/out of pending selection (green fill = selected, outline = not). Floating bar appears at screen bottom when songs selected: "X songs selected → [Create Submission]". Create Submission builds patches row (code-only name, status open, dropped_files with prev_sent from patch_songs), inserts patch_songs rows, clears selection, shows toast. Old picker dropdown removed. Toast auto-dismisses after 4s.
 RESULT: builds clean

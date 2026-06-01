@@ -1197,7 +1197,9 @@
   {:else}
     <div class="list">
       {#each sortedPatches as patch (patch.id)}
-        {@const dropCount = (subDropFiles[patch.id]?.length || 0) + patch.songs.length}
+        {@const dfSongIds = new Set((subDropFiles[patch.id] || []).map(f => f.song_id).filter(Boolean))}
+        {@const dedupedSongs = patch.songs.filter(s => !dfSongIds.has(s.id))}
+        {@const dropCount = (subDropFiles[patch.id]?.length || 0) + dedupedSongs.length}
         <div class="patch-card {expandedPatchId === patch.id ? 'exp' : ''}">
           <div class="patch-head" onclick={() => expandedPatchId = expandedPatchId === patch.id ? null : patch.id}>
             <div class="patch-info">
@@ -1229,6 +1231,28 @@
           {#if expandedPatchId === patch.id}
             <div class="patch-body">
 
+              <!-- Always-editable artist + connection -->
+              <div class="patch-meta-edit">
+                <div class="patch-meta-field">
+                  <label class="patch-meta-lbl">ARTIST / LABEL</label>
+                  <input class="inp-sm" placeholder="Add artist name..."
+                    value={patch.artist || ''}
+                    onblur={e => { const v = e.target.value.trim(); if (v !== (patch.artist || '')) updatePatchField(patch, 'artist', v) }}
+                    onkeydown={e => e.key === 'Enter' && e.target.blur()} />
+                </div>
+                <div class="patch-meta-field">
+                  <label class="patch-meta-lbl">SEND TO</label>
+                  <select class="inp-sm"
+                    value={String(patch.contact_id || '')}
+                    onchange={e => updatePatchField(patch, 'contact_id', e.target.value || null)}>
+                    <option value="">Add destination...</option>
+                    {#each connections.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')) as c}
+                      <option value={String(c.id)}>{c.name}</option>
+                    {/each}
+                  </select>
+                </div>
+              </div>
+
               {#if patch.status !== 'sent'}
                 <!-- Drop zone -->
                 <div class="sub-drop-zone {subDragging[patch.id] ? 'drag-over' : ''}"
@@ -1258,7 +1282,7 @@
                         <button class="del" onclick={() => removeDropFile(patch.id, df.filename)}>×</button>
                       </div>
                     {/each}
-                    {#each patch.songs as song}
+                    {#each dedupedSongs as song}
                       <div class="patch-song-row">
                         <span class="song-code-in-list">{song.code}</span>
                         <span class="sep-dot">·</span>
@@ -1697,6 +1721,10 @@
   .new-demo-dropzone.drag-over .new-demo-drop-hint { color: #4caf82; }
   .demo-add-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; white-space: nowrap; }
   .demo-add-btn:hover { background: #d4b660; }
+
+  .patch-meta-edit { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-bottom: 4px; border-bottom: 1px solid #1c1c1c; margin-bottom: 4px; }
+  .patch-meta-field { display: flex; flex-direction: column; gap: 4px; }
+  .patch-meta-lbl { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #555; }
 
   .s-btn.sel { background: #4caf82; border-color: #4caf82; color: #0a0a0a; }
   .s-btn.sel:hover { background: #3d9e72; border-color: #3d9e72; }

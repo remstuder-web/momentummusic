@@ -330,73 +330,6 @@
     deposits = deposits.filter(d => d.id !== id)
   }
 
-  // ── System costs (static) ──────────────────────────────────────────────────
-  const systemCosts = [
-    { name: 'Railway EU West',  note: 'Hermes / PHANTOM backend', amount: 5.00 },
-  ]
-  const systemCostsTotal = systemCosts.reduce((s, c) => s + c.amount, 0)
-
-  // ── Hermes credit balance ──────────────────────────────────────────────────
-  let hermesCredits      = $state(null)   // numeric if known
-  let hermesCreditsLow   = $state(false)
-  let hermesCreditsUnavailable = $state(false)
-
-  // ── OpenRouter balance ─────────────────────────────────────────────────────
-  let openRouterBalance  = $state(null)
-  let openRouterLow      = $state(false)
-  let openRouterNoKey    = $state(false)
-  let openRouterUnavail  = $state(false)
-
-
-  async function loadHermesCredits() {
-    try {
-      const res = await fetch('http://localhost:4242/status', {
-        signal: AbortSignal.timeout(3000)
-      })
-      const data = await res.json()
-      hermesCreditsUnavailable = false
-      if (data.hermes_credits != null) {
-        hermesCredits = parseFloat(data.hermes_credits)
-        hermesCreditsLow = hermesCredits < 5
-        if (typeof window !== 'undefined') localStorage.setItem('mm_hermes_credits_last', hermesCredits.toString())
-      } else {
-        // No explicit field — infer from last_watcher_error
-        const err = (data.last_watcher_error || '').toLowerCase()
-        if (err.includes('credit balance') || err.includes('credits')) {
-          // Only flag low if error is within the last 24 hours
-          const tsMatch = (data.last_watcher_error || '').match(/\(([^)]+)\)\s*$/)
-          const errorAge = tsMatch ? Date.now() - new Date(tsMatch[1]).getTime() : 0
-          if (errorAge < 24 * 60 * 60 * 1000) hermesCreditsLow = true
-        }
-        // Keep last known numeric value if we had one
-        const last = typeof window !== 'undefined' ? localStorage.getItem('mm_hermes_credits_last') : null
-        if (last && hermesCredits === null) hermesCredits = parseFloat(last)
-      }
-    } catch(e) {
-      hermesCreditsUnavailable = true
-      const last = typeof window !== 'undefined' ? localStorage.getItem('mm_hermes_credits_last') : null
-      if (last) hermesCredits = parseFloat(last)
-    }
-  }
-
-  async function loadOpenRouterBalance() {
-    try {
-      const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
-        headers: { 'Authorization': 'Bearer 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' },
-        signal: AbortSignal.timeout(5000)
-      })
-      const data = await res.json()
-      if (data.data?.limit_remaining != null) {
-        openRouterBalance = parseFloat(data.data.limit_remaining)
-        openRouterLow = openRouterBalance < 2
-        openRouterNoKey = false
-        openRouterUnavail = false
-      } else {
-        openRouterUnavail = true
-      }
-    } catch(e) { openRouterUnavail = true }
-  }
-
   // ── Strategy Decisions ────────────────────────────────────────────────────
   let { pendingStrategyCount = $bindable(0) } = $props()
 
@@ -474,9 +407,7 @@
     loadPhantomBrief()
     loadTrades()
     loadInboxFallback()
-    loadHermesCredits()
     loadCronLogs()
-    loadOpenRouterBalance()
     loadDashboard()
     loadDeposits()
     loadStrategyDecisions()
@@ -484,9 +415,7 @@
 
     const pi = setInterval(loadPhantomStatus, 60000)
     const ti = setInterval(loadTrades, 15000)
-    const hi = setInterval(loadHermesCredits, 5 * 60 * 1000)
     const ci = setInterval(loadCronLogs, 5 * 60 * 1000)
-    const ori = setInterval(loadOpenRouterBalance, 10 * 60 * 1000)
     const di  = setInterval(loadDashboard, 2 * 60 * 1000)
 
     const ps = supabase.channel('phantom_status')
@@ -506,8 +435,7 @@
       .subscribe()
 
     return () => {
-      clearInterval(pi); clearInterval(ti); clearInterval(hi); clearInterval(ci)
-      clearInterval(ori); clearInterval(di)
+      clearInterval(pi); clearInterval(ti); clearInterval(ci); clearInterval(di)
       supabase.removeChannel(ps); supabase.removeChannel(ts); supabase.removeChannel(ss)
       supabase.removeChannel(ds); supabase.removeChannel(strat)
     }
@@ -929,65 +857,6 @@
     {/each}
   </div>
 
-  <!-- ══ SYSTEM COSTS ════════════════════════════════════════════════════════ -->
-  <div class="sh" style="margin-top:28px;display:flex;align-items:center;justify-content:space-between">
-    <span>System Costs</span>
-    <span class="subs-total">${systemCostsTotal.toFixed(2)}/mo</span>
-  </div>
-  <div class="cost-list">
-    {#each systemCosts as cost}
-      <div class="cost-row">
-        <span class="cost-name">{cost.name}</span>
-        <span class="cost-note">{cost.note}</span>
-        <span class="cost-amt">${cost.amount.toFixed(2)}/mo</span>
-      </div>
-    {/each}
-
-    <!-- Hermes credit balance (live from watcher) -->
-    <div class="cost-row credits-row" class:credits-low={hermesCreditsLow}>
-      <span class="cost-name">Hermes Credits</span>
-      <span class="cost-note">
-        {#if hermesCredits != null}
-          <span style="color:{hermesCreditsLow ? '#c9784c' : '#9e9690'}">${hermesCredits.toFixed(2)}</span>{#if hermesCreditsUnavailable}<span class="credits-stale"> · last known</span>{/if}
-        {:else if hermesCreditsUnavailable}
-          <span style="color:#555">unavailable</span>
-        {:else}
-          <span style="color:#555">—</span>
-        {/if}
-      </span>
-      <a class="credits-badge {hermesCreditsLow ? 'badge-topup' : 'badge-ok'}"
-         href="https://hermesagent.ai/billing" target="_blank" rel="noopener">
-        {hermesCreditsLow ? 'TOP UP NEEDED' : 'OK'}
-      </a>
-    </div>
-
-    <!-- OpenRouter balance -->
-    <div class="cost-row credits-row" class:credits-low={openRouterLow}>
-      <span class="cost-name">OpenRouter</span>
-      <span class="cost-note">
-        {#if openRouterBalance != null}
-          <span style="color:{openRouterLow ? '#c9784c' : '#9e9690'}">${openRouterBalance.toFixed(2)} remaining</span>
-        {:else if openRouterNoKey}
-          <span style="color:#555">add key to .env</span>
-        {:else if openRouterUnavail}
-          <span style="color:#555">unavailable</span>
-        {:else}
-          <span style="color:#555">—</span>
-        {/if}
-      </span>
-      {#if openRouterBalance != null}
-        <span class="credits-badge {openRouterLow ? 'badge-topup' : 'badge-ok'}">{openRouterLow ? 'TOP UP' : 'OK'}</span>
-      {:else}
-        <span class="credits-badge badge-dim">—</span>
-      {/if}
-    </div>
-
-    <div class="total-bar" style="margin-top:6px">
-      <span class="total-lbl">Infrastructure total</span>
-      <span class="total-amt" style="font-size:13px">${systemCostsTotal.toFixed(2)}/mo</span>
-    </div>
-  </div>
-
   <!-- ══ STRATEGY REVIEW ═══════════════════════════════════════════════════ -->
   <div class="sh" style="margin-top:32px;display:flex;align-items:center;justify-content:space-between">
     <span>STRATEGY REVIEW</span>
@@ -1077,9 +946,6 @@
   .empty{font-family:'Space Mono',monospace;font-size:12px;color:#9e9690;padding:32px 0;text-align:center}
   .empty-sm{font-family:'DM Sans',sans-serif;font-size:11px;color:#9e9690;padding:4px 0 8px}
   .section-title{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(201,168,76,.85);margin:0 0 4px}
-  .total-bar{border:1px solid rgba(201,168,76,.2);border-radius:3px;padding:8px 12px;background:rgba(201,168,76,.04);display:flex;align-items:center;justify-content:space-between;margin-top:8px}
-  .total-lbl{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#cec9c1}
-  .total-amt{font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#c9a84c}
 
   /* Bot */
   .bot-badge{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;padding:2px 7px;border-radius:2px;letter-spacing:.08em}
@@ -1175,20 +1041,6 @@
   .cron-last{font-family:'Space Mono',monospace;font-size:9px;color:#4caf82}
 
   /* System costs */
-  .cost-list{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
-  .cost-row{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:3px;background:#1c1c1c;border:0.5px solid #303030}
-  .cost-name{font-family:'Space Mono',monospace;font-size:10px;color:#cec9c1;width:140px;flex-shrink:0}
-  .cost-note{font-family:'DM Sans',sans-serif;font-size:11px;color:#9e9690;flex:1}
-  .cost-amt{font-family:'Space Mono',monospace;font-size:10px;color:#cec9c1;flex-shrink:0}
-  .credits-row{transition:background .3s,border-color .3s}
-  .credits-row.credits-low{border-color:rgba(224,90,74,.4);background:rgba(224,90,74,.06)}
-  .credits-stale{color:#555;font-size:10px}
-  .credits-badge{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.06em;text-decoration:none;padding:3px 9px;border-radius:2px;flex-shrink:0;white-space:nowrap;transition:opacity .15s}
-  .credits-badge:hover{opacity:.8}
-  .badge-ok{background:rgba(76,175,130,.12);color:#4caf82;border:1px solid rgba(76,175,130,.25)}
-  .badge-topup{background:rgba(224,90,74,.15);color:#e05a4a;border:1px solid rgba(224,90,74,.35);animation:topup-pulse 2s ease-in-out infinite}
-  @keyframes topup-pulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 8px rgba(224,90,74,.3)}}
-
   /* Mozart */
   .mozart-block{margin-top:16px;border-top:1px solid #1c1c1c;padding-top:12px;display:flex;flex-direction:column;gap:8px}
   .mozart-title-row{display:flex;align-items:center;justify-content:space-between}
@@ -1215,7 +1067,6 @@
   .equity-sep{color:#555;font-size:10px}
 
   /* Dim credits badge */
-  .badge-dim{background:transparent;color:#333;border:1px solid #222}
 
   /* Trading Dashboard */
   .dash-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:6px}

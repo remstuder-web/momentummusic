@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-01] ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: Fix artist spaces preserved in filename, remove code from project headers
+WHAT: (1) All artistClean computations: removed .replace(/\s+/g,'_') so "Pilar Vega"→"PILAR VEGA" (space kept). Applied to saveSongAudio overwrite+non-overwrite, handleInstrumentalDrop, handleStemsZipDrop, getPublicFilename (ProjectsTab) and migration endpoint + watcher getPublicFilename. (2) Removed <span class="song-code">{song.code}</span> from project song header. (3) Updated migration endpoint to also match already-migrated files by work_data reverse lookup, not just code-prefix — enables re-running to correct any format issue. Re-ran migration: 13 files renamed (PILAR_VEGA→PILAR VEGA etc.), 10 DB rows updated. 2 untracked orphan files renamed directly with mv.
+RESULT: all files in correct format, watcher running
+BLOCKERS: none
+
+## [2026-06-01] ProjectsTab.svelte + momentum-watcher.cjs — DONE
 TASK: Project files: new naming format ARTIST_Title_VNN, rename existing files
 WHAT: (1) saveSongAudio non-overwrite: artistClean = artist.toUpperCase().replace spaces→_, ver = V+1-indexed padded; production=ARTIST_Title_VNN.ext, mixing=ARTIST_Title_MIX_VNN.ext. (2) saveSongAudio overwrite: same format, version from position in versions array. (3) handleInstrumentalDrop: ARTIST_Title_INST_V01.ext (no BPM in name). (4) handleStemsZipDrop: ARTIST_Title_STEMS_VNN.zip, version from dropped filename. (5) getPublicFilename: regex /^\d{8}_/ → /^\d{5,8}_/. (6) POST /rename-existing-project-files: parses code from old filenames, looks up song+project in Supabase, builds new name, renames on disk, updates work_data in DB. Migration result: 16 files renamed, 11 DB rows updated, 4 skipped (.DS_Store only).
 RESULT: all files on disk in new format, watcher running

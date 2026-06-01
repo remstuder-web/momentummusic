@@ -169,7 +169,7 @@
       if (activeV) {
         const oldFilename = activeV.audio_path || ''
         const artistRaw = selectedProject?.artist || ''
-        const artistClean = artistRaw.toUpperCase().replace(/\s+/g, '_').replace(/[<>:"/\\|?*]/g, '').trim()
+        const artistClean = artistRaw.toUpperCase().replace(/[<>:"/\\|?*]/g, '').trim()
         const titlePart = sanitizeTitle(song.title || '')
         const sameTypeVers = wd.versions.filter(v => v.version_type === dir)
         const vIdx = sameTypeVers.findIndex(v => v.id === activeId)
@@ -215,7 +215,7 @@
     const ver = 'V' + String(nextVerNum).padStart(2, '0')
 
     const artistRaw = selectedProject?.artist || ''
-    const artistClean = artistRaw.toUpperCase().replace(/\s+/g, '_').replace(/[<>:"/\\|?*]/g, '').trim()
+    const artistClean = artistRaw.toUpperCase().replace(/[<>:"/\\|?*]/g, '').trim()
     const titlePart = sanitizeTitle(song.title || '')
     const filename = dir === 'mixing'
       ? (artistClean ? `${artistClean}_${titlePart}_MIX_${ver}.${ext}` : `${titlePart}_MIX_${ver}.${ext}`)
@@ -381,7 +381,7 @@
     const safe = s => (s||'').replace(/[<>:"/\\|?*]/g,'').trim()
 
     const ext  = file.name.slice(file.name.lastIndexOf('.'))
-    const artistClean = (artist || '').toUpperCase().replace(/\s+/g, '_').replace(/[<>:"/\\|?*]/g, '').trim()
+    const artistClean = (artist || '').toUpperCase().replace(/[<>:"/\\|?*]/g, '').trim()
     const titlePart = safe(song.title || song.code || '')
     const filename = artistClean
       ? `${artistClean}_${titlePart}_INST_V01${ext}`
@@ -510,7 +510,7 @@
     const ver = 'V' + vNum
     const stemsVersionLabel = ver
 
-    const artistClean = (artist || '').toUpperCase().replace(/\s+/g, '_').replace(/[<>:"/\\|?*]/g, '').trim()
+    const artistClean = (artist || '').toUpperCase().replace(/[<>:"/\\|?*]/g, '').trim()
     const titlePart = safe(song.title || song.code || '')
     const filename = artistClean
       ? `${artistClean}_${titlePart}_STEMS_${ver}.zip`
@@ -717,7 +717,7 @@
     if (!internalFilename) return internalFilename
     const withoutCode = internalFilename.replace(/^\d{5,8}_/, '')
     const artistClean = (artist || '').toUpperCase()
-      .replace(/[^A-Z0-9 ]/g, '').trim().replace(/\s+/g, '_')
+      .replace(/[<>:"/\\|?*]/g, '').trim()
     if (!artistClean || withoutCode.toUpperCase().includes(artistClean)) return withoutCode
     return artistClean + '_' + withoutCode
   }
@@ -2917,7 +2917,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
               <div class="song-head-left" onclick={() => expandSong(song, !expanded)}>
                 <div class="song-info">
                   <div class="code-stars-row">
-                    <span class="song-code">{song.code}</span>
                     <div class="stars" onclick={e => e.stopPropagation()}>
                       {#each [1,2,3] as n}
                         <button class="star {(song.rating||0) >= n ? 'on' : ''}"

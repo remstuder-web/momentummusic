@@ -3055,9 +3055,8 @@ function getPublicFilename(internalFilename, artist, songTitle) {
   // Remove leading 6- or 8-digit code like "260601_" or "26040604_"
   const withoutCode = internalFilename.replace(/^\d{6,8}_/, '')
   const artistClean = (artist || '').toUpperCase()
-    .replace(/[^A-Z0-9 ]/g, '')
+    .replace(/[<>:"/\\|?*]/g, '')
     .trim()
-    .replace(/\s+/g, '_')
   if (!artistClean || withoutCode.toUpperCase().includes(artistClean)) {
     return withoutCode
   }
@@ -12479,24 +12478,42 @@ ${formatted}`
       const projectById = new Map(allProjects.map(p => [p.id, p]))
       const safeStr = s => (s||'').replace(/[<>:"/\\|?*]/g, '').trim()
 
-      function buildNewFilename(filename, folder) {
+      // Build a reverse map: filename → song (from all work_data audio paths)
+      const songByFilename = new Map()
+      for (const song of allSongs) {
+        const wd = song.work_data || {}
+        const paths = [wd.prod_audio, wd.mix_audio, wd.instr_audio, wd.stems_zip,
+          ...(Array.isArray(wd.versions) ? wd.versions.map(v => v.audio_path) : [])
+        ].filter(Boolean)
+        for (const p of paths) songByFilename.set(p, song)
+      }
+
+      function correctFilename(filename, folder, song) {
         const ext = path.extname(filename)
         const nameNoExt = path.basename(filename, ext)
-        const codeMatch = nameNoExt.match(/^(\d{5,8})_/)
-        if (!codeMatch) return null
-        const song = songByCode.get(codeMatch[1])
-        if (!song) return null
         const project = song.project_id ? projectById.get(song.project_id) : null
-        const artist = (project?.artist || '').toUpperCase().replace(/\s+/g, '_').replace(/[<>:"/\\|?*]/g, '').trim()
+        const artist = (project?.artist || '').toUpperCase().replace(/[<>:"/\\|?*]/g, '').trim()
         const title = safeStr(song.title || '')
         if (!title) return null
         const base = artist ? `${artist}_${title}` : title
-        const verMatch = nameNoExt.match(/_v(\d+)/i)
-        if (!verMatch) return null
-        const ver = 'V' + String(parseInt(verMatch[1]) + 1).padStart(2, '0')
-        if (folder === 'mixing')        return `${base}_MIX_${ver}${ext}`
-        if (folder === 'instrumental')  return `${base}_INST_${ver}${ext}`
-        if (folder === 'stems')         return `${base}_STEMS_${ver}.zip`
+        // Extract version tag — old v-lowercase or new V-uppercase
+        const verMatch = nameNoExt.match(/[_]([Vv]\d+)$/) ||
+                         nameNoExt.match(/_(MIX)_([Vv]\d+)$/i) ||
+                         nameNoExt.match(/_(INST)_([Vv]\d+)$/i) ||
+                         nameNoExt.match(/_(STEMS)_([Vv]\d+)$/i)
+        // Re-derive from code-prefix files
+        const oldCodeMatch = nameNoExt.match(/^(\d{5,8})_/)
+        let ver
+        if (oldCodeMatch) {
+          const vm = nameNoExt.match(/_v(\d+)/i)
+          ver = vm ? 'V' + String(parseInt(vm[1]) + 1).padStart(2, '0') : 'V01'
+        } else {
+          const vm = nameNoExt.match(/[_](V\d+)$/i)
+          ver = vm ? vm[1].toUpperCase() : 'V01'
+        }
+        if (folder === 'mixing')       return `${base}_MIX_${ver}${ext}`
+        if (folder === 'instrumental') return `${base}_INST_${ver}${ext}`
+        if (folder === 'stems')        return `${base}_STEMS_${ver}.zip`
         return `${base}_${ver}${ext}`
       }
 
@@ -12504,17 +12521,22 @@ ${formatted}`
       const renameMap = new Map()
       const renamed = [], skipped = []
       const folders = [
-        { dir: PRODUCTION_DIR, folder: 'production' },
-        { dir: MIXING_DIR,     folder: 'mixing' },
-        { dir: STEMS_DIR,      folder: 'stems' },
+        { dir: PRODUCTION_DIR,    folder: 'production' },
+        { dir: MIXING_DIR,        folder: 'mixing' },
+        { dir: STEMS_DIR,         folder: 'stems' },
         { dir: INSTRUMENTALS_DIR, folder: 'instrumental' }
       ]
       for (const { dir, folder } of folders) {
         if (!fs.existsSync(dir)) continue
         const files = fs.readdirSync(dir).filter(f => !fs.statSync(path.join(dir, f)).isDirectory())
         for (const filename of files) {
-          const newFilename = buildNewFilename(filename, folder)
-          if (!newFilename) { skipped.push(`${folder}/${filename} (no match)`); continue }
+          // Look up song: first by code prefix, then by existing work_data reference
+          const nameNoExt = path.basename(filename, path.extname(filename))
+          const codeMatch = nameNoExt.match(/^(\d{5,8})_/)
+          const song = codeMatch ? songByCode.get(codeMatch[1]) : songByFilename.get(filename)
+          if (!song) { skipped.push(`${folder}/${filename} (no song match)`); continue }
+          const newFilename = correctFilename(filename, folder, song)
+          if (!newFilename) { skipped.push(`${folder}/${filename} (no title)`); continue }
           if (newFilename === filename) { skipped.push(`${folder}/${filename} (unchanged)`); continue }
           try {
             fs.renameSync(path.join(dir, filename), path.join(dir, newFilename))

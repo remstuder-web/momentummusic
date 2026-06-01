@@ -818,20 +818,20 @@
 
   const realtimeChannel = supabase
     .channel('demos-realtime')
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'songs',
-      filter: 'project_id=is.null'
-    }, (payload) => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'songs' }, (payload) => {
       if (payload.eventType === 'INSERT') {
-        songs = [payload.new, ...songs]
-      }
-      if (payload.eventType === 'DELETE') {
+        if (payload.new.project_id == null) songs = [payload.new, ...songs]
+      } else if (payload.eventType === 'DELETE') {
         songs = songs.filter(s => s.id !== payload.old.id)
-      }
-      if (payload.eventType === 'UPDATE') {
-        songs = songs.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s)
+      } else if (payload.eventType === 'UPDATE') {
+        if (payload.new.project_id == null) {
+          const exists = songs.some(s => s.id === payload.new.id)
+          songs = exists
+            ? songs.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s)
+            : [payload.new, ...songs]
+        } else {
+          songs = songs.filter(s => s.id !== payload.new.id)
+        }
       }
     })
     .subscribe()
@@ -1028,10 +1028,10 @@
                     {#each KEYS as k}<option value={k}>{k}</option>{/each}
                   </select>
                 </div>
-                <div class="field" style="flex:0 0 auto">
+                <div class="field" style="flex-shrink:0">
                   <label>TEMPO</label>
                   <div style="display:flex;align-items:center;gap:4px">
-                    <input class="inp-sm" type="number" placeholder="120" value={song.tempo || ''} onchange={e => updateTempo(song, parseInt(e.target.value))} style="width:60px" />
+                    <input class="inp-sm" type="number" placeholder="120" value={song.tempo || ''} onchange={e => updateTempo(song, parseInt(e.target.value))} style="width:70px" />
                     {#if song._bpmHalf}
                       <span class="bpm-alt" onclick={() => updateTempo(song, song._bpmHalf)}>½ {song._bpmHalf}</span>
                     {:else if song.tempo}
@@ -1044,18 +1044,19 @@
                     {/if}
                   </div>
                 </div>
+                <div class="field" style="flex-shrink:0">
+                  <label>FEAT.</label>
+                  <input class="inp-sm" placeholder="Collaborator..."
+                    style="width:220px;max-width:220px"
+                    value={song.work_data?.collaborator || ''}
+                    onchange={e => updateCollaborator(song, e.target.value)} />
+                </div>
                 {#if song.audio_path}
                   <button class="reanalyze-btn {song._analyzing ? 'loading' : ''}" onclick={() => reAnalyzeSong(song)}
                     title="Re-read key & tempo from file (run after Mixed In Key tags it)">
                     {song._analyzing ? '...' : '↻'}
                   </button>
                 {/if}
-                <div class="field" style="flex:0 0 200px">
-                  <label>FEAT.</label>
-                  <input class="inp-sm" placeholder="Collaborator..."
-                    value={song.work_data?.collaborator || ''}
-                    onchange={e => updateCollaborator(song, e.target.value)} />
-                </div>
               </div>
               <div class="field">
                 <label>TAGS</label>
@@ -1526,7 +1527,7 @@
   .open-preview-btn:hover { border-color: #c9a84c; color: #c9a84c; }
 
   .card-body { padding: 16px; border-top: 1px solid #303030; display: flex; flex-direction: column; gap: 14px; background: #0a0a0a; }
-  .key-tempo-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+  .key-tempo-row { display: flex; gap: 8px; align-items: center; }
   .key-tempo-row .field { flex-shrink: 0; }
   .reanalyze-btn { font-family: 'Space Mono', monospace; font-size: 13px; padding: 4px 8px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; margin-bottom: 1px; flex-shrink: 0; }
   .reanalyze-btn:hover { border-color: #c9a84c; color: #c9a84c; }

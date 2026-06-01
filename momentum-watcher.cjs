@@ -1899,8 +1899,17 @@ async function runEssentiaAnalysis(filePath) {
       bpm = Math.round(b)
     }
     if (f.key && f.scale) key = f.key + (f.scale === 'minor' ? 'm' : '')
-    return { bpm, key }
-  } catch(e) { return { bpm: null, key: null } }
+    return {
+      bpm, key,
+      energy:       f.energy        ?? null,
+      brightness:   f.brightness    ?? null,
+      bass_energy:  f.bass_energy   ?? null,
+      danceability: f.danceability  ?? null,
+      warmth:       f.warmth        ?? null,
+      loudness:     f.loudness_lufs ?? null,
+      raw: f
+    }
+  } catch(e) { return { bpm: null, key: null, energy: null, brightness: null, bass_energy: null, danceability: null, warmth: null, loudness: null, raw: {} } }
 }
 
 function parseDemoFilename(filename) {
@@ -13981,21 +13990,68 @@ server.listen(PORT, '127.0.0.1', () => {
         const songId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
         console.log(`✓ Demo inserted: ${code} "${title}"${filenameBpm ? ' ' + filenameBpm + 'bpm' : ''} (id ${songId})`)
 
-        // ── Step 6: Essentia — key always; BPM only if not in filename ──
-        const { bpm: essBpm, key } = await runEssentiaAnalysis(newPath)
-        const finalBpm = filenameBpm || essBpm
-        const updates = {}
-        if (!filenameBpm && essBpm) updates.tempo = essBpm
-        if (key) updates.key = key
-        if (songId && Object.keys(updates).length) {
+        // ── Step 6: Essentia — always run; BPM from filename takes priority ──
+        const ess = await runEssentiaAnalysis(newPath)
+        const finalBpm = filenameBpm || ess.bpm
+        const { key, energy, brightness, bass_energy, danceability, warmth, loudness, raw: essRaw } = ess
+        console.log(`  ✓ Essentia: ${finalBpm || '?'}bpm ${key || '?'} nrg:${energy?.toFixed(2)} dns:${danceability?.toFixed(2)}`)
+
+        // ── Step 7: Auto-tag via Claude Haiku ──
+        let autoTags = []
+        const apiKey = process.env.ANTHROPIC_API_KEY
+        if (apiKey && (finalBpm || key || energy != null)) {
+          try {
+            const tagPrompt = [
+              'Based on this audio analysis, suggest 3-5 genre/mood tags.',
+              '',
+              `BPM: ${finalBpm || 'unknown'}`,
+              `Key: ${key || 'unknown'}`,
+              `Energy: ${energy?.toFixed(2) ?? 'unknown'}`,
+              `Brightness: ${brightness?.toFixed(2) ?? 'unknown'}`,
+              `Bass Energy: ${bass_energy?.toFixed(2) ?? 'unknown'}`,
+              `Danceability: ${danceability?.toFixed(2) ?? 'unknown'}`,
+              `Warmth: ${warmth?.toFixed(2) ?? 'unknown'}`,
+              '',
+              "Return ONLY a JSON array of short lowercase tags.",
+              "Examples: ['dark', 'trap', 'melodic', 'bass-heavy', 'cinematic']",
+              'Max 5 tags, min 2 tags. No explanation.'
+            ].join('\n')
+
+            const tr = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+              body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 80, messages: [{ role: 'user', content: tagPrompt }] })
+            })
+            const td = await tr.json()
+            const raw = (td.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
+            autoTags = JSON.parse(raw)
+            if (!Array.isArray(autoTags)) autoTags = []
+            autoTags = autoTags.slice(0, 5).map(t => String(t).toLowerCase().trim()).filter(Boolean)
+            console.log(`  ✓ Auto-tags: ${autoTags.join(', ')}`)
+          } catch(e) { console.warn('  ⚠ Auto-tag failed:', e.message) }
+        }
+
+        // ── Step 8: PATCH with all analysis results ──
+        if (songId) {
+          const updates = {
+            tempo: finalBpm || undefined,
+            key:   key     || undefined,
+            tags:  autoTags.length ? autoTags : undefined,
+            work_data: {
+              auto_detected: true,
+              detected_at: new Date().toISOString(),
+              analysis: { bpm: finalBpm, key, energy, brightness, bass_energy, danceability, warmth, loudness }
+            }
+          }
+          // Remove undefined keys
+          Object.keys(updates).forEach(k => updates[k] === undefined && delete updates[k])
           await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${songId}`, {
             method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
             body: JSON.stringify(updates)
           })
-          console.log(`  ✓ Analysis: ${finalBpm || '?'}bpm ${key || '?'}`)
         }
 
-        // ── Step 7: Archive — clean old name, copy new name ──
+        // ── Step 9: Archive — clean old name, copy new name ──
         try {
           if (!fs.existsSync(ARCHIVE_29TH)) fs.mkdirSync(ARCHIVE_29TH, { recursive: true })
           if (newFilename !== filename) {
@@ -14006,10 +14062,11 @@ server.listen(PORT, '127.0.0.1', () => {
           console.log(`  ✓ Archived: ${newFilename}`)
         } catch(e) { console.warn('⚠ Archive failed:', e.message) }
 
-        // ── Step 8: Telegram ──
+        // ── Step 10: Telegram ──
         const tgParts = [`🎵 New demo: ${code} ${title}`]
         if (finalBpm) tgParts.push(`${finalBpm} BPM`)
         if (key) tgParts.push(key)
+        if (autoTags.length) tgParts.push(autoTags.join(' · '))
         if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, tgParts.join(' | ')).catch(() => {})
 
       } catch(e) { logError('demo-auto-detect', e.message); console.error('✗ Demo auto-detect error:', e.message) }

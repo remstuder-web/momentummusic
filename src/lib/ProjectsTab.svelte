@@ -51,7 +51,6 @@
   let refPickerOpen = $state({}) // song.id -> bool
   let spotifyPasteInput = $state({}) // song.id -> Spotify URL paste string
   let notesOpen = $state({}) // song.id -> bool
-  let addingRef = $state({}) // song.id -> bool
   let analyzerLoading = $state({}) // song.id -> bool
   let analyzerVersionLabel = $state({}) // song.id -> string
   let vocalStyleResult = $state({}) // song.id -> vocal style text
@@ -1063,34 +1062,14 @@
     } catch { return '🔗 Link' }
   }
 
-  // Song demo field editing
-  let songTagInput = $state({})
+  // Song field editing
   let songRefInput = $state({})
   let songAudioBlobUrls = $state({}) // separate from version audio
-
-  const KEYS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','Cm','C#m','Dm','D#m','Em','Fm','F#m','Gm','G#m','Am','A#m','Bm']
 
   async function updateSongField(song, field, value) {
     song[field] = value
     songs = [...songs]
     await supabase.from('songs').update({ [field]: value }).eq('id', song.id)
-  }
-
-  async function addSongTag(song) {
-    const val = (songTagInput[song.id] || '').trim()
-    if (!val) return
-    const tags = [...(song.tags || []), val]
-    await updateSongField(song, 'tags', tags)
-    songTagInput[song.id] = ''
-  }
-
-  async function addSongTag_direct(song, val) {
-    if (!val || (song.tags||[]).includes(val)) return
-    await updateSongField(song, 'tags', [...(song.tags || []), val])
-  }
-
-  async function removeSongTag(song, tag) {
-    await updateSongField(song, 'tags', (song.tags||[]).filter(t=>t!==tag))
   }
 
   async function addSongRef(song) {
@@ -3091,43 +3070,9 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 {#if wd.current_stage === 'production'}
                 <div class="song-meta-block">
                   <div class="song-meta-row1">
-                    <div class="field field-sm">
+                    <div class="field" style="flex:1">
                       <label>TITLE</label>
                       <input class="inp-sm" value={song.title||''} placeholder="Working title..." onchange={e => { updateSongField(song, 'title', e.target.value); renameSongAudioFiles(song, e.target.value) }} />
-                    </div>
-                    <div class="field field-sm">
-                      <label>KEY</label>
-                      <select class="inp-sm" value={song.key||''} onchange={e => updateSongField(song, 'key', e.target.value)}>
-                        <option value="">—</option>
-                        {#each KEYS as k}<option value={k}>{k}</option>{/each}
-                      </select>
-                    </div>
-                    <div class="field field-sm">
-                      <label>TEMPO</label>
-                      <input class="inp-sm" type="number" placeholder="120" value={song.tempo||''} onchange={e => updateSongField(song, 'tempo', parseInt(e.target.value)||null)} />
-                    </div>
-                    <div class="field" style="flex:1">
-                      <label>TAGS</label>
-                      <div class="tags-wrap">
-                        {#each (song.tags||[]) as tag}
-                          {@const tagLabel = GENRE_LIST.find(g => g.tag === tag)?.label || tag}
-                          <span class="tag">{tagLabel}<button class="tag-del" onclick={() => removeSongTag(song, tag)}>×</button></span>
-                        {/each}
-                        <select class="tag-genre-select" onchange={e => {
-                          const val = e.target.value
-                          if (val && !(song.tags||[]).includes(val)) addSongTag_direct(song, val)
-                          e.target.value = ''
-                        }}>
-                          <option value="">+ genre</option>
-                          {#each GENRE_LIST as g}
-                            {#if g.type === 'main'}
-                              <option disabled style="font-weight:700;color:#c9a84c">{g.label}</option>
-                            {:else}
-                              <option value={g.tag} disabled={(song.tags||[]).includes(g.tag)}>{g.label}</option>
-                            {/if}
-                          {/each}
-                        </select>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -3156,21 +3101,12 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                           </span>
                         {/each}
                       </div>
-                      {#if addingRef[song.id]}
-                        <div class="ref-add-row">
-                          <input class="inp-sm" placeholder="Spotify / YouTube URL..."
-                            bind:value={songRefInput[song.id]}
-                            onkeydown={e => e.key === 'Enter' && addSongRef(song)}
-                            autofocus />
-                          <button class="btn-ghost-sm" onclick={() => addSongRef(song)}>+ Add</button>
-                          <button class="btn-ghost-sm" onclick={() => { addingRef[song.id] = false; addingRef = { ...addingRef } }}>cancel</button>
-                        </div>
-                      {:else}
-                        <button class="add-ref-toggle"
-                          onclick={() => { addingRef[song.id] = true; addingRef = { ...addingRef } }}>
-                          + add ref
-                        </button>
-                      {/if}
+                      <div class="ref-add-row">
+                        <input class="inp-sm" placeholder="Spotify / YouTube URL..."
+                          bind:value={songRefInput[song.id]}
+                          onkeydown={e => e.key === 'Enter' && addSongRef(song)} />
+                        <button class="btn-ghost-sm" onclick={() => addSongRef(song)}>+ Add</button>
+                      </div>
                     </div>
                   </div>
                 </div>

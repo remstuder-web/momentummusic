@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-01] src/lib/DemoTab.svelte — DONE
+TASK: Submissions card header — consistent 3-line format
+WHAT: patch-info now shows: (1) code extracted from name (split on _), white bold; (2) artist input, gold, transparent border style, editable inline, saves on blur; (3) connection select, dim, transparent border style, saves on change. Placeholder text when empty. Removed patch-meta-edit block from body — fields now live in header. Removed old patch-name/patch-contact spans.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-01] src/lib/DemoTab.svelte — DONE
 TASK: Fix submission duplication + editable artist/connection
 WHAT: (1) Deduplicate song list render — compute dfSongIds from dropped_files, filter patch.songs to exclude already-shown songs; patch_songs rows kept for in-batch indicator. (2) Added patch-meta-edit section at top of every expanded patch: artist name input (saves on blur) + connection select (saves on change), both always editable with placeholder text.
 RESULT: builds clean

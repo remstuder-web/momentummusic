@@ -1200,11 +1200,26 @@
         {@const dfSongIds = new Set((subDropFiles[patch.id] || []).map(f => f.song_id).filter(Boolean))}
         {@const dedupedSongs = patch.songs.filter(s => !dfSongIds.has(s.id))}
         {@const dropCount = (subDropFiles[patch.id]?.length || 0) + dedupedSongs.length}
+        {@const patchCode = patch.name.split('_')[0]}
         <div class="patch-card {expandedPatchId === patch.id ? 'exp' : ''}">
           <div class="patch-head" onclick={() => expandedPatchId = expandedPatchId === patch.id ? null : patch.id}>
             <div class="patch-info">
-              <span class="patch-name">{patch.name}</span>
-              {#if patch.artist}<span class="patch-contact">{patch.artist}</span>{/if}
+              <span class="patch-head-code">{patchCode}</span>
+              <input class="patch-head-artist"
+                placeholder="— add artist —"
+                value={patch.artist || ''}
+                onclick={e => e.stopPropagation()}
+                onblur={e => { const v = e.target.value.trim(); if (v !== (patch.artist || '')) updatePatchField(patch, 'artist', v) }}
+                onkeydown={e => e.key === 'Enter' && e.target.blur()} />
+              <select class="patch-head-conn"
+                value={String(patch.contact_id || '')}
+                onclick={e => e.stopPropagation()}
+                onchange={e => { e.stopPropagation(); updatePatchField(patch, 'contact_id', e.target.value || null) }}>
+                <option value="">— add destination —</option>
+                {#each connections.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')) as c}
+                  <option value={String(c.id)}>{c.name}</option>
+                {/each}
+              </select>
             </div>
             {#if patch.folder_link}
               <button class="patch-link-btn" onclick={e => { e.stopPropagation(); openLink(patch.folder_link) }} title={patch.folder_link}>📁</button>
@@ -1230,28 +1245,6 @@
 
           {#if expandedPatchId === patch.id}
             <div class="patch-body">
-
-              <!-- Always-editable artist + connection -->
-              <div class="patch-meta-edit">
-                <div class="patch-meta-field">
-                  <label class="patch-meta-lbl">ARTIST / LABEL</label>
-                  <input class="inp-sm" placeholder="Add artist name..."
-                    value={patch.artist || ''}
-                    onblur={e => { const v = e.target.value.trim(); if (v !== (patch.artist || '')) updatePatchField(patch, 'artist', v) }}
-                    onkeydown={e => e.key === 'Enter' && e.target.blur()} />
-                </div>
-                <div class="patch-meta-field">
-                  <label class="patch-meta-lbl">SEND TO</label>
-                  <select class="inp-sm"
-                    value={String(patch.contact_id || '')}
-                    onchange={e => updatePatchField(patch, 'contact_id', e.target.value || null)}>
-                    <option value="">Add destination...</option>
-                    {#each connections.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')) as c}
-                      <option value={String(c.id)}>{c.name}</option>
-                    {/each}
-                  </select>
-                </div>
-              </div>
 
               {#if patch.status !== 'sent'}
                 <!-- Drop zone -->
@@ -1628,9 +1621,15 @@
   .patch-head:hover { background: #252525; }
   .patch-card.exp .patch-head { background: #252525; }
   .patch-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; overflow: hidden; }
-  .patch-name { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; color: #cec9c1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .patch-card.exp .patch-name { color: #4a9fd4; }
-  .patch-contact { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: #4a9fd4; }
+  .patch-head-code { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; color: #f5f1ea; letter-spacing: .04em; line-height: 1.2; }
+  .patch-head-artist { background: transparent; border: none; border-bottom: 1px solid transparent; font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; text-transform: uppercase; color: #c9a84c; padding: 0; outline: none; width: 100%; cursor: text; transition: border-color .15s; line-height: 1.2; }
+  .patch-head-artist:hover { border-bottom-color: rgba(201,168,76,.3); }
+  .patch-head-artist:focus { border-bottom-color: rgba(201,168,76,.6); }
+  .patch-head-artist::placeholder { color: #2a2a2a; font-weight: 300; text-transform: none; font-size: 11px; }
+  .patch-head-conn { background: transparent; border: none; border-bottom: 1px solid transparent; font-family: 'Space Mono', monospace; font-size: 11px; color: #555; padding: 0; outline: none; cursor: pointer; width: 100%; transition: border-color .15s; line-height: 1.2; }
+  .patch-head-conn:hover { border-bottom-color: #303030; color: #9e9690; }
+  .patch-head-conn:focus { border-bottom-color: #444; }
+  .patch-head-conn option { background: #1c1c1c; color: #f5f1ea; }
   .patch-no-contact { font-family: 'Space Mono', monospace; font-size: 11px; color: #e05a4a; }
   .patch-link-btn { background: transparent; border: none; font-size: 16px; cursor: pointer; padding: 0 4px; flex-shrink: 0; line-height: 1; }
   .patch-listen-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 2px 7px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; transition: all .15s; }
@@ -1721,10 +1720,6 @@
   .new-demo-dropzone.drag-over .new-demo-drop-hint { color: #4caf82; }
   .demo-add-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; white-space: nowrap; }
   .demo-add-btn:hover { background: #d4b660; }
-
-  .patch-meta-edit { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-bottom: 4px; border-bottom: 1px solid #1c1c1c; margin-bottom: 4px; }
-  .patch-meta-field { display: flex; flex-direction: column; gap: 4px; }
-  .patch-meta-lbl { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #555; }
 
   .s-btn.sel { background: #4caf82; border-color: #4caf82; color: #0a0a0a; }
   .s-btn.sel:hover { background: #3d9e72; border-color: #3d9e72; }

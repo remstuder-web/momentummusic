@@ -147,7 +147,7 @@
       supabase.from('connections').select('id, name, folder_link, sent_history, group_type, group_types').order('name'),
       supabase.from('songs').select('id, title, code, project_id, tags, status').not('project_id', 'is', null).order('created_at', { ascending: false }),
     ])
-    songs = songsRes.data || []
+    songs = (songsRes.data || []).sort((a, b) => parseInt(b.code) - parseInt(a.code))
     connections = connectionsRes.data || []
     projectSongsAll = projSongsRes.data || []
     if (connectionsRes.error) console.error('Connections load error:', connectionsRes.error)
@@ -187,7 +187,7 @@
       .from('songs')
       .insert({ code, status: 'demo', tags: [], reference_links: [] })
       .select().single()
-    songs = [data, ...songs]
+    songs = [data, ...songs].sort((a, b) => parseInt(b.code) - parseInt(a.code))
     expandedId = data.id
   }
 
@@ -943,7 +943,7 @@
     const current  = new Map(songs.map(s => [s.id, s]))
     const hasNew     = data.some(s => !current.has(s.id))
     const hasMissing = songs.some(s => !incoming.has(s.id))
-    if (hasNew || hasMissing) songs = data
+    if (hasNew || hasMissing) songs = data.sort((a, b) => parseInt(b.code) - parseInt(a.code))
   }, 5000)
 
   onDestroy(() => clearInterval(pollInterval))

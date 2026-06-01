@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte — DONE
+TASK: Sort demo list by code descending, newest on top
+WHAT: Applied .sort((a, b) => parseInt(b.code) - parseInt(a.code)) at three points: (1) initial load assignment, (2) after INSERT via addSong(), (3) after poll detects hasNew or hasMissing. Removed implicit created_at ordering dependency.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-01] momentum-watcher.cjs — DONE
 TASK: Change demo code format to YYNNN (5 digits), year-sequential
 WHAT: generateNextDemoCode() rewritten: yy prefix (e.g. '26'), scans DEMOS_DIR for /^(\d{5})_/ with matching prefix, queries Supabase filtered to yy%, memMax guard checks same year prefix, nextNNN padded to 3 digits, newCode = yy+NNN (26001–26999, resets each year). /next-song-code endpoint updated with same YYNNN logic. parseDemoFilename regex widened to /^(\d{5,6})_/ (reads both legacy 6-digit and new 5-digit). Step-2 code validity check widened to /^\d{5,6}$/. SENT watcher add+unlink guards widened to /^\d{5,6}/. Verified: /next-song-code returns 26001 on clean year.

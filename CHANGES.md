@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte + src/lib/ProjectsTab.svelte — DONE
+TASK: Lazy audio loading — only load src on first play interaction
+WHAT: All <audio> elements: src="" + data-src={url} + preload="none". DemoTab: preload changed from "auto". Three load points: (1) onpointerdown on wrapper div sets a.src=a.dataset.src if !a.currentSrc before native controls click registers; (2) handleKeydown sets same before audio.play(); (3) handlePlay unchanged (onplay fires after play starts — src already set). Same pattern in both files. applyGain action in DemoTab unaffected — gain node is connected to the element, not the src.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/ProjectsTab.svelte — DONE
 TASK: ANALYZER/RELEASE after STEMS, stars in header, spacebar play on hover
 WHAT: (1) Removed margin-left:auto from .log-tab-btn CSS; added style="margin-left:auto" inline on LOG button only — ANALYZER and RELEASE now sit flush after STEMS, LOG stays flush right. (2) Removed stars .code-stars-row block from .song-info; added stars div inside .song-head-badges after version-badge. (3) Added currentlyPlaying+hoveredSongId state, handlePlay+handleKeydown functions. onMount registers keydown, onDestroy removes it. song-head gets onmouseenter/leave. All 3 <audio> elements get data-song-id+onplay.

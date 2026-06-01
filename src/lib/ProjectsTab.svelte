@@ -643,6 +643,7 @@
         currentlyPlaying.pause()
         currentlyPlaying.currentTime = 0
       }
+      if (!audio.currentSrc) audio.src = audio.dataset.src || ''
       audio.play()
       currentlyPlaying = audio
     } else {
@@ -2984,18 +2985,21 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 <div class="song-player-slot">
                   {#key audioTick}
                     {#if bestAudio}
-                      <div class="player-wrap-head" onpointerdown={e => e.stopPropagation()}>
-                        <audio class="mini-player" controls preload="none" src={bestAudio.src}
+                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
+                        <audio class="mini-player" controls preload="none" src=""
+                          data-src={bestAudio.src}
                           data-song-id={song.id} onplay={handlePlay}></audio>
                       </div>
                     {:else if blobUrl}
-                      <div class="player-wrap-head" onpointerdown={e => e.stopPropagation()}>
-                        <audio class="mini-player" controls preload="none" src={blobUrl}
+                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
+                        <audio class="mini-player" controls preload="none" src=""
+                          data-src={blobUrl}
                           data-song-id={song.id} onplay={handlePlay}></audio>
                       </div>
                     {:else if songAudioBlobUrls[song.id]}
-                      <div class="player-wrap-head" onpointerdown={e => e.stopPropagation()}>
-                        <audio class="mini-player" controls preload="none" src={songAudioBlobUrls[song.id]}
+                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
+                        <audio class="mini-player" controls preload="none" src=""
+                          data-src={songAudioBlobUrls[song.id]}
                           data-song-id={song.id} onplay={handlePlay}></audio>
                       </div>
                     {:else if song.audio_path}

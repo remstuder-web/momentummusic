@@ -945,6 +945,7 @@
         currentlyPlaying.pause()
         currentlyPlaying.currentTime = 0
       }
+      if (!audio.currentSrc) audio.src = audio.dataset.src || ''
       audio.play()
       currentlyPlaying = audio
     } else {
@@ -1128,9 +1129,10 @@
                 {@const src = audioSrc(song)}
                 <div class="player-slot">
                   {#if src}
-                    <div class="player-wrap" onpointerdown={e => e.stopPropagation()}>
-                      <audio class="mini-player" controls preload="auto"
-                        src={src}
+                    <div class="player-wrap" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
+                      <audio class="mini-player" controls preload="none"
+                        src=""
+                        data-src={src}
                         data-song-id={song.id}
                         onplay={handlePlay}
                         use:applyGain={song.id}></audio>

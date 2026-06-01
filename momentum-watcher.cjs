@@ -14079,11 +14079,8 @@ server.listen(PORT, '127.0.0.1', () => {
               `Danceability: ${danceability?.toFixed(2) ?? 'unknown'}`,
               `Warmth: ${warmth?.toFixed(2) ?? 'unknown'}`,
               '',
-              'Possible tags (not exhaustive — use what fits):',
-              'Genre/mood: dark, trap, melodic, bass-heavy, cinematic, emotional, aggressive, chill, atmospheric, drill, afrobeats, dancehall, rnb, soul, pop, rap, hiphop, reggaeton, electronic, house, ambient',
-              'Instrumentation: guitar, piano, strings, orchestral, brass, flute, organic, synthesizer, vintage',
-              '',
               "Return ONLY a JSON array of short lowercase tags.",
+              "Examples (not exhaustive — use any tags that fit, including instruments): ['dark', 'trap', 'melodic', 'bass-heavy', 'cinematic', 'emotional', 'aggressive', 'chill', 'atmospheric', 'drill', 'afrobeats', 'rnb', 'pop', 'rap', 'hiphop', 'guitar', 'piano', 'strings', 'orchestral', 'brass', 'flute', 'organic', 'synthesizer', 'vintage']",
               'Max 5 tags, min 2 tags. No explanation.'
             ].join('\n')
 

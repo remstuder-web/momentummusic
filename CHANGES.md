@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte — DONE
+TASK: Stop other audio players when a new one starts
+WHAT: Added currentlyPlaying (plain let, not $state — no reactivity needed). handlePlay(event) pauses+resets the previous audio element before assigning the new one. onplay={handlePlay} added to the single <audio class="mini-player"> element.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-01] momentum-watcher.cjs — DONE
 TASK: POST /set-all-demos-to-sample migration endpoint; no default demo_type on auto-detect
 WHAT: Added POST /set-all-demos-to-sample: fetches all songs where project_id IS NULL, filters to those with null/empty work_data.demo_type, PATCHes each with demo_type='SAMPLE', returns {ok,updated}. Auto-detect rowBase already had no demo_type — confirmed no change needed. Migration run: 18 songs updated.

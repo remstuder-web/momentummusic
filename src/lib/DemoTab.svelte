@@ -908,6 +908,16 @@
   let aiInput = $state('')
   let aiMessages = $state([])
   let aiLoading = $state(false)
+  let currentlyPlaying = null
+
+  function handlePlay(event) {
+    const audio = event.target
+    if (currentlyPlaying && currentlyPlaying !== audio) {
+      currentlyPlaying.pause()
+      currentlyPlaying.currentTime = 0
+    }
+    currentlyPlaying = audio
+  }
 
   async function sendAI() {
     if (!aiInput.trim() || aiLoading) return
@@ -1088,6 +1098,7 @@
                     <div class="player-wrap" onpointerdown={e => e.stopPropagation()}>
                       <audio class="mini-player" controls preload="auto"
                         src={src}
+                        onplay={handlePlay}
                         use:applyGain={song.id}></audio>
                       <button class="open-preview-btn" onclick={e => { e.stopPropagation(); openInPreview(song) }} title="Open in QuickTime">▶︎</button>
                     </div>

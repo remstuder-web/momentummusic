@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte + momentum-watcher.cjs — DONE
+TASK: Fix sync-demo-archive trigger on type+artist change
+WHAT: Both updateDemoType and updateAtArtist now await the fetch and log result with console.log('ARCHIVE SYNC:', result) — errors are no longer swallowed. syncDemoArchive helper now logs every call: filename | type | at_artist | shouldArchive | inArchive → action. Logic unchanged (SAMPLE+no@ → copy, SAMPLE+@ → delete, SONG → delete if present).
+RESULT: builds clean, watcher running
+BLOCKERS: none
+
 ## [2026-06-01] momentum-watcher.cjs — DONE
 TASK: Auto-submission folder watcher on /P2P/29TH AVENUE/SENT/
 WHAT: Added SENT_DIR constant. Chokidar watcher (depth:1) on SENT_DIR: addDir → create patches row (status open, source:sent_dir); add file (6-digit code prefix only) → look up song in Supabase, compute prev_sent from patch_songs, push to dropped_files; unlink → remove from dropped_files. SUBMISSIONS_DIR unchanged (still points to !MOMENTUM MUSIC/Submissions). SENT_DIR created if missing.

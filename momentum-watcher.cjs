@@ -1891,18 +1891,24 @@ function syncDemoArchive(filename, type, at_artist) {
   const inArchive   = fs.existsSync(archivePath)
   const shouldBeInArchive = (type || 'SONG') === 'SAMPLE' && !at_artist
 
+  let result
   if (shouldBeInArchive && !inArchive) {
-    if (!fs.existsSync(demoPath)) return { action: 'no_change', reason: 'source not found' }
-    if (!fs.existsSync(ARCHIVE_29TH)) fs.mkdirSync(ARCHIVE_29TH, { recursive: true })
-    fs.copyFileSync(demoPath, archivePath)
-    console.log(`📂 Archive sync: copied to archive — ${filename}`)
-    return { action: 'copied_to_archive' }
+    if (!fs.existsSync(demoPath)) {
+      result = { action: 'no_change', reason: 'source not found' }
+    } else {
+      if (!fs.existsSync(ARCHIVE_29TH)) fs.mkdirSync(ARCHIVE_29TH, { recursive: true })
+      fs.copyFileSync(demoPath, archivePath)
+      result = { action: 'copied_to_archive' }
+    }
   } else if (!shouldBeInArchive && inArchive) {
     fs.unlinkSync(archivePath)
-    console.log(`📂 Archive sync: deleted from archive — ${filename}`)
-    return { action: 'deleted_from_archive' }
+    result = { action: 'deleted_from_archive' }
+  } else {
+    result = { action: 'no_change' }
   }
-  return { action: 'no_change' }
+
+  console.log(`sync-demo-archive: ${filename} | type=${type || 'SONG'} at=${at_artist || '(none)'} shouldArchive=${shouldBeInArchive} inArchive=${inArchive} → ${result.action}${result.reason ? ' ('+result.reason+')' : ''}`)
+  return result
 }
 
 // ── Essentia analysis helper for demo auto-detect ────────────────────────

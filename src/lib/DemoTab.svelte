@@ -852,10 +852,14 @@
     songs = [...songs]
     await supabase.from('songs').update({ work_data: newWorkData }).eq('id', song.id)
     if (song.audio_path) {
-      fetch('http://localhost:4242/sync-demo-archive', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: song.audio_path, type, at_artist: newWorkData.at_artist || '' })
-      }).then(r => r.json()).then(d => { if (d.action !== 'no_change') console.log('archive sync:', d.action) }).catch(() => {})
+      try {
+        const r = await fetch('http://localhost:4242/sync-demo-archive', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: song.audio_path, type, at_artist: newWorkData.at_artist || '' })
+        })
+        const result = await r.json()
+        console.log('ARCHIVE SYNC:', result)
+      } catch(e) { console.warn('ARCHIVE SYNC failed:', e.message) }
     }
   }
 
@@ -866,10 +870,14 @@
     songs = [...songs]
     await supabase.from('songs').update({ work_data: newWorkData }).eq('id', song.id)
     if (song.audio_path) {
-      fetch('http://localhost:4242/sync-demo-archive', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: song.audio_path, type: newWorkData.demo_type || 'SONG', at_artist: trimmed })
-      }).then(r => r.json()).then(d => { if (d.action !== 'no_change') console.log('archive sync:', d.action) }).catch(() => {})
+      try {
+        const r = await fetch('http://localhost:4242/sync-demo-archive', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: song.audio_path, type: newWorkData.demo_type || 'SONG', at_artist: trimmed })
+        })
+        const result = await r.json()
+        console.log('ARCHIVE SYNC:', result)
+      } catch(e) { console.warn('ARCHIVE SYNC failed:', e.message) }
     }
   }
 

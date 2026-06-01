@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] momentum-watcher.cjs — DONE
+TASK: Demo auto-tag expanded tag vocabulary
+WHAT: Tag prompt now includes instrumentation tags (guitar, piano, strings, orchestral, brass, flute, organic, synthesizer, vintage) + genre tags (rap, pop, hiphop) alongside existing mood/genre vocabulary; prompt updated to say "genre, mood, or instrumentation"
+RESULT: works — watcher restarted
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DailyTab.svelte + momentum-watcher.cjs — DONE
 TASK: daily-tab-restructure-whatsapp-ondemand
 WHAT: Removed PRIVATE tab; restructured Daily tab into 3 sections (TRENDS & NEWS → WHATSAPP → ROUTINE/HELPERS); moved agent buttons + inbox to always-visible section 1; replaced auto-polled WhatsApp inbox messages with on-demand contact analysis (dropdown + Analyze button); disabled flushWhatsappBuffer setInterval; added POST /analyze-whatsapp-contact endpoint (reads last 20 msgs from SQLite, calls Claude Haiku, returns summary/real_intent/tone/opportunities/recommended_response/urgency — no Telegram send)
@@ -2091,4 +2097,143 @@ BLOCKERS: none
 TASK: spotify-rate-limit-protection
 WHAT: Added spotifyFetch() wrapper — handles Bearer token, 30-call/30s throttle, 429 → sets spotifyRateLimitUntil + Telegram alert, 403 throws; replaced all 32 raw Spotify API fetch() calls; runBackgroundQueue checks rate limit flag + retries in 60s, 3s between tracks; GET /spotify-status endpoint; removed all orphaned token/spH vars
 RESULT: works — spotify-status returns correct JSON, ping ok
+BLOCKERS: none
+
+## 2026-06-01 DemoTab.svelte — DONE
+TASK: Change 1
+WHAT: Removed Move to Projects button, modal, 5 state vars, 3 functions, dead CSS
+RESULT: works
+BLOCKERS: none
+
+## 2026-06-01 momentum-watcher.cjs + DemoTab.svelte + DailyTab.svelte — DONE
+TASK: Changes 1-4
+WHAT: Demos folder auto-detect, 29TH AVENUE archive copy, /generate-titles endpoint, AUTO badge, Title Generator helper
+RESULT: works — watcher confirmed watching, /generate-titles tested OK
+BLOCKERS: none
+
+## 2026-06-01 momentum-watcher.cjs + DemoTab.svelte — DONE
+TASK: YYMMNN codes, filename parsing, rename sync, collaborator
+WHAT: 4-part change — code format, filename parse, /rename-demo endpoint, FEAT. field
+RESULT: works — parsing verified, /rename-demo endpoint tested
+BLOCKERS: none
+
+## 2026-06-01 src/lib/DemoTab.svelte — DONE
+TASK: Realtime subscription
+WHAT: Added supabase.channel() on songs WHERE project_id IS NULL — INSERT/DELETE/UPDATE push live to browser
+RESULT: works — no reload needed when watcher auto-detects a file
+BLOCKERS: none
+
+## 2026-06-01 src/lib/DemoTab.svelte — DONE
+TASK: Tempo/Feat row layout fix
+WHAT: Reanalyze button moved before FEAT., fixed widths (TEMPO auto, FEAT. 200px), removed CSS width:80px conflict
+RESULT: works
+BLOCKERS: none
+
+## 2026-06-01 src/lib/DemoTab.svelte — DONE
+TASK: Realtime fix + tempo/feat layout fix
+WHAT: Removed invalid realtime filter (project_id=is.null not supported), added client-side filtering. Layout: KEY→TEMPO→FEAT.→↻, fixed widths, align-items:center
+RESULT: works
+BLOCKERS: none
+
+## 2026-06-01 src/lib/DemoTab.svelte — DONE
+TASK: CODE/TITLE row alignment
+WHAT: align-items:flex-start fixes bottom-edge misalignment. CODE 90px, TITLE flex:1. BPM alts → ÷2 ×2 compact buttons
+RESULT: works
+BLOCKERS: none
+
+## 2026-06-01 src/lib/DemoTab.svelte — DONE
+TASK: Replace realtime with polling
+WHAT: setInterval 5s polls songs WHERE project_id IS NULL, replaces array only when ids change
+RESULT: works — no Supabase dashboard config needed
+BLOCKERS: none
+
+## 2026-06-01 src/lib/DemoTab.svelte — DONE
+TASK: Fix DailyTab crash
+WHAT: Restored onMount import — was accidentally dropped when replacing realtime with polling, but onMount() call at line 337 remained, causing ReferenceError
+RESULT: works
+BLOCKERS: none
+
+## 2026-06-01 DemoTab.svelte + momentum-watcher.cjs — DONE
+TASK: Submissions redesign (all 6 parts)
+WHAT: Free artist input, YYNNNN code, drop zone with prev-send history chips, deferred folder creation, removed brief UI
+RESULT: builds clean, watcher running
+BLOCKERS: none
+
+## 2026-06-01 momentum-watcher.cjs — DONE
+TASK: Smart demo filename parsing
+WHAT: New parseDemoFilename, inventDemoTitle via Haiku, 2-step INSERT+PATCH flow, BPM-from-filename skips Essentia tempo
+RESULT: works — all 7 test cases verified, watcher running
+BLOCKERS: none
+
+## 2026-06-01 momentum-watcher.cjs — DONE
+TASK: Demo auto-detect fixes 1-3
+WHAT: Code from readdirSync (not Supabase), rename file in DEMOS_DIR to canonical name, archive sync with rename
+RESULT: works — watcher running, re-fire suppressed via demoSkip set
+BLOCKERS: none
+
+## 2026-06-01 momentum-watcher.cjs — DONE
+TASK: Demo Essentia full analysis + Haiku auto-tags
+WHAT: runEssentiaAnalysis returns 8 signals, Haiku generates tags from profile, single combined PATCH to Supabase
+RESULT: works — watcher running
+BLOCKERS: none
+
+## 2026-06-01 src/lib/ProjectsTab.svelte — DONE
+TASK: Remove CHECKLIST 70%, TIPS panel, MIX PREP and MASTERING tabs
+WHAT: 272 lines removed — all state, functions, HTML, CSS for those three features. DB data untouched.
+RESULT: builds clean
+BLOCKERS: none
+
+## 2026-06-01 src/lib/DemoTab.svelte — DONE
+TASK: Submissions 6-part update
+WHAT: CODE·TITLE in lists, archive button+mode, OPEN/ARCHIVE toggle (newest first), SOLD placeholder, connection picker in modal
+RESULT: builds clean
+BLOCKERS: none
+
+## 2026-06-01 src/lib/ProjectsTab.svelte — DONE
+TASK: Remove KEY/TEMPO/TAGS, references always visible
+WHAT: 64 lines removed — KEY/TEMPO/TAGS fields + state/functions gone; ref input always shown without toggle
+RESULT: builds clean
+BLOCKERS: none
+
+## 2026-06-01 DemoTab.svelte + momentum-watcher.cjs — DONE
+TASK: Persist dropped files to Supabase
+WHAT: serialize/deserialize helpers, save on drop, restore on load, clear on send, watcher column check
+RESULT: works — PENDING manual SQL migration (see below)
+BLOCKERS: Need to run in Supabase dashboard SQL editor:
+  ALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT '[]'::jsonb;
+
+## 2026-06-01 momentum-watcher.cjs + .gitignore — DONE
+TASK: Track used invented demo titles
+WHAT: usedTitles loaded from used_demo_titles.json, injected into Haiku prompt, appended on confirmed insert
+RESULT: works — watcher running
+BLOCKERS: none
+
+## 2026-06-01 src/lib/DemoTab.svelte — DONE
+TASK: Fix dropped files persistence — metadata only
+WHAT: Removed File binary, single flat format, awaited saves, debug logs added, field names fixed
+RESULT: builds clean — STILL BLOCKED on Supabase column (run SQL manually)
+BLOCKERS: ALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT '[]'::jsonb;
+
+## 2026-06-01 src/lib/FinancesTab.svelte — DONE
+TASK: Remove subscriptions & services section
+WHAT: 148 lines removed — all state, functions, HTML, CSS for subscriptions. finances table untouched.
+RESULT: builds clean
+BLOCKERS: none
+
+## 2026-06-01 ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: New Song button with auto songcode
+WHAT: GET /next-song-code scans DEMOS_DIR + songs table, inline form in project view, no file created
+RESULT: works — /next-song-code tested, returns 260602
+BLOCKERS: none
+
+## 2026-06-01 momentum-watcher.cjs — DONE
+TASK: BPM from filename takes priority over Essentia
+WHAT: Logs "BPM from filename" when used; PATCH skips tempo update if filename had BPM; Essentia still runs for key+signals
+RESULT: works — watcher running
+BLOCKERS: none
+
+## 2026-06-01 src/lib/FinancesTab.svelte — DONE
+TASK: Remove system costs section
+WHAT: Removed systemCosts/systemCostsTotal, Hermes/OpenRouter state + functions + intervals + HTML + CSS (cost-*, credits-*, badge-*, total-bar/lbl/amt)
+RESULT: builds clean
 BLOCKERS: none

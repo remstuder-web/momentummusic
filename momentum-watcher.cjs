@@ -14068,7 +14068,7 @@ server.listen(PORT, '127.0.0.1', () => {
             } catch(e) {}
 
             const tagPrompt = [
-              'You are tagging music for Remo, a music producer. Suggest 3-5 genre/mood tags based on this audio analysis.',
+              'You are tagging music for Remo, a music producer. Suggest 3-5 tags (genre, mood, or instrumentation) based on this audio analysis.',
               learnedExamples,
               'Current track analysis:',
               `BPM: ${finalBpm || 'unknown'}`,
@@ -14079,8 +14079,11 @@ server.listen(PORT, '127.0.0.1', () => {
               `Danceability: ${danceability?.toFixed(2) ?? 'unknown'}`,
               `Warmth: ${warmth?.toFixed(2) ?? 'unknown'}`,
               '',
+              'Possible tags (not exhaustive — use what fits):',
+              'Genre/mood: dark, trap, melodic, bass-heavy, cinematic, emotional, aggressive, chill, atmospheric, drill, afrobeats, dancehall, rnb, soul, pop, rap, hiphop, reggaeton, electronic, house, ambient',
+              'Instrumentation: guitar, piano, strings, orchestral, brass, flute, organic, synthesizer, vintage',
+              '',
               "Return ONLY a JSON array of short lowercase tags.",
-              "Examples: ['dark', 'trap', 'melodic', 'bass-heavy', 'cinematic']",
               'Max 5 tags, min 2 tags. No explanation.'
             ].join('\n')
 

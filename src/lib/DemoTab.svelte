@@ -1486,8 +1486,8 @@
   .card-head { padding: 0 14px; height: 52px; display: flex; align-items: center; gap: 10px; cursor: pointer; background: #1c1c1c; user-select: none; transition: background .15s; overflow: visible; position: relative; }
   .card-head:hover { background: #252525; }
   .card.exp .card-head { background: #252525; }
-  .head-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-  .head-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 380px; justify-content: flex-end; }
+  .head-left { display: flex; align-items: center; gap: 10px; width: 58%; flex-shrink: 0; min-width: 0; overflow: hidden; }
+  .head-right { display: flex; align-items: center; gap: 6px; flex: 1; }
   .head-pills { display: flex; align-items: center; gap: 4px; flex-shrink: 0; min-width: 110px; justify-content: flex-end; }
   .player-slot { width: 250px; flex-shrink: 0; display: flex; align-items: center; }
   .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }

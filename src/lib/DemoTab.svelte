@@ -98,9 +98,8 @@
   const KEYS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','Cm','C#m','Dm','D#m','Em','Fm','F#m','Gm','G#m','Am','A#m','Bm']
 
   let newDemoDragging = $state(false)
-  let tagSearch = $state('')
-  let headerGenre = $state('')       // genre filter in header
-  let showHeaderGenrePicker = $state(false)
+  let selectedTags = $state(new Set())
+  let showTagDropdown = $state(false)
 
   async function renameDemoAudio(song, newTitle) {
     if (!song.audio_path || !newTitle?.trim()) return
@@ -772,27 +771,17 @@
   let projectSongsForBatch = $derived(projectSongsAll.filter(s => !songsInBatches.has(s.id)))
   let showBatchPicker = $state({})
   let showContactPicker = $state({})
+  let allTagsInSystem = $derived(
+    [...new Set(songs.flatMap(s => s.tags || []))].sort()
+  )
+
   let filteredSongs = $derived((() => {
-    let list = songs
-    if (tagSearch.trim()) {
-      // Split on spaces/commas — each term must match (AND logic)
-      const terms = tagSearch.trim().toLowerCase().split(/[\s,]+/).filter(Boolean)
-      list = list.filter(s => terms.every(term => {
-        // Match against tags
-        if ((s.tags||[]).some(t => t.toLowerCase().includes(term))) return true
-        // Match against tempo: "94", "94bpm", "bpm94"
-        if (s.tempo) {
-          const bpmStr = String(s.tempo)
-          if (bpmStr.includes(term.replace(/bpm/i, ''))) return true
-          if (term.replace(/bpm/i, '') === bpmStr) return true
-        }
-        return false
-      }))
-    }
-    if (headerGenre) {
-      list = list.filter(s => (s.tags||[]).includes(headerGenre))
-    }
-    return list
+    if (!selectedTags.size) return songs
+    return songs.filter(s => {
+      const st = s.tags || []
+      for (const t of selectedTags) if (!st.includes(t)) return false
+      return true
+    })
   })())
 
   function openSpotifyPopup(url) {
@@ -844,7 +833,7 @@
   onDestroy(() => clearInterval(pollInterval))
 </script>
 
-<svelte:window onclick={() => { if (Object.values(showBatchPicker).some(Boolean)) showBatchPicker = {}; if (showPatchArtistPicker) showPatchArtistPicker = false; if (Object.values(showGenrePicker).some(Boolean)) showGenrePicker = {}; if (showHeaderGenrePicker) showHeaderGenrePicker = false }} />
+<svelte:window onclick={() => { if (Object.values(showBatchPicker).some(Boolean)) showBatchPicker = {}; if (showPatchArtistPicker) showPatchArtistPicker = false; if (Object.values(showGenrePicker).some(Boolean)) showGenrePicker = {}; if (showTagDropdown) showTagDropdown = false }} />
 <div class="demo-layout">
 <div class="demo-main">
 
@@ -855,23 +844,49 @@
     <button class="vtab {view === 'patches' ? 'on' : ''}" onclick={() => view = 'patches'}>SUBMISSIONS</button>
   </div>
   {#if view === 'demos'}
-    <div class="header-genre-wrap" onclick={e => e.stopPropagation()}>
-      <input class="tag-search-inp" placeholder="Genre..." readonly
-        value={headerGenre}
-        onclick={() => { showHeaderGenrePicker = !showHeaderGenrePicker }}
-        style={headerGenre ? 'color:#c9a84c;border-color:rgba(201,168,76,.4)' : ''} />
-      {#if showHeaderGenrePicker}
-        <div class="header-genre-dropdown">
-          {#if headerGenre}
-            <button class="genre-opt" style="color:#555;font-style:italic" onclick={() => { headerGenre = ''; showHeaderGenrePicker = false }}>— Clear —</button>
+    <div class="tag-filter-wrap" onclick={e => e.stopPropagation()}>
+      <button class="tag-filter-btn {selectedTags.size ? 'active' : ''}"
+        onclick={() => showTagDropdown = !showTagDropdown}>
+        {#if selectedTags.size}
+          {[...selectedTags].join(', ')}
+        {:else}
+          Filter by tags
+        {/if}
+        <span class="tag-filter-arr">▼</span>
+      </button>
+      {#if showTagDropdown}
+        <div class="tag-filter-dropdown">
+          <div class="tag-filter-list">
+            {#if !allTagsInSystem.length}
+              <span class="tag-filter-empty">No tags yet</span>
+            {:else}
+              {#each allTagsInSystem as t}
+                {@const checked = selectedTags.has(t)}
+                {@const count = songs.filter(s => (s.tags||[]).includes(t)).length}
+                <label class="tag-ckb-row {checked ? 'on' : ''}">
+                  <input type="checkbox" {checked}
+                    onchange={() => {
+                      const next = new Set(selectedTags)
+                      if (next.has(t)) next.delete(t); else next.add(t)
+                      selectedTags = next
+                    }} />
+                  <span class="tag-ckb-label">{t}</span>
+                  <span class="tag-ckb-count">{count}</span>
+                </label>
+              {/each}
+            {/if}
+          </div>
+          {#if selectedTags.size}
+            <button class="tag-reset-btn" onclick={() => { selectedTags = new Set(); showTagDropdown = false }}>
+              ✕ Reset ({selectedTags.size})
+            </button>
           {/if}
-          {#each availableGenres as g}
-            <button class="genre-opt {headerGenre === g ? 'sel' : ''}" onclick={() => { headerGenre = g; showHeaderGenrePicker = false }}>{g}</button>
-          {/each}
         </div>
       {/if}
     </div>
-    <input class="tag-search-inp" bind:value={tagSearch} placeholder="tag1 tag2 94bpm..." />
+    {#if selectedTags.size}
+      <button class="tag-clear-inline" onclick={() => selectedTags = new Set()}>✕ {selectedTags.size}</button>
+    {/if}
     <div
       class="new-demo-dropzone {newDemoDragging ? 'drag-over' : ''}"
       ondragover={e => { e.preventDefault(); newDemoDragging = true }}
@@ -1406,11 +1421,25 @@
   .s-btn.in-batch:hover { background: rgba(74,159,212,.1); }
   .s-btn.multi-batch { border-color: rgba(224,90,74,.6); color: #e05a4a; }
   .s-btn.multi-batch:hover { background: rgba(224,90,74,.1); }
-  .tag-search-inp { font-family: 'Space Mono', monospace; font-size: 11px; padding: 5px 10px; background: #1c1c1c; border: 1px solid #252525; color: #cec9c1; border-radius: 3px; outline: none; width: 140px; cursor: pointer; }
-  .tag-search-inp:focus { border-color: rgba(201,168,76,.4); }
-  .tag-search-inp::placeholder { color: #333; }
-  .header-genre-wrap { position: relative; }
-  .header-genre-dropdown { position: absolute; top: calc(100% + 4px); left: 0; min-width: 160px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; z-index: 999; max-height: 220px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,.6); }
+  .tag-filter-wrap { position: relative; }
+  .tag-filter-btn { font-family: 'Space Mono', monospace; font-size: 11px; padding: 5px 10px; background: #1c1c1c; border: 1px solid #252525; color: #9e9690; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 6px; max-width: 220px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .tag-filter-btn.active { border-color: rgba(201,168,76,.4); color: #c9a84c; }
+  .tag-filter-btn:hover { border-color: #303030; }
+  .tag-filter-arr { font-size: 8px; opacity: .6; flex-shrink: 0; }
+  .tag-filter-dropdown { position: absolute; top: calc(100% + 4px); left: 0; width: 220px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; z-index: 999; box-shadow: 0 6px 20px rgba(0,0,0,.6); overflow: hidden; }
+  .tag-filter-list { max-height: 260px; overflow-y: auto; padding: 4px 0; }
+  .tag-filter-empty { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; padding: 10px 12px; display: block; }
+  .tag-ckb-row { display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer; transition: background .1s; }
+  .tag-ckb-row:hover { background: #252525; }
+  .tag-ckb-row.on { background: rgba(201,168,76,.06); }
+  .tag-ckb-row input[type=checkbox] { accent-color: #c9a84c; flex-shrink: 0; cursor: pointer; }
+  .tag-ckb-label { font-family: 'Space Mono', monospace; font-size: 11px; color: #cec9c1; flex: 1; }
+  .tag-ckb-row.on .tag-ckb-label { color: #c9a84c; }
+  .tag-ckb-count { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; }
+  .tag-reset-btn { display: block; width: 100%; font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 8px 12px; background: rgba(201,168,76,.06); border: none; border-top: 1px solid #303030; color: #c9a84c; cursor: pointer; text-align: left; letter-spacing: .06em; }
+  .tag-reset-btn:hover { background: rgba(201,168,76,.12); }
+  .tag-clear-inline { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 4px 8px; background: transparent; border: 1px solid rgba(201,168,76,.3); color: rgba(201,168,76,.7); border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .tag-clear-inline:hover { color: #c9a84c; border-color: rgba(201,168,76,.6); }
   .genre-opt.sel { color: #c9a84c; background: rgba(201,168,76,.06); }
   .s-picker-above { position: absolute; bottom: calc(100% + 6px); right: 0; background: #1c1c1c; border: 1px solid #303030; border-radius: 4px; min-width: 240px; z-index: 99; overflow: hidden; box-shadow: 0 -4px 20px rgba(0,0,0,.5); }
   .s-pick-list { max-height: 220px; overflow-y: auto; }

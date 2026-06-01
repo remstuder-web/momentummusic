@@ -8980,6 +8980,51 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
+  // ── GET /audio-compat/:filename — transcode problem audio to 44.1kHz 16-bit PCM ──
+  if (req.method === 'GET' && req.url.startsWith('/audio-compat/')) {
+    const filename = decodeURIComponent(req.url.slice('/audio-compat/'.length))
+    if (filename.includes('..') || filename.includes('/')) { res.writeHead(400); res.end(); return }
+    const audioDirs = [DEMOS_DIR, PRODUCTION_DIR, MIXING_DIR, INSTRUMENTALS_DIR]
+    let filepath = null
+    for (const dir of audioDirs) {
+      const c = path.join(dir, filename)
+      if (fs.existsSync(c)) { filepath = c; break }
+    }
+    if (!filepath) { res.writeHead(404); res.end('not found'); return }
+    const tmpOut = path.join(os.tmpdir(), `compat_${Date.now()}_${Math.random().toString(36).slice(2)}.wav`)
+    try {
+      await new Promise((resolve, reject) => {
+        const proc = require('child_process').spawn(
+          '/opt/homebrew/bin/ffmpeg',
+          ['-y', '-i', filepath, '-ar', '44100', '-acodec', 'pcm_s16le', tmpOut],
+          { stdio: ['ignore', 'ignore', 'pipe'] }
+        )
+        proc.on('close', code => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)))
+        proc.on('error', reject)
+      })
+      const stat = fs.statSync(tmpOut)
+      res.writeHead(200, {
+        'Content-Type': 'audio/wav',
+        'Content-Length': stat.size,
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache',
+        'Accept-Ranges': 'none',
+        'Content-Disposition': `inline; filename="${filename}"`
+      })
+      const stream = fs.createReadStream(tmpOut)
+      stream.pipe(res)
+      const cleanup = () => { try { fs.unlinkSync(tmpOut) } catch(e) {} }
+      stream.on('end', cleanup)
+      res.on('close', cleanup)
+      console.log(`✓ audio-compat: transcoded ${filename} (${(stat.size/1024/1024).toFixed(1)}MB)`)
+    } catch(e) {
+      console.error(`✗ audio-compat: ${filename}: ${e.message}`)
+      try { fs.unlinkSync(tmpOut) } catch(e2) {}
+      if (!res.headersSent) { res.writeHead(500); res.end(e.message) }
+    }
+    return
+  }
+
   // ── GET /audio/FILENAME ─────────────────────────────────────────────────
   // unified audio route: /audio/, /production/, /mixing/
   const routePrefixes = { '/audio/': DEMOS_DIR, '/production/': PRODUCTION_DIR, '/mixing/': MIXING_DIR, '/instrumentals/': INSTRUMENTALS_DIR }

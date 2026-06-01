@@ -624,6 +624,16 @@
   }
 
   // Best available audio src for header player — mixing > production only
+  function handleAudioError(e) {
+    const audio = e.target
+    const src = audio.src || ''
+    if (!src || src.includes('/audio-compat/')) return
+    const filename = decodeURIComponent(src.split('/').pop())
+    if (!filename) return
+    console.warn('Audio load failed, retrying via compat:', filename)
+    audio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
+  }
+
   function handlePlay(event) {
     const audio = event.target
     if (currentlyPlaying && currentlyPlaying !== audio) {
@@ -2988,19 +2998,19 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                       <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
                         <audio class="mini-player" controls preload="none" src=""
                           data-src={bestAudio.src}
-                          data-song-id={song.id} onplay={handlePlay}></audio>
+                          data-song-id={song.id} onplay={handlePlay} onerror={handleAudioError}></audio>
                       </div>
                     {:else if blobUrl}
                       <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
                         <audio class="mini-player" controls preload="none" src=""
                           data-src={blobUrl}
-                          data-song-id={song.id} onplay={handlePlay}></audio>
+                          data-song-id={song.id} onplay={handlePlay} onerror={handleAudioError}></audio>
                       </div>
                     {:else if songAudioBlobUrls[song.id]}
                       <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a && !a.currentSrc) a.src = a.dataset.src || '' }}>
                         <audio class="mini-player" controls preload="none" src=""
                           data-src={songAudioBlobUrls[song.id]}
-                          data-song-id={song.id} onplay={handlePlay}></audio>
+                          data-song-id={song.id} onplay={handlePlay} onerror={handleAudioError}></audio>
                       </div>
                     {:else if song.audio_path}
                       <div class="audio-drop-sm"

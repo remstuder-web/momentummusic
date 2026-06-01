@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] momentum-watcher.cjs + DemoTab + ProjectsTab — DONE
+TASK: Transcoding endpoint for problem audio files (GET /audio-compat/:filename)
+WHAT: Backend: GET /audio-compat/:filename searches all audio dirs (Demos, Production, Mixing, Instrumentals), runs ffmpeg -ar 44100 -acodec pcm_s16le to a temp file, streams with correct Content-Length, cleans up temp file on close. Frontend: handleAudioError() added to both tabs — checks audio.src, guards against /audio-compat/ loops, extracts filename, retries via /audio-compat/. onerror={handleAudioError} added to all audio elements. Verified: 404 for missing, 200+25MB for real WAV.
+RESULT: watcher running, endpoint tested
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte + src/lib/ProjectsTab.svelte — DONE
 TASK: Lazy audio loading — only load src on first play interaction
 WHAT: All <audio> elements: src="" + data-src={url} + preload="none". DemoTab: preload changed from "auto". Three load points: (1) onpointerdown on wrapper div sets a.src=a.dataset.src if !a.currentSrc before native controls click registers; (2) handleKeydown sets same before audio.play(); (3) handlePlay unchanged (onplay fires after play starts — src already set). Same pattern in both files. applyGain action in DemoTab unaffected — gain node is connected to the element, not the src.

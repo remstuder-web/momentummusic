@@ -926,6 +926,16 @@
   let currentlyPlaying = null
   let hoveredSongId = null
 
+  function handleAudioError(e) {
+    const audio = e.target
+    const src = audio.src || ''
+    if (!src || src.includes('/audio-compat/')) return
+    const filename = decodeURIComponent(src.split('/').pop())
+    if (!filename) return
+    console.warn('Audio load failed, retrying via compat:', filename)
+    audio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
+  }
+
   function handlePlay(event) {
     const audio = event.target
     if (currentlyPlaying && currentlyPlaying !== audio) {
@@ -1135,6 +1145,7 @@
                         data-src={src}
                         data-song-id={song.id}
                         onplay={handlePlay}
+                        onerror={handleAudioError}
                         use:applyGain={song.id}></audio>
                       <button class="open-preview-btn" onclick={e => { e.stopPropagation(); openInPreview(song) }} title="Open in QuickTime">▶︎</button>
                     </div>

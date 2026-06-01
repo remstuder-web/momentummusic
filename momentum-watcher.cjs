@@ -11838,6 +11838,50 @@ ${formatted}`
     return
   }
 
+  // ── GET /fix-audio-path-mismatch — scan all songs, report prod/mix filename mismatches ──
+  if (req.method === 'GET' && req.url === '/fix-audio-path-mismatch') {
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const { data: songs, error } = await supabase
+        .from('songs')
+        .select('id, code, title, work_data')
+        .not('work_data', 'is', null)
+      if (error) throw new Error(error.message)
+
+      const mismatches = []
+      for (const song of songs || []) {
+        const wd = song.work_data || {}
+        const checks = [
+          { field: 'prod_audio', dir: PRODUCTION_DIR, value: wd.prod_audio },
+          { field: 'mix_audio',  dir: MIXING_DIR,     value: wd.mix_audio  },
+          { field: 'instr_audio', dir: INSTRUMENTALS_DIR, value: wd.instr_audio },
+        ]
+        for (const { field, dir, value } of checks) {
+          if (!value) continue
+          const exists = fs.existsSync(path.join(dir, value))
+          if (!exists) {
+            mismatches.push({ song_id: song.id, code: song.code, title: song.title, field, missing_file: value, dir })
+          }
+        }
+        for (const v of wd.versions || []) {
+          if (!v.audio_path) continue
+          const dir = v.version_type === 'mixing' ? MIXING_DIR : PRODUCTION_DIR
+          const exists = fs.existsSync(path.join(dir, v.audio_path))
+          if (!exists) {
+            mismatches.push({ song_id: song.id, code: song.code, title: song.title, field: `versions[${v.name}].audio_path`, missing_file: v.audio_path, dir })
+          }
+        }
+      }
+      console.log(`✓ audio-path-mismatch scan: ${songs.length} songs checked, ${mismatches.length} mismatches`)
+      res.end(JSON.stringify({ ok: true, songs_checked: songs.length, mismatch_count: mismatches.length, mismatches }))
+    } catch(e) {
+      console.error('fix-audio-path-mismatch error:', e.message)
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── GET /pause-bg-queue ───────────────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/pause-bg-queue') {
     bgQueuePaused = true

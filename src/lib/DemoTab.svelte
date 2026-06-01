@@ -1163,15 +1163,14 @@
                     <button onclick={() => playSong(song.id, audioSrc(song))}>
                       {currentSongId === String(song.id) && isPlaying ? '⏸' : '▶'}
                     </button>
-                    {#if currentSongId === String(song.id)}
-                      <span class="time">{formatTime(currentTime)} / {formatTime(duration)}</span>
-                      <input type="range" class="seek-bar"
-                        min="0" max={duration || 100} value={currentTime}
-                        oninput={e => { if (sharedPlayer) sharedPlayer.currentTime = Number(e.target.value) }} />
-                    {:else}
-                      <span class="time">0:00</span>
-                      <div class="seek-bar-empty"></div>
-                    {/if}
+                    <span class="time">
+                      {currentSongId === String(song.id) ? formatTime(currentTime) + ' / ' + formatTime(duration) : '0:00'}
+                    </span>
+                    <input type="range" class="seek-bar"
+                      min="0"
+                      max={currentSongId === String(song.id) ? (duration || 100) : 100}
+                      value={currentSongId === String(song.id) ? currentTime : 0}
+                      oninput={e => { if (sharedPlayer) sharedPlayer.currentTime = +e.target.value }} />
                   </div>
                 {:else if song.audio_path}
                   <span class="audio-ref">🎵 {song.audio_path}</span>
@@ -1623,14 +1622,13 @@
   .title-audio-row label { font-size: 11px; color: rgba(201,168,76,.7); }
   .row1-inp { height: 40px; box-sizing: border-box; }
   .audio-row { display: flex; gap: 8px; margin-top: 2px; margin-bottom: 2px; }
-  .player-slot { flex-shrink: 0; display: flex; align-items: center; min-width: 200px; max-width: 280px; }
-  .mini-player { display: flex; align-items: center; gap: 6px; width: 100%; }
+  .player-slot { flex-shrink: 0; display: flex; align-items: center; }
+  .mini-player { display: flex; align-items: center; gap: 6px; width: 240px; flex-shrink: 0; }
   .mini-player button { background: none; border: none; color: #9e9690; cursor: pointer; font-size: 14px; padding: 2px 4px; flex-shrink: 0; }
   .mini-player.active button { color: #f5f1ea; }
-  .mini-player .time { font-size: 10px; font-family: 'Space Mono', monospace; color: #555; min-width: 72px; flex-shrink: 0; }
+  .mini-player .time { font-size: 10px; font-family: 'Space Mono', monospace; color: #555; width: 80px; flex-shrink: 0; text-align: right; }
   .mini-player.active .time { color: #9e9690; }
   .seek-bar { flex: 1; height: 3px; accent-color: #c9a84c; cursor: pointer; min-width: 0; }
-  .seek-bar-empty { flex: 1; height: 3px; background: #252525; border-radius: 2px; min-width: 0; }
   .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .notes-preview { font-size: 10px; color: #444; font-style: italic; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
   .code-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 90px; flex-shrink: 0; }

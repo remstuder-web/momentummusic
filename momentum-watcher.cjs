@@ -14253,15 +14253,26 @@ Max 150 words. Be specific and actionable.` }]
     const { error: chkErr } = await supabase.from('patches').select('dropped_files').limit(1)
     if (!chkErr) {
       console.log('✓ patches.dropped_files column ready')
+      return
+    }
+    console.log('patches.dropped_files missing — attempting to add via exec_sql RPC...')
+    const serviceKey = process.env.SUPABASE_SECRET_KEY
+    if (!serviceKey) { console.warn('⚠ SUPABASE_SECRET_KEY not set — cannot auto-add column'); return }
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/exec_sql`, {
+      method: 'POST',
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ sql: "ALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT '[]'::jsonb;" })
+    })
+    const d = await r.json().catch(() => null)
+    console.log('SQL result:', r.status, JSON.stringify(d))
+    if (r.ok || r.status === 200) {
+      console.log('✓ patches.dropped_files column added')
     } else {
-      const { error: addErr } = await supabaseAdmin.rpc('exec_sql', {
-        sql: "ALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT '[]'::jsonb"
-      })
-      if (!addErr) {
-        console.log('✓ patches.dropped_files column added automatically')
-      } else {
-        console.warn('⚠ patches missing dropped_files — run in Supabase SQL Editor:\nALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT \'[]\'::jsonb;')
-      }
+      console.warn('⚠ exec_sql RPC failed — run manually in Supabase SQL Editor:\nALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT \'[]\'::jsonb;')
     }
   })()
 })

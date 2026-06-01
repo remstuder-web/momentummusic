@@ -82,25 +82,9 @@
   let audioTick = $state(0) // increment to force player re-render after drop
 
   let showPatchModal = $state(false)
-  let submissionBrief = $state('')
-  let submissionResults = $state(null)
-  let submissionLoading = $state(false)
-  let newPatchName = $state('')
-  let newPatchArtist = $state('')
-  let newPatchArtistId = $state('')  // selected artist connection id (second picker)
-  let showPatchArtistPicker = $state(false)
-  let newPatchContact = $state('')
-  let showPatchContactPicker = $state(false)
-  let isArtistSelected = $derived(
-    connections.find(x => x.id == newPatchContact)
-      ? (connections.find(x => x.id == newPatchContact)?.group_types?.length
-          ? connections.find(x => x.id == newPatchContact).group_types
-          : connections.find(x => x.id == newPatchContact)?.group_type
-          ? [connections.find(x => x.id == newPatchContact).group_type]
-          : []
-        ).includes('ARTISTS')
-      : false
-  )
+  let newPatchArtistName = $state('')
+  let subDropFiles = $state({})   // patchId → [{filename, title, bpm, songId, prevPatches}]
+  let subDragging = $state({})
   let expandedPatchId = $state(null)
 
   const STATUS = {
@@ -502,87 +486,71 @@
     }
   }
 
-  async function analyzeBrief(contactId = null) {
-    submissionLoading = true
-    try {
-      const id = contactId ?? newPatchContact
-      const contactName = connections.find(c => c.id == id)?.name || 'Unknown'
-      const r = await fetch('http://localhost:4242/analyze-submission-brief', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brief: submissionBrief, label: contactName })
-      })
-      submissionResults = await r.json()
-    } catch(e) {
-      alert('Brief analysis failed: ' + e.message)
-    }
-    submissionLoading = false
+  async function generateSubmissionCode() {
+    const yy = String(new Date().getFullYear()).slice(2)
+    const { data } = await supabase.from('patches').select('name').like('name', yy + '%')
+    const nums = (data || []).map(p => {
+      const seg = (p.name || '').split('_')[0]
+      return (seg.length === 5 && seg.startsWith(yy)) ? (parseInt(seg.slice(2)) || 0) : 0
+    })
+    const max = nums.length ? Math.max(...nums) : 0
+    return yy + String(max + 1).padStart(3, '0')
+  }
+
+  function parseDemoFilenameFront(filename) {
+    const nameNoExt = filename.replace(/\.[^.]+$/, '')
+    const parts = nameNoExt.split('_')
+    let code = null, bpm = null
+    if (parts.length > 1 && /^\d{6,8}$/.test(parts[0])) code = parts.shift()
+    if (parts.length > 0 && /^\d{2,3}bpm$/i.test(parts[parts.length - 1])) bpm = parseInt(parts.pop())
+    const title = parts.join(' ').trim() || nameNoExt
+    return { code, title, bpm }
   }
 
   async function createPatch() {
-    const contact = connections.find(c => String(c.id) === String(newPatchContact))
-    const artistConn = connections.find(c => String(c.id) === String(newPatchArtistId))
-    const datePrefix = new Date().toISOString().slice(0,10).replace(/-/g,'')
-    const connectionPart = contact?.name || ''
-
-    // Artist connection → DEMOS always. Non-artist → use selected artist name or DEMOS
-    const artistPart = isArtistSelected ? 'DEMOS' : (artistConn?.name || 'DEMOS')
-    const baseName = [datePrefix, connectionPart, artistPart].filter(Boolean).join('_')
-
-    // Auto-number if same base exists
-    let fullName = baseName
-    const existing = patches.filter(p => p.name === baseName || p.name.startsWith(baseName + ' '))
-    if (existing.length > 0) fullName = baseName + ' ' + (existing.length + 1)
-
+    const code = await generateSubmissionCode()
+    const artistSafe = (newPatchArtistName.trim()).toUpperCase()
+      .replace(/[^A-Z0-9 ]/g, '').trim().replace(/\s+/g, '_') || 'DEMOS'
+    const name = `${code}_${artistSafe}`
     const { data } = await supabase.from('patches')
-      .insert({ name: fullName, artist: artistConn?.name || null, contact_id: contact?.id || null, status: 'open' })
+      .insert({ name, artist: newPatchArtistName.trim() || null, contact_id: null, status: 'open' })
       .select().single()
     patches = [{ ...data, songs: [] }, ...patches]
-    newPatchName = ''
-    newPatchArtist = ''
-    newPatchArtistId = ''
-    newPatchContact = ''
-    showPatchContactPicker = false
-    showPatchArtistPicker = false
+    newPatchArtistName = ''
     showPatchModal = false
     expandedPatchId = data.id
+  }
+
+  async function handleSubDrop(e, patch) {
+    e.preventDefault()
+    subDragging = { ...subDragging, [patch.id]: false }
+    const audioExts = new Set(['.wav', '.mp3', '.aiff', '.aif', '.m4a'])
+    const current = subDropFiles[patch.id] || []
+    for (const file of Array.from(e.dataTransfer.files)) {
+      const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+      if (!audioExts.has(ext)) continue
+      if (current.find(f => f.filename === file.name)) continue
+      const { code, title, bpm } = parseDemoFilenameFront(file.name)
+      const { data: matched } = await supabase.from('songs')
+        .select('id, code, title').eq('audio_path', file.name).maybeSingle()
+      let prevPatches = []
+      if (matched) {
+        const { data: ps } = await supabase.from('patch_songs')
+          .select('patches(name, status)').eq('song_id', matched.id)
+        prevPatches = (ps || []).filter(r => r.patches?.status === 'sent').map(r => r.patches?.name).filter(Boolean)
+      }
+      current.push({ file, filename: file.name, title: title || file.name.replace(/\.[^.]+$/, ''), bpm, songId: matched?.id || null, prevPatches })
+    }
+    subDropFiles = { ...subDropFiles, [patch.id]: [...current] }
+  }
+
+  function removeDropFile(patchId, filename) {
+    subDropFiles = { ...subDropFiles, [patchId]: (subDropFiles[patchId] || []).filter(f => f.filename !== filename) }
   }
 
   async function addSongToPatch(patch, song) {
     const already = patch.songs.find(s => s.id === song.id)
     if (already) return
-
-    // Warn if already in a project
-    if (song.project_id) {
-      const proj = projects.find(p => p.id === song.project_id)
-      if (!confirm(`⚠ This song is already in project "${proj?.name || song.project_id}".\nAdd to submission anyway?`)) return
-    }
-
-    // Check if already sent to this contact via active patches in memory
-    if (patch.contact_id) {
-      const code = song.code || song.title || ''
-      const warnings = []
-
-      // Check active sent patches
-      const sentToContact = patches.filter(p => p.id !== patch.id && String(p.contact_id) === String(patch.contact_id) && p.status === 'sent')
-      for (const sp of sentToContact) {
-        if (sp.songs?.some(s => s.id === song.id)) {
-          warnings.push(`"${sp.name}" (sent ${sp.sent_at?.slice(0,10)||'?'})`)
-        }
-      }
-
-      // Also check sent_history on the connection
-      if (!warnings.length) {
-        const { data: conn } = await supabase.from('connections').select('sent_history').eq('id', patch.contact_id).single()
-        const history = conn?.sent_history || []
-        const prevEntry = history.find(e => e.song_codes?.includes(code))
-        if (prevEntry) warnings.push(`"${prevEntry.patch_name}" (${prevEntry.sent_at?.slice(0,10)||'?'})`)
-      }
-
-      if (warnings.length) {
-        alert(`ℹ️ "${code}" was already sent to this contact in ${warnings.join(', ')}.\nAdding anyway.`)
-      }
-    }
 
     await supabase.from('patch_songs').insert({ patch_id: patch.id, song_id: song.id })
     patch.songs = [...patch.songs, song]
@@ -596,67 +564,60 @@
   }
 
   async function sendPatch(patch) {
-    if (!patch.contact_id) { alert('Select a contact first.'); return }
-    if (!patch.songs.length) { alert('Add songs first.'); return }
-    if (!confirm(`Create submission "${patch.name}" with ${patch.songs.length} songs and copy Dropbox link to clipboard?`)) return
+    const dropFiles = subDropFiles[patch.id] || []
+    const allFiles = [...dropFiles.map(f => f.filename), ...patch.songs.map(s => s.audio_path).filter(Boolean)]
+    if (!allFiles.length) { alert('Drop some audio files first.'); return }
+    if (!confirm(`Send submission "${patch.name}" with ${allFiles.length} file(s) and copy link to clipboard?`)) return
 
-    const audioFiles = patch.songs.map(s => s.audio_path).filter(Boolean)
-    const missingSongs = patch.songs.filter(s => !s.audio_path).map(s => s.title || s.code)
-    if (missingSongs.length) {
-      if (!confirm(`${missingSongs.length} song(s) have no audio file: ${missingSongs.join(', ')}.\nContinue anyway?`)) return
+    // Save any unmatched files (not already in DEMOS_DIR) to demos folder first
+    for (const df of dropFiles) {
+      if (!df.songId) {
+        try {
+          const buf = await df.file.arrayBuffer()
+          await fetch(`http://localhost:4242/save-audio?dir=demo&filename=${encodeURIComponent(df.filename)}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf
+          })
+        } catch(e) {}
+      }
     }
 
     try {
       const res = await fetch('http://localhost:4242/create-submission', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patchName: patch.name, artist: patch.artist || '', audioFiles })
+        body: JSON.stringify({ patchName: patch.name, artist: patch.artist || '', audioFiles: allFiles })
       })
       const result = await res.json()
       if (!result.ok) throw new Error(result.error)
 
       const linkToSave = result.shareLink || result.folderPath
+      if (linkToSave) navigator.clipboard.writeText(linkToSave).catch(() => {})
 
-      // Copy Dropbox link to clipboard
-      if (linkToSave) {
-        navigator.clipboard.writeText(linkToSave).catch(() => {})
+      // Insert patch_songs for newly dropped matched songs
+      const newSongIds = dropFiles.filter(f => f.songId).map(f => f.songId)
+      if (newSongIds.length) {
+        await supabase.from('patch_songs').insert(newSongIds.map(id => ({ patch_id: patch.id, song_id: id })))
+        await supabase.from('songs').update({ status: 'sent' }).in('id', newSongIds)
+        songs = songs.map(s => newSongIds.includes(s.id) ? { ...s, status: 'sent' } : s)
+      }
+      // Mark existing patch songs as sent
+      const existingSongIds = patch.songs.map(s => s.id)
+      if (existingSongIds.length) {
+        await supabase.from('songs').update({ status: 'sent' }).in('id', existingSongIds)
+        songs = songs.map(s => existingSongIds.includes(s.id) ? { ...s, status: 'sent' } : s)
       }
 
-      // Save link to patch
-      await supabase.from('patches').update({ folder_link: linkToSave }).eq('id', patch.id)
-      patch.folder_link = linkToSave
-
-      // Save link to connection's folder_link (most recent submission)
-      if (patch.contact_id && linkToSave) {
-        await supabase.from('connections').update({ folder_link: linkToSave }).eq('id', patch.contact_id)
-        const conn = connections.find(c => c.id == patch.contact_id)
-        if (conn) { conn.folder_link = linkToSave; connections = [...connections] }
-      }
-
-      // Mark patch as sent + save song codes
-      const songCodes = patch.songs.map(s => ({ code: s.code, title: s.title || '' }))
+      const songCodes = dropFiles.map(f => ({ code: f.title, filename: f.filename }))
       await supabase.from('patches').update({
-        status: 'sent', sent_at: new Date().toISOString(),
-        song_codes: songCodes
+        folder_link: linkToSave, status: 'sent', sent_at: new Date().toISOString(), song_codes: songCodes
       }).eq('id', patch.id)
-      const songIds = patch.songs.map(s => s.id)
-      await supabase.from('songs').update({ status: 'sent' }).in('id', songIds)
+
       patch.status = 'sent'
-      patch.songs = patch.songs.map(s => ({ ...s, status: 'sent' }))
-      songs = songs.map(s => songIds.includes(s.id) ? { ...s, status: 'sent' } : s)
+      patch.folder_link = linkToSave
       patches = [...patches]
+      subDropFiles = { ...subDropFiles, [patch.id]: [] }
 
-      if (submissionBrief && result.folderPath) {
-        fetch('http://localhost:4242/save-submission-brief', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder: result.folderPath, brief: submissionBrief, results: submissionResults })
-        }).catch(() => {})
-        submissionBrief = ''
-        submissionResults = null
-      }
-
-      alert(`✓ Submission sent!\nDropbox link copied to clipboard.${result.missing?.length ? '\n⚠ Missing: ' + result.missing.join(', ') : ''}`)
+      alert(`✓ Sent! Link copied.${result.missing?.length ? '\n⚠ Missing: ' + result.missing.join(', ') : ''}`)
     } catch(err) {
       alert('Error: ' + err.message + '\nMake sure the watcher is running.')
     }
@@ -711,19 +672,6 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ patchName: patch.name })
       }).catch(() => {})
-    }
-
-    // Save song codes to connection's sent_history
-    if (patch?.contact_id && patch?.songs?.length) {
-      const songCodes = (patch.songs||[]).map(s => s.code || s.title || s.id)
-      const { data: conn } = await supabase.from('connections').select('sent_history').eq('id', patch.contact_id).single()
-      const existing = conn?.sent_history || []
-      const already = existing.find(e => e.patch_name === patch.name)
-      if (!already) {
-        await supabase.from('connections').update({
-          sent_history: [...existing, { patch_name: patch.name, sent_at: patch.sent_at, song_codes: songCodes, deleted_at: new Date().toISOString() }]
-        }).eq('id', patch.contact_id)
-      }
     }
 
     // Mark deleted in DB — keep row with all info intact
@@ -1138,22 +1086,22 @@
   {:else}
     <div class="list">
       {#each sortedPatches as patch (patch.id)}
-        {@const contact = connections.find(c => c.id == patch.contact_id)}
+        {@const dropCount = (subDropFiles[patch.id]?.length || 0) + patch.songs.length}
         <div class="patch-card {expandedPatchId === patch.id ? 'exp' : ''}">
           <div class="patch-head" onclick={() => expandedPatchId = expandedPatchId === patch.id ? null : patch.id}>
             <div class="patch-info">
               <span class="patch-name">{patch.name}</span>
-              {#if contact}
-                <span class="patch-contact">→ {contact.name}</span>
-              {:else}
-                <span class="patch-no-contact">⚠ no contact</span>
-              {/if}
+              {#if patch.artist}<span class="patch-contact">{patch.artist}</span>{/if}
             </div>
             {#if patch.folder_link}
               <button class="patch-link-btn" onclick={e => { e.stopPropagation(); openLink(patch.folder_link) }} title={patch.folder_link}>📁</button>
             {/if}
             <button class="patch-listen-btn" onclick={e => { e.stopPropagation(); createShareSession(patch) }} title="Generate listen link">↗</button>
-            <span class="patch-count">{patch.songs.length} songs</span>
+            {#if patch.status === 'open'}
+              <span class="patch-count">{dropCount} files</span>
+            {:else}
+              <span class="patch-count">{patch.songs.length} songs</span>
+            {/if}
             {#if sessionDownloads[patch.name]?.codes?.length}
               <span class="patch-dl-badge" title="Downloaded: {sessionDownloads[patch.name].codes.join(', ')}">
                 ↓ {sessionDownloads[patch.name].codes.length}
@@ -1167,136 +1115,69 @@
           {#if expandedPatchId === patch.id}
             <div class="patch-body">
 
-              <!-- Contact picker — buttons, no <select> binding issues -->
-              <div class="patch-contact-row">
-                <div class="field" style="flex:1">
-                  <label>CONTACT</label>
-                  <div class="contact-current" onclick={() => { showContactPicker[patch.id] = !showContactPicker[patch.id]; showContactPicker = {...showContactPicker} }}>
-                    {#if contact}
-                      <span class="contact-chosen">{contact.name}</span>
-                    {:else}
-                      <span class="contact-none">— choose contact —</span>
-                    {/if}
-                    <span class="contact-arr">▶</span>
-                  </div>
-                  {#if showContactPicker[patch.id]}
-                    <div class="contact-list">
-                      {#if !connections.length}
-                        <div class="contact-opt" style="color:#e05a4a;cursor:default">No connections loaded — check console</div>
-                      {:else}
-                        <button class="contact-opt {!patch.contact_id?'sel':''}" onclick={() => { updatePatchField(patch,'contact_id',null); showContactPicker={...showContactPicker,[patch.id]:false} }}>— None —</button>
-                        {#each connections as c}
-                          <button class="contact-opt {patch.contact_id == c.id ? 'sel' : ''}" onclick={() => { updatePatchField(patch,'contact_id',c.id); showContactPicker={...showContactPicker,[patch.id]:false} }}>
-                            {c.name}
-                          </button>
-                        {/each}
-                      {/if}
-                    </div>
-                  {/if}
-                </div>
-              </div>
-
-              {#if patch.songs.length}
-                <div class="patch-songs">
-                  {#each patch.songs as song}
-                    <div class="patch-song-row">
-                      <span class="code">{song.code}</span>
-                      {#if song.title}<span class="song-title">{song.title}</span>{/if}
-                      <div class="head-meta" style="flex:1">
-                        {#each (song.tags || []).slice(0,2) as tag}
-                          <span class="tag-sm">{tag}</span>
-                        {/each}
-                      </div>
-                      {#if sessionDownloads[patch.name]?.codes?.includes(song.code)}
-                        <span class="song-dl-indicator" title="Downloaded by recipient">↓ downloaded</span>
-                      {/if}
-                      {#if song.project_id}
-                        <span class="proj-badge">PROJECT</span>
-                      {/if}
-                      {#if patch.status !== 'sent'}
-                        <button class="del" onclick={() => removeSongFromPatch(patch, song.id)}>×</button>
-                      {/if}
-                    </div>
-                  {/each}
-                </div>
-              {:else}
-                <p class="empty-sm">No songs yet — add from demo cards (footer).</p>
-              {/if}
-
               {#if patch.status !== 'sent'}
-                <div class="submission-brief-section">
-                  <div class="sub-label">BRIEF / REQUEST INFO (optional)</div>
-                  <textarea
-                    class="brief-input"
-                    placeholder="Paste the label brief here... e.g. 'Looking for dark R&B, 90-100bpm, emotional but club-ready, ref: Summer Walker'"
-                    bind:value={submissionBrief}
-                    rows="3"
-                  ></textarea>
-                  {#if submissionBrief.trim().length > 10}
-                    <button
-                      class="analyze-brief-btn"
-                      disabled={submissionLoading}
-                      onclick={() => analyzeBrief(patch.contact_id)}>
-                      {submissionLoading ? '⏳ Analyzing...' : '🔍 Find Matches'}
-                    </button>
-                  {/if}
-                  {#if submissionResults}
-                    <div class="brief-results">
-                      <div class="result-section">
-                        <div class="result-title">REFERENCE TRACKS FOR THIS BRIEF</div>
-                        <div class="result-subtitle">{submissionResults.reference_tracks?.length || 0} tracks matching the genre/style</div>
-                        {#each (submissionResults.reference_tracks || []) as track}
-                          <div class="result-track">
-                            <span class="track-name">{track.artist} — {track.title}</span>
-                            {#if track.spotify_id}
-                              <a href="https://open.spotify.com/track/{track.spotify_id}" class="listen-link" target="_blank">▶ listen</a>
-                            {/if}
-                            {#if track.tempo}
-                              <span class="track-meta">{Math.round(track.tempo)}bpm{track.key ? ' · ' + track.key : ''}{track.camelot ? ' · ' + track.camelot : ''}</span>
-                            {/if}
-                          </div>
-                        {/each}
-                      </div>
-                      <div class="result-section" style="margin-top:8px">
-                        <div class="result-title">YOUR DEMOS THAT MATCH</div>
-                        <div class="result-subtitle">Best fits from your catalog</div>
-                        {#each (submissionResults.matching_demos || []) as demo}
-                          <div class="result-track">
-                            <span class="track-name">{demo.title || demo.code}</span>
-                            <span class="match-score" style="color:{demo.match_score > 75 ? '#4caf82' : demo.match_score > 50 ? '#e8a838' : '#9e9690'}">{demo.match_score}% match</span>
-                            {#if demo.reasons?.[0]}
-                              <span class="match-reason">{demo.reasons[0]}</span>
-                            {/if}
-                          </div>
-                        {/each}
-                      </div>
-                      {#if submissionResults.analysis}
-                        <div class="result-section" style="margin-top:8px">
-                          <div class="result-title">MOZART'S TAKE</div>
-                          <div class="brief-analysis">{submissionResults.analysis}</div>
-                        </div>
-                      {/if}
-                    </div>
-                  {/if}
+                <!-- Drop zone -->
+                <div class="sub-drop-zone {subDragging[patch.id] ? 'drag-over' : ''}"
+                  ondragover={e => { e.preventDefault(); subDragging = {...subDragging, [patch.id]: true} }}
+                  ondragleave={() => { subDragging = {...subDragging, [patch.id]: false} }}
+                  ondrop={e => handleSubDrop(e, patch)}>
+                  <span class="sub-drop-hint">↓ Drop audio files here (.wav .mp3 .aiff .m4a)</span>
                 </div>
+
+                <!-- File list -->
+                {#if dropCount > 0}
+                  <div class="patch-songs">
+                    {#each (subDropFiles[patch.id] || []) as df}
+                      <div class="patch-song-row">
+                        <span class="sub-filename">{df.title || df.filename}</span>
+                        {#if df.bpm}<span class="meta-pill">{df.bpm} BPM</span>{/if}
+                        {#if df.prevPatches?.length}
+                          <span class="prev-sent-row">
+                            sent:
+                            {#each df.prevPatches as pp}
+                              <span class="prev-sent-chip">{pp}</span>
+                            {/each}
+                          </span>
+                        {/if}
+                        <button class="del" onclick={() => removeDropFile(patch.id, df.filename)}>×</button>
+                      </div>
+                    {/each}
+                    {#each patch.songs as song}
+                      <div class="patch-song-row">
+                        <span class="code">{song.code}</span>
+                        {#if song.title}<span class="song-title">{song.title}</span>{/if}
+                        <button class="del" onclick={() => removeSongFromPatch(patch, song.id)}>×</button>
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <p class="empty-sm">No files yet — drop audio above or use S on demo cards.</p>
+                {/if}
 
                 <div class="patch-footer">
-                  {#if patch.contact_id}
-                    <button class="btn-send" onclick={() => sendPatch(patch)}>→ Send Submission ({patch.songs.length} songs)</button>
-                  {:else}
-                    <button class="btn-send-blocked" disabled>→ Select contact first</button>
-                  {/if}
+                  <button class="btn-send" onclick={() => sendPatch(patch)}>→ Send Submission ({dropCount} files)</button>
                 </div>
-                <!-- Background picker + Generate Link — inline, always visible -->
                 <ListenLinkBlock bind:backgroundStyle={selectedBg} ongenerate={() => createShareSession(patch)} />
               {:else}
                 <div class="sent-info">
-                  <span>Sent {patch.sent_at ? new Date(patch.sent_at).toLocaleDateString('de-CH') : ''}{contact ? ' to '+contact.name : ''}</span>
+                  <span>Sent {patch.sent_at ? new Date(patch.sent_at).toLocaleDateString('de-CH') : ''}</span>
                   {#if patch.folder_link}
                     <button class="link-open-btn" onclick={() => openLink(patch.folder_link)}>📁 {patch.folder_link.length > 40 ? '…'+patch.folder_link.slice(-38) : patch.folder_link}</button>
                   {/if}
                 </div>
-                <!-- Generate new listen link even for sent patches -->
+                {#if patch.songs.length}
+                  <div class="patch-songs">
+                    {#each patch.songs as song}
+                      <div class="patch-song-row">
+                        <span class="code">{song.code}</span>
+                        {#if song.title}<span class="song-title">{song.title}</span>{/if}
+                        {#if sessionDownloads[patch.name]?.codes?.includes(song.code)}
+                          <span class="song-dl-indicator" title="Downloaded by recipient">↓ downloaded</span>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
                 <ListenLinkBlock bind:backgroundStyle={selectedBg} ongenerate={() => createShareSession(patch)} />
                 <div class="field" style="padding:0 0 4px">
                   <label>FEEDBACK RECEIVED</label>
@@ -1343,73 +1224,21 @@
 </div><!-- end demo-layout -->
 
 {#if showPatchModal}
-  <div class="modal-bg" onclick={() => { showPatchModal = false; showPatchContactPicker = false; showPatchArtistPicker = false }}>
+  <div class="modal-bg" onclick={() => showPatchModal = false}>
     <div class="modal" onclick={e => e.stopPropagation()}>
       <div class="modal-title">New Submission</div>
-
       <div class="field">
-        <label>SEND TO <span style="color:#333;font-size:10px">— optional</span></label>
-        <div class="contact-current" onclick={() => { showPatchContactPicker = !showPatchContactPicker; showPatchArtistPicker = false }}>
-          {#if newPatchContact}
-            <span class="contact-chosen">{connections.find(c => c.id == newPatchContact)?.name || '—'}</span>
-          {:else}
-            <span class="contact-none">— No contact yet —</span>
-          {/if}
-          <span class="contact-arr">▶</span>
-        </div>
-        {#if showPatchContactPicker}
-          <div class="contact-list">
-            <button class="contact-opt" onclick={() => { newPatchContact = ''; newPatchArtistId = ''; showPatchContactPicker = false }}>— None —</button>
-            {#each ['ARTISTS', 'PRODUCERS', 'MUSIC INDUSTRY'] as grp}
-              {@const grpConns = connections
-                .filter(c => (c.group_types?.length ? c.group_types : c.group_type ? [c.group_type] : ['MUSIC INDUSTRY']).includes(grp))
-                .slice().sort((a,b) => (a.name||'').localeCompare(b.name||''))}
-              {#if grpConns.length}
-                <div class="contact-group-label">{grp}</div>
-                {#each grpConns as c}
-                  <button class="contact-opt {newPatchContact == c.id ? 'sel' : ''}" onclick={() => { newPatchContact = c.id; newPatchArtistId = ''; showPatchContactPicker = false }}>{c.name}</button>
-                {/each}
-              {/if}
-            {/each}
-          </div>
-        {/if}
+        <label>ARTIST / LABEL NAME</label>
+        <input class="inp-sm" placeholder="e.g. SONY, CAPITAL BRA, NIDJO..."
+          bind:value={newPatchArtistName}
+          onkeydown={e => e.key === 'Enter' && createPatch()} />
       </div>
-
-      <!-- Second picker: ARTIST — only for non-artist connections -->
-      {#if newPatchContact && !isArtistSelected}
-        {#each [connections.filter(c => (c.group_types?.length ? c.group_types : c.group_type ? [c.group_type] : ['MUSIC INDUSTRY']).includes('ARTISTS')).sort((a,b) => (a.name||'').localeCompare(b.name||''))] as artistConns}
-          {#if artistConns.length}
-            <div class="field" style="margin-top:8px">
-              <label>ARTIST <span style="color:#555;font-size:10px">— leave empty for DEMOS</span></label>
-              <div class="contact-current" onclick={() => { showPatchArtistPicker = !showPatchArtistPicker; showPatchContactPicker = false }}>
-                {#if newPatchArtistId}
-                  <span class="contact-chosen">{connections.find(c => c.id == newPatchArtistId)?.name || '—'}</span>
-                {:else}
-                  <span class="contact-none">— DEMOS —</span>
-                {/if}
-                <span class="contact-arr">▶</span>
-              </div>
-              {#if showPatchArtistPicker}
-                <div class="contact-list">
-                  <button class="contact-opt {!newPatchArtistId ? 'sel' : ''}" onclick={() => { newPatchArtistId = ''; showPatchArtistPicker = false }}>— DEMOS —</button>
-                  {#each artistConns as c}
-                    <button class="contact-opt {newPatchArtistId == c.id ? 'sel' : ''}" onclick={() => { newPatchArtistId = c.id; showPatchArtistPicker = false }}>{c.name}</button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/if}
-        {/each}
+      {#if newPatchArtistName.trim()}
+        {@const preview = newPatchArtistName.trim().toUpperCase().replace(/[^A-Z0-9 ]/g,'').trim().replace(/\s+/g,'_')}
+        <div class="patch-name-preview">{String(new Date().getFullYear()).slice(2)}???_{preview}</div>
       {/if}
-
-      <div class="patch-name-preview">
-        {#each [connections.find(c => c.id == newPatchArtistId)] as selArtist}
-          {new Date().toISOString().slice(0,10).replace(/-/g,'')}_{connections.find(c => c.id == newPatchContact)?.name || ''}_{isArtistSelected ? 'DEMOS' : (selArtist?.name || 'DEMOS')}
-        {/each}
-      </div>
-
       <button class="btn-gold-full" style="margin-top:10px" onclick={createPatch}>Create Submission</button>
-      <button class="modal-cancel" onclick={() => { showPatchModal = false; showPatchContactPicker = false; showPatchArtistPicker = false }}>Cancel</button>
+      <button class="modal-cancel" onclick={() => showPatchModal = false}>Cancel</button>
     </div>
   </div>
 {/if}
@@ -1639,7 +1468,6 @@
   .contact-opt.sel { color: #4a9fd4; background: rgba(74,159,212,.06); }
   .player-wrap { display: flex; align-items: center; flex-shrink: 0; min-width: 220px; }
   .mini-player { height: 40px; width: 100%; max-width: 220px; accent-color: #c9a84c; }
-  .btn-send-blocked { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; padding: 10px 20px; background: #0d0d0d; border: 1px solid #252525; color: #444; border-radius: 3px; cursor: not-allowed; width: 100%; }
   .btn-send { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; padding: 10px 20px; background: rgba(74,159,212,.1); border: 1px solid rgba(74,159,212,.4); color: #4a9fd4; border-radius: 3px; cursor: pointer; width: 100%; }
   .btn-send:hover { background: rgba(74,159,212,.18); }
   .patch-count { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; }
@@ -1673,24 +1501,13 @@
   .patch-name-preview { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; padding: 7px 0 2px; border-top: 1px solid #1c1c1c; margin-top: 10px; letter-spacing: .04em; }
   .modal-cancel { font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 3px; cursor: pointer; }
   .modal-cancel:hover { color: #9e9690; }
-  .submission-brief-section { margin: 10px 0; border-top: 1px solid #1a1a1a; padding-top: 10px; }
-  .sub-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-bottom: 6px; }
-  .brief-input { width: 100%; background: #1c1c1c; border: 1px solid #252525; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; padding: 8px; border-radius: 3px; outline: none; resize: vertical; line-height: 1.5; box-sizing: border-box; }
-  .brief-input:focus { border-color: #303030; }
-  .analyze-brief-btn { margin-top: 6px; font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.3); color: #c9a84c; padding: 5px 14px; border-radius: 2px; cursor: pointer; letter-spacing: .06em; }
-  .analyze-brief-btn:disabled { opacity: .4; cursor: default; }
-  .brief-results { margin-top: 10px; max-height: 340px; overflow-y: auto; }
-  .result-section { background: #111; border-radius: 3px; padding: 8px 10px; }
-  .result-title { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .1em; margin-bottom: 2px; }
-  .result-subtitle { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #444; margin-bottom: 8px; }
-  .result-track { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #1a1a1a; flex-wrap: wrap; }
-  .result-track:last-child { border-bottom: none; }
-  .track-name { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #cec9c1; flex: 1; min-width: 0; }
-  .listen-link { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; text-decoration: none; flex-shrink: 0; }
-  .track-meta { font-family: 'Space Mono', monospace; font-size: 8px; color: #444; flex-shrink: 0; }
-  .match-score { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; flex-shrink: 0; }
-  .match-reason { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #555; font-style: italic; }
-  .brief-analysis { font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #9e9690; line-height: 1.6; }
+  .sub-drop-zone { border: 1px dashed #303030; border-radius: 3px; padding: 14px 16px; display: flex; align-items: center; justify-content: center; background: #080808; transition: all .15s; cursor: copy; }
+  .sub-drop-zone.drag-over { border-color: #4a9fd4; background: rgba(74,159,212,.05); }
+  .sub-drop-hint { font-family: 'Space Mono', monospace; font-size: 11px; color: #333; }
+  .sub-drop-zone.drag-over .sub-drop-hint { color: #4a9fd4; }
+  .sub-filename { font-family: 'Space Mono', monospace; font-size: 11px; color: #cec9c1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prev-sent-row { display: flex; align-items: center; gap: 4px; flex-shrink: 0; font-family: 'Space Mono', monospace; font-size: 9px; color: #555; }
+  .prev-sent-chip { font-family: 'Space Mono', monospace; font-size: 9px; padding: 1px 5px; border-radius: 2px; background: rgba(224,90,74,.08); border: 1px solid rgba(224,90,74,.3); color: #e05a4a; white-space: nowrap; }
   .bg-options { display: flex; flex-direction: column; gap: 6px; }
   .bg-opt { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #141414; border: 1px solid #252525; border-radius: 4px; cursor: pointer; text-align: left; transition: all .15s; }
   .bg-opt:hover { border-color: #303030; background: #1c1c1c; }

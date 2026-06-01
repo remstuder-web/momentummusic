@@ -3004,8 +3004,8 @@ async function fetchSpotifyId(title, artist) {
 // ── Public filename — strips internal code prefix for artist-facing downloads ──
 function getPublicFilename(internalFilename, artist, songTitle) {
   if (!internalFilename) return internalFilename
-  // Remove leading 8-digit code like "26040604_"
-  const withoutCode = internalFilename.replace(/^\d{8}_/, '')
+  // Remove leading 6- or 8-digit code like "260601_" or "26040604_"
+  const withoutCode = internalFilename.replace(/^\d{6,8}_/, '')
   const artistClean = (artist || '').toUpperCase()
     .replace(/[^A-Z0-9 ]/g, '')
     .trim()

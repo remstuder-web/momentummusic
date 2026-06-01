@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/routes/+page.svelte, src/lib/DailyTab.svelte, momentum-watcher.cjs — DONE
+TASK: cleanup-remove-notes-tab-daily-calendar
+WHAT: Removed Notes tab entirely; removed Tasks section + calendar/week/year plan view + today-section from Daily tab; removed sidebar calendar widget; removed Apple Notes endpoints (GET/POST/PATCH/DELETE /notes, /notes/reorder, /apple-notes, /apple-notes-sync) + setInterval + notes table startup check from watcher; cleaned ~400 lines of dead script code (addTask, buildCal, upcomingTasks, reminders, resolveTaskPrefix, etc.)
+RESULT: works — clean build, watcher healthy
+BLOCKERS: none
+
 ## [2026-05-21] momentum-watcher.cjs + src/lib/DailyTab.svelte — DONE
 TASK: midi-generator-rewrite-midi-input
 WHAT: Rewrite MIDI FROM REFERENCE to accept .mid input instead of audio; parse MIDI with mido (BPM, key, note density, chord clusters, melodic phrases, rhythmic pattern), send to Claude Sonnet, generate 5 .mid files to Desktop

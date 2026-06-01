@@ -11660,168 +11660,6 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
-  // ── GET /notes — read all notes from Obsidian/Notes/ ─────────────────────────
-  if (req.method === 'GET' && req.url === '/notes') {
-    try {
-      const nowNote = parseNowNote()
-      const regularNotes = readNotesDir()
-      const notes = nowNote ? [nowNote, ...regularNotes] : regularNotes
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, notes, lastSync: appleNotesLastSync }))
-    } catch(e) {
-      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
-    }
-    return
-  }
-
-  // ── POST /notes — create note in Obsidian + Apple Notes ──────────────────────
-  if (req.method === 'POST' && req.url === '/notes') {
-    const chunks = []; req.on('data', c => chunks.push(c))
-    req.on('end', async () => {
-      try {
-        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        if (!body.title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'title required' })); return }
-        if (!fs.existsSync(NOTES_PATH)) fs.mkdirSync(NOTES_PATH, { recursive: true })
-        const filename = noteToFilename(body.title)
-        const existingNotes = readNotesDir()
-        const nextPos = existingNotes.length
-        writeNoteFile(path.join(NOTES_PATH, filename), { content: body.content || '', position: nextPos })
-        createAppleNote(body.title, body.content || '', 'Notes').catch(() => {})
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, filename }))
-      } catch(e) {
-        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
-      }
-    })
-    return
-  }
-
-  // ── PATCH /notes — update note content or rename ──────────────────────────────
-  if (req.method === 'PATCH' && req.url === '/notes') {
-    const chunks = []; req.on('data', c => chunks.push(c))
-    req.on('end', async () => {
-      try {
-        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        if (!body.filename) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'filename required' })); return }
-        const oldPath = path.join(NOTES_PATH, body.filename)
-        let filename = body.filename
-        let title = body.filename.replace(/\.md$/, '')
-        // Rename: create new file, delete old
-        // Read existing position before any rename/overwrite
-        let existingPosition = null
-        if (fs.existsSync(oldPath)) {
-          const { fm } = parseFrontmatter(fs.readFileSync(oldPath, 'utf8'))
-          if (fm.position !== undefined) existingPosition = parseInt(fm.position, 10)
-        }
-        if (body.title && noteToFilename(body.title) !== body.filename) {
-          filename = noteToFilename(body.title)
-          title = body.title
-          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath)
-        }
-        writeNoteFile(path.join(NOTES_PATH, filename), { content: body.content ?? '', position: existingPosition })
-        updateAppleNote(title, body.content ?? '', 'Notes').catch(() => {})
-        // NOW.md: reset 30s extract timer on every save
-        if (filename === 'NOW.md') {
-          clearTimeout(nowExtractTimer)
-          nowExtractTimer = setTimeout(async () => {
-            try {
-              await extractNowEntries(body.content ?? '')
-              console.log('NOW auto-extracted to brain')
-            } catch(e) { console.error('NOW extract error:', e.message) }
-          }, 30000)
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, filename }))
-      } catch(e) {
-        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
-      }
-    })
-    return
-  }
-
-  // ── DELETE /notes — delete note file (Apple Note left intact) ─────────────────
-  if (req.method === 'DELETE' && req.url === '/notes') {
-    const chunks = []; req.on('data', c => chunks.push(c))
-    req.on('end', async () => {
-      try {
-        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        if (!body.filename) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'filename required' })); return }
-        const fp = path.join(NOTES_PATH, body.filename)
-        if (fs.existsSync(fp)) fs.unlinkSync(fp)
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true }))
-      } catch(e) {
-        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
-      }
-    })
-    return
-  }
-
-  // ── POST /notes/reorder — swap positions of two adjacent notes ───────────────
-  if (req.method === 'POST' && req.url === '/notes/reorder') {
-    const chunks = []; req.on('data', c => chunks.push(c))
-    req.on('end', async () => {
-      try {
-        const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        if (!body.filename || body.direction === undefined) {
-          res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'filename and direction required' })); return
-        }
-        const all = readNotesDir()
-        const idx = all.findIndex(n => n.filename === body.filename)
-        const swapIdx = idx + body.direction
-        if (idx < 0 || swapIdx < 0 || swapIdx >= all.length) {
-          res.writeHead(200); res.end(JSON.stringify({ ok: true })); return
-        }
-        // Assign explicit positions to all notes if any are unpositioned
-        const needsInit = all.some(n => n.position === null)
-        if (needsInit) {
-          for (let i = 0; i < all.length; i++) all[i].position = i
-        }
-        // Swap positions
-        const posA = all[idx].position
-        const posB = all[swapIdx].position
-        all[idx].position = posB
-        all[swapIdx].position = posA
-        // Write both files preserving content
-        for (const n of [all[idx], all[swapIdx]]) {
-          const fp = path.join(NOTES_PATH, n.filename)
-          if (fs.existsSync(fp)) {
-            writeNoteFile(fp, { content: n.content, position: n.position, source: n.source || 'momentum' })
-          }
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true }))
-      } catch(e) {
-        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
-      }
-    })
-    return
-  }
-
-  // ── GET /apple-notes — return raw Apple Notes list ───────────────────────────
-  if (req.method === 'GET' && req.url === '/apple-notes') {
-    try {
-      const notes = await getAppleNotes('Notes')
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, notes, lastSync: appleNotesLastSync, count: notes.length }))
-    } catch(e) {
-      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
-    }
-    return
-  }
-
-  // ── POST /apple-notes-sync — sync Apple Notes → Obsidian/Notes/ ──────────────
-  if (req.method === 'POST' && req.url === '/apple-notes-sync') {
-    try {
-      const result = await syncAppleNotesToObsidian()
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, ...result, lastSync: appleNotesLastSync }))
-    } catch(e) {
-      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
-    }
-    return
-  }
-
   // ── GET /now — read NOW.md content ───────────────────────────────────────────
   if (req.method === 'GET' && req.url === '/now') {
     try {
@@ -13797,17 +13635,6 @@ server.listen(PORT, '127.0.0.1', () => {
   } else {
     console.log('⚠ Obsidian vault not found:', OBSIDIAN_VAULT_PATH, '— create vault to enable sync')
   }
-  ensureNowNote()
-  // Apple Notes auto-sync every 5 minutes
-  if (!fs.existsSync(NOTES_PATH)) fs.mkdirSync(NOTES_PATH, { recursive: true })
-  setInterval(async () => {
-    try { await syncAppleNotesToObsidian() } catch(e) { logError('apple-notes-sync', e.message) }
-    try { await reconcileNotes() } catch(e) { logError('notes-reconcile', e.message) }
-  }, 5 * 60 * 1000)
-  setTimeout(async () => {
-    try { await reconcileNotes() } catch(e) { logError('notes-reconcile', e.message) }
-  }, 10000)
-  console.log('✓ Apple Notes auto-sync + reconcile: every 5 minutes')
   // connectBrainEntries() — defined at module scope above (accessible via endpoint + scheduler)
 
   // Weekly brain review — Sunday 8am
@@ -13943,9 +13770,6 @@ Max 150 words. Be specific and actionable.` }]
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=warmth,rhythm_regularity,harmonic_complexity&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing extended analysis columns — run SQL in Supabase:\nALTER TABLE reference_tracks\n  ADD COLUMN IF NOT EXISTS speechiness float,\n  ADD COLUMN IF NOT EXISTS instrumentalness float,\n  ADD COLUMN IF NOT EXISTS onset_rate float,\n  ADD COLUMN IF NOT EXISTS rhythm_regularity float,\n  ADD COLUMN IF NOT EXISTS dynamic_complexity float,\n  ADD COLUMN IF NOT EXISTS loudness_range float,\n  ADD COLUMN IF NOT EXISTS vocal_pitch_mean float,\n  ADD COLUMN IF NOT EXISTS vocal_pitch_range float,\n  ADD COLUMN IF NOT EXISTS vocal_root_note text,\n  ADD COLUMN IF NOT EXISTS vibrato_presence float,\n  ADD COLUMN IF NOT EXISTS harmonic_complexity float,\n  ADD COLUMN IF NOT EXISTS warmth float;') })
-    .catch(() => {})
-  fetch(`${SUPABASE_URL}/rest/v1/notes?select=apple_note_id,source&limit=1`, { headers: sbHeaders })
-    .then(r => { if (r.status === 400) console.warn('⚠ notes table missing Apple Notes columns — run SQL in Supabase:\nALTER TABLE notes ADD COLUMN IF NOT EXISTS apple_note_id text;\nALTER TABLE notes ADD COLUMN IF NOT EXISTS source text DEFAULT \'momentum\';\nALTER TABLE notes ADD COLUMN IF NOT EXISTS updated_at timestamptz;\nCREATE UNIQUE INDEX IF NOT EXISTS notes_apple_note_id_idx ON notes(apple_note_id) WHERE apple_note_id IS NOT NULL;') })
     .catch(() => {})
   fetch(`${SUPABASE_URL}/rest/v1/vocal_eq_curves?select=stem_type,source_type,version_name&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ vocal_eq_curves missing columns — run SQL in Supabase:\nALTER TABLE vocal_eq_curves\n  ADD COLUMN IF NOT EXISTS stem_type text DEFAULT \'vocals\',\n  ADD COLUMN IF NOT EXISTS source_type text DEFAULT \'mix\',\n  ADD COLUMN IF NOT EXISTS version_name text;') })

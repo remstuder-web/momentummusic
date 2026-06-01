@@ -5,23 +5,11 @@
 
   const today = new Date().toDateString()
   const todayISO = new Date().toISOString().slice(0,10)
-  const tomorrowDate = new Date(); tomorrowDate.setDate(tomorrowDate.getDate()+1)
-  const tomorrowISO = tomorrowDate.toISOString().slice(0,10)
-
-  // Get next 7 days ISO strings
-  function getWeekDays() {
-    return Array.from({length: 7}, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() + i)
-      return d.toISOString().slice(0,10)
-    })
-  }
 
   let state = $state({
     date: today, ticks: {}, customs: [], healthChecks: {}, healthTicks: {},
     helpers: [], helperTicks: {}, privateItems: [], privateTicks: {},
-    checkItems: [], checkTicks: {},
-    tasks: [], dismissedReminders: [], seededFixed: false,
-    calYear: new Date().getFullYear(), calMonth: new Date().getMonth(), selectedDay: todayISO
+    checkItems: [], checkTicks: {}
   })
 
   let projects = $state([])
@@ -29,12 +17,10 @@
   let allSongs_ = $state([])
   let demoSongs_ = $state([])
   let loading = $state(true)
-  let calDate = $state(new Date())
 
   // Inline preview audio
   let inlineAudio = null
   let inlinePlayingUrl = $state('')
-  let selectedDay = $state(todayISO)
   let activeSection = $state('routine')
 
   let newCheck = $state('')
@@ -206,10 +192,6 @@
       { name: 'get_groove_pool', hint: 'Get all grooves in the groove pool' },
     ]},
   ]
-  let reminders = $state([])
-  let subReminders = $state([]) // weekly submission nudges
-  let tasksOpen = $state(true)
-  let newTask = $state({ label: '', date: todayISO, time: '', time_to: '', type: 'general', artist: '', project: '', song: '', stage: '', recurring: false })
   let newCustom = $state(''), newCustomUrl = $state(''), newHealth = $state('')
 
   // Mozart
@@ -221,21 +203,6 @@
     }
   })
   let correctionInputs = $state({}) // keyed by message index
-
-  // TTS speak
-  let undoStack = $state([])
-
-  function pushDailyUndo(description, tasksSnapshot) {
-    undoStack = [{ description, tasksSnapshot: JSON.parse(JSON.stringify(tasksSnapshot)), timestamp: Date.now() }, ...undoStack].slice(0, 10)
-  }
-
-  async function undoDaily() {
-    if (!undoStack.length) return
-    const action = undoStack[0]
-    undoStack = undoStack.slice(1)
-    state.tasks = action.tasksSnapshot
-    await save()
-  }
 
   let speakingId = $state(null)
   let openArticles = $state({})
@@ -258,10 +225,6 @@
     if (speakToastTimer) clearTimeout(speakToastTimer)
     speakToastTimer = setTimeout(() => speakToast = '', 3500)
   }
-
-  let saveStatus = $state('')
-  let showRestoreBanner = $state(false)
-  let pendingBackupTasks = $state([])
 
   // Goals
   let activeGoals = $state([])
@@ -311,137 +274,6 @@
   // Check Out — brain_knowledge entries surfaced for daily review
   let checkOutItems = $state([])
 
-  const FIXED_SEED = []
-  const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa']
-  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
-  const TASK_TYPES = [
-    { id: 'general',  label: 'GENERAL' },
-    { id: 'deadline', label: 'DEADLINE' },
-    { id: 'session',  label: 'SESSION' },
-    { id: 'private',  label: 'PRIVATE' },
-  ]
-  const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
-
-  function taskColor(type, recurring) {
-    if (type === 'deadline') return '#e05a4a'
-    if (type === 'session') return '#4caf82'
-    if (type === 'private') return '#4a9fd4'
-    return '#c9a84c'
-  }
-
-  function buildCal(d) {
-    const year = d.getFullYear(), month = d.getMonth()
-    const first = new Date(year, month, 1).getDay()
-    const days = new Date(year, month+1, 0).getDate()
-    const cells = []
-    for (let i = 0; i < first; i++) cells.push(null)
-    for (let i = 1; i <= days; i++) {
-      const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`
-      cells.push({ day: i, iso })
-    }
-    return cells
-  }
-
-  let calDays = $derived(buildCal(calDate))
-  let weekDays = $derived(getWeekDays())
-
-  // Upcoming = tasks not hidden_from_upcoming and date >= today, sorted
-  let upcomingTasks = $derived(
-    (state.tasks||[]).filter(t => !t.hidden_from_upcoming && t.date >= todayISO)
-      .sort((a,b) => a.date.localeCompare(b.date))
-  )
-  // Week tasks grouped by day
-  let weekTasksByDay = $derived(buildWeekTasks())
-
-  function buildWeekTasks() {
-    const map = {}
-    weekDays.forEach(d => { map[d] = [] })
-    ;(state.tasks||[]).filter(t => weekDays.includes(t.date)).forEach(t => {
-      if (map[t.date]) map[t.date].push(t)
-    })
-    projects.forEach(p => {
-      (p.deadlines||[]).filter(d => weekDays.includes(d.date) && !d.done).forEach(d => {
-        if (map[d.date]) map[d.date].push({ id: 'dl_'+d.id, label: d.label, type: 'project', project: p.name, color: p.color, isDeadline: true })
-      })
-    })
-    return map
-  }
-
-  function calPrev() { calDate = new Date(calDate.getFullYear(), calDate.getMonth()-1, 1) }
-  function calNext() { calDate = new Date(calDate.getFullYear(), calDate.getMonth()+1, 1) }
-
-  function seedFixed() {
-    const ids = (state.customs||[]).map(c => c.id)
-    const toAdd = FIXED_SEED.filter(s => !ids.includes(s.id))
-    if (toAdd.length) {
-      state.customs = [...toAdd, ...(state.customs||[])]
-      state.seededFixed = true
-    }
-  }
-
-  async function checkDeadlineReminders() {
-    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowISO = tomorrow.toISOString().slice(0,10)
-    const found = []
-    projects.forEach(p => {
-      (p.deadlines||[]).forEach(d => {
-        if (!d.done && d.date === tomorrowISO) {
-          const key = `deadline__${p.name}__${d.label}__${d.date}`
-          if (!(state.dismissedReminders||[]).includes(key))
-            found.push({ key, label: d.label, project: p.name, color: p.color })
-        }
-      })
-    })
-    ;(state.tasks||[]).forEach(t => {
-      if (!t.done && t.date === tomorrowISO) {
-        const key = `task__${t.id}__${t.date}`
-        if (!(state.dismissedReminders||[]).includes(key))
-          found.push({ key, label: t.label, project: t.project||'', color: taskColor(t.type, t.recurring || !t.date) })
-      }
-    })
-    reminders = found
-    if (found.length && typeof window !== 'undefined' && 'Notification' in window) {
-      const perm = await Notification.requestPermission()
-      if (perm === 'granted') found.forEach(r =>
-        new Notification('Momentum — Tomorrow', { body: r.label+(r.project?' · '+r.project:''), icon: '/favicon.png' })
-      )
-    }
-  }
-
-  async function dismissReminder(key) {
-    state.dismissedReminders = [...(state.dismissedReminders||[]), key]
-    reminders = reminders.filter(r => r.key !== key)
-    await save()
-  }
-
-  function dismissSubReminder(key) {
-    subReminders = subReminders.filter(r => r.key !== key)
-  }
-
-  async function loadSubReminders() {
-    try {
-      const { data: patches } = await supabase.from('patches')
-        .select('id, name, created_at, contact_id')
-        .not('status', 'in', '("sent","deleted")')
-        .order('created_at', { ascending: false })
-      if (!patches?.length) { subReminders = []; return }
-
-      const now = new Date()
-      const found = []
-      for (const p of patches) {
-        const created = new Date(p.created_at)
-        const daysSince = Math.floor((now - created) / 86400000)
-        if (daysSince < 7) continue // not yet a week old
-
-        // week number since creation (0 = first week, 1 = second week...)
-        const weekNum = Math.floor(daysSince / 7)
-        const key = `sub_${p.id}_w${weekNum}`
-        found.push({ key, name: p.name, weekNum, daysSince })
-      }
-      subReminders = found
-    } catch(e) {}
-  }
-
   async function loadStaticData() {
     const keys = ['customs', 'helpers', 'helper_ticks']
     const { data } = await supabase.from('user_settings').select('key, value').in('key', keys)
@@ -490,31 +322,6 @@
       projectSongs = songMap
       const { data } = await supabase.from('daily_state').select('*').eq('date', today).maybeSingle()
 
-      // Load recurring tasks AND dated future tasks from recent rows
-      let recurringTasks = []
-      let futureTasks = []
-      {
-        const { data: rt } = await supabase.from('daily_state')
-          .select('tasks')
-          .neq('date', today)
-          .order('id', { ascending: false })
-          .limit(60)
-        if (rt?.length) {
-          const seen = new Set()
-          for (const row of rt) {
-            for (const t of (row.tasks || [])) {
-              if (seen.has(t.id) || t.done) continue
-              seen.add(t.id)
-              if (t.recurring) {
-                recurringTasks.push(t)
-              } else if (t.date) {
-                // Dated task from a previous row — keep it so it doesn't get lost
-                futureTasks.push(t)
-              }
-            }
-          }
-        }
-      }
       // Fallback for private_items, check_items (still per-day)
       let fallback = null
       if (!data?.private_items?.length && !data?.check_items?.length) {
@@ -524,8 +331,6 @@
           .order('id', { ascending: false }).limit(1).maybeSingle()
         fallback = fb
       }
-      // Read backup before state is set — so removal below doesn't lose it
-      const backup = localStorage.getItem('mm_daily_backup_' + todayISO)
 
       if (data) {
         state = { ...state,
@@ -535,56 +340,18 @@
           privateItems: data.private_items?.length ? data.private_items : (fallback?.private_items||[]),
           privateTicks: data.private_ticks||{},
           checkItems: data.check_items?.length ? data.check_items : (fallback?.check_items||[]),
-          checkTicks: data.check_ticks||{},
-          tasks: (() => {
-            const todayTasks = data.tasks || []
-            const todayIds = new Set(todayTasks.map(t => t.id))
-            const merged = [
-              ...todayTasks,
-              ...recurringTasks.filter(t => !todayIds.has(t.id)),
-              ...futureTasks.filter(t => !todayIds.has(t.id))
-            ]
-            return merged
-          })(), dismissedReminders: data.dismissed_reminders||[],
-          seededFixed: data.seeded_fixed||false,
-          calYear: data.cal_year||new Date().getFullYear(), calMonth: data.cal_month||new Date().getMonth(),
-          selectedDay: data.selected_day||todayISO
+          checkTicks: data.check_ticks||{}
         }
-        if (data.selected_day) selectedDay = data.selected_day
-        if (data.cal_year) calDate = new Date(data.cal_year, data.cal_month||0, 1)
-        localStorage.removeItem('mm_daily_backup_' + todayISO)
-      } else {
-        // No row for today — load private/check from fallback
-        if (fallback) {
-          state = { ...state,
-            helperTicks: {},
-            privateItems: fallback?.private_items||[],
-            privateTicks: {},
-            checkItems: fallback?.check_items||[],
-            checkTicks: {},
-            tasks: [...recurringTasks, ...futureTasks],
-          }
+      } else if (fallback) {
+        state = { ...state,
+          helperTicks: {},
+          privateItems: fallback?.private_items||[],
+          privateTicks: {},
+          checkItems: fallback?.check_items||[],
+          checkTicks: {}
         }
-        localStorage.removeItem('mm_daily_backup_' + todayISO)
       }
-      seedFixed()
-      loadSubReminders()
-      // Persist ticks/tasks into today's daily_state row
-      if (fallback || recurringTasks.length || futureTasks.length) await save()
-      // Restore banner: only show tasks in backup that are missing from Supabase (truly lost)
-      if (backup) {
-        try {
-          const backupTasks = JSON.parse(backup)
-          const supabaseTasks = state.tasks || []
-          const newInBackup = backupTasks.filter(b => !supabaseTasks.some(s => s.id === b.id))
-          if (newInBackup.length > 0) {
-            showRestoreBanner = true
-            pendingBackupTasks = newInBackup
-          } else {
-            localStorage.removeItem('mm_daily_backup_' + todayISO)
-          }
-        } catch(e) { localStorage.removeItem('mm_daily_backup_' + todayISO) }
-      }
+      if (fallback) await save()
     } catch(e) { console.error('LOAD ERROR:', e) }
     loading = false
   }
@@ -600,25 +367,12 @@
   }
 
   async function save() {
-    saveStatus = 'saving'
-    const { error } = await supabase.from('daily_state').upsert({
+    await supabase.from('daily_state').upsert({
       date: today,
-      tasks: state.tasks,
-      dismissed_reminders: state.dismissedReminders,
       ticks: state.ticks,
       health_ticks: state.healthTicks,
       private_ticks: state.privateTicks
     }, { onConflict: 'date' })
-    if (error) {
-      saveStatus = 'error'
-      console.error('DailyTab save failed:', error)
-      try {
-        localStorage.setItem('mm_daily_backup_' + todayISO, JSON.stringify(state.tasks))
-      } catch(e) {}
-    } else {
-      saveStatus = 'saved'
-      setTimeout(() => saveStatus = '', 1500)
-    }
   }
 
   async function tick(id) { state.ticks = {...state.ticks, [id]: !state.ticks[id]}; await save() }
@@ -701,72 +455,6 @@
     state.healthChecks = arr; await save()
   }
 
-  function resolveTaskPrefix(t) {
-    const color = t.type === 'deadline' ? '#e05a4a'
-                : t.type === 'session'  ? '#4caf82'
-                : t.type === 'private'  ? '#4a9fd4'
-                : '#c9a84c'
-
-    // Build context: TYPE · ARTIST — PROJECT
-    const parts = []
-
-    // Type badge always first
-    parts.push(t.type.toUpperCase())
-
-    // Artist + project chain
-    if (t.project_id) {
-      const proj = projects.find(p => p.id === t.project_id)
-      if (proj) {
-        if (proj.artist) parts.push(proj.artist.toUpperCase())
-        parts.push(proj.name.toUpperCase())
-      }
-    } else if (t.project) {
-      const proj = projects.find(p => p.name === t.project)
-      const artist = proj?.artist || t.artist || ''
-      if (artist) parts.push(artist.toUpperCase())
-      parts.push(t.project.toUpperCase())
-    } else if (t.artist) {
-      parts.push(t.artist.toUpperCase())
-    }
-
-    // Song if present
-    if (t.song_id) {
-      const song = allSongs_.find(s => s.id === t.song_id) || demoSongs_.find(s => s.id === t.song_id)
-      if (song) parts.push((song.title || song.code).toUpperCase())
-    } else if (t.song) {
-      parts.push(t.song.toUpperCase())
-    }
-
-    return { label: parts.join(' · '), color }
-  }
-
-  const SONG_STAGES = [
-    { id: 'production', label: 'PRODUCTION', prefix: 'PR' },
-    { id: 'mix_prep',   label: 'MIX PREP',   prefix: 'MP' },
-    { id: 'mixing',     label: 'MIXING',      prefix: 'MR' },
-    { id: 'mastering',  label: 'MASTERING',   prefix: 'MA' },
-    { id: 'stems',      label: 'STEMS',       prefix: 'ST' },
-  ]
-
-  function getActiveVersion(songObj, stage) {
-    const wd = songObj?.work_data || {}
-    const versions = wd.versions || []
-    const activeId = wd.active_version_id
-    const stageVers = versions.filter(v => v.version_type === (stage === 'mixing' ? 'mixing' : stage === 'production' ? 'production' : null))
-    if (!stageVers.length) return null
-    return stageVers.find(v => v.id === activeId) || stageVers[stageVers.length - 1]
-  }
-
-  function buildTaskPrefix(songName, stage) {
-    const stageConf = SONG_STAGES.find(s => s.id === stage)
-    if (!stageConf) return songName
-    const songList = Object.values(projectSongs).flat()
-    const songObj = songList.find(s => (s.title || s.code) === songName)
-    const ver = getActiveVersion(songObj, stage)
-    const verLabel = ver ? ' ' + ver.name.toUpperCase() : ''
-    return `${stageConf.prefix}${verLabel}`
-  }
-
   async function addCheck() {
     if (!newCheck.trim()) return
     const item = { id: 'ck'+Date.now(), label: newCheck.trim(), url: newCheckUrl.trim() }
@@ -786,102 +474,8 @@
     state.checkItems = arr; await save()
   }
 
-  async function addTask() {
-    const proj = projects.find(p => p.name === newTask.project)
-    const proj_id = proj ? proj.id : null
-    const songList = proj_id ? (projectSongs[proj_id] || projectSongs[newTask.project] || []) : demoSongs_
-    const songObj = songList.find(s => (s.title || s.code) === newTask.song)
-    const song_id = songObj ? songObj.id : null
-    const stageConf = SONG_STAGES.find(s => s.id === newTask.stage)
-
-    // Auto-generate label if stage selected but no label typed
-    let label = newTask.label.trim()
-    if (newTask.type === 'song' && newTask.song && stageConf) {
-      const ver = (newTask.stage === 'production' || newTask.stage === 'mixing')
-        ? getActiveVersion(songObj, newTask.stage)
-        : null
-      const verStr = ver ? ' ' + ver.name.toUpperCase() : ''
-      const stageLabel = {
-        production: 'PRODUCTION REVISION',
-        mix_prep:   'MIX PREP',
-        mixing:     'MIX REVISION',
-        mastering:  'MASTERING',
-        stems:      'STEMS',
-      }[newTask.stage] || stageConf.label
-      const autoLabel = stageLabel + verStr
-      label = label ? autoLabel + ' — ' + label : autoLabel
-    }
-
-    if (!label) return // nothing to save
-
-    pushDailyUndo('Added task: ' + label.slice(0, 30), state.tasks)
-
-    // Only recurring if user explicitly toggled the ☀ button
-    const isRecurring = newTask.recurring
-
-    // Auto-fill time_to: if only start time given, add 1 hour
-    let autoTimeTo = newTask.time_to
-    if (newTask.time && !newTask.time_to) {
-      const [h, m] = newTask.time.split(':').map(Number)
-      autoTimeTo = String((h + 1) % 24).padStart(2, '0') + ':' + String(m).padStart(2, '0')
-    }
-
-    state.tasks = [...state.tasks, {
-      id: 't'+Date.now(), label,
-      date: isRecurring ? '' : newTask.date,
-      time: isRecurring ? '' : (newTask.time || ''),
-      time_to: isRecurring ? '' : autoTimeTo,
-      type: newTask.type,
-      artist: newTask.artist || '',
-      project: newTask.project, project_id: proj_id,
-      song: newTask.song, song_id,
-      stage: newTask.stage,
-      done: false, hidden_from_upcoming: false,
-      recurring: isRecurring
-    }]
-    newTask = { label: '', date: todayISO, time: '', time_to: '', type: 'general', artist: '', project: '', song: '', stage: '', recurring: false }
-    upcomingTab = 'week'
-    await save()
-  }
-  async function toggleTask(id) {
-    state.tasks = state.tasks.map(t => t.id === id ? {...t, done: !t.done} : t); await save()
-  }
-  async function updateTask(id, field, value) {
-    state.tasks = state.tasks.map(t => t.id === id ? {...t, [field]: value} : t); await save()
-  }
-  async function dismissFromUpcoming(id) {
-    state.tasks = state.tasks.map(t => t.id === id ? {...t, hidden_from_upcoming: true} : t); await save()
-  }
-  async function togglePin(id) {
-    const alreadyPinned = state.tasks.find(t => t.id === id)?.pinned
-    state.tasks = state.tasks.map(t => ({ ...t, pinned: t.id === id ? !alreadyPinned : false }))
-    await save()
-  }
-
-  async function delTask(id) {
-    const deletedTask = state.tasks.find(t => t.id === id)
-    if (deletedTask) pushDailyUndo('Deleted task: ' + (deletedTask.label || '').slice(0, 30), state.tasks)
-    state.tasks = state.tasks.filter(t => t.id !== id)
-    await save()
-    localStorage.removeItem('mm_daily_backup_' + todayISO)
-    // Also scrub from all other daily_state rows (recurring tasks live in past rows)
-    const { data: rows } = await supabase.from('daily_state')
-      .select('id, tasks').neq('date', today).not('tasks', 'eq', '[]')
-    if (rows) {
-      for (const row of rows) {
-        const cleaned = (row.tasks || []).filter(t => t.id !== id)
-        if (cleaned.length !== (row.tasks || []).length) {
-          await supabase.from('daily_state').update({ tasks: cleaned }).eq('id', row.id)
-        }
-      }
-    }
-  }
-
-  let upcomingTab = $state('week')
-  let editingTaskId = $state(null)
   let inboxItems = $state([])
   let inboxUnread = $state(0)
-  let brainReviewCount = $state(0)
   let generatingBriefing = $state(false)
   let autoBriefingLoading = $state(false)
   let agentLastRun = $state({})
@@ -893,7 +487,6 @@
   let visibleInbox = $derived(
     inboxItems.filter(n => routineOnlyTypes.includes(n.type) ? activeSection === 'routine' : true)
   )
-  let pinnedTask = $derived((state.tasks || []).find(t => t.pinned))
   let scoutingArtists = $state(false)
   let whatsappName = $state('')
 
@@ -1070,39 +663,6 @@
     inboxUnread = inboxItems.filter(n => !n.read).length
   }
 
-  function getUpcomingItems(tab) {
-    const recurring = (state.tasks||[]).filter(t => !t.done && t.recurring)
-    const tasks = (state.tasks||[]).filter(t => !t.done && !t.recurring)
-    const deadlines = projects.flatMap(p =>
-      (p.deadlines||[]).filter(d => !d.done && d.date).map(d => ({
-        id: 'dl_'+d.date+p.id, label: d.label, date: d.date, time: '',
-        type: 'deadline', project: p.name, song: '', _isDL: true, _color: p.color
-      }))
-    )
-    const all = [...tasks, ...deadlines].sort((a,b) => a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''))
-    const addDays = n => { const d = new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10) }
-
-    const weekEnd  = addDays(7)
-    const monthEnd = addDays(28)
-
-    const recurringMapped = recurring.map(t => ({ ...t, date: todayISO, _recurring: true }))
-    if (tab === 'week')  return all.filter(t => t.date >= todayISO && t.date <= weekEnd)
-    if (tab === 'month') return all.filter(t => t.date >= todayISO && t.date <= monthEnd)
-    if (tab === 'check') return [...recurringMapped, ...all]
-
-    // YEAR: all tasks (incl. past) for the current calendar year, plus done tasks with dates
-    const yearStr = todayISO.slice(0, 4)
-    const allYearTasks = (state.tasks||[]).filter(t => !t.recurring && t.date && t.date.startsWith(yearStr))
-    const allYearDLs = projects.flatMap(p =>
-      (p.deadlines||[]).filter(d => d.date && d.date.startsWith(yearStr)).map(d => ({
-        id: 'dl_'+d.date+p.id, label: d.label, date: d.date, time: '',
-        type: 'deadline', project: p.name, song: '', _isDL: true, _color: p.color,
-        _done: d.done
-      }))
-    )
-    return [...allYearTasks, ...allYearDLs].sort((a,b) => a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''))
-  }
-
   // Mozart
   async function sendAI(rawMsg) {
     const msg = (typeof rawMsg === 'string' && rawMsg.trim()) ? rawMsg.trim() : aiInput.trim()
@@ -1112,13 +672,12 @@
     aiLoading = true
     const apiKey = localStorage.getItem('mm_api_key') || ''
     if (!apiKey) { aiMessages = [...aiMessages, { role: 'assistant', content: 'No API key set — add it in Settings ⚙.' }]; aiLoading = false; return }
-    const openTasks = (state.tasks||[]).filter(t=>!t.done).slice(0,6).map(t=>t.label+(t.project?' ['+t.project+']':'')).join(', ')
 
-    const mozartContext = await buildMozartContext(supabase, { tasks: state.tasks })
+    const mozartContext = await buildMozartContext(supabase, {})
 
     const system = `You are this producer's co-intelligence.
 A sharp, direct thinking partner for music production decisions.
-Today: ${todayISO}. Open tasks: ${openTasks||'none'}.
+Today: ${todayISO}.
 
 CHARACTER:
 - Challenge assumptions before confirming them
@@ -1297,29 +856,6 @@ ${mozartContext}`
       .replace(/\n/g, '<br>')
   }
 
-  // Resolve live artist/project/song for day-detail panel
-  function resolveDetailLabel(t) {
-    const parts = []
-    if (t.project_id) {
-      const proj = projects.find(p => p.id === t.project_id)
-      if (proj) {
-        if (proj.artist) parts.push(proj.artist)
-        parts.push(proj.name)
-      } else if (t.project) parts.push(t.project)
-    } else if (t.project) {
-      const proj = projects.find(p => p.name === t.project)
-      if (proj) {
-        if (proj.artist) parts.push(proj.artist)
-        parts.push(proj.name)
-      } else parts.push(t.project)
-    }
-    if (t.song_id) {
-      const song = allSongs_.find(s => s.id === t.song_id) || demoSongs_.find(s => s.id === t.song_id)
-      if (song) parts.push(song.title || song.code)
-    } else if (t.song) parts.push(t.song)
-    return parts.length ? parts.join(' — ') : null
-  }
-
   async function reloadProjectData() {
     try {
       const { data: proj } = await supabase.from('projects').select('id,name,artist,color,deadlines').order('position')
@@ -1491,14 +1027,6 @@ ${mozartContext}`
   ;(async () => { await loadInbox() })()
   loadCheckOut()
   loadGoals()
-  ;(async () => {
-    const { data } = await supabase
-      .from('brain_knowledge')
-      .select('id')
-      .lte('review_date', todayISO)
-      .not('review_date', 'is', null)
-    brainReviewCount = (data || []).length
-  })()
 
   onMount(() => {
     syncDownloadNotifications()
@@ -1558,309 +1086,8 @@ ${mozartContext}`
   <!-- LEFT COLUMN -->
   <div class="main">
 
-    {#if showRestoreBanner}
-      <div style="background:#2a1f00;border:1px solid #c9a84c;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#f5f1ea;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span style="flex:1;">⚠ Unsaved tasks found from your last session — restore them?</span>
-        <button onclick={async () => { state.tasks = pendingBackupTasks; await save(); showRestoreBanner = false; localStorage.removeItem('mm_daily_backup_' + todayISO) }} style="background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.4);color:#c9a84c;font-family:'Space Mono',monospace;font-size:11px;padding:5px 10px;border-radius:3px;cursor:pointer;">Restore</button>
-        <button onclick={() => { showRestoreBanner = false; localStorage.removeItem('mm_daily_backup_' + todayISO) }} style="background:transparent;border:1px solid #303030;color:#9e9690;font-family:'Space Mono',monospace;font-size:11px;padding:5px 10px;border-radius:3px;cursor:pointer;">Dismiss</button>
-      </div>
-    {/if}
-
-    <div class="day-header">
-      <span class="day-title">{new Date().toLocaleDateString('de-CH', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</span>
-    </div>
-
-    <!-- TASKS -->
-    <div class="section-block">
-      <div class="tasks-header">
-        <div class="sh" style="margin-bottom:0;border:none;padding-bottom:0">Tasks</div>
-        {#if saveStatus === 'saving'}
-          <span style="font-size:11px;font-family:'Space Mono',monospace;color:#9e9690;">saving…</span>
-        {:else if saveStatus === 'saved'}
-          <span style="font-size:11px;font-family:'Space Mono',monospace;color:#4caf82;">✓ saved</span>
-        {:else if saveStatus === 'error'}
-          <span style="font-size:11px;font-family:'Space Mono',monospace;color:#e74c3c;">⚠ save failed — check connection</span>
-        {/if}
-        <button class="undo-tab-btn" onclick={undoDaily} disabled={undoStack.length === 0} title={undoStack[0]?.description || 'Nothing to undo'}>
-          ↩ {undoStack[0] ? undoStack[0].description.slice(0, 20) + '...' : 'undo'}
-        </button>
-      </div>
-      <!-- Single add row -->
-      <div class="add-task-form">
-        <select class="add-inp type-sel" bind:value={newTask.type} onchange={() => { newTask.artist = ''; newTask.project = ''; newTask.song = '' }}>
-          {#each TASK_TYPES as tt}<option value={tt.id}>{tt.label}</option>{/each}
-        </select>
-
-        {#if newTask.type !== 'private'}
-          {@const artists = [...new Set(projects.map(p => p.artist).filter(Boolean))].sort()}
-          <select class="add-inp proj-sel" bind:value={newTask.artist} onchange={() => { newTask.project = ''; newTask.song = '' }}>
-            <option value="">— Artist —</option>
-            {#each artists as a}<option value={a}>{a}</option>{/each}
-          </select>
-
-          {#if newTask.artist}
-            {@const artistProjects = projects.filter(p => p.artist === newTask.artist)}
-            <select class="add-inp proj-sel" bind:value={newTask.project} onchange={() => newTask.song = ''}>
-              <option value="">— Project —</option>
-              {#each artistProjects as p}<option value={p.name}>{p.name}</option>{/each}
-            </select>
-          {/if}
-
-          {#if newTask.project}
-            {@const proj = projects.find(p => p.name === newTask.project)}
-            {@const songs = proj ? (projectSongs[proj.id] || []) : []}
-            {#if songs.length}
-              <select class="add-inp proj-sel" bind:value={newTask.song}>
-                <option value="">— Song —</option>
-                {#each songs as s}<option value={s.title||s.code}>{s.title||s.code}</option>{/each}
-              </select>
-            {/if}
-          {/if}
-        {/if}
-        <input class="add-inp" style="flex:1;min-width:80px" bind:value={newTask.label}
-          placeholder="New task..." onkeydown={e => e.key === 'Enter' && addTask()} />
-        <button class="daily-toggle {newTask.recurring ? 'on' : ''}"
-          onclick={() => newTask = {...newTask, recurring: !newTask.recurring}}
-          title="Show every day until done">☀</button>
-        {#if !newTask.recurring}
-          <input class="add-inp date-inp" type="date" bind:value={newTask.date} />
-          <input class="add-inp time-inp" type="time" bind:value={newTask.time} />
-          <span class="time-sep">–</span>
-          <input class="add-inp time-inp" type="time" bind:value={newTask.time_to} />
-        {/if}
-        <button class="add-btn" onclick={addTask}>+</button>
-      </div>
-    </div>
-
     <!-- ROUTINE / HEALTH -->
     <div class="section-block">
-
-      <!-- ── TODAY: tasks + nudges ─────────────────────────────── -->
-      <div class="today-section">
-
-        <!-- TTS toast -->
-        {#if speakToast}
-          <div class="speak-toast">{speakToast}</div>
-        {/if}
-
-        <!-- Brain review banner -->
-        {#if brainReviewCount > 0}
-          <button
-            class="brain-review-nudge"
-            onclick={() => document.dispatchEvent(new CustomEvent('mm-switch-tab', { detail: 'brain' }))}
-          >🧠 {brainReviewCount} brain {brainReviewCount === 1 ? 'entry' : 'entries'} ready for review →</button>
-        {/if}
-
-        <!-- Submission nudges -->
-        {#if subReminders.length}
-          <div class="sub-reminders">
-            {#each subReminders as r}
-              <button class="sub-reminder-row" onclick={() => dismissSubReminder(r.key)}>
-                <span class="sub-remind-icon">!</span>
-                <span class="sub-remind-text">SUBMISSION "{r.name}" — {r.daysSince}d open, no response yet</span>
-                <span class="sub-remind-close">×</span>
-              </button>
-            {/each}
-          </div>
-        {/if}
-
-        <!-- Today's tasks -->
-        {#if pinnedTask}
-          <div class="focus-block">
-            <div class="focus-label">TODAY'S FOCUS</div>
-            <div class="focus-task">{pinnedTask.label}</div>
-          </div>
-        {/if}
-        {#each [getUpcomingItems('week').filter(t => t.date === todayISO && !t._recurring)] as todayTaskItems}
-        {#if todayTaskItems.length}
-          <div class="today-tasks-list">
-            {#each todayTaskItems as t (t.id)}
-              <div class="task-flat-row {t._isDL?'deadline-row':''}">
-                {#if t.time}<span class="tfl-time" style="min-width:38px">{t.time}{t.time_to ? ' – '+t.time_to : ''}</span>{:else}<span style="min-width:38px;display:inline-block"></span>{/if}
-                {#if t._isDL}
-                  {#if t.project}<span class="tfl-prefix" style="color:{t._color||'#c9a84c'}">{t.project.toUpperCase()}</span>{/if}
-                  <span class="tfl-label">{t.label}</span>
-                {:else}
-                  <button class="pin-btn {t.pinned ? 'pinned' : ''}" onclick={() => togglePin(t.id)} title={t.pinned ? 'Unpin' : 'Set as focus'}>{t.pinned ? '◉' : '◎'}</button>
-                  {#each [resolveTaskPrefix(t)] as prefix}
-                    <span class="tfl-prefix" style="color:{prefix.color}">{prefix.label}</span>
-                  {/each}
-                  <input class="tfl-edit" value={t.label} onchange={e => updateTask(t.id, 'label', e.target.value)} />
-                  <button class="edit-time-btn {editingTaskId===t.id?'on':''}" onclick={() => editingTaskId = editingTaskId===t.id ? null : t.id} title="Edit date/time">✎</button>
-                  <button class="tfl-done" onclick={() => toggleTask(t.id)} title="Mark done">✓</button>
-                  <button class="del-flat" onclick={() => delTask(t.id)}>×</button>
-                {/if}
-              </div>
-              {#if editingTaskId === t.id}
-                <div class="task-edit-row">
-                  <input type="date" class="add-inp date-inp" value={t.date} onchange={e => updateTask(t.id, 'date', e.target.value)} />
-                  <input type="time" class="add-inp time-inp" value={t.time} onchange={e => {
-                    const val = e.target.value
-                    updateTask(t.id, 'time', val)
-                    if (val && !t.time_to) {
-                      const [h,m] = val.split(':').map(Number)
-                      updateTask(t.id, 'time_to', String((h+1)%24).padStart(2,'0')+':'+String(m).padStart(2,'0'))
-                    }
-                  }} />
-                  <span class="time-sep">–</span>
-                  <input type="time" class="add-inp time-inp" value={t.time_to} onchange={e => updateTask(t.id, 'time_to', e.target.value)} />
-                </div>
-              {/if}
-            {/each}
-          </div>
-        {/if}
-        {/each}
-
-      </div>
-
-      <!-- ── PLAN: WEEK / MONTH / YEAR sub-tabs ──────────────── -->
-      <div class="plan-section">
-        <div class="up-tabs">
-          {#each [['week','WEEK'],['month','MONTH'],['year','YEAR']] as [id,label]}
-            <button class="up-tab {upcomingTab===id?'on':''}" onclick={() => {
-              upcomingTab = id
-              if (id === 'year') setTimeout(() => {
-                const el = document.getElementById('year-today-marker')
-                el?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-              }, 30)
-            }}>
-              {label}
-            </button>
-          {/each}
-        </div>
-
-        {#if upcomingTab === 'week'}
-          <!-- WEEK: dated tasks only, grouped by day -->
-          {@const weekItems = getUpcomingItems('week')}
-          <div class="week-view">
-            {#each Array.from({length:7}, (_,i) => { const d = new Date(); d.setDate(d.getDate()+i); return d.toISOString().slice(0,10) }) as dayISO}
-              {@const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date(dayISO+'T12:00:00').getDay()]}
-              {@const dayTasks = weekItems.filter(t => t.date === dayISO && !t._recurring)}
-              {@const isToday = dayISO === todayISO}
-              <div class="week-day-block {isToday?'is-today':''}">
-                <div class="week-day-header">
-                  <span class="week-day-name {isToday?'today-name':''}">{isToday ? 'TODAY' : dayName}</span>
-                  <span class="week-day-date">{dayISO.slice(5)}</span>
-                </div>
-                {#if dayTasks.length}
-                  {#each dayTasks as t (t.id)}
-                    <div class="task-flat-row {t._isDL?'deadline-row':''}">
-                      {#if t.time}<span class="tfl-time" style="min-width:38px">{t.time}{t.time_to ? ' – '+t.time_to : ''}</span>{:else}<span style="min-width:38px;display:inline-block"></span>{/if}
-                      {#if t._isDL}
-                        {#if t.project}<span class="tfl-prefix" style="color:{t._color||'#c9a84c'}">{t.project.toUpperCase()}</span>{/if}
-                        <span class="tfl-label">{t.label}</span>
-                      {:else}
-                        {#each [resolveTaskPrefix(t)] as prefix}
-                          <span class="tfl-prefix" style="color:{prefix.color}">{prefix.label}</span>
-                        {/each}
-                        <input class="tfl-edit" value={t.label} onchange={e => updateTask(t.id, 'label', e.target.value)} />
-                        <button class="edit-time-btn {editingTaskId===t.id?'on':''}" onclick={() => editingTaskId = editingTaskId===t.id ? null : t.id} title="Edit date/time">✎</button>
-                        <button class="tfl-done" onclick={() => toggleTask(t.id)} title="Mark done">✓</button>
-                        <button class="del-flat" onclick={() => delTask(t.id)}>×</button>
-                      {/if}
-                    </div>
-                    {#if editingTaskId === t.id}
-                      <div class="task-edit-row">
-                        <input type="date" class="add-inp date-inp" value={t.date} onchange={e => updateTask(t.id, 'date', e.target.value)} />
-                        <input type="time" class="add-inp time-inp" value={t.time} onchange={e => {
-                          const val = e.target.value
-                          updateTask(t.id, 'time', val)
-                          if (val && !t.time_to) {
-                            const [h,m] = val.split(':').map(Number)
-                            updateTask(t.id, 'time_to', String((h+1)%24).padStart(2,'0')+':'+String(m).padStart(2,'0'))
-                          }
-                        }} />
-                        <span class="time-sep">–</span>
-                        <input type="time" class="add-inp time-inp" value={t.time_to} onchange={e => updateTask(t.id, 'time_to', e.target.value)} />
-                      </div>
-                    {/if}
-                  {/each}
-                {:else}
-                  <div class="week-empty-day">—</div>
-                {/if}
-              </div>
-            {/each}
-          </div>
-
-        {:else if upcomingTab === 'year'}
-          <!-- YEAR: full calendar year, incl. past & done, scrollable, today anchored -->
-          {@const yearItems = getUpcomingItems('year')}
-          {#if !yearItems.length}
-            <p class="empty-sm" style="padding:8px 0;color:#333">No tasks this year.</p>
-          {:else}
-            <div class="task-scroll year-scroll">
-              {#each yearItems as t (t.id)}
-                {@const isPast = t.date < todayISO}
-                {@const isToday = t.date === todayISO}
-                {#if isToday}
-                  <div id="year-today-marker" class="year-today-sep">TODAY</div>
-                {/if}
-                <div class="task-flat-row {t._isDL?'deadline-row':''} {t._done||t.done?'year-done-row':''} {isPast&&!isToday?'year-past-row':''}">
-                  <span class="tfl-date" style="{isToday?'color:#c9a84c;font-weight:700':''}">{t.date.slice(5)}</span>
-                  {#if t.time}<span class="tfl-time">{t.time}{t.time_to ? ' – '+t.time_to : ''}</span>{/if}
-                  {#if t._isDL}
-                    {#if t.project}<span class="tfl-prefix" style="color:{t._color||'#c9a84c'}">{t.project.toUpperCase()}</span>{/if}
-                    <span class="tfl-label">{t.label}</span>
-                  {:else}
-                    {#each [resolveTaskPrefix(t)] as prefix}
-                      <span class="tfl-prefix" style="color:{prefix.color}">{prefix.label}</span>
-                    {/each}
-                    <span class="tfl-label" style="{t.done?'text-decoration:line-through;opacity:.4':''}">{t.label}</span>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          {/if}
-
-        {:else}
-          <!-- MONTH / GENERAL: flat list -->
-          {#each [getUpcomingItems(upcomingTab)] as items}
-            {#if !items.length}
-              <p class="empty-sm" style="padding:8px 0;color:#333">Nothing here.</p>
-            {:else}
-              <div class="task-scroll {items.length > 7 ? 'scrollable' : ''}">
-              {#each items as t (t.id)}
-                <div class="task-flat-row {t._isDL?'deadline-row':''} {t._recurring?'recurring-row':''}">
-                  {#if t._recurring}
-                    <span class="tfl-daily">☀</span>
-                  {:else}
-                    <span class="tfl-date">{t.date === todayISO ? 'TODAY' : t.date.slice(5)}</span>
-                    {#if t.time}<span class="tfl-time">{t.time}{t.time_to ? ' – '+t.time_to : ''}</span>{/if}
-                  {/if}
-                  {#if t._isDL}
-                    {#if t.project}<span class="tfl-prefix" style="color:{t._color||'#c9a84c'}">{t.project.toUpperCase()}</span>{/if}
-                    <span class="tfl-label">{t.label}</span>
-                  {:else}
-                    {#each [resolveTaskPrefix(t)] as prefix}
-                      <span class="tfl-prefix" style="color:{prefix.color}">{prefix.label}</span>
-                    {/each}
-                    <input class="tfl-edit" value={t.label} onchange={e => updateTask(t.id, 'label', e.target.value)} />
-                    <button class="edit-time-btn {editingTaskId===t.id?'on':''}" onclick={() => editingTaskId = editingTaskId===t.id ? null : t.id} title="Edit date/time">✎</button>
-                    <button class="tfl-done" onclick={() => toggleTask(t.id)} title="Mark done">✓</button>
-                    <button class="del-flat" onclick={() => delTask(t.id)}>×</button>
-                  {/if}
-                </div>
-                {#if editingTaskId === t.id}
-                  <div class="task-edit-row">
-                    <input type="date" class="add-inp date-inp" value={t.date} onchange={e => updateTask(t.id, 'date', e.target.value)} />
-                    <input type="time" class="add-inp time-inp" value={t.time} onchange={e => {
-                      const val = e.target.value
-                      updateTask(t.id, 'time', val)
-                      if (val && !t.time_to) {
-                        const [h,m] = val.split(':').map(Number)
-                        updateTask(t.id, 'time_to', String((h+1)%24).padStart(2,'0')+':'+String(m).padStart(2,'0'))
-                      }
-                    }} />
-                    <span class="time-sep">–</span>
-                    <input type="time" class="add-inp time-inp" value={t.time_to} onchange={e => updateTask(t.id, 'time_to', e.target.value)} />
-                  </div>
-                {/if}
-              {/each}
-              </div>
-            {/if}
-          {/each}
-        {/if}
-      </div>
 
       <div class="sections">
         <button class="sec-tab {activeSection==='routine'?'on':''}" onclick={() => activeSection='routine'}>ROUTINE</button>
@@ -2600,59 +1827,6 @@ ${mozartContext}`
   </div>
 
   <div class="side">
-
-    <!-- Calendar -->
-    <div class="cal-wrap">
-      <div class="cal-header">
-        <button class="cal-nav" onclick={calPrev}>‹</button>
-        <span class="cal-month">{MONTHS[calDate.getMonth()]} {calDate.getFullYear()}</span>
-        <button class="cal-nav" onclick={calNext}>›</button>
-      </div>
-      <div class="cal-grid">
-        {#each DAYS as d}<div class="cal-day-lbl">{d}</div>{/each}
-        {#each calDays as cell}
-          {#if cell === null}
-            <div></div>
-          {:else}
-            {@const hasDeadline = projects.some(p => (p.deadlines||[]).some(d => d.date===cell.iso&&!d.done))}
-            {@const hasPrivateTask = (state.tasks||[]).some(t => t.date===cell.iso&&!t.done&&t.type==='private')}
-            {@const hasOtherTask = (state.tasks||[]).some(t => t.date===cell.iso&&!t.done&&t.type!=='private')}
-            <button class="cal-cell {cell.iso===selectedDay?'sel':''} {cell.iso===todayISO?'today':''}"
-              onclick={async () => { selectedDay=cell.iso; newTask.date=cell.iso; await save() }}>
-              {cell.day}
-              {#if hasDeadline || hasOtherTask}<span class="cal-dot gold-dot"></span>{/if}
-              {#if hasPrivateTask}<span class="cal-dot blue-dot"></span>{/if}
-            </button>
-          {/if}
-        {/each}
-      </div>
-    </div>
-
-    <!-- Day detail -->
-    <div class="day-detail">
-      <div class="sh" style="margin-top:12px;margin-bottom:6px">{selectedDay === todayISO ? 'TODAY' : selectedDay}</div>
-      {#each projects as p}
-        {#each (p.deadlines||[]).filter(d => d.date===selectedDay && !d.done) as dl}
-          <div class="detail-row">
-            <div class="dot-sm" style="background:{p.color}"></div>
-            <span class="detail-label">{dl.label}</span>
-            <span class="detail-proj">{p.name}</span>
-          </div>
-        {/each}
-      {/each}
-      {#each (state.tasks||[]).filter(t => t.date===selectedDay && !t.done) as t (t.id)}
-        {#each [resolveDetailLabel(t)] as detailLabel}
-          <div class="detail-row clickable-row" onclick={() => toggleTask(t.id)} title="Click to mark done">
-            <div class="dot-sm" style="background:{t.type==='private'?'#4a9fd4':'#c9a84c'}"></div>
-            <span class="detail-label">{t.label}</span>
-            {#if detailLabel}<span class="detail-proj" style="color:{t.type==='private'?'#4a9fd4':'#c9a84c'}">{detailLabel}</span>{/if}
-          </div>
-        {/each}
-      {/each}
-      {#if !projects.some(p=>(p.deadlines||[]).some(d=>d.date===selectedDay&&!d.done)) && !(state.tasks||[]).some(t=>t.date===selectedDay&&!t.done)}
-        <p class="empty-sm" style="color:#333">Nothing on this day.</p>
-      {/if}
-    </div>
 
     <!-- Mozart -->
     <div class="mozart-block">

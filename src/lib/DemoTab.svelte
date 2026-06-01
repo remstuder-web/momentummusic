@@ -36,7 +36,7 @@
 
 <script>
   import { supabase } from './supabase.js'
-  import { onMount } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { GENRE_LIST } from '$lib/genres.js'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
 
@@ -815,6 +815,28 @@
   }
 
   load()
+
+  const realtimeChannel = supabase
+    .channel('demos-realtime')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'songs',
+      filter: 'project_id=is.null'
+    }, (payload) => {
+      if (payload.eventType === 'INSERT') {
+        songs = [payload.new, ...songs]
+      }
+      if (payload.eventType === 'DELETE') {
+        songs = songs.filter(s => s.id !== payload.old.id)
+      }
+      if (payload.eventType === 'UPDATE') {
+        songs = songs.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s)
+      }
+    })
+    .subscribe()
+
+  onDestroy(() => supabase.removeChannel(realtimeChannel))
 </script>
 
 <svelte:window onclick={() => { if (Object.values(showBatchPicker).some(Boolean)) showBatchPicker = {}; if (showPatchArtistPicker) showPatchArtistPicker = false; if (Object.values(showGenrePicker).some(Boolean)) showGenrePicker = {}; if (showHeaderGenrePicker) showHeaderGenrePicker = false }} />

@@ -846,6 +846,33 @@
     showToast(`Submission ${code} created — fill in details in Submissions tab${frozenMsg}`)
   }
 
+  async function updateDemoType(song, type) {
+    const newWorkData = { ...(song.work_data || {}), demo_type: type }
+    song.work_data = newWorkData
+    songs = [...songs]
+    await supabase.from('songs').update({ work_data: newWorkData }).eq('id', song.id)
+    if (song.audio_path) {
+      fetch('http://localhost:4242/sync-demo-archive', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: song.audio_path, type, at_artist: newWorkData.at_artist || '' })
+      }).then(r => r.json()).then(d => { if (d.action !== 'no_change') console.log('archive sync:', d.action) }).catch(() => {})
+    }
+  }
+
+  async function updateAtArtist(song, value) {
+    const trimmed = value.trim()
+    const newWorkData = { ...(song.work_data || {}), at_artist: trimmed }
+    song.work_data = newWorkData
+    songs = [...songs]
+    await supabase.from('songs').update({ work_data: newWorkData }).eq('id', song.id)
+    if (song.audio_path) {
+      fetch('http://localhost:4242/sync-demo-archive', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: song.audio_path, type: newWorkData.demo_type || 'SONG', at_artist: trimmed })
+      }).then(r => r.json()).then(d => { if (d.action !== 'no_change') console.log('archive sync:', d.action) }).catch(() => {})
+    }
+  }
+
   async function toggleFreeze(song) {
     const isFrozen = !!song.work_data?.frozen
     if (!isFrozen) {
@@ -1022,6 +1049,7 @@
                 </div>
                 {#if song.title}<span class="song-title">{song.title}</span>{/if}
               </div>
+              {#if song.work_data?.auto_detected}<span class="auto-badge">AUTO</span>{/if}
               {#if isExpanded}
                 <div class="head-meta">
                   {#each (song.tags || []).slice(0,3) as tag}
@@ -1034,12 +1062,16 @@
             </div>
 
             <div class="head-right" onclick={e => e.stopPropagation()}>
-              <div class="head-pills">
-                {#if song.key}<span class="meta-pill">{song.key}</span>{/if}
-                {#if song.tempo}<span class="meta-pill">{song.tempo} BPM</span>{/if}
-                {#if song.work_data?.auto_detected}<span class="auto-badge">AUTO</span>{/if}
-                {#if song.work_data?.frozen}<span class="frozen-badge">FROZEN</span>{/if}
+              <div class="type-at-group">
+                {#if (song.work_data?.demo_type || 'SONG') === 'SAMPLE'}
+                  <span class="type-badge">SAMPLE</span>
+                {/if}
+                {#if song.work_data?.at_artist}
+                  <span class="at-display">@{song.work_data.at_artist}</span>
+                {/if}
               </div>
+              {#if song.work_data?.frozen}<span class="frozen-badge">FROZEN</span>{/if}
+              <div class="head-spacer"></div>
               <div class="head-badges" onclick={e => e.stopPropagation()}>
                 <div class="s-wrap">
                   <button class="s-btn {song.work_data?.frozen ? 'frozen-disabled' : selectedForSub.has(song.id) ? 'sel' : songBatchCount[song.id] >= 2 ? 'multi-batch' : songBatchCount[song.id] === 1 ? 'in-batch' : ''}"
@@ -1072,13 +1104,13 @@
           <!-- CARD BODY -->
           {#if expandedId === song.id}
             <div class="card-body">
-              <!-- Title row with inline audio drop -->
+              <!-- Row 1: code / title / type / @artist -->
               <div class="title-audio-row">
                 <div class="field" style="flex:0 0 90px">
                   <label>CODE</label>
                   <input class="inp-sm" value={song.code} onchange={e => updateField(song, 'code', e.target.value)} style="font-family:'Space Mono',monospace;font-size:12px" />
                 </div>
-                <div class="field" style="flex:1;min-width:0">
+                <div class="field" style="flex:2;min-width:0">
                   <label style="display:flex;align-items:center;gap:6px">
                     TITLE
                     <button class="btn-rand-title" onclick={() => handleTitleChange(song, randomTitle())} title="Random title">✦</button>
@@ -1090,7 +1122,25 @@
                     <div class="filename-hint">{song.audio_path}</div>
                   {/if}
                 </div>
-                <div class="field" style="flex:2">
+                <div class="field" style="flex:0 0 100px">
+                  <label>TYPE</label>
+                  <select class="inp-sm" value={song.work_data?.demo_type || 'SONG'}
+                    onchange={e => updateDemoType(song, e.target.value)}>
+                    <option value="SONG">SONG</option>
+                    <option value="SAMPLE">SAMPLE</option>
+                  </select>
+                </div>
+                <div class="field" style="flex:1;min-width:100px">
+                  <label>@ ARTIST / PROJECT</label>
+                  <input class="inp-sm" placeholder="@artist or project..."
+                    value={song.work_data?.at_artist || ''}
+                    onblur={e => updateAtArtist(song, e.target.value)}
+                    onkeydown={e => e.key === 'Enter' && e.target.blur()} />
+                </div>
+              </div>
+              <!-- Row 3: audio drop zone -->
+              <div class="audio-row">
+                <div class="field" style="flex:1">
                   <label>AUDIO</label>
                   <div class="drop-zone-inline {song._dragging ? 'drag-over' : ''}"
                     ondragover={e => { e.preventDefault(); song._dragging = true; songs = [...songs] }}
@@ -1488,7 +1538,11 @@
   .card.exp .card-head { background: #252525; }
   .head-left { display: flex; align-items: center; gap: 10px; width: 58%; flex-shrink: 0; min-width: 0; overflow: hidden; }
   .head-right { display: flex; align-items: center; gap: 6px; flex: 1; }
-  .head-pills { display: flex; align-items: center; gap: 4px; flex-shrink: 0; min-width: 110px; justify-content: flex-end; }
+  .type-at-group { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .type-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 2px; color: #c9a84c; border: 1px solid rgba(201,168,76,.4); background: rgba(201,168,76,.06); letter-spacing: .08em; flex-shrink: 0; }
+  .at-display { font-family: 'Space Mono', monospace; font-size: 10px; color: rgba(201,168,76,.6); flex-shrink: 0; letter-spacing: .03em; }
+  .head-spacer { flex: 1; }
+  .audio-row { display: flex; gap: 8px; }
   .player-slot { width: 250px; flex-shrink: 0; display: flex; align-items: center; }
   .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .notes-preview { font-size: 10px; color: #444; font-style: italic; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }

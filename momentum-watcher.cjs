@@ -1883,6 +1883,27 @@ async function saveToCheckout(track) {
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)) }
 
+// ── Archive sync helper — used by /sync-demo-archive endpoint + chokidar ──
+function syncDemoArchive(filename, type, at_artist) {
+  const demoPath    = path.join(DEMOS_DIR, filename)
+  const archivePath = path.join(ARCHIVE_29TH, filename)
+  const inArchive   = fs.existsSync(archivePath)
+  const shouldBeInArchive = (type || 'SONG') === 'SAMPLE' && !at_artist
+
+  if (shouldBeInArchive && !inArchive) {
+    if (!fs.existsSync(demoPath)) return { action: 'no_change', reason: 'source not found' }
+    if (!fs.existsSync(ARCHIVE_29TH)) fs.mkdirSync(ARCHIVE_29TH, { recursive: true })
+    fs.copyFileSync(demoPath, archivePath)
+    console.log(`📂 Archive sync: copied to archive — ${filename}`)
+    return { action: 'copied_to_archive' }
+  } else if (!shouldBeInArchive && inArchive) {
+    fs.unlinkSync(archivePath)
+    console.log(`📂 Archive sync: deleted from archive — ${filename}`)
+    return { action: 'deleted_from_archive' }
+  }
+  return { action: 'no_change' }
+}
+
 // ── Essentia analysis helper for demo auto-detect ────────────────────────
 async function runEssentiaAnalysis(filePath) {
   const { execSync } = require('child_process')
@@ -6328,6 +6349,23 @@ async function restore(input) {
           console.log(`🧊 Frozen (not in archive): ${filename}`)
         }
         res.writeHead(200); res.end(JSON.stringify({ ok: true, deleted_from_archive }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /sync-demo-archive — copy or delete from archive based on type/@ ──
+  if (req.method === 'POST' && req.url === '/sync-demo-archive') {
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', () => {
+      try {
+        const { filename, type, at_artist } = JSON.parse(body)
+        if (!filename) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'filename required' })); return }
+        const result = syncDemoArchive(filename, type, at_artist)
+        res.writeHead(200); res.end(JSON.stringify({ ok: true, ...result }))
       } catch(e) {
         res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
       }
@@ -14054,6 +14092,9 @@ server.listen(PORT, '127.0.0.1', () => {
         const inserted = await ins.json()
         const songId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
         console.log(`✓ Demo inserted: ${code} "${title}"${filenameBpm ? ' ' + filenameBpm + 'bpm' : ''} (id ${songId})`)
+
+        // Sync archive — new auto-detected demos default to SONG (no archive)
+        try { syncDemoArchive(newFilename, 'SONG', '') } catch(e) {}
 
         // Record invented title so it's never reused
         if (titleWasInvented && title && title !== 'UNTITLED') {

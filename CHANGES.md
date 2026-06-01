@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte + momentum-watcher.cjs — DONE
+TASK: Demo TYPE/SAMPLE field + @ artist + archive sync
+WHAT: (1) Collapsed header: replaced key/BPM pills with TYPE badge (only shown if SAMPLE) + @artist display; AUTO badge moved to head-left; FROZEN stays in head-right; spacer pushes buttons right. (2) Expanded row 1: CODE | TITLE | TYPE dropdown (SONG/SAMPLE) | @ ARTIST input. Row 3 (new): AUDIO full-width. Row 2 key/tempo/feat unchanged. (3) updateDemoType + updateAtArtist functions save work_data.demo_type/at_artist, fire POST /sync-demo-archive. (4) Watcher: syncDemoArchive() helper copies/deletes from ARCHIVE_29TH based on type=SAMPLE && !at_artist. POST /sync-demo-archive endpoint. Chokidar auto-detect calls sync with SONG default.
+RESULT: builds clean, watcher running
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte — DONE
 TASK: Align metadata column with + New Demo button position
 WHAT: head-left width: 58% (flex-shrink: 0, overflow: hidden), head-right flex: 1 — percentage split aligns right column start with header bar landmarks regardless of title length.

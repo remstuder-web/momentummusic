@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] momentum-watcher.cjs — DONE
+TASK: Auto-submission folder watcher on /P2P/29TH AVENUE/SENT/
+WHAT: Added SENT_DIR constant. Chokidar watcher (depth:1) on SENT_DIR: addDir → create patches row (status open, source:sent_dir); add file (6-digit code prefix only) → look up song in Supabase, compute prev_sent from patch_songs, push to dropped_files; unlink → remove from dropped_files. SUBMISSIONS_DIR unchanged (still points to !MOMENTUM MUSIC/Submissions). SENT_DIR created if missing.
+RESULT: watcher running, ✓ SENT folder watching confirmed in logs
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte — DONE
 TASK: Remove tags+AUTO from header, align TYPE/@artist with New Demo button
 WHAT: (1) head-meta (tags/collab/notes) removed from header entirely — only in card body. (2) auto-badge removed. (3) card-head switched to CSS grid (401px 1fr auto 20px, col-gap 0) so demo-meta-right starts at 14+401=415px from card left. TITLE field in expanded row fixed at 293px so TYPE starts at 16+90+8+293+8=415px. Both columns align with + New Demo button at ~415px.

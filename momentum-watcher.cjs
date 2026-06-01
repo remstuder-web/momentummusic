@@ -180,6 +180,7 @@ const MIXING_DIR      = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC'
 const RELEASES_DIR    = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Releases')
 const STEMS_DIR       = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Stems')
 const ARCHIVE_29TH    = path.join(process.env.HOME, 'Dropbox', 'P2P', '29TH AVENUE', '!ARCHIVE')
+const SENT_DIR        = path.join(process.env.HOME, 'Dropbox', 'P2P', '29TH AVENUE', 'SENT')
 const USED_TITLES_FILE = path.join(__dirname, 'used_demo_titles.json')
 let usedTitles = []
 try { usedTitles = JSON.parse(fs.readFileSync(USED_TITLES_FILE, 'utf8')) } catch(e) { usedTitles = [] }
@@ -14218,6 +14219,86 @@ server.listen(PORT, '127.0.0.1', () => {
       } catch(e) { console.error('✗ Demo unlink error:', e.message) }
     })
   console.log('✓ Demos folder watching:', DEMOS_DIR)
+
+  // ── SENT_DIR watcher — /P2P/29TH AVENUE/SENT/ ────────────────────────────
+  // New folder → create patches row. File add/remove → sync dropped_files.
+  // Only files whose basename starts with a 6-digit code are tracked.
+  if (!fs.existsSync(SENT_DIR)) { try { fs.mkdirSync(SENT_DIR, { recursive: true }) } catch(e) {} }
+
+  async function getSentPatch(folderName) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/patches?name=eq.${encodeURIComponent(folderName)}&select=id,name,dropped_files&limit=1`, { headers: sbHeaders })
+    const rows = await r.json()
+    return Array.isArray(rows) && rows.length ? rows[0] : null
+  }
+
+  async function saveSentDropFiles(patchId, files) {
+    await fetch(`${SUPABASE_URL}/rest/v1/patches?id=eq.${patchId}`, {
+      method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ dropped_files: files })
+    })
+  }
+
+  chokidar.watch(SENT_DIR, {
+    ignoreInitial: true, persistent: true, depth: 1,
+    awaitWriteFinish: { stabilityThreshold: 1500, pollInterval: 400 }
+  })
+    .on('addDir', async folderPath => {
+      const folderName = path.basename(folderPath)
+      if (folderName === path.basename(SENT_DIR)) return  // root dir event
+      try {
+        const existing = await getSentPatch(folderName)
+        if (existing) return
+        const codeMatch = folderName.match(/^(\d{5})/)
+        const code = codeMatch ? codeMatch[1] : null
+        const { data } = await supabase.from('patches')
+          .insert({ name: folderName, status: 'open', artist: '', contact_id: null, dropped_files: [], work_data: { source: 'sent_dir' } })
+          .select('id,name').single()
+        console.log(`📁 SENT: new folder → patch "${folderName}" (id ${data?.id})`)
+        if (code) {
+          const slug = folderName.replace(/[^A-Z0-9_]/gi, '_').toUpperCase()
+          const tgMsg = `📁 New SENT folder: ${folderName}`
+          if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, tgMsg).catch(() => {})
+        }
+      } catch(e) { console.error('SENT addDir error:', e.message) }
+    })
+    .on('add', async filePath => {
+      const filename = path.basename(filePath)
+      const folderName = path.basename(path.dirname(filePath))
+      if (!(/^\d{6}/.test(filename))) return  // only 6-digit code files
+      const ext = path.extname(filename).toLowerCase()
+      if (!['.wav','.mp3','.aiff','.aif','.m4a','.flac'].includes(ext)) return
+      try {
+        const patch = await getSentPatch(folderName)
+        if (!patch) return
+        const current = Array.isArray(patch.dropped_files) ? [...patch.dropped_files] : []
+        if (current.find(f => f.filename === filename)) return
+        const { code, title, bpm } = parseDemoFilename(filename)
+        const { data: matched } = await supabase.from('songs')
+          .select('id,code,title').eq('audio_path', filename).maybeSingle()
+        let prev_sent = []
+        if (matched) {
+          const { data: ps } = await supabase.from('patch_songs')
+            .select('patches(name,status)').eq('song_id', matched.id)
+          prev_sent = (ps || []).filter(r => r.patches?.status === 'sent').map(r => r.patches?.name).filter(Boolean)
+        }
+        current.push({ filename, title: title || matched?.title || filename.replace(/\.[^.]+$/,''), code: matched?.code || code || '', bpm: bpm || null, song_id: matched?.id || null, prev_sent })
+        await saveSentDropFiles(patch.id, current)
+        console.log(`📁 SENT: added file "${filename}" → patch "${folderName}"`)
+      } catch(e) { console.error('SENT add error:', e.message) }
+    })
+    .on('unlink', async filePath => {
+      const filename = path.basename(filePath)
+      const folderName = path.basename(path.dirname(filePath))
+      if (!(/^\d{6}/.test(filename))) return
+      try {
+        const patch = await getSentPatch(folderName)
+        if (!patch) return
+        const updated = (Array.isArray(patch.dropped_files) ? patch.dropped_files : []).filter(f => f.filename !== filename)
+        await saveSentDropFiles(patch.id, updated)
+        console.log(`📁 SENT: removed file "${filename}" from patch "${folderName}"`)
+      } catch(e) { console.error('SENT unlink error:', e.message) }
+    })
+  console.log('✓ SENT folder watching:', SENT_DIR)
 
   // connectBrainEntries() — defined at module scope above (accessible via endpoint + scheduler)
 

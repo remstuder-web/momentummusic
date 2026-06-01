@@ -168,11 +168,16 @@
       const activeV = wd.versions.find(v => v.id === activeId && v.version_type === dir)
       if (activeV) {
         const oldFilename = activeV.audio_path || ''
-        const code = song.code || ''
-        const artist = selectedProject?.artist ? '_' + sanitizeTitle(selectedProject.artist) : ''
-        const title = song.title ? '_' + sanitizeTitle(song.title) : ''
-        const verPart = dir === 'mixing' ? `MIX_${activeV.name.replace('MIX_', '')}` : activeV.name
-        const filename = `${code}${artist}${title}_${verPart}.${ext}`
+        const artistRaw = selectedProject?.artist || ''
+        const artistClean = artistRaw.toUpperCase().replace(/\s+/g, '_').replace(/[<>:"/\\|?*]/g, '').trim()
+        const titlePart = sanitizeTitle(song.title || '')
+        const sameTypeVers = wd.versions.filter(v => v.version_type === dir)
+        const vIdx = sameTypeVers.findIndex(v => v.id === activeId)
+        const vNum = (vIdx >= 0 ? vIdx : sameTypeVers.length) + 1
+        const ver = 'V' + String(vNum).padStart(2, '0')
+        const filename = dir === 'mixing'
+          ? (artistClean ? `${artistClean}_${titlePart}_MIX_${ver}.${ext}` : `${titlePart}_MIX_${ver}.${ext}`)
+          : (artistClean ? `${artistClean}_${titlePart}_${ver}.${ext}` : `${titlePart}_${ver}.${ext}`)
         pushUndo('Overwrote ' + filename + ' on ' + (song.title || song.code), song.id, JSON.parse(JSON.stringify(wd)), filename)
         const buf = await file.arrayBuffer()
         const res = await fetch(
@@ -206,15 +211,15 @@
     }
 
     const existingVersions = wd.versions.filter(v => v.version_type === dir)
-    const nextVerNum = existingVersions.length
-    const ver = 'v' + String(nextVerNum).padStart(2, '0')
+    const nextVerNum = existingVersions.length + 1
+    const ver = 'V' + String(nextVerNum).padStart(2, '0')
 
-    const code = song.code || ''
-    const artist = selectedProject?.artist ? '_' + sanitizeTitle(selectedProject.artist) : ''
-    const title = song.title ? '_' + sanitizeTitle(song.title) : ''
+    const artistRaw = selectedProject?.artist || ''
+    const artistClean = artistRaw.toUpperCase().replace(/\s+/g, '_').replace(/[<>:"/\\|?*]/g, '').trim()
+    const titlePart = sanitizeTitle(song.title || '')
     const filename = dir === 'mixing'
-      ? `${code}${artist}${title}_MIX_${ver}.${ext}`
-      : `${code}${artist}${title}_${ver}.${ext}`
+      ? (artistClean ? `${artistClean}_${titlePart}_MIX_${ver}.${ext}` : `${titlePart}_MIX_${ver}.${ext}`)
+      : (artistClean ? `${artistClean}_${titlePart}_${ver}.${ext}` : `${titlePart}_${ver}.${ext}`)
 
     const oldfile = dir === 'mixing' ? (wd.mix_audio || '') : (wd.prod_audio || '')
 
@@ -375,24 +380,13 @@
     const artist = selectedProject?.artist || ''
     const safe = s => (s||'').replace(/[<>:"/\\|?*]/g,'').trim()
 
-    // Extract version+bpm suffix from dropped filename
-    // e.g. "beat_v02_94bpm.wav" → suffix "_v02_94bpm"
-    // e.g. "prod_v003.wav"      → suffix "_v003"
-    // e.g. "song.wav"           → suffix "_v01" (default)
-    const base = file.name.replace(/\.[^.]+$/, '')
     const ext  = file.name.slice(file.name.lastIndexOf('.'))
-    const vIdx = base.search(/[_\s\-]?v\d{1,3}/i)
-    let suffix = '_v01'
-    if (vIdx !== -1) {
-      const raw = base.slice(vIdx).replace(/^[_\s\-]+/, '')
-      suffix = '_' + raw.replace(/\s+/g, '_').replace(/^v(\d)(?=[_\s]|$)/i, (_, n) => 'v0' + n)
-    } else if (song.tempo) {
-      suffix = '_v01_' + song.tempo + 'bpm'
-    }
-
-    const parts = [safe(song.code), safe(artist), safe(song.title||'')].filter(Boolean)
-    const filename = parts.join('_') + suffix + ext
-    const vLabel = suffix.replace(/^_/, '').split('_')[0]
+    const artistClean = (artist || '').toUpperCase().replace(/\s+/g, '_').replace(/[<>:"/\\|?*]/g, '').trim()
+    const titlePart = safe(song.title || song.code || '')
+    const filename = artistClean
+      ? `${artistClean}_${titlePart}_INST_V01${ext}`
+      : `${titlePart}_INST_V01${ext}`
+    const vLabel = 'V01'
     const oldfile = wd.instr_audio || ''
 
     // Show filename immediately before async work
@@ -510,17 +504,17 @@
     const artist = selectedProject?.artist || ''
     const safe = s => (s||'').replace(/[<>:"/\\|?*]/g,'').trim()
 
-    // Parse version suffix from dropped filename — find _V01_133bpm etc, uppercase it
     const baseName = file.name.replace(/\.zip$/i, '')
-    const vMatch = baseName.match(/(_?[Vv]\d+.*)$/)
-    const versionSuffix = vMatch ? '_' + vMatch[1].replace(/^_+/, '').toUpperCase() : ''
-    // e.g. "mysong_V01_133bpm" → "_V01_133BPM", "stems_v02" → "_V02"
+    const vMatch = baseName.match(/[Vv](\d+)/)
+    const vNum = vMatch ? String(parseInt(vMatch[1])).padStart(2, '0') : '01'
+    const ver = 'V' + vNum
+    const stemsVersionLabel = ver
 
-    // Extract version label for display (e.g. "_V01_133BPM" → "V01")
-    const stemsVersionLabel = vMatch ? vMatch[1].replace(/^_+/, '').toUpperCase().split('_')[0] : ''
-
-    const parts = [safe(song.code), safe(artist), safe(song.title||''), 'STEMS'].filter(Boolean)
-    const filename = parts.join('_') + versionSuffix + '.zip'
+    const artistClean = (artist || '').toUpperCase().replace(/\s+/g, '_').replace(/[<>:"/\\|?*]/g, '').trim()
+    const titlePart = safe(song.title || song.code || '')
+    const filename = artistClean
+      ? `${artistClean}_${titlePart}_STEMS_${ver}.zip`
+      : `${titlePart}_STEMS_${ver}.zip`
     const oldfile = wd.stems_zip || ''
 
     try {
@@ -721,7 +715,7 @@
 
   function getPublicFilename(internalFilename, artist) {
     if (!internalFilename) return internalFilename
-    const withoutCode = internalFilename.replace(/^\d{8}_/, '')
+    const withoutCode = internalFilename.replace(/^\d{5,8}_/, '')
     const artistClean = (artist || '').toUpperCase()
       .replace(/[^A-Z0-9 ]/g, '').trim().replace(/\s+/g, '_')
     if (!artistClean || withoutCode.toUpperCase().includes(artistClean)) return withoutCode

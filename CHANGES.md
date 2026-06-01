@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: Project files: new naming format ARTIST_Title_VNN, rename existing files
+WHAT: (1) saveSongAudio non-overwrite: artistClean = artist.toUpperCase().replace spaces→_, ver = V+1-indexed padded; production=ARTIST_Title_VNN.ext, mixing=ARTIST_Title_MIX_VNN.ext. (2) saveSongAudio overwrite: same format, version from position in versions array. (3) handleInstrumentalDrop: ARTIST_Title_INST_V01.ext (no BPM in name). (4) handleStemsZipDrop: ARTIST_Title_STEMS_VNN.zip, version from dropped filename. (5) getPublicFilename: regex /^\d{8}_/ → /^\d{5,8}_/. (6) POST /rename-existing-project-files: parses code from old filenames, looks up song+project in Supabase, builds new name, renames on disk, updates work_data in DB. Migration result: 16 files renamed, 11 DB rows updated, 4 skipped (.DS_Store only).
+RESULT: all files on disk in new format, watcher running
+BLOCKERS: none
+
 ## [2026-06-01] momentum-watcher.cjs — DONE
 TASK: Fix SENT patch insert: remove work_data, fix auto-tag error handling
 WHAT: (1) Removed work_data:{source:'sent_dir'} from patches .insert() — column doesn't exist in patches table. (2) Auto-tag catch block changed from console.warn (noisy) to console.log with "Auto-tag skipped for: filename" — empty/unparseable Haiku response silently skips tagging. Also suppressed the ✓ Auto-tags log when array is empty.

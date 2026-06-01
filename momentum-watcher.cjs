@@ -12461,6 +12461,111 @@ ${formatted}`
     return
   }
 
+  // ── POST /rename-existing-project-files — one-time migration to new ARTIST_Title_VNN format ──
+  if (req.method === 'POST' && req.url === '/rename-existing-project-files') {
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      // 1. Fetch all project songs + projects
+      const [songsRes, projectsRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/songs?project_id=not.is.null&select=id,code,title,project_id,work_data,audio_path`, { headers: sbHeaders }),
+        fetch(`${SUPABASE_URL}/rest/v1/projects?select=id,artist`, { headers: sbHeaders })
+      ])
+      const allSongs = await songsRes.json()
+      const allProjects = await projectsRes.json()
+      if (!Array.isArray(allSongs)) throw new Error('songs fetch failed: ' + JSON.stringify(allSongs))
+
+      const songByCode = new Map(allSongs.map(s => [s.code, s]))
+      const projectById = new Map(allProjects.map(p => [p.id, p]))
+      const safeStr = s => (s||'').replace(/[<>:"/\\|?*]/g, '').trim()
+
+      function buildNewFilename(filename, folder) {
+        const ext = path.extname(filename)
+        const nameNoExt = path.basename(filename, ext)
+        const codeMatch = nameNoExt.match(/^(\d{5,8})_/)
+        if (!codeMatch) return null
+        const song = songByCode.get(codeMatch[1])
+        if (!song) return null
+        const project = song.project_id ? projectById.get(song.project_id) : null
+        const artist = (project?.artist || '').toUpperCase().replace(/\s+/g, '_').replace(/[<>:"/\\|?*]/g, '').trim()
+        const title = safeStr(song.title || '')
+        if (!title) return null
+        const base = artist ? `${artist}_${title}` : title
+        const verMatch = nameNoExt.match(/_v(\d+)/i)
+        if (!verMatch) return null
+        const ver = 'V' + String(parseInt(verMatch[1]) + 1).padStart(2, '0')
+        if (folder === 'mixing')        return `${base}_MIX_${ver}${ext}`
+        if (folder === 'instrumental')  return `${base}_INST_${ver}${ext}`
+        if (folder === 'stems')         return `${base}_STEMS_${ver}.zip`
+        return `${base}_${ver}${ext}`
+      }
+
+      // 2. Rename files in each folder, collect old→new map
+      const renameMap = new Map()
+      const renamed = [], skipped = []
+      const folders = [
+        { dir: PRODUCTION_DIR, folder: 'production' },
+        { dir: MIXING_DIR,     folder: 'mixing' },
+        { dir: STEMS_DIR,      folder: 'stems' },
+        { dir: INSTRUMENTALS_DIR, folder: 'instrumental' }
+      ]
+      for (const { dir, folder } of folders) {
+        if (!fs.existsSync(dir)) continue
+        const files = fs.readdirSync(dir).filter(f => !fs.statSync(path.join(dir, f)).isDirectory())
+        for (const filename of files) {
+          const newFilename = buildNewFilename(filename, folder)
+          if (!newFilename) { skipped.push(`${folder}/${filename} (no match)`); continue }
+          if (newFilename === filename) { skipped.push(`${folder}/${filename} (unchanged)`); continue }
+          try {
+            fs.renameSync(path.join(dir, filename), path.join(dir, newFilename))
+            renameMap.set(filename, newFilename)
+            renamed.push(`${filename} → ${newFilename}`)
+            console.log(`✓ Renamed: ${filename} → ${newFilename}`)
+          } catch(e) {
+            skipped.push(`${filename} (error: ${e.message})`)
+            console.error(`✗ Rename failed: ${filename}: ${e.message}`)
+          }
+        }
+      }
+
+      // 3. Update work_data in Supabase for all affected songs
+      const applyRenames = wd => {
+        const r = f => (f && renameMap.has(f)) ? renameMap.get(f) : f
+        if (wd.prod_audio)  wd.prod_audio  = r(wd.prod_audio)
+        if (wd.mix_audio)   wd.mix_audio   = r(wd.mix_audio)
+        if (wd.instr_audio) wd.instr_audio = r(wd.instr_audio)
+        if (wd.stems_zip)   wd.stems_zip   = r(wd.stems_zip)
+        if (Array.isArray(wd.versions)) {
+          wd.versions = wd.versions.map(v => ({ ...v, audio_path: r(v.audio_path) }))
+        }
+      }
+
+      let dbUpdated = 0
+      for (const song of allSongs) {
+        const wd = JSON.parse(JSON.stringify(song.work_data || {}))
+        const before = JSON.stringify(wd)
+        applyRenames(wd)
+        if (JSON.stringify(wd) === before) continue
+        await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, {
+          method: 'PATCH',
+          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ work_data: wd })
+        })
+        dbUpdated++
+        console.log(`✓ Updated work_data: song ${song.id} (${song.code})`)
+      }
+
+      console.log(`✓ Migration complete: ${renamed.length} renamed, ${dbUpdated} DB rows updated, ${skipped.length} skipped`)
+      res.writeHead(200)
+      res.end(JSON.stringify({ ok: true, renamed: renamed.length, dbUpdated, skipped: skipped.length, renames: renamed, skippedList: skipped }))
+    } catch(e) {
+      console.error('rename-existing-project-files error:', e.message)
+      res.writeHead(500)
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /migrate-my-refs-to-library — one-time: source='user' → 'agent' ──
   if (req.method === 'POST' && req.url === '/migrate-my-refs-to-library') {
     res.setHeader('Access-Control-Allow-Origin', '*')

@@ -1922,21 +1922,6 @@ function parseDemoFilename(filename) {
   return { code, title: rest || null, bpm }
 }
 
-async function generateDemoCode() {
-  const now = new Date()
-  const yy = String(now.getFullYear()).slice(2)
-  const mm = String(now.getMonth()+1).padStart(2,'0')
-  const prefix = yy + mm
-  try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=code&code=like.${prefix}%25`, { headers: sbHeaders })
-    const data = await r.json()
-    const existing = (Array.isArray(data) ? data : [])
-      .filter(s => s.code && s.code.length === 6)
-      .map(s => parseInt(s.code.slice(4)) || 0)
-    const max = existing.length ? Math.max(...existing) : 0
-    return prefix + String(max + 1).padStart(2,'0')
-  } catch(e) { return prefix + '01' }
-}
 
 async function inventDemoTitle() {
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -13929,11 +13914,15 @@ server.listen(PORT, '127.0.0.1', () => {
 
   // Demos folder watcher — auto-detect new audio files
   const DEMO_WATCH_EXTS = new Set(['.wav', '.mp3', '.aiff', '.aif', '.m4a'])
+  const demoSkip = new Set()  // filenames being renamed — suppress chokidar re-fire
+
   chokidar.watch(DEMOS_DIR, { ignoreInitial: true, persistent: true, awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 500 } })
     .on('add', async filePath => {
       const filename = path.basename(filePath)
       const ext = path.extname(filename).toLowerCase()
       if (!DEMO_WATCH_EXTS.has(ext)) return
+      if (demoSkip.has(filename)) { demoSkip.delete(filename); return }
+
       try {
         // Skip if already in Supabase
         const chk = await fetch(`${SUPABASE_URL}/rest/v1/songs?audio_path=eq.${encodeURIComponent(filename)}&select=id&limit=1`, { headers: sbHeaders })
@@ -13942,22 +13931,44 @@ server.listen(PORT, '127.0.0.1', () => {
 
         // ── Step 1: Parse filename ──
         const { code: parsedCode, title: parsedTitle, bpm: filenameBpm } = parseDemoFilename(filename)
-        const code = (parsedCode && /^\d{6}$/.test(parsedCode)) ? parsedCode : await generateDemoCode()
 
-        // ── Step 2: Title — invent via Haiku if empty ──
+        // ── Step 2: Code — scan actual DEMOS_DIR files for highest number ──
+        let code = (parsedCode && /^\d{6}$/.test(parsedCode)) ? parsedCode : null
+        if (!code) {
+          const dirFiles = fs.readdirSync(DEMOS_DIR)
+          const existing = dirFiles
+            .map(f => { const m = f.match(/^(\d{6})_/); return m ? parseInt(m[1]) : 0 })
+            .filter(n => n > 0)
+          const lastCode = existing.length ? Math.max(...existing) : 260600
+          code = String(lastCode + 1)
+        }
+
+        // ── Step 3: Title — invent via Haiku if empty ──
         let title = parsedTitle
         if (!title) {
-          console.log(`  ℹ No title in filename — asking Haiku…`)
-          title = await inventDemoTitle() || filename.replace(/\.[^.]+$/, '')
+          console.log(`  ℹ No title in "${filename}" — asking Haiku…`)
+          title = await inventDemoTitle() || 'UNTITLED'
           console.log(`  ✓ Invented title: "${title}"`)
         }
 
-        // ── Step 3: INSERT immediately (card appears in ~5s via polling) ──
-        const now = new Date().toISOString()
+        // ── Step 4: Build canonical filename + rename if needed ──
+        const safe = s => (s || '').replace(/[<>:"/\\|?*]/g, '').trim()
+        const nameParts = [code, safe(title)]
+        if (filenameBpm) nameParts.push(`${filenameBpm}bpm`)
+        const newFilename = nameParts.join('_') + ext
+        const newPath = path.join(DEMOS_DIR, newFilename)
+
+        if (newFilename !== filename) {
+          demoSkip.add(newFilename)  // suppress the rename's add event
+          fs.renameSync(filePath, newPath)
+          console.log(`  ✓ Renamed: ${filename} → ${newFilename}`)
+        }
+
+        // ── Step 5: INSERT immediately (card appears in ~5s via polling) ──
         const rowBase = {
           code, title, status: 'demo', project_id: null, tags: [], reference_links: [],
-          audio_path: filename,
-          work_data: { auto_detected: true, detected_at: now }
+          audio_path: newFilename,
+          work_data: { auto_detected: true, detected_at: new Date().toISOString() }
         }
         if (filenameBpm) rowBase.tempo = filenameBpm
 
@@ -13965,13 +13976,13 @@ server.listen(PORT, '127.0.0.1', () => {
           method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=representation' },
           body: JSON.stringify(rowBase)
         })
-        if (!ins.ok) throw new Error('Supabase insert failed: ' + await ins.text())
+        if (!ins.ok) throw new Error('Supabase insert: ' + await ins.text())
         const inserted = await ins.json()
         const songId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
         console.log(`✓ Demo inserted: ${code} "${title}"${filenameBpm ? ' ' + filenameBpm + 'bpm' : ''} (id ${songId})`)
 
-        // ── Step 4: Essentia — always run for key; also BPM if not in filename ──
-        const { bpm: essBpm, key } = await runEssentiaAnalysis(filePath)
+        // ── Step 6: Essentia — key always; BPM only if not in filename ──
+        const { bpm: essBpm, key } = await runEssentiaAnalysis(newPath)
         const finalBpm = filenameBpm || essBpm
         const updates = {}
         if (!filenameBpm && essBpm) updates.tempo = essBpm
@@ -13981,16 +13992,21 @@ server.listen(PORT, '127.0.0.1', () => {
             method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
             body: JSON.stringify(updates)
           })
-          console.log(`  ✓ Analysis: ${finalBpm||'?'}bpm ${key||'?'}`)
+          console.log(`  ✓ Analysis: ${finalBpm || '?'}bpm ${key || '?'}`)
         }
 
-        // ── Step 5: Archive + Telegram ──
+        // ── Step 7: Archive — clean old name, copy new name ──
         try {
           if (!fs.existsSync(ARCHIVE_29TH)) fs.mkdirSync(ARCHIVE_29TH, { recursive: true })
-          await fs.promises.copyFile(filePath, path.join(ARCHIVE_29TH, filename))
-          console.log(`  ✓ Archived to 29TH AVENUE: ${filename}`)
-        } catch(e) { console.warn('⚠ 29TH AVENUE copy failed:', e.message) }
+          if (newFilename !== filename) {
+            const oldArchive = path.join(ARCHIVE_29TH, filename)
+            if (fs.existsSync(oldArchive)) fs.unlinkSync(oldArchive)
+          }
+          await fs.promises.copyFile(newPath, path.join(ARCHIVE_29TH, newFilename))
+          console.log(`  ✓ Archived: ${newFilename}`)
+        } catch(e) { console.warn('⚠ Archive failed:', e.message) }
 
+        // ── Step 8: Telegram ──
         const tgParts = [`🎵 New demo: ${code} ${title}`]
         if (finalBpm) tgParts.push(`${finalBpm} BPM`)
         if (key) tgParts.push(key)

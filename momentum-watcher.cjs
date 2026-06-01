@@ -14234,6 +14234,9 @@ Max 150 words. Be specific and actionable.` }]
   fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=genre_tag,playlist_name&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing genre_tag/playlist_name — run SQL:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;') })
     .catch(() => {})
+  fetch(`${SUPABASE_URL}/rest/v1/patches?select=dropped_files&limit=1`, { headers: sbHeaders })
+    .then(r => { if (r.status === 400) console.warn('⚠ patches missing dropped_files column — run SQL:\nALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT \'[]\'::jsonb;') })
+    .catch(() => {})
 })
 
 // ── File watcher ──────────────────────────────────────────────────────────

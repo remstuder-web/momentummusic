@@ -83,8 +83,21 @@
 
   let showPatchModal = $state(false)
   let newPatchArtistName = $state('')
-  let subDropFiles = $state({})   // patchId → [{filename, title, bpm, songId, prevPatches}]
+  let subDropFiles = $state({})   // patchId → [{file?, filename, code, title, bpm, songId, prevPatches}]
   let subDragging = $state({})
+
+  function serializeDropFiles(files) {
+    return files.map(f => ({
+      filename: f.filename, title: f.title, code: f.code || '',
+      bpm: f.bpm || null, song_id: f.songId || null, prev_sent: f.prevPatches || []
+    }))
+  }
+  function deserializeDropFiles(rows) {
+    return (rows || []).map(r => ({
+      file: null, filename: r.filename, title: r.title, code: r.code || '',
+      bpm: r.bpm || null, songId: r.song_id || null, prevPatches: r.prev_sent || []
+    }))
+  }
   let expandedPatchId = $state(null)
 
   const STATUS = {
@@ -166,6 +179,13 @@
         .filter(Boolean)
         .sort((a, b) => (b.created_at || '') > (a.created_at || '') ? 1 : -1)
     }))
+
+    // Restore persisted drop files (file objects are null — upload guard handles this)
+    const restored = {}
+    for (const p of patches) {
+      if (p.dropped_files?.length) restored[p.id] = deserializeDropFiles(p.dropped_files)
+    }
+    if (Object.keys(restored).length) subDropFiles = { ...subDropFiles, ...restored }
 
     loading = false
     loadSessionDownloads()
@@ -549,10 +569,13 @@
       current.push({ file, filename: file.name, code: displayCode, title: title || file.name.replace(/\.[^.]+$/, ''), bpm, songId: matched?.id || null, prevPatches })
     }
     subDropFiles = { ...subDropFiles, [patch.id]: [...current] }
+    supabase.from('patches').update({ dropped_files: serializeDropFiles(current) }).eq('id', patch.id).then(() => {})
   }
 
-  function removeDropFile(patchId, filename) {
-    subDropFiles = { ...subDropFiles, [patchId]: (subDropFiles[patchId] || []).filter(f => f.filename !== filename) }
+  async function removeDropFile(patchId, filename) {
+    const updated = (subDropFiles[patchId] || []).filter(f => f.filename !== filename)
+    subDropFiles = { ...subDropFiles, [patchId]: updated }
+    await supabase.from('patches').update({ dropped_files: serializeDropFiles(updated) }).eq('id', patchId)
   }
 
   async function addSongToPatch(patch, song) {
@@ -576,9 +599,9 @@
     if (!allFiles.length) { alert('Drop some audio files first.'); return }
     if (!confirm(`Send submission "${patch.name}" with ${allFiles.length} file(s) and copy link to clipboard?`)) return
 
-    // Save any unmatched files (not already in DEMOS_DIR) to demos folder first
+    // Save any unmatched files (not already in DEMOS_DIR) — only if File object present
     for (const df of dropFiles) {
-      if (!df.songId) {
+      if (!df.songId && df.file) {
         try {
           const buf = await df.file.arrayBuffer()
           await fetch(`http://localhost:4242/save-audio?dir=demo&filename=${encodeURIComponent(df.filename)}`, {
@@ -616,7 +639,8 @@
 
       const songCodes = dropFiles.map(f => ({ code: f.title, filename: f.filename }))
       await supabase.from('patches').update({
-        folder_link: linkToSave, status: 'sent', sent_at: new Date().toISOString(), song_codes: songCodes
+        folder_link: linkToSave, status: 'sent', sent_at: new Date().toISOString(),
+        song_codes: songCodes, dropped_files: []
       }).eq('id', patch.id)
 
       patch.status = 'sent'

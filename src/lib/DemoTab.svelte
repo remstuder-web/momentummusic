@@ -1061,26 +1061,30 @@
               {/if}
             </div>
 
-            <div class="head-right" onclick={e => e.stopPropagation()}>
-              <div class="type-at-group">
-                {#if (song.work_data?.demo_type || 'SONG') === 'SAMPLE'}
-                  <span class="type-badge">SAMPLE</span>
-                {/if}
-                {#if song.work_data?.at_artist}
-                  <span class="at-display">@{song.work_data.at_artist}</span>
-                {/if}
-              </div>
+            <!-- TYPE column — aligns with TYPE dropdown in expanded row -->
+            <div class="head-type">
+              {#if (song.work_data?.demo_type || 'SONG') === 'SAMPLE'}
+                <span class="type-badge">SAMPLE</span>
+              {/if}
+            </div>
+
+            <!-- @ARTIST column — aligns with @ input in expanded row -->
+            <div class="head-at">
+              {#if song.work_data?.at_artist}
+                <span class="at-display">@{song.work_data.at_artist}</span>
+              {/if}
               {#if song.work_data?.frozen}<span class="frozen-badge">FROZEN</span>{/if}
-              <div class="head-spacer"></div>
-              <div class="head-badges" onclick={e => e.stopPropagation()}>
-                <div class="s-wrap">
-                  <button class="s-btn {song.work_data?.frozen ? 'frozen-disabled' : selectedForSub.has(song.id) ? 'sel' : songBatchCount[song.id] >= 2 ? 'multi-batch' : songBatchCount[song.id] === 1 ? 'in-batch' : ''}"
-                    onclick={e => { e.stopPropagation(); if (!song.work_data?.frozen) toggleSubSelect(song.id) }}
-                    title={song.work_data?.frozen ? 'Track is frozen' : selectedForSub.has(song.id) ? 'Deselect' : 'Select for submission'}>S</button>
-                  <button class="freeze-btn {song.work_data?.frozen ? 'on' : ''}"
-                    onclick={e => { e.stopPropagation(); toggleFreeze(song) }}
-                    title={song.work_data?.frozen ? 'Unfreeze track' : 'Freeze track'}>⛔</button>
-                </div>
+            </div>
+
+            <!-- Buttons — fixed right -->
+            <div class="head-buttons" onclick={e => e.stopPropagation()}>
+              <div class="s-wrap">
+                <button class="s-btn {song.work_data?.frozen ? 'frozen-disabled' : selectedForSub.has(song.id) ? 'sel' : songBatchCount[song.id] >= 2 ? 'multi-batch' : songBatchCount[song.id] === 1 ? 'in-batch' : ''}"
+                  onclick={e => { e.stopPropagation(); if (!song.work_data?.frozen) toggleSubSelect(song.id) }}
+                  title={song.work_data?.frozen ? 'Track is frozen' : selectedForSub.has(song.id) ? 'Deselect' : 'Select for submission'}>S</button>
+                <button class="freeze-btn {song.work_data?.frozen ? 'on' : ''}"
+                  onclick={e => { e.stopPropagation(); toggleFreeze(song) }}
+                  title={song.work_data?.frozen ? 'Unfreeze track' : 'Freeze track'}>⛔</button>
               </div>
               {#key audioTick}
                 {@const src = audioSrc(song)}
@@ -1108,23 +1112,20 @@
               <div class="title-audio-row">
                 <div class="field" style="flex:0 0 90px">
                   <label>CODE</label>
-                  <input class="inp-sm" value={song.code} onchange={e => updateField(song, 'code', e.target.value)} style="font-family:'Space Mono',monospace;font-size:12px" />
+                  <input class="inp-sm row1-inp" value={song.code} onchange={e => updateField(song, 'code', e.target.value)} style="font-family:'Space Mono',monospace;font-size:12px" />
                 </div>
                 <div class="field" style="flex:2;min-width:0">
                   <label style="display:flex;align-items:center;gap:6px">
                     TITLE
                     <button class="btn-rand-title" onclick={() => handleTitleChange(song, randomTitle())} title="Random title">✦</button>
                   </label>
-                  <input class="inp-sm" placeholder="Working title..." value={song.title || ''}
+                  <input class="inp-sm row1-inp" placeholder="Working title..." value={song.title || ''}
                     onchange={e => handleTitleChange(song, e.target.value)}
                     onkeydown={e => e.key === 'Enter' && e.target.blur()} />
-                  {#if song.audio_path}
-                    <div class="filename-hint">{song.audio_path}</div>
-                  {/if}
                 </div>
-                <div class="field" style="flex:0 0 100px">
+                <div class="field" style="flex:0 0 120px">
                   <label>TYPE</label>
-                  <select class="inp-sm" value={song.work_data?.demo_type || 'SONG'}
+                  <select class="inp-sm row1-inp" value={song.work_data?.demo_type || 'SONG'}
                     onchange={e => updateDemoType(song, e.target.value)}>
                     <option value="SONG">SONG</option>
                     <option value="SAMPLE">SAMPLE</option>
@@ -1132,7 +1133,7 @@
                 </div>
                 <div class="field" style="flex:1;min-width:100px">
                   <label>@ ARTIST / PROJECT</label>
-                  <input class="inp-sm" placeholder="@artist or project..."
+                  <input class="inp-sm row1-inp" placeholder="@artist or project..."
                     value={song.work_data?.at_artist || ''}
                     onblur={e => updateAtArtist(song, e.target.value)}
                     onkeydown={e => e.key === 'Enter' && e.target.blur()} />
@@ -1536,13 +1537,15 @@
   .card-head { padding: 0 14px; height: 52px; display: flex; align-items: center; gap: 10px; cursor: pointer; background: #1c1c1c; user-select: none; transition: background .15s; overflow: visible; position: relative; }
   .card-head:hover { background: #252525; }
   .card.exp .card-head { background: #252525; }
-  .head-left { display: flex; align-items: center; gap: 10px; width: 58%; flex-shrink: 0; min-width: 0; overflow: hidden; }
-  .head-right { display: flex; align-items: center; gap: 6px; flex: 1; }
-  .type-at-group { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .head-left { display: flex; align-items: center; gap: 10px; width: 33%; flex-shrink: 0; min-width: 0; overflow: hidden; }
+  .head-type { width: 120px; flex-shrink: 0; display: flex; align-items: center; }
+  .head-at { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
+  .head-buttons { flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
   .type-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 2px; color: #c9a84c; border: 1px solid rgba(201,168,76,.4); background: rgba(201,168,76,.06); letter-spacing: .08em; flex-shrink: 0; }
-  .at-display { font-family: 'Space Mono', monospace; font-size: 10px; color: rgba(201,168,76,.6); flex-shrink: 0; letter-spacing: .03em; }
-  .head-spacer { flex: 1; }
-  .audio-row { display: flex; gap: 8px; }
+  .at-display { font-family: 'Space Mono', monospace; font-size: 10px; color: rgba(201,168,76,.55); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .03em; }
+  .title-audio-row label { font-size: 11px; color: rgba(201,168,76,.7); }
+  .row1-inp { height: 40px; box-sizing: border-box; }
+  .audio-row { display: flex; gap: 8px; margin-top: 2px; margin-bottom: 2px; }
   .player-slot { width: 250px; flex-shrink: 0; display: flex; align-items: center; }
   .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .notes-preview { font-size: 10px; color: #444; font-style: italic; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }

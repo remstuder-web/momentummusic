@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte — DONE
+TASK: Header layout fixes, remove duplicate filename, consistent spacing
+WHAT: (1) Tags already behind {#if isExpanded} — confirmed correct. (2) Collapsed header: 3-column layout head-left(33%)/head-type(120px)/head-at(flex:1)/head-buttons(fixed); removes old head-right/type-at-group/head-spacer. (3) Expanded row 1: TYPE field 120px, row1-inp class (height:40px), dim-gold labels (rgba(201,168,76,.7)), filename-hint removed from under title. (4) audio-row margin-top/bottom 2px (card-body gap handles the rest).
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte + momentum-watcher.cjs — DONE
 TASK: Demo TYPE/SAMPLE field + @ artist + archive sync
 WHAT: (1) Collapsed header: replaced key/BPM pills with TYPE badge (only shown if SAMPLE) + @artist display; AUTO badge moved to head-left; FROZEN stays in head-right; spacer pushes buttons right. (2) Expanded row 1: CODE | TITLE | TYPE dropdown (SONG/SAMPLE) | @ ARTIST input. Row 3 (new): AUDIO full-width. Row 2 key/tempo/feat unchanged. (3) updateDemoType + updateAtArtist functions save work_data.demo_type/at_artist, fire POST /sync-demo-archive. (4) Watcher: syncDemoArchive() helper copies/deletes from ARCHIVE_29TH based on type=SAMPLE && !at_artist. POST /sync-demo-archive endpoint. Chokidar auto-detect calls sync with SONG default.

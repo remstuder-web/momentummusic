@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte + momentum-watcher.cjs — DONE
+TASK: Demo freeze button
+WHAT: ⛔ freeze button added after S button on every demo card. Frozen state: red-tint border, FROZEN badge, S button greyed/disabled. toggleFreeze() saves work_data.frozen to Supabase, calls POST /freeze-demo on freeze (deletes from ARCHIVE_29TH, leaves Demos untouched), no archive restore on unfreeze. createSubmissionFromSelection skips frozen songs with toast message. toggleSubSelect silently blocks frozen songs.
+RESULT: builds clean, watcher running
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte — DONE
 TASK: Submissions card header — consistent 3-line format
 WHAT: patch-info now shows: (1) code extracted from name (split on _), white bold; (2) artist input, gold, transparent border style, editable inline, saves on blur; (3) connection select, dim, transparent border style, saves on change. Placeholder text when empty. Removed patch-meta-edit block from body — fields now live in header. Removed old patch-name/patch-contact spans.

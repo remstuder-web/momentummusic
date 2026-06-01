@@ -6310,6 +6310,31 @@ async function restore(input) {
     return
   }
 
+  // ── POST /freeze-demo — delete from archive, leave Demos untouched ─────
+  if (req.method === 'POST' && req.url === '/freeze-demo') {
+    let body = ''
+    req.on('data', d => body += d)
+    req.on('end', () => {
+      try {
+        const { filename } = JSON.parse(body)
+        if (!filename) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'filename required' })); return }
+        const archivePath = path.join(ARCHIVE_29TH, filename)
+        let deleted_from_archive = false
+        if (fs.existsSync(archivePath)) {
+          fs.unlinkSync(archivePath)
+          deleted_from_archive = true
+          console.log(`🧊 Frozen + deleted from archive: ${filename}`)
+        } else {
+          console.log(`🧊 Frozen (not in archive): ${filename}`)
+        }
+        res.writeHead(200); res.end(JSON.stringify({ ok: true, deleted_from_archive }))
+      } catch(e) {
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /delete-audio ────────────────────────────────────────────────
   if (req.method === 'POST' && req.url.startsWith('/delete-audio')) {
     const u = new URL(req.url, 'http://localhost')

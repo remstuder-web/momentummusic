@@ -796,6 +796,8 @@
   }
 
   function toggleSubSelect(songId) {
+    const song = songs.find(s => s.id === songId)
+    if (song?.work_data?.frozen) return
     const next = new Set(selectedForSub)
     if (next.has(songId)) next.delete(songId)
     else next.add(songId)
@@ -804,8 +806,10 @@
 
   async function createSubmissionFromSelection() {
     if (!selectedForSub.size) return
+    const allSelected = songs.filter(s => selectedForSub.has(s.id))
+    const selectedSongs = allSelected.filter(s => !s.work_data?.frozen)
+    if (!selectedSongs.length) { showToast('All selected tracks are frozen'); selectedForSub = new Set(); return }
     const code = await generateSubmissionCode()
-    const selectedSongs = songs.filter(s => selectedForSub.has(s.id))
 
     // Build dropped_files with prev_sent from existing patch_songs
     const dropFiles = []
@@ -835,8 +839,34 @@
 
     patches = [{ ...patch, songs: selectedSongs }, ...patches]
     subDropFiles = { ...subDropFiles, [patch.id]: dropFiles }
+    // Skip frozen songs, report if any were skipped
+    const frozenSkipped = allSelected.filter(s => s.work_data?.frozen)
+    const frozenMsg = frozenSkipped.length ? ` (${frozenSkipped.length} frozen skipped)` : ''
     selectedForSub = new Set()
-    showToast(`Submission ${code} created — fill in details in Submissions tab`)
+    showToast(`Submission ${code} created — fill in details in Submissions tab${frozenMsg}`)
+  }
+
+  async function toggleFreeze(song) {
+    const isFrozen = !!song.work_data?.frozen
+    if (!isFrozen) {
+      if (!confirm('Freeze this track? It will be removed from archive and locked from submissions.')) return
+      const newWorkData = { ...(song.work_data || {}), frozen: true }
+      song.work_data = newWorkData
+      songs = [...songs]
+      await supabase.from('songs').update({ work_data: newWorkData }).eq('id', song.id)
+      if (song.audio_path) {
+        fetch('http://localhost:4242/freeze-demo', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: song.audio_path })
+        }).catch(() => {})
+      }
+    } else {
+      if (!confirm('Unfreeze? Track will be available for submissions again but NOT restored to archive.')) return
+      const newWorkData = { ...(song.work_data || {}), frozen: false }
+      song.work_data = newWorkData
+      songs = [...songs]
+      await supabase.from('songs').update({ work_data: newWorkData }).eq('id', song.id)
+    }
   }
 
   // Mozart
@@ -975,7 +1005,7 @@
     <div class="list">
       {#each filteredSongs as song (song.id)}
         {@const isExpanded = expandedId === song.id}
-        <div class="card {isExpanded ? 'exp' : ''}">
+        <div class="card {isExpanded ? 'exp' : ''} {song.work_data?.frozen ? 'frozen' : ''}">
 
           <!-- CARD HEADER -->
           <div class="card-head" onclick={() => toggleDemo(song)}>
@@ -1005,15 +1035,21 @@
                 {#if song.work_data?.auto_detected}
                   <span class="auto-badge">AUTO</span>
                 {/if}
+                {#if song.work_data?.frozen}
+                  <span class="frozen-badge">FROZEN</span>
+                {/if}
               </div>
             </div>
 
             <div class="head-right" onclick={e => e.stopPropagation()}>
               <div class="head-badges" onclick={e => e.stopPropagation()}>
                 <div class="s-wrap">
-                  <button class="s-btn {selectedForSub.has(song.id) ? 'sel' : songBatchCount[song.id] >= 2 ? 'multi-batch' : songBatchCount[song.id] === 1 ? 'in-batch' : ''}"
-                    onclick={e => { e.stopPropagation(); toggleSubSelect(song.id) }}
-                    title={selectedForSub.has(song.id) ? 'Deselect' : 'Select for submission'}>S</button>
+                  <button class="s-btn {song.work_data?.frozen ? 'frozen-disabled' : selectedForSub.has(song.id) ? 'sel' : songBatchCount[song.id] >= 2 ? 'multi-batch' : songBatchCount[song.id] === 1 ? 'in-batch' : ''}"
+                    onclick={e => { e.stopPropagation(); if (!song.work_data?.frozen) toggleSubSelect(song.id) }}
+                    title={song.work_data?.frozen ? 'Track is frozen' : selectedForSub.has(song.id) ? 'Deselect' : 'Select for submission'}>S</button>
+                  <button class="freeze-btn {song.work_data?.frozen ? 'on' : ''}"
+                    onclick={e => { e.stopPropagation(); toggleFreeze(song) }}
+                    title={song.work_data?.frozen ? 'Unfreeze track' : 'Freeze track'}>⛔</button>
                 </div>
               </div>
               {#key audioTick}
@@ -1733,4 +1769,14 @@
   .sub-float-clear:hover { color: #9e9690; }
 
   .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); padding: 10px 20px; background: #252525; border: 1px solid #4caf82; border-radius: 4px; font-family: 'Space Mono', monospace; font-size: 12px; color: #4caf82; z-index: 300; box-shadow: 0 4px 16px rgba(0,0,0,.5); pointer-events: none; white-space: nowrap; }
+
+  .card.frozen { border-color: rgba(224,90,74,.35); }
+  .card.frozen .card-head { background: rgba(224,90,74,.03); }
+  .card.frozen.exp { border-color: rgba(224,90,74,.5); }
+  .frozen-badge { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 2px; color: #e05a4a; border: 1px solid rgba(224,90,74,.4); background: rgba(224,90,74,.06); flex-shrink: 0; letter-spacing: .08em; }
+  .freeze-btn { font-size: 12px; padding: 1px 4px; background: transparent; border: 1px solid #252525; color: #333; border-radius: 2px; cursor: pointer; flex-shrink: 0; line-height: 1; }
+  .freeze-btn:hover { border-color: rgba(224,90,74,.4); }
+  .freeze-btn.on { border-color: rgba(224,90,74,.5); background: rgba(224,90,74,.08); }
+  .s-btn.frozen-disabled { border-color: #1e1e1e; color: #2a2a2a; cursor: not-allowed; }
+  .s-btn.frozen-disabled:hover { background: transparent; }
 </style>

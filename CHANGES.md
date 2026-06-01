@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte — DONE
+TASK: Spacebar play/pause for demo cards on hover
+WHAT: Added hoveredSongId (plain let). handleKeydown: guards on Space + hoveredSongId, prevents default scroll, queries audio[data-song-id], toggles play/pause reusing currentlyPlaying stop logic. onMount registers keydown listener; onDestroy removes it. card-head gets onmouseenter/onmouseleave to set hoveredSongId. <audio> gets data-song-id={song.id}.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte + momentum-watcher.cjs — DONE
 TASK: Demo tempo change: rename file in Demos + archive to reflect new BPM
 WHAT: Backend: POST /rename-demo-file — strips code prefix and old _NNNbpm suffix from filename, appends new_tempo, PATCHes Supabase audio_path first (so chokidar add sees it in DB and skips), then fs.renameSync in DEMOS_DIR and ARCHIVE_29TH. Frontend: updateTempo() calls /rename-demo-file after Supabase tempo update; updates song.audio_path reactively on success. Files without existing BPM in name get BPM appended.

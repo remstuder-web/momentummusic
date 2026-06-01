@@ -342,7 +342,8 @@
   }
 
   // On mount: increment audioTick so audio server URLs render for existing songs
-  onMount(() => { audioTick++ })
+  onMount(() => { audioTick++; window.addEventListener('keydown', handleKeydown) })
+  onDestroy(() => window.removeEventListener('keydown', handleKeydown))
   function openInPreview(song) {
     if (!song.audio_path) return
     // Write a trigger JSON to Downloads — watcher opens the file in QuickTime
@@ -923,6 +924,7 @@
   let aiMessages = $state([])
   let aiLoading = $state(false)
   let currentlyPlaying = null
+  let hoveredSongId = null
 
   function handlePlay(event) {
     const audio = event.target
@@ -931,6 +933,23 @@
       currentlyPlaying.currentTime = 0
     }
     currentlyPlaying = audio
+  }
+
+  function handleKeydown(e) {
+    if (e.code !== 'Space' || !hoveredSongId) return
+    e.preventDefault()
+    const audio = document.querySelector(`audio[data-song-id="${hoveredSongId}"]`)
+    if (!audio) return
+    if (audio.paused) {
+      if (currentlyPlaying && currentlyPlaying !== audio) {
+        currentlyPlaying.pause()
+        currentlyPlaying.currentTime = 0
+      }
+      audio.play()
+      currentlyPlaying = audio
+    } else {
+      audio.pause()
+    }
   }
 
   async function sendAI() {
@@ -1067,7 +1086,7 @@
         <div class="card {isExpanded ? 'exp' : ''} {song.work_data?.frozen ? 'frozen' : ''}">
 
           <!-- CARD HEADER -->
-          <div class="card-head" onclick={() => toggleDemo(song)}>
+          <div class="card-head" onclick={() => toggleDemo(song)} onmouseenter={() => hoveredSongId = song.id} onmouseleave={() => hoveredSongId = null}>
             <!-- col 1: code + title -->
             <div class="head-left">
               <div class="code-wrap">
@@ -1112,6 +1131,7 @@
                     <div class="player-wrap" onpointerdown={e => e.stopPropagation()}>
                       <audio class="mini-player" controls preload="auto"
                         src={src}
+                        data-song-id={song.id}
                         onplay={handlePlay}
                         use:applyGain={song.id}></audio>
                       <button class="open-preview-btn" onclick={e => { e.stopPropagation(); openInPreview(song) }} title="Open in QuickTime">▶︎</button>

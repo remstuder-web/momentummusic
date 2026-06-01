@@ -5,3 +5,4 @@ dist/
 .env
 *.local
 .DS_Store
+used_demo_titles.json

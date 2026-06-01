@@ -180,6 +180,9 @@ const MIXING_DIR      = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC'
 const RELEASES_DIR    = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Releases')
 const STEMS_DIR       = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Stems')
 const ARCHIVE_29TH    = path.join(process.env.HOME, 'Dropbox', 'P2P', '29TH AVENUE', '!ARCHIVE')
+const USED_TITLES_FILE = path.join(__dirname, 'used_demo_titles.json')
+let usedTitles = []
+try { usedTitles = JSON.parse(fs.readFileSync(USED_TITLES_FILE, 'utf8')) } catch(e) { usedTitles = [] }
 const AUDIO_EXTS      = ['.mp3', '.wav', '.aiff', '.aif', '.flac', '.m4a', '.ogg', '.opus']
 const CODE_PATTERN    = /^\d{8}_v\d{2}\.\w+$/
 const OPEN_TRIGGER    = '__momentum_open__.json'
@@ -1936,12 +1939,16 @@ async function inventDemoTitle() {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
   try {
+    const exclusion = usedTitles.length
+      ? `\n\nThese titles are already taken — do NOT use any of these:\n${usedTitles.join(', ')}`
+      : ''
+    const prompt = `Give me one short punchy music track title, 2 words max, all caps, dark/emotional vibe.${exclusion}\n\nReturn ONLY the title, nothing else.`
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001', max_tokens: 20,
-        messages: [{ role: 'user', content: 'Give me one short punchy music track title, 2 words max, all caps, dark/emotional vibe. Return ONLY the title, nothing else.' }]
+        messages: [{ role: 'user', content: prompt }]
       })
     })
     const d = await r.json()
@@ -13954,9 +13961,11 @@ server.listen(PORT, '127.0.0.1', () => {
 
         // ── Step 3: Title — invent via Haiku if empty ──
         let title = parsedTitle
+        let titleWasInvented = false
         if (!title) {
           console.log(`  ℹ No title in "${filename}" — asking Haiku…`)
           title = await inventDemoTitle() || 'UNTITLED'
+          titleWasInvented = true
           console.log(`  ✓ Invented title: "${title}"`)
         }
 
@@ -13989,6 +13998,12 @@ server.listen(PORT, '127.0.0.1', () => {
         const inserted = await ins.json()
         const songId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
         console.log(`✓ Demo inserted: ${code} "${title}"${filenameBpm ? ' ' + filenameBpm + 'bpm' : ''} (id ${songId})`)
+
+        // Record invented title so it's never reused
+        if (titleWasInvented && title && title !== 'UNTITLED') {
+          usedTitles.push(title)
+          try { fs.writeFileSync(USED_TITLES_FILE, JSON.stringify(usedTitles)) } catch(e) {}
+        }
 
         // ── Step 6: Essentia — always run; BPM from filename takes priority ──
         const ess = await runEssentiaAnalysis(newPath)
@@ -14234,9 +14249,21 @@ Max 150 words. Be specific and actionable.` }]
   fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=genre_tag,playlist_name&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing genre_tag/playlist_name — run SQL:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;') })
     .catch(() => {})
-  fetch(`${SUPABASE_URL}/rest/v1/patches?select=dropped_files&limit=1`, { headers: sbHeaders })
-    .then(r => { if (r.status === 400) console.warn('⚠ patches missing dropped_files column — run SQL:\nALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT \'[]\'::jsonb;') })
-    .catch(() => {})
+  ;(async () => {
+    const { error: chkErr } = await supabase.from('patches').select('dropped_files').limit(1)
+    if (!chkErr) {
+      console.log('✓ patches.dropped_files column ready')
+    } else {
+      const { error: addErr } = await supabaseAdmin.rpc('exec_sql', {
+        sql: "ALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT '[]'::jsonb"
+      })
+      if (!addErr) {
+        console.log('✓ patches.dropped_files column added automatically')
+      } else {
+        console.warn('⚠ patches missing dropped_files — run in Supabase SQL Editor:\nALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT \'[]\'::jsonb;')
+      }
+    }
+  })()
 })
 
 // ── File watcher ──────────────────────────────────────────────────────────

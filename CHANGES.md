@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-02] src/lib/DemoTab.svelte — DONE
+TASK: Fix player width match, restore SAMPLE position, player grows left
+WHAT: (1) HTML: moved open-preview-btn outside player-wrap (now sibling outside player-slot inside {#key} block) so audio fills full 280px. (2) CSS: .demo-meta-right → position:absolute left:415px, pointer-events:none — restores fixed center position matching old grid col2 start. (3) .head-buttons → margin-left:auto anchors right section to right edge; player grows leftward into gap. (4) .player-wrap → width:100% (no flex:1 1 0). Both .mini-player rules unified to height:40px width:100%.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] src/lib/DemoTab.svelte — DONE
 TASK: Match player width to ProjectsTab, expand left not right
 WHAT: .card-head: grid→flex (removes fixed 401px first column). .head-left: flex:1, min-width:0 (compresses toward title when space is tight). .demo-meta-right: flex-shrink:0 (stays fixed). .head-buttons: already flex-shrink:0. .player-slot: width 260→280px, flex-shrink:0, min-width:280px (matches ProjectsTab 280px player). Both .mini-player rules: max-width 260→280px.
 RESULT: builds clean

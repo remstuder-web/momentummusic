@@ -1153,12 +1153,14 @@
                         onplay={handlePlay}
                         onerror={handleAudioError}
                         use:applyGain={song.id}></audio>
-                      <button class="open-preview-btn" onclick={e => { e.stopPropagation(); openInPreview(song) }} title="Open in QuickTime">▶︎</button>
                     </div>
                   {:else if song.audio_path}
                     <button class="audio-ref clickable" onclick={e => { e.stopPropagation(); openInPreview(song) }} title="Open in QuickTime">🎵 {song.audio_path}</button>
                   {/if}
                 </div>
+                {#if src}
+                  <button class="open-preview-btn" onclick={e => { e.stopPropagation(); openInPreview(song) }} title="Open in QuickTime">▶︎</button>
+                {/if}
               {/key}
             </div>
 
@@ -1599,14 +1601,14 @@
   .card-head:hover { background: #252525; }
   .card.exp .card-head { background: #252525; }
   .head-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; overflow: hidden; }
-  .demo-meta-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; overflow: hidden; padding-left: 8px; }
-  .head-buttons { display: flex; align-items: center; gap: 8px; flex-shrink: 0; overflow: hidden; }
+  .demo-meta-right { position: absolute; left: 415px; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+  .head-buttons { display: flex; align-items: center; gap: 6px; flex-shrink: 0; overflow: hidden; margin-left: auto; }
   .type-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 2px; color: #c9a84c; border: 1px solid rgba(201,168,76,.4); background: rgba(201,168,76,.06); letter-spacing: .08em; flex-shrink: 0; }
   .at-display { font-family: 'Space Mono', monospace; font-size: 10px; color: rgba(201,168,76,.55); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .03em; }
   .title-audio-row label { font-size: 11px; color: rgba(201,168,76,.7); }
   .row1-inp { height: 40px; box-sizing: border-box; }
   .audio-row { display: flex; gap: 8px; margin-top: 2px; margin-bottom: 2px; }
-  .player-slot { flex-shrink: 0; width: 280px; max-width: 280px; min-width: 280px; display: flex; align-items: center; overflow: hidden; }
+  .player-slot { flex-shrink: 0; width: 280px; display: flex; align-items: center; overflow: hidden; }
   .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .notes-preview { font-size: 10px; color: #444; font-style: italic; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
   .code-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 90px; flex-shrink: 0; }
@@ -1674,7 +1676,7 @@
   .btn-release { font-family: 'Space Mono', monospace; font-size: 10px; padding: 3px 8px; background: transparent; border: 1px solid rgba(224,90,74,.4); color: #e05a4a; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .btn-release:hover { background: rgba(224,90,74,.08); }
 
-  .mini-player { height: 40px; flex-shrink: 1; max-width: 280px; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
+  .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
   .audio-ref { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
   .audio-ref.clickable { background: transparent; border: none; cursor: pointer; padding: 0; color: #4a9fd4; }
   .audio-ref.clickable:hover { color: #c9a84c; }
@@ -1810,8 +1812,8 @@
   .contact-opt:hover { background: #1c1c1c; color: #c9a84c; }
   .contact-group-label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .12em; color: #4caf82; padding: 10px 12px 5px; text-transform: uppercase; border-bottom: 1px solid #252525; border-top: 1px solid #1a1a1a; background: #0f0f0f; margin-top: 2px; }
   .contact-opt.sel { color: #4a9fd4; background: rgba(74,159,212,.06); }
-  .player-wrap { display: flex; align-items: center; flex: 1 1 0; min-width: 0; overflow: hidden; }
-  .mini-player { height: 40px; width: 100%; max-width: 280px; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
+  .player-wrap { display: flex; align-items: center; width: 100%; }
+  .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
   .btn-send { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; padding: 10px 20px; background: rgba(74,159,212,.1); border: 1px solid rgba(74,159,212,.4); color: #4a9fd4; border-radius: 3px; cursor: pointer; width: 100%; }
   .btn-send:hover { background: rgba(74,159,212,.18); }
   .patch-count { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; }

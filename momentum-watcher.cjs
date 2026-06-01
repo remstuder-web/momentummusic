@@ -14034,6 +14034,32 @@ server.listen(PORT, '127.0.0.1', () => {
   const DEMO_WATCH_EXTS = new Set(['.wav', '.mp3', '.aiff', '.aif', '.m4a'])
   const demoSkip = new Set()  // filenames being renamed — suppress chokidar re-fire
 
+  // ── Mutex for code generation — prevents duplicate codes on bulk drop ──────
+  let codeGenerationLock = false
+  let lastAssignedCode = 0  // in-memory high-water mark covers the rename gap
+
+  async function generateNextDemoCode() {
+    while (codeGenerationLock) await new Promise(r => setTimeout(r, 50))
+    codeGenerationLock = true
+    try {
+      const dirFiles = fs.readdirSync(DEMOS_DIR)
+      const fileMax = dirFiles
+        .map(f => { const m = f.match(/^(\d{6})_/); return m ? parseInt(m[1]) : 0 })
+        .reduce((a, b) => Math.max(a, b), 0)
+      let dbMax = 0
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=code&code=like.2%25&order=code.desc&limit=1`, { headers: sbHeaders })
+        const rows = await r.json()
+        if (Array.isArray(rows) && rows[0]?.code && /^\d{6}$/.test(rows[0].code)) dbMax = parseInt(rows[0].code)
+      } catch(e) {}
+      const next = Math.max(fileMax, dbMax, lastAssignedCode, 260600) + 1
+      lastAssignedCode = next
+      return String(next)
+    } finally {
+      codeGenerationLock = false
+    }
+  }
+
   // ── Startup cleanup: delete Supabase rows whose audio file no longer exists ──
   ;(async () => {
     try {
@@ -14067,15 +14093,10 @@ server.listen(PORT, '127.0.0.1', () => {
         // ── Step 1: Parse filename ──
         const { code: parsedCode, title: parsedTitle, bpm: filenameBpm } = parseDemoFilename(filename)
 
-        // ── Step 2: Code — scan actual DEMOS_DIR files for highest number ──
+        // ── Step 2: Code — mutex-protected to prevent duplicates on bulk drop ──
         let code = (parsedCode && /^\d{6}$/.test(parsedCode)) ? parsedCode : null
         if (!code) {
-          const dirFiles = fs.readdirSync(DEMOS_DIR)
-          const existing = dirFiles
-            .map(f => { const m = f.match(/^(\d{6})_/); return m ? parseInt(m[1]) : 0 })
-            .filter(n => n > 0)
-          const lastCode = existing.length ? Math.max(...existing) : 260600
-          code = String(lastCode + 1)
+          code = await generateNextDemoCode()
         }
 
         // ── Step 3: Title — invent via Haiku if empty ──

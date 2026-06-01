@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-01] momentum-watcher.cjs — DONE
+TASK: Fix demo code generation race condition for bulk drops
+WHAT: Added codeGenerationLock boolean + lastAssignedCode high-water mark at demo watcher scope. generateNextDemoCode() acquires lock via 50ms spin-wait, scans DEMOS_DIR + queries Supabase for highest code, takes max of fileMax/dbMax/lastAssignedCode/260600, increments lastAssignedCode before releasing lock — so concurrent calls each see the previous call's reservation even before the rename hits disk. Replaced inline Step 2 scan in the chokidar add handler with await generateNextDemoCode().
+RESULT: watcher running clean, no orphans on restart
+BLOCKERS: none
+
+## [2026-06-01] momentum-watcher.cjs — DONE
 TASK: Fix demo unlink: delete from Supabase on file remove, startup cleanup
 WHAT: (1) unlink handler: added console.log('DEMO DELETED:', filename) before ext check, added console.log for no-row case, changed DELETE to use 'Prefer: return=representation' and awaits result with console.log('DELETE RESULT:', ...) + checks del.ok. (2) Startup cleanup IIFE: reads DEMOS_DIR files, queries all songs with project_id IS NULL and audio_path NOT NULL, deletes any row whose audio_path is missing from disk — logs each deletion + summary count. (3) Chokidar unlink fires for Dropbox-sync deletions the same as local deletes — confirmed by behaviour.
 RESULT: 7 orphaned records cleaned on first pm2 restart, unlink path now fully logged

@@ -80,6 +80,7 @@
   let mozartAnalysis = $state({}) // song.id -> { loading, ok, error }
   let mozartInsight = $state({}) // song.id -> { strategic, creative, next_step }
   let mozartInsightLoading = $state({}) // song.id -> bool
+  let uploadingSongs = $state({}) // song.id -> 'prod'|'mix'|'instr'|'stems'|null
 
   function formatMinSec(sec) {
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60)
@@ -352,10 +353,13 @@
   }
 
   async function handleProdDrop(e, song) {
-    e.preventDefault(); song._prodDrag = false; songs = [...songs]
+    e.preventDefault()
+    song._prodDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
+    const altKey = e.altKey
+    uploadingSongs = { ...uploadingSongs, [song.id]: 'prod' }
     try {
-      await saveSongAudio(file, song, 'production', e.altKey)
+      await saveSongAudio(file, song, 'production', altKey)
       const wd = workData(song)
       const vLabel = wd.versions?.find(v => v.id === wd.active_version_id)?.name || 'prod'
       fetch('http://localhost:4242/analyze-vocal-eq', {
@@ -363,13 +367,21 @@
         body: JSON.stringify({ type: 'mix', song_id: song.id, label: vLabel })
       }).catch(() => {})
     } catch(err) { alert('Error: ' + err.message) }
+    finally {
+      song._prodDrag = false
+      uploadingSongs = { ...uploadingSongs, [song.id]: null }
+      songs = [...songs]
+    }
   }
 
   async function handleMixDrop(e, song) {
-    e.preventDefault(); song._mixDrag = false; songs = [...songs]
+    e.preventDefault()
+    song._mixDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
+    const altKey = e.altKey
+    uploadingSongs = { ...uploadingSongs, [song.id]: 'mix' }
     try {
-      await saveSongAudio(file, song, 'mixing', e.altKey)
+      await saveSongAudio(file, song, 'mixing', altKey)
       const wd = workData(song)
       const vLabel = wd.versions?.find(v => v.id === wd.active_version_id)?.name || 'mix'
       fetch('http://localhost:4242/analyze-vocal-eq', {
@@ -377,11 +389,18 @@
         body: JSON.stringify({ type: 'mix', song_id: song.id, label: vLabel })
       }).catch(() => {})
     } catch(err) { alert('Error: ' + err.message) }
+    finally {
+      song._mixDrag = false
+      uploadingSongs = { ...uploadingSongs, [song.id]: null }
+      songs = [...songs]
+    }
   }
 
   async function handleInstrumentalDrop(e, song) {
-    e.preventDefault(); song._instrDrag = false; songs = [...songs]
+    e.preventDefault()
+    song._instrDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
+    uploadingSongs = { ...uploadingSongs, [song.id]: 'instr' }
 
     const wd = workData(song)
     const artist = selectedProject?.artist || ''
@@ -428,6 +447,10 @@
       console.log(`✓ Instrumental saved: ${savedFilename}`)
     } catch(err) {
       alert('Error saving instrumental: ' + err.message + '\nMake sure the watcher is running.')
+    } finally {
+      song._instrDrag = false
+      uploadingSongs = { ...uploadingSongs, [song.id]: null }
+      songs = [...songs]
     }
   }
 
@@ -510,9 +533,11 @@
   }
 
   async function handleStemsZipDrop(e, song) {
-    e.preventDefault(); song._stemsDrag = false; songs = [...songs]
+    e.preventDefault()
+    song._stemsDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
     if (!file.name.toLowerCase().endsWith('.zip')) { alert('Please drop a ZIP file.'); return }
+    uploadingSongs = { ...uploadingSongs, [song.id]: 'stems' }
 
     const wd = workData(song)
     const artist = selectedProject?.artist || ''
@@ -555,6 +580,10 @@
       })
     } catch(err) {
       alert('Error uploading stems: ' + err.message + '\nMake sure the watcher is running.')
+    } finally {
+      song._stemsDrag = false
+      uploadingSongs = { ...uploadingSongs, [song.id]: null }
+      songs = [...songs]
     }
   }
 

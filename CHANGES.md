@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-01] momentum-watcher.cjs — DONE
+TASK: Fix demo code generation: month-aware, NN resets each month
+WHAT: generateNextDemoCode() now builds code as YYMMNN. Derives currentMonthPrefix (e.g. '2606'). Scans DEMOS_DIR and Supabase filtered to that prefix only — extracts NN (last 2 chars of 6-digit code). lastAssignedCode changed from integer to string; memMax only applied when prefix matches (prevents bleed across month boundary). nextNN = max(fileMax, dbMax, memMax) + 1, padded to 2 digits. First demo each month resets to NN=01.
+RESULT: watcher running clean, no orphans
+BLOCKERS: none
+
+## [2026-06-01] momentum-watcher.cjs — DONE
 TASK: Fix demo code generation race condition for bulk drops
 WHAT: Added codeGenerationLock boolean + lastAssignedCode high-water mark at demo watcher scope. generateNextDemoCode() acquires lock via 50ms spin-wait, scans DEMOS_DIR + queries Supabase for highest code, takes max of fileMax/dbMax/lastAssignedCode/260600, increments lastAssignedCode before releasing lock — so concurrent calls each see the previous call's reservation even before the rename hits disk. Replaced inline Step 2 scan in the chokidar add handler with await generateNextDemoCode().
 RESULT: watcher running clean, no orphans on restart

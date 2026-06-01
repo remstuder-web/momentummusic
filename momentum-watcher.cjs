@@ -14036,25 +14036,47 @@ server.listen(PORT, '127.0.0.1', () => {
 
   // ── Mutex for code generation — prevents duplicate codes on bulk drop ──────
   let codeGenerationLock = false
-  let lastAssignedCode = 0  // in-memory high-water mark covers the rename gap
+  let lastAssignedCode = ''  // 6-char string e.g. '260801' — month-aware high-water mark
 
   async function generateNextDemoCode() {
     while (codeGenerationLock) await new Promise(r => setTimeout(r, 50))
     codeGenerationLock = true
     try {
+      const now = new Date()
+      const yy = String(now.getFullYear()).slice(2)
+      const mm = String(now.getMonth() + 1).padStart(2, '0')
+      const prefix = yy + mm  // e.g. '2608'
+
+      // Highest NN used this month in DEMOS_DIR
       const dirFiles = fs.readdirSync(DEMOS_DIR)
-      const fileMax = dirFiles
-        .map(f => { const m = f.match(/^(\d{6})_/); return m ? parseInt(m[1]) : 0 })
-        .reduce((a, b) => Math.max(a, b), 0)
+      const fileNNs = dirFiles
+        .map(f => { const m = f.match(/^(\d{6})_/); return m ? m[1] : null })
+        .filter(c => c && c.startsWith(prefix))
+        .map(c => parseInt(c.slice(4)))
+      const fileMax = fileNNs.length ? Math.max(...fileNNs) : 0
+
+      // Highest NN used this month in Supabase
       let dbMax = 0
       try {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=code&code=like.2%25&order=code.desc&limit=1`, { headers: sbHeaders })
+        const r = await fetch(
+          `${SUPABASE_URL}/rest/v1/songs?select=code&code=like.${prefix}%25&order=code.desc&limit=1`,
+          { headers: sbHeaders }
+        )
         const rows = await r.json()
-        if (Array.isArray(rows) && rows[0]?.code && /^\d{6}$/.test(rows[0].code)) dbMax = parseInt(rows[0].code)
+        if (Array.isArray(rows) && rows[0]?.code && rows[0].code.startsWith(prefix)) {
+          dbMax = parseInt(rows[0].code.slice(4))
+        }
       } catch(e) {}
-      const next = Math.max(fileMax, dbMax, lastAssignedCode, 260600) + 1
-      lastAssignedCode = next
-      return String(next)
+
+      // In-memory high-water mark — only relevant when same month
+      const memMax = (lastAssignedCode && lastAssignedCode.startsWith(prefix))
+        ? parseInt(lastAssignedCode.slice(4))
+        : 0
+
+      const nextNN = Math.max(fileMax, dbMax, memMax) + 1
+      const newCode = prefix + String(nextNN).padStart(2, '0')
+      lastAssignedCode = newCode
+      return newCode
     } finally {
       codeGenerationLock = false
     }

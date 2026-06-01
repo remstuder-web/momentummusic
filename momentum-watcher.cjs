@@ -8824,8 +8824,23 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     req.on('data', chunk => chunks.push(chunk))
     req.on('end', async () => {
       try {
-        // Delete old file if name changed
-        if (oldfile && oldfile !== fname) {
+        // Delete ALL existing INST files for this song (matches artist+title prefix)
+        const markerIdx = fname.toUpperCase().indexOf('_INST_')
+        if (markerIdx !== -1) {
+          const songPrefix = fname.slice(0, markerIdx).toLowerCase()
+          try {
+            const existing = fs.readdirSync(INSTRUMENTALS_DIR).filter(f =>
+              f !== fname &&
+              f.toLowerCase().startsWith(songPrefix) &&
+              f.toUpperCase().includes('_INST_')
+            )
+            for (const f of existing) {
+              const fp = path.join(INSTRUMENTALS_DIR, f)
+              if (fs.existsSync(fp)) { fs.unlinkSync(fp); console.log(`  🗑 Deleted old instrumental: ${f}`) }
+            }
+          } catch(e) { console.warn('  ⚠ Could not scan instrumentals dir:', e.message) }
+        } else if (oldfile && oldfile !== fname) {
+          // Fallback: delete by oldfile param if no INST marker in filename
           const oldPath = path.join(INSTRUMENTALS_DIR, oldfile)
           if (fs.existsSync(oldPath)) { fs.unlinkSync(oldPath); console.log(`  🗑 Deleted instrumental: ${oldfile}`) }
         }

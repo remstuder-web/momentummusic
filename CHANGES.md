@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] momentum-watcher.cjs + ProjectsTab.svelte — DONE
+TASK: Instrumental: overwrite previous file in Dropbox, show new filename in UI
+WHAT: Watcher: before saving, scan INSTRUMENTALS_DIR for files whose name starts with the same prefix (everything before _INST_ in new fname, lowercased) — delete all matches. Fallback to oldfile param if no _INST_ marker. Frontend: after save, use result.filename (server-authoritative) for instrPendingName + wd.instr_audio so displayed name always reflects what the server saved.
+RESULT: watcher running
+BLOCKERS: none
+
 ## [2026-06-02] src/lib/ProjectsTab.svelte — DONE
 TASK: Instrumental drop: use version number from dropped filename
 WHAT: handleInstrumentalDrop: parse version via /[_\s]v?(\d{2})[_\s\.]/i on file.name. versionNum = match group or '01' fallback. vLabel = 'V' + versionNum. filename uses vLabel instead of hardcoded 'V01'. No watcher changes — it accepts any filename as-is.

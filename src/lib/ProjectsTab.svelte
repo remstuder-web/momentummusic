@@ -415,15 +415,17 @@
       const result = await res.json()
       if (!result.ok) throw new Error(result.error)
 
+      const savedFilename = result.filename || filename
+      instrPendingName = { ...instrPendingName, [song.id]: savedFilename }
       await saveWorkData(song, wd2 => {
-        wd2.instr_audio = filename
+        wd2.instr_audio = savedFilename
         wd2.instr_version = vLabel
         wd2.instr_sent = false
       })
       if (instrBlobUrls[song.id]) URL.revokeObjectURL(instrBlobUrls[song.id])
       instrBlobUrls = { ...instrBlobUrls, [song.id]: URL.createObjectURL(file) }
       audioTick++
-      console.log(`✓ Instrumental saved: ${filename}`)
+      console.log(`✓ Instrumental saved: ${savedFilename}`)
     } catch(err) {
       alert('Error saving instrumental: ' + err.message + '\nMake sure the watcher is running.')
     }

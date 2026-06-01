@@ -14327,8 +14327,8 @@ server.listen(PORT, '127.0.0.1', () => {
             autoTags = JSON.parse(cleaned)
             if (!Array.isArray(autoTags)) autoTags = []
             autoTags = autoTags.slice(0, 5).map(t => String(t).toLowerCase().trim()).filter(Boolean)
-            console.log(`  ✓ Auto-tags: ${autoTags.join(', ')}`)
-          } catch(e) { console.warn('  ⚠ Auto-tag failed:', e.message) }
+            if (autoTags.length) console.log(`  ✓ Auto-tags: ${autoTags.join(', ')}`)
+          } catch(e) { console.log(`  Auto-tag skipped for: ${filename}`) }
         }
 
         // ── Step 8: PATCH with analysis results (tempo from filename already in INSERT) ──
@@ -14421,7 +14421,7 @@ server.listen(PORT, '127.0.0.1', () => {
         const codeMatch = folderName.match(/^(\d{5})/)
         const code = codeMatch ? codeMatch[1] : null
         const { data, error: insertErr } = await supabase.from('patches')
-          .insert({ name: folderName, status: 'open', artist: '', contact_id: null, dropped_files: [], work_data: { source: 'sent_dir' } })
+          .insert({ name: folderName, status: 'open', artist: '', contact_id: null, dropped_files: [] })
           .select('id')
           .single()
         if (insertErr) { console.error('📁 SENT: patch insert error:', insertErr.message); return }

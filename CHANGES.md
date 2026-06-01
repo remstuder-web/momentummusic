@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] momentum-watcher.cjs — DONE
+TASK: Fix SENT patch insert: remove work_data, fix auto-tag error handling
+WHAT: (1) Removed work_data:{source:'sent_dir'} from patches .insert() — column doesn't exist in patches table. (2) Auto-tag catch block changed from console.warn (noisy) to console.log with "Auto-tag skipped for: filename" — empty/unparseable Haiku response silently skips tagging. Also suppressed the ✓ Auto-tags log when array is empty.
+RESULT: watcher running clean
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte — DONE
 TASK: Spacebar play/pause for demo cards on hover
 WHAT: Added hoveredSongId (plain let). handleKeydown: guards on Space + hoveredSongId, prevents default scroll, queries audio[data-song-id], toggles play/pause reusing currentlyPlaying stop logic. onMount registers keydown listener; onDestroy removes it. card-head gets onmouseenter/onmouseleave to set hoveredSongId. <audio> gets data-song-id={song.id}.

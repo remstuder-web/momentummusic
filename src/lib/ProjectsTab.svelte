@@ -2956,6 +2956,9 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
               <!-- LEFT: info + pills, grows -->
               <div class="song-head-left" onclick={() => expandSong(song, !expanded)}>
                 <div class="song-info">
+                  {#if selectedProject?.artist}
+                    <div class="song-artist-hdr">{selectedProject.artist.toUpperCase()}</div>
+                  {/if}
                   <input class="song-title-input" value={song.title||''} placeholder="Add title..."
                     onclick={e => e.stopPropagation()}
                     onchange={e => { updateSongField(song, 'title', e.target.value); renameSongAudioFiles(song, e.target.value) }}
@@ -4378,7 +4381,8 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .star { background: transparent; border: none; font-size: 11px; color: #2a2a2a; cursor: pointer; padding: 0; line-height: 1; }
   .star.on { color: #4caf82; }
   .star:hover { color: #4caf82; }
-  .song-title-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: #9e9690; font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 1px 0; outline: none; width: 100%; cursor: text; }
+  .song-artist-hdr { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; letter-spacing: .08em; line-height: 1.2; }
+  .song-title-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: #9e9690; font-size: 16px; font-weight: 400; font-family: 'DM Sans', sans-serif; padding: 1px 0; outline: none; width: 100%; cursor: text; }
   .song-title-input:hover { border-bottom-color: #303030; }
   .song-title-input:focus { border-bottom-color: rgba(201,168,76,.5); color: #cec9c1; }
   .song-title-input::placeholder { color: #333; }

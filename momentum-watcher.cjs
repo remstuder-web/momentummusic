@@ -12633,6 +12633,109 @@ ${formatted}`
     return
   }
 
+  // ── POST /fix-title-case-filenames — rename project files to match current songs.title case ──
+  if (req.method === 'POST' && req.url === '/fix-title-case-filenames') {
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const [songsRes, projectsRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/songs?project_id=not.is.null&select=id,code,title,project_id,work_data`, { headers: sbHeaders }),
+        fetch(`${SUPABASE_URL}/rest/v1/projects?select=id,artist`, { headers: sbHeaders })
+      ])
+      const allSongs = await songsRes.json()
+      const allProjects = await projectsRes.json()
+      if (!Array.isArray(allSongs)) throw new Error('songs fetch: ' + JSON.stringify(allSongs))
+
+      const projectById = new Map(allProjects.map(p => [p.id, p]))
+      const safeStr = s => (s||'').replace(/[<>:"/\\|?*]/g, '').trim()
+
+      // Build reverse map: filename → song from work_data audio paths
+      const songByFilename = new Map()
+      for (const song of allSongs) {
+        const wd = song.work_data || {}
+        const paths = [wd.prod_audio, wd.mix_audio, wd.instr_audio, wd.stems_zip,
+          ...(Array.isArray(wd.versions) ? wd.versions.map(v => v.audio_path) : [])
+        ].filter(Boolean)
+        for (const p of paths) songByFilename.set(p, song)
+      }
+
+      function fixedFilename(filename, folder) {
+        const ext = path.extname(filename)
+        const nameNoExt = path.basename(filename, ext)
+        const song = songByFilename.get(filename)
+        if (!song) return null
+        const project = song.project_id ? projectById.get(song.project_id) : null
+        const artist = (project?.artist || '').toUpperCase().replace(/[<>:"/\\|?*]/g, '').trim()
+        const title = safeStr(song.title || '')
+        if (!title) return null
+        const base = artist ? `${artist}_${title}` : title
+        // Extract version as-is from end of filename (e.g. _V05)
+        const verMatch = nameNoExt.match(/_([Vv]\d+)$/)
+        const ver = verMatch ? verMatch[1].toUpperCase() : 'V01'
+        if (folder === 'mixing')       return `${base}_MIX_${ver}${ext}`
+        if (folder === 'instrumental') return `${base}_INST_${ver}${ext}`
+        if (folder === 'stems')        return `${base}_STEMS_${ver}.zip`
+        return `${base}_${ver}${ext}`
+      }
+
+      const renameMap = new Map()
+      const renamed = [], skipped = []
+      const folders = [
+        { dir: PRODUCTION_DIR,    folder: 'production' },
+        { dir: MIXING_DIR,        folder: 'mixing' },
+        { dir: STEMS_DIR,         folder: 'stems' },
+        { dir: INSTRUMENTALS_DIR, folder: 'instrumental' }
+      ]
+      for (const { dir, folder } of folders) {
+        if (!fs.existsSync(dir)) continue
+        const files = fs.readdirSync(dir).filter(f => !fs.statSync(path.join(dir, f)).isDirectory())
+        for (const filename of files) {
+          const newFilename = fixedFilename(filename, folder)
+          if (!newFilename) { skipped.push(`${folder}/${filename} (no match)`); continue }
+          if (newFilename === filename) { skipped.push(`${folder}/${filename} (unchanged)`); continue }
+          try {
+            fs.renameSync(path.join(dir, filename), path.join(dir, newFilename))
+            renameMap.set(filename, newFilename)
+            renamed.push(`${filename} → ${newFilename}`)
+            console.log(`✓ Case fix: ${filename} → ${newFilename}`)
+          } catch(e) {
+            skipped.push(`${filename} (error: ${e.message})`)
+            console.error(`✗ Case fix failed: ${filename}: ${e.message}`)
+          }
+        }
+      }
+
+      // Update work_data in Supabase
+      let dbUpdated = 0
+      for (const song of allSongs) {
+        const wd = JSON.parse(JSON.stringify(song.work_data || {}))
+        const before = JSON.stringify(wd)
+        const r = f => (f && renameMap.has(f)) ? renameMap.get(f) : f
+        if (wd.prod_audio)  wd.prod_audio  = r(wd.prod_audio)
+        if (wd.mix_audio)   wd.mix_audio   = r(wd.mix_audio)
+        if (wd.instr_audio) wd.instr_audio = r(wd.instr_audio)
+        if (wd.stems_zip)   wd.stems_zip   = r(wd.stems_zip)
+        if (Array.isArray(wd.versions)) wd.versions = wd.versions.map(v => ({ ...v, audio_path: r(v.audio_path) }))
+        if (JSON.stringify(wd) === before) continue
+        await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, {
+          method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ work_data: wd })
+        })
+        dbUpdated++
+        console.log(`✓ Updated work_data: song ${song.id}`)
+      }
+
+      console.log(`✓ Case fix complete: ${renamed.length} renamed, ${dbUpdated} DB rows updated`)
+      res.writeHead(200)
+      res.end(JSON.stringify({ ok: true, renamed: renamed.length, dbUpdated, renames: renamed, skipped: skipped.length }))
+    } catch(e) {
+      console.error('fix-title-case-filenames error:', e.message)
+      res.writeHead(500)
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /migrate-my-refs-to-library — one-time: source='user' → 'agent' ──
   if (req.method === 'POST' && req.url === '/migrate-my-refs-to-library') {
     res.setHeader('Access-Control-Allow-Origin', '*')

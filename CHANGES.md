@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/lib/DemoTab.svelte — DONE
+TASK: Constrain player width to fit within card header
+WHAT: .player-slot: flex-shrink:1, width/max-width:260px, min-width:160px, overflow:hidden (was width:250px flex-shrink:0). .player-wrap: flex:1 1 0, min-width:0, overflow:hidden (was flex-shrink:0 min-width:320px). Both .mini-player rules: max-width 320px→260px, flex-shrink:1. .head-buttons: added overflow:hidden.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] src/lib/DemoTab.svelte + src/lib/ProjectsTab.svelte — DONE
 TASK: Audio player: full load on play, fix scrubbing, wider player
 WHAT: Added ensureAudioLoaded(audio) helper: sets preload='auto' + conditionally sets src from dataset.src if !currentSrc. handlePlay: adds audio.preload='auto' (enables buffering immediately on play event). handleKeydown: calls ensureAudioLoaded() before audio.play(). onpointerdown handlers: replaced inline src-set with ensureAudioLoaded(a) call (all 4 handlers across both files). CSS: DemoTab .player-wrap min-width 220→320px, .mini-player max-width 220→320px (both rules). ProjectsTab .song-player-slot 240→280px, .song-head-right 420→460px.

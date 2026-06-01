@@ -989,11 +989,11 @@
             <div class="card-body">
               <!-- Title row with inline audio drop -->
               <div class="title-audio-row">
-                <div class="field" style="flex:0 0 130px">
+                <div class="field" style="flex:0 0 90px">
                   <label>CODE</label>
-                  <input class="inp-sm" value={song.code} onchange={e => updateField(song, 'code', e.target.value)} />
+                  <input class="inp-sm" value={song.code} onchange={e => updateField(song, 'code', e.target.value)} style="font-family:'Space Mono',monospace;font-size:12px" />
                 </div>
-                <div class="field" style="flex:2">
+                <div class="field" style="flex:1;min-width:0">
                   <label style="display:flex;align-items:center;gap:6px">
                     TITLE
                     <button class="btn-rand-title" onclick={() => handleTitleChange(song, randomTitle())} title="Random title">✦</button>
@@ -1030,17 +1030,11 @@
                 </div>
                 <div class="field" style="flex-shrink:0">
                   <label>TEMPO</label>
-                  <div style="display:flex;align-items:center;gap:4px">
+                  <div class="tempo-input-row">
                     <input class="inp-sm" type="number" placeholder="120" value={song.tempo || ''} onchange={e => updateTempo(song, parseInt(e.target.value))} style="width:70px" />
-                    {#if song._bpmHalf}
-                      <span class="bpm-alt" onclick={() => updateTempo(song, song._bpmHalf)}>½ {song._bpmHalf}</span>
-                    {:else if song.tempo}
-                      <span class="bpm-alt" onclick={() => updateTempo(song, Math.round(song.tempo / 2))}>½ {Math.round(song.tempo / 2)}</span>
-                    {/if}
-                    {#if song._bpmDouble}
-                      <span class="bpm-alt" onclick={() => updateTempo(song, song._bpmDouble)}>2× {song._bpmDouble}</span>
-                    {:else if song.tempo}
-                      <span class="bpm-alt" onclick={() => updateTempo(song, song.tempo * 2)}>2× {song.tempo * 2}</span>
+                    {#if song.tempo}
+                      <span class="bpm-alt" onclick={() => updateTempo(song, song._bpmHalf || Math.round(song.tempo / 2))}>÷2</span>
+                      <span class="bpm-alt" onclick={() => updateTempo(song, song._bpmDouble || song.tempo * 2)}>×2</span>
                     {/if}
                   </div>
                 </div>
@@ -1537,8 +1531,9 @@
   .field-head { display: flex; align-items: center; justify-content: space-between; }
   label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #9e9690; }
   .inp-sm { background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; outline: none; border-radius: 3px; width: 100%; }
-  .bpm-alt { font-family: 'Space Mono', monospace; font-size: 8px; color: #333; cursor: pointer; padding: 0 3px; white-space: nowrap; }
-  .bpm-alt:hover { color: #c9a84c; }
+  .tempo-input-row { display: flex; align-items: center; gap: 2px; }
+  .bpm-alt { font-family: 'Space Mono', monospace; font-size: 9px; color: #2e2e2e; cursor: pointer; padding: 2px 4px; background: #111; border: 1px solid #1e1e1e; border-radius: 2px; white-space: nowrap; line-height: 1; }
+  .bpm-alt:hover { color: #c9a84c; border-color: rgba(201,168,76,.3); }
   .inp-sm:focus { border-color: rgba(201,168,76,.5); }
   .ta { background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 300; padding: 8px 10px; outline: none; resize: vertical; border-radius: 3px; width: 100%; min-height: 80px; line-height: 1.6; }
   .ta:focus { border-color: rgba(201,168,76,.5); }
@@ -1583,7 +1578,7 @@
   .btn-ghost-sm { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 4px 10px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 2px; cursor: pointer; white-space: nowrap; }
   .btn-ghost-sm:hover { border-color: #c9a84c; color: #c9a84c; }
   .btn-ghost-sm.dim { opacity: .5; pointer-events: none; }
-  .title-audio-row { display: flex; gap: 8px; align-items: flex-end; }
+  .title-audio-row { display: flex; gap: 8px; align-items: flex-start; }
   .drop-zone-inline { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #0d0d0d; border: 1px dashed #252525; border-radius: 3px; min-height: 36px; transition: border-color .15s; cursor: copy; }
   .drop-zone-inline.drag-over { border-color: #c9a84c; background: rgba(201,168,76,.04); }
   .drop-zone-inline:hover { border-color: #303030; }

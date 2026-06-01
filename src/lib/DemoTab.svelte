@@ -351,16 +351,42 @@
     return { update(newId) { node.volume = gainMap[newId] ?? 1.0 } }
   }
 
+  function saveTagPattern(song, tags) {
+    const analysis = song.work_data?.analysis
+    if (!analysis || !tags.length) return
+    const content = JSON.stringify({
+      tags,
+      bpm: song.tempo || analysis.bpm,
+      key: song.key || analysis.key,
+      energy: analysis.energy,
+      brightness: analysis.brightness,
+      bass_energy: analysis.bass_energy,
+      danceability: analysis.danceability,
+      warmth: analysis.warmth
+    })
+    supabase.from('brain_knowledge').upsert({
+      category: 'tag_pattern',
+      title: `Tag pattern: ${tags.join(', ')} (${song.code})`,
+      content,
+      confidence: 'confirmed',
+      active: true,
+      source_type: 'manual'
+    }, { onConflict: 'title' }).then(() => {})
+  }
+
   async function addTag(song) {
     const val = (tagInput[song.id] || '').trim()
     if (!val) return
     const tags = [...(song.tags || []), val]
     await updateField(song, 'tags', tags)
     tagInput[song.id] = ''
+    saveTagPattern(song, tags)
   }
 
   async function removeTag(song, tag) {
-    await updateField(song, 'tags', (song.tags || []).filter(t => t !== tag))
+    const tags = (song.tags || []).filter(t => t !== tag)
+    await updateField(song, 'tags', tags)
+    saveTagPattern(song, tags)
   }
 
   async function addRef(song) {
@@ -1046,7 +1072,9 @@
                         <div class="genre-dropdown">
                           {#each filteredGenres as g}
                             <button class="genre-opt" onclick={() => {
-                              updateField(song, 'tags', [...(song.tags||[]), g])
+                              const tags = [...(song.tags||[]), g]
+                              updateField(song, 'tags', tags)
+                              saveTagPattern(song, tags)
                               genreSearch = {...genreSearch, [song.id]: ''}
                               showGenrePicker = {...showGenrePicker, [song.id]: false}
                             }}>{g}</button>

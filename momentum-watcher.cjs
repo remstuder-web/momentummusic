@@ -14047,14 +14047,30 @@ server.listen(PORT, '127.0.0.1', () => {
           console.log(`  ✓ Essentia: ${finalBpm || '?'}bpm ${key || '?'} nrg:${energy?.toFixed(2)} dns:${danceability?.toFixed(2)}`)
         }
 
-        // ── Step 7: Auto-tag via Claude Haiku ──
+        // ── Step 7: Auto-tag via Claude Haiku (with learned tag patterns) ──
         let autoTags = []
         const apiKey = process.env.ANTHROPIC_API_KEY
         if (apiKey && (finalBpm || key || energy != null)) {
           try {
+            // Load up to 15 learned patterns from brain_knowledge
+            let learnedExamples = ''
+            try {
+              const pR = await fetch(`${SUPABASE_URL}/rest/v1/brain_knowledge?category=eq.tag_pattern&active=eq.true&select=content&order=created_at.desc&limit=15`, { headers: sbHeaders })
+              const patterns = await pR.json()
+              if (Array.isArray(patterns) && patterns.length) {
+                const examples = patterns
+                  .map(p => { try { return JSON.parse(p.content) } catch(e) { return null } })
+                  .filter(Boolean)
+                  .map(p => `BPM:${p.bpm||'?'} Key:${p.key||'?'} Energy:${p.energy?.toFixed(2)||'?'} Brightness:${p.brightness?.toFixed(2)||'?'} Danceability:${p.danceability?.toFixed(2)||'?'} → tags: [${p.tags?.join(', ')}]`)
+                  .join('\n')
+                learnedExamples = `\nRemo's own tagging history (learn from these patterns):\n${examples}\n`
+              }
+            } catch(e) {}
+
             const tagPrompt = [
-              'Based on this audio analysis, suggest 3-5 genre/mood tags.',
-              '',
+              'You are tagging music for Remo, a music producer. Suggest 3-5 genre/mood tags based on this audio analysis.',
+              learnedExamples,
+              'Current track analysis:',
               `BPM: ${finalBpm || 'unknown'}`,
               `Key: ${key || 'unknown'}`,
               `Energy: ${energy?.toFixed(2) ?? 'unknown'}`,

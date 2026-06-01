@@ -82,12 +82,6 @@
 
   let audioTick = $state(0) // increment to force player re-render after drop
 
-  let showMoveModal = $state(false)
-  let movingSong = $state(null)
-  let projects = $state([])
-  let newProjectName = $state('')
-  let newProjectArtist = $state('')
-
   let showPatchModal = $state(false)
   let submissionBrief = $state('')
   let submissionResults = $state(null)
@@ -432,108 +426,6 @@
     if (structure < 0.33) return adj[Math.floor(Math.random()*adj.length)] + ' ' + noun[Math.floor(Math.random()*noun.length)]
     if (structure < 0.66) return noun[Math.floor(Math.random()*noun.length)] + ' ' + noun[Math.floor(Math.random()*noun.length)]
     return adj[Math.floor(Math.random()*adj.length)] + ' ' + adj[Math.floor(Math.random()*adj.length)] + ' ' + noun[Math.floor(Math.random()*noun.length)]
-  }
-
-  async function openMoveModal(song) {
-    // Check if already in a project
-    if (song.project_id) {
-      const { data: proj } = await supabase.from('projects').select('name, artist').eq('id', song.project_id).single()
-      const label = proj ? (proj.artist ? proj.artist + ' — ' + proj.name : proj.name) : 'another project'
-      if (!confirm(`⚠ This song is already in "${label}".\nMove it to a different project anyway?`)) return
-    }
-    movingSong = song
-    const { data } = await supabase.from('projects').select('id, name, artist, color').order('position')
-    projects = data || []
-    showMoveModal = true
-  }
-
-  async function moveToExisting(projectId) {
-    const song = movingSong
-    const project = projects.find(p => p.id === projectId)
-    const work_data = { ...(song.work_data || {}) }
-    work_data.current_stage = 'production'
-
-    if (song.audio_path) {
-      const ext = song.audio_path.slice(song.audio_path.lastIndexOf('.'))
-      const safe = s => (s||'').replace(/[<>:"/\\|?*]/g,'').trim()
-      const parts = [safe(song.code), safe(project?.artist||''), safe(song.title||''), 'v00'].filter(Boolean)
-      const v00File = parts.join('_') + ext
-      const v00id = 'v00_' + Date.now()
-      if (!work_data.versions) work_data.versions = []
-      work_data.prod_audio = v00File
-      work_data.active_version_id = v00id
-      work_data.versions = [{
-        id: v00id, name: 'v00', version_type: 'production',
-        audio_path: v00File, sent_to_artist: false, feedback: [],
-        created_at: new Date().toISOString()
-      }, ...work_data.versions.filter(v => v.name !== 'v00')]
-      try {
-        await fetch('http://localhost:4242/copy-demo-to-production', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ demoFile: song.audio_path, outFile: v00File })
-        })
-      } catch(e) { console.warn('Watcher not running — audio copy failed:', e.message) }
-    }
-
-    if (song.notes) {
-      work_data.project_info = song.notes
-    }
-
-    // Remove from all patches (but don't delete history)
-    await supabase.from('patch_songs').delete().eq('song_id', song.id)
-    patches = patches.map(p => ({ ...p, songs: p.songs.filter(s => s.id !== song.id) }))
-
-    await supabase.from('songs').update({ project_id: projectId, work_data, tags: song.tags||[] }).eq('id', song.id)
-    songs = songs.filter(s => s.id !== song.id)
-    showMoveModal = false
-    movingSong = null
-  }
-
-  async function moveToNew() {
-    if (!newProjectName.trim()) return
-    const song = movingSong
-    const { data: proj } = await supabase.from('projects')
-      .insert({ name: newProjectName.trim(), artist: newProjectArtist.trim(), color: '#9b6fd4', status: 'active', position: 0, songs: [], deadlines: [], tasks: [] })
-      .select().single()
-    const work_data = { ...(song.work_data || {}) }
-    work_data.current_stage = 'production'
-
-    if (song.audio_path) {
-      const ext = song.audio_path.slice(song.audio_path.lastIndexOf('.'))
-      const safe = s => (s||'').replace(/[<>:"/\\|?*]/g,'').trim()
-      const parts = [safe(song.code), safe(newProjectArtist.trim()||''), safe(song.title||''), 'v00'].filter(Boolean)
-      const v00File = parts.join('_') + ext
-      const v00id = 'v00_' + Date.now()
-
-      if (!work_data.versions) work_data.versions = []
-      work_data.prod_audio = v00File
-      work_data.active_version_id = v00id
-      work_data.versions = [{
-        id: v00id, name: 'v00', version_type: 'production',
-        audio_path: v00File, sent_to_artist: false, feedback: [],
-        created_at: new Date().toISOString()
-      }, ...work_data.versions.filter(v => v.name !== 'v00')]
-
-      try {
-        await fetch('http://localhost:4242/copy-demo-to-production', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ demoFile: song.audio_path, outFile: v00File })
-        })
-      } catch(e) { console.warn('Watcher not running — audio copy failed:', e.message) }
-    }
-
-    if (song.notes) {
-      work_data.project_info = song.notes
-    }
-
-    await supabase.from('patch_songs').delete().eq('song_id', song.id)
-    patches = patches.map(p => ({ ...p, songs: p.songs.filter(s => s.id !== song.id) }))
-    await supabase.from('songs').update({ project_id: proj.id, work_data, tags: song.tags||[] }).eq('id', song.id)
-    songs = songs.filter(s => s.id !== song.id)
-    showMoveModal = false
-    movingSong = null
-    newProjectName = ''
-    newProjectArtist = ''
   }
 
   async function createShareSession(patch) {
@@ -1183,7 +1075,6 @@
                 </div>
               </div>
               <div class="card-footer">
-                <button class="btn-move" onclick={() => openMoveModal(song)}>→ Move to Project</button>
                 <button class="btn-delete" onclick={() => remove(song.id)}>Delete</button>
               </div>
             </div>
@@ -1403,36 +1294,6 @@
 
 </div><!-- end demo-layout -->
 
-{#if showMoveModal}
-  <div class="modal-bg" onclick={() => showMoveModal = false}>
-    <div class="modal" onclick={e => e.stopPropagation()}>
-      <div class="modal-title">Move <span class="gold">{movingSong?.code}</span> to Project</div>
-      {#if movingSong?.tags?.length}
-        <div class="move-tags-preview">
-          {#each movingSong.tags as tag}<span class="tag">{tag}</span>{/each}
-        </div>
-      {/if}
-      {#if projects.length}
-        <div class="modal-section">EXISTING PROJECTS</div>
-        {#each projects as p}
-          <div class="modal-proj-row" onclick={() => moveToExisting(p.id)}>
-            <div class="dot" style="background:{p.color}"></div>
-            <div class="modal-proj-info">
-              <span class="modal-proj-artist" style="color:{p.color||'#cec9c1'}">{p.artist||p.name}</span>
-              {#if p.artist}<span class="modal-proj-name">{p.name}</span>{/if}
-            </div>
-          </div>
-        {/each}
-      {/if}
-      <div class="modal-section" style="margin-top:16px">NEW PROJECT</div>
-      <input class="inp-sm" bind:value={newProjectArtist} placeholder="Artist..." />
-      <input class="inp-sm" bind:value={newProjectName} placeholder="Project name..." style="margin-top:6px" />
-      <button class="btn-gold-full" onclick={moveToNew}>Create & Move</button>
-      <button class="modal-cancel" onclick={() => showMoveModal = false}>Cancel</button>
-    </div>
-  </div>
-{/if}
-
 {#if showPatchModal}
   <div class="modal-bg" onclick={() => { showPatchModal = false; showPatchContactPicker = false; showPatchArtistPicker = false }}>
     <div class="modal" onclick={e => e.stopPropagation()}>
@@ -1628,8 +1489,6 @@
   .drop-clear { background: transparent; border: none; color: #555; font-size: 16px; cursor: pointer; flex-shrink: 0; padding: 0; }
   .drop-clear:hover { color: #e05a4a; }
 
-  .move-tags-preview { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 12px; }
-  .move-tags-preview .tag { pointer-events: none; }
   .tags-input-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .tags-inline { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; flex: 1; }
   .genre-picker-wrap { position: relative; }
@@ -1688,7 +1547,6 @@
   .batch-pick-opt:hover { background: #252525; color: #c9a84c; }
   .batch-pick-empty { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; padding: 10px 14px; }
   .btn-delete { font-family: 'Space Mono', monospace; font-size: 11px; padding: 6px 12px; background: transparent; border: 1px solid rgba(224,90,74,.3); color: #e05a4a; border-radius: 3px; cursor: pointer; }
-  .btn-move { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 14px; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.4); color: #c9a84c; border-radius: 3px; cursor: pointer; }
 
   .patch-card { border: 1px solid #303030; border-radius: 4px; overflow: hidden; }
   .patch-card.exp { border-color: rgba(74,159,212,.4); }
@@ -1759,13 +1617,6 @@
   .modal { background: #1c1c1c; border: 1px solid #303030; border-radius: 6px; padding: 24px; width: 380px; display: flex; flex-direction: column; gap: 8px; }
   .modal-title { font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 700; color: #f5f1ea; margin-bottom: 8px; }
   .gold { color: #c9a84c; }
-  .modal-section { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; color: #555; text-transform: uppercase; }
-  .modal-proj-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 3px; cursor: pointer; border: 1px solid #252525; transition: all .15s; }
-  .modal-proj-row:hover { background: #252525; border-color: rgba(201,168,76,.3); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .modal-proj-info { display: flex; flex-direction: column; gap: 1px; flex: 1; }
-  .modal-proj-artist { font-family: "Space Mono", monospace; font-size: 14px; font-weight: 700; letter-spacing: .05em; }
-  .modal-proj-name { font-size: 11px; color: #555; }
   .btn-gold-full { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 10px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; margin-top: 4px; }
   .patch-name-preview { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; padding: 7px 0 2px; border-top: 1px solid #1c1c1c; margin-top: 10px; letter-spacing: .04em; }
   .modal-cancel { font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 3px; cursor: pointer; }

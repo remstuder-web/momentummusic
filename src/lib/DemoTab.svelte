@@ -886,6 +886,9 @@
                 {#if song.notes}
                   <span class="notes-preview">{song.notes.slice(0,60)}{song.notes.length>60?'…':''}</span>
                 {/if}
+                {#if song.work_data?.auto_detected}
+                  <span class="auto-badge">AUTO</span>
+                {/if}
               </div>
             </div>
 
@@ -1419,6 +1422,7 @@
   .head-meta { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; align-items: center; min-width: 0; overflow: hidden; }
   .tag-sm { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 2px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.2); color: #c9a84c; }
   .meta-pill { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 2px; background: #252525; border: 1px solid #303030; color: #9e9690; }
+  .auto-badge { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 2px; color: #4caf82; border: 1px solid rgba(76,175,130,.35); background: rgba(76,175,130,.06); flex-shrink: 0; }
   .status-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .1em; padding: 3px 8px; border-radius: 2px; border: 1px solid; flex-shrink: 0; }
   .arr { font-size: 11px; color: #9e9690; transition: transform .2s; flex-shrink: 0; }
   .card.exp .arr { transform: rotate(90deg); }

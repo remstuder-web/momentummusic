@@ -179,6 +179,7 @@ const INSTRUMENTALS_DIR = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSI
 const MIXING_DIR      = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Mixing')
 const RELEASES_DIR    = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Releases')
 const STEMS_DIR       = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Stems')
+const ARCHIVE_29TH    = path.join(process.env.HOME, 'Dropbox', 'P2P', '29TH AVENUE', '!ARCHIVE')
 const AUDIO_EXTS      = ['.mp3', '.wav', '.aiff', '.aif', '.flac', '.m4a', '.ogg', '.opus']
 const CODE_PATTERN    = /^\d{8}_v\d{2}\.\w+$/
 const OPEN_TRIGGER    = '__momentum_open__.json'
@@ -1878,6 +1879,55 @@ async function saveToCheckout(track) {
 }
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)) }
+
+// ── Essentia analysis helper for demo auto-detect ────────────────────────
+async function runEssentiaAnalysis(filePath) {
+  const { execSync } = require('child_process')
+  const PY = '/opt/homebrew/bin/python3.11'
+  const SCRIPT = path.join(__dirname, 'analyze_audio.py')
+  try {
+    const pyOut = execSync(
+      `"${PY}" "${SCRIPT}" ${shellEscape(filePath)} 2>/dev/null`,
+      { encoding: 'utf8', timeout: 60000 }
+    ).trim()
+    const f = JSON.parse(pyOut)
+    let bpm = null, key = null
+    if (f.bpm) {
+      let b = f.bpm
+      while (b < 70) b *= 2
+      while (b > 160) b /= 2
+      bpm = Math.round(b)
+    }
+    if (f.key && f.scale) key = f.key + (f.scale === 'minor' ? 'm' : '')
+    return { bpm, key }
+  } catch(e) { return { bpm: null, key: null } }
+}
+
+function parseDemoFilename(filename) {
+  const nameNoExt = filename.replace(/\.[^.]+$/, '')
+  let title = nameNoExt, bpm = null
+  const bpmMatch = nameNoExt.match(/\b(\d{2,3})\s*bpm\b/i)
+  if (bpmMatch) { bpm = parseInt(bpmMatch[1]); title = title.replace(bpmMatch[0], '').trim() }
+  const numMatch = title.match(/^(\d+)[\s_-]+(.+)/)
+  if (numMatch) title = numMatch[2]
+  title = title.replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim()
+  return { title, bpm }
+}
+
+async function generateDemoCode() {
+  const now = new Date()
+  const yy = String(now.getFullYear()).slice(2)
+  const mm = String(now.getMonth()+1).padStart(2,'0')
+  const dd = String(now.getDate()).padStart(2,'0')
+  const prefix = yy+mm+dd
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=code&code=like.${prefix}%25`, { headers: sbHeaders })
+    const data = await r.json()
+    const existing = (Array.isArray(data) ? data : []).map(s => parseInt((s.code||'').slice(6)) || 0)
+    const max = existing.length ? Math.max(...existing) : 0
+    return prefix + String(max + 1).padStart(2,'0')
+  } catch(e) { return prefix + '01' }
+}
 
 // ── Background library track processing queue ─────────────────────────────
 const ESSENTIA_PY = '/opt/homebrew/bin/python3.11'
@@ -5931,7 +5981,7 @@ For third-party plugins (VST/AU/VST3): use get_browser_items_at_path with path "
 // ── HTTP server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Filename, X-Oldfile, X-Artist, X-Song, Range')
   res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
 
@@ -10077,6 +10127,38 @@ print(json.dumps({'files': files}))
     return
   }
 
+  // ── POST /generate-titles — Claude Haiku track title suggestions ────────
+  if (req.method === 'POST' && req.url === '/generate-titles') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      try {
+        const { description } = JSON.parse(Buffer.concat(chunks).toString())
+        if (!description) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'description required' })); return }
+        const apiKey = process.env.ANTHROPIC_API_KEY
+        if (!apiKey) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: 'ANTHROPIC_API_KEY not set' })); return }
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001', max_tokens: 300,
+            messages: [{ role: 'user', content: `Generate 10 creative, catchy music track titles based on: ${description}\nReturn ONLY a JSON array of 10 strings. No explanation, no numbering.` }]
+          })
+        })
+        const d = await r.json()
+        if (d.usage) fetch(`http://127.0.0.1:${PORT}/track-cost`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: '/generate-titles', model: 'claude-haiku-4-5-20251001', input_tokens: d.usage.input_tokens || 0, output_tokens: d.usage.output_tokens || 0, cost_usd: ((d.usage.input_tokens || 0) * 0.0000008) + ((d.usage.output_tokens || 0) * 0.000001) }) }).catch(() => {})
+        const raw = (d.content?.[0]?.text || '[]').replace(/```json|```/g, '').trim()
+        const titles = JSON.parse(raw)
+        res.end(JSON.stringify({ ok: true, titles }))
+      } catch(e) {
+        console.error('generate-titles error:', e.message)
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /sync-all-refs — consolidate all Spotify track refs into reference_tracks ──
   if (req.method === 'POST' && req.url === '/sync-all-refs') {
     const chunks = []; req.on('data', c => chunks.push(c))
@@ -12609,6 +12691,29 @@ ${formatted}`
     return
   }
 
+  // ── DELETE /clear-inbox-notifications ────────────────────────────────────────
+  if (req.method === 'DELETE' && req.url === '/clear-inbox-notifications') {
+    try {
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      const { data, error } = await supabase
+        .from('inbox_notifications')
+        .delete()
+        .in('type', ['whatsapp', 'whatsapp_summary', 'briefing', 'scout'])
+        .lt('created_at', cutoff)
+        .select()
+      if (error) throw error
+      const deleted = Array.isArray(data) ? data.length : 0
+      console.log(`[clear-inbox-notifications] deleted ${deleted} rows older than 7 days`)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, deleted }))
+    } catch(e) {
+      console.error('[clear-inbox-notifications] error:', e.message)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   res.writeHead(404); res.end()
 })
 
@@ -13729,6 +13834,68 @@ server.listen(PORT, '127.0.0.1', () => {
   } else {
     console.log('⚠ Obsidian vault not found:', OBSIDIAN_VAULT_PATH, '— create vault to enable sync')
   }
+
+  // Demos folder watcher — auto-detect new audio files
+  const DEMO_WATCH_EXTS = new Set(['.wav', '.mp3', '.aiff', '.aif', '.m4a'])
+  chokidar.watch(DEMOS_DIR, { ignoreInitial: true, persistent: true, awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 500 } })
+    .on('add', async filePath => {
+      const filename = path.basename(filePath)
+      const ext = path.extname(filename).toLowerCase()
+      if (!DEMO_WATCH_EXTS.has(ext)) return
+      try {
+        // Skip if already in Supabase
+        const chk = await fetch(`${SUPABASE_URL}/rest/v1/songs?audio_path=eq.${encodeURIComponent(filename)}&select=id&limit=1`, { headers: sbHeaders })
+        const chkData = await chk.json()
+        if (Array.isArray(chkData) && chkData.length) { console.log(`⏭  Demo already in DB: ${filename}`); return }
+
+        const { title, bpm: filenameBpm } = parseDemoFilename(filename)
+        const code = await generateDemoCode()
+        const { bpm: essBpm, key } = await runEssentiaAnalysis(filePath)
+        const bpm = filenameBpm || essBpm
+
+        const songData = {
+          code, title, status: 'demo', project_id: null, tags: [], reference_links: [],
+          audio_path: filename,
+          work_data: { auto_detected: true, detected_at: new Date().toISOString() }
+        }
+        if (bpm) songData.tempo = bpm
+        if (key) songData.key = key
+
+        const ins = await fetch(`${SUPABASE_URL}/rest/v1/songs`, {
+          method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify(songData)
+        })
+        if (!ins.ok) throw new Error('Supabase insert failed: ' + await ins.text())
+
+        // Copy to 29TH AVENUE archive
+        try {
+          if (!fs.existsSync(ARCHIVE_29TH)) fs.mkdirSync(ARCHIVE_29TH, { recursive: true })
+          await fs.promises.copyFile(filePath, path.join(ARCHIVE_29TH, filename))
+          console.log(`✓ Archived to 29TH AVENUE: ${filename}`)
+        } catch(e) { console.warn('⚠ 29TH AVENUE copy failed:', e.message) }
+
+        const parts = [`🎵 New demo detected: ${title || filename}`]
+        if (bpm) parts.push(`${bpm} BPM`)
+        if (key) parts.push(key)
+        if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, parts.join(' | ')).catch(() => {})
+        console.log(`✓ Demo auto-detected: ${filename} → ${code} "${title}" ${bpm||'?'}bpm ${key||'?'}`)
+      } catch(e) { logError('demo-auto-detect', e.message); console.error('✗ Demo auto-detect error:', e.message) }
+    })
+    .on('unlink', async filePath => {
+      const filename = path.basename(filePath)
+      if (!DEMO_WATCH_EXTS.has(path.extname(filename).toLowerCase())) return
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?audio_path=eq.${encodeURIComponent(filename)}&project_id=is.null&select=id,title,code&limit=1`, { headers: sbHeaders })
+        const rows = await r.json()
+        if (!Array.isArray(rows) || !rows.length) return
+        const song = rows[0]
+        await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, { method: 'DELETE', headers: sbHeaders })
+        if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, `🗑 Demo removed: ${song.title || song.code || filename}`).catch(() => {})
+        console.log(`✓ Demo removed from DB: ${filename}`)
+      } catch(e) { console.error('✗ Demo unlink error:', e.message) }
+    })
+  console.log('✓ Demos folder watching:', DEMOS_DIR)
+
   // connectBrainEntries() — defined at module scope above (accessible via endpoint + scheduler)
 
   // Weekly brain review — Sunday 8am

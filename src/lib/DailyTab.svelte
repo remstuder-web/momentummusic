@@ -28,6 +28,9 @@
   let normDragging = $state(false)
   let normStatus = $state('')   // '' | 'working' | 'ok' | 'err'
   let normMsg = $state('')
+  let titleGenInput = $state('')
+  let titleGenLoading = $state(false)
+  let titleGenResults = $state([])
 
   let acapellaFile = $state(null)
   let acapellaLoading = $state(false)
@@ -417,6 +420,22 @@
     const idx = arr.findIndex(h => h.id === id), ni = idx + dir
     if (ni < 0 || ni >= arr.length) return
     const tmp = arr[idx]; arr[idx] = arr[ni]; arr[ni] = tmp; state.helpers = arr; await saveHelpers()
+  }
+
+  async function generateTitles() {
+    if (!titleGenInput.trim() || titleGenLoading) return
+    titleGenLoading = true
+    titleGenResults = []
+    try {
+      const r = await fetch('http://localhost:4242/generate-titles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: titleGenInput.trim() })
+      })
+      const d = await r.json()
+      titleGenResults = d.titles || []
+    } catch(e) { alert('Title generator error: ' + e.message) }
+    titleGenLoading = false
   }
 
   async function moveCustom(id, dir) {
@@ -1511,8 +1530,29 @@ ${mozartContext}`
           <button class="add-btn" onclick={addHelper}>+</button>
         </div>
 
+        <!-- TITLE GENERATOR -->
+        <div class="normalizer-title">TITLE GENERATOR</div>
+        <div class="title-gen-row">
+          <input class="add-inp title-gen-inp" bind:value={titleGenInput}
+            placeholder="Describe the vibe, genre, mood, artist style..."
+            onkeydown={e => e.key === 'Enter' && generateTitles()} />
+          <button class="btn-gold-sm {titleGenLoading ? 'dim' : ''}" onclick={generateTitles} disabled={titleGenLoading}>
+            {titleGenLoading ? '...' : 'Generate Titles'}
+          </button>
+        </div>
+        {#if titleGenResults.length}
+          <div class="title-gen-results">
+            {#each titleGenResults as t}
+              <div class="title-gen-item">
+                <span class="title-gen-text">{t}</span>
+                <button class="title-copy-btn" onclick={() => navigator.clipboard.writeText(t)}>Copy</button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
         <!-- NORMALIZER -->
-        <div class="normalizer-title">NORMALIZER</div>
+        <div class="normalizer-title" style="margin-top:16px">NORMALIZER</div>
         <div class="normalizer-drop
           {normDragging ? 'dragging' : ''}
           {normStatus === 'ok' ? 'ok' : ''}
@@ -2169,6 +2209,14 @@ ${mozartContext}`
   .add-inp { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 9px; outline: none; border-radius: 3px; }
   .add-inp:focus { border-color: rgba(201,168,76,.4); }
   .normalizer-title { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .1em; color: #555; padding: 10px 0 5px; }
+  .title-gen-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .title-gen-inp { flex: 1; }
+  .title-gen-results { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+  .title-gen-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #111; border: 1px solid #1c1c1c; border-radius: 3px; }
+  .title-gen-text { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; flex: 1; }
+  .title-copy-btn { font-family: 'Space Mono', monospace; font-size: 10px; padding: 3px 8px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .title-copy-btn:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
+  .btn-gold-sm.dim { opacity: .5; cursor: not-allowed; }
   .normalizer-drop { border: 1px dashed #252525; border-radius: 3px; padding: 10px 14px; cursor: copy; transition: all .15s; }
   .normalizer-drop.dragging { border-color: #c9a84c; background: rgba(201,168,76,.04); }
   .normalizer-drop.ok { border-color: rgba(76,175,130,.4); background: rgba(76,175,130,.04); }

@@ -83,21 +83,10 @@
 
   let showPatchModal = $state(false)
   let newPatchArtistName = $state('')
-  let subDropFiles = $state({})   // patchId → [{file?, filename, code, title, bpm, songId, prevPatches}]
+  // Single flat format — same shape in memory and in Supabase jsonb
+  // { filename, title, code, bpm, song_id, prev_sent }
+  let subDropFiles = $state({})   // patchId → [DropFile]
   let subDragging = $state({})
-
-  function serializeDropFiles(files) {
-    return files.map(f => ({
-      filename: f.filename, title: f.title, code: f.code || '',
-      bpm: f.bpm || null, song_id: f.songId || null, prev_sent: f.prevPatches || []
-    }))
-  }
-  function deserializeDropFiles(rows) {
-    return (rows || []).map(r => ({
-      file: null, filename: r.filename, title: r.title, code: r.code || '',
-      bpm: r.bpm || null, songId: r.song_id || null, prevPatches: r.prev_sent || []
-    }))
-  }
   let expandedPatchId = $state(null)
 
   const STATUS = {
@@ -180,10 +169,13 @@
         .sort((a, b) => (b.created_at || '') > (a.created_at || '') ? 1 : -1)
     }))
 
-    // Restore persisted drop files (file objects are null — upload guard handles this)
+    // Restore persisted drop files from Supabase jsonb
     const restored = {}
     for (const p of patches) {
-      if (p.dropped_files?.length) restored[p.id] = deserializeDropFiles(p.dropped_files)
+      console.log('LOADED DROPPED FILES:', p.id, p.name, JSON.stringify(p.dropped_files))
+      if (Array.isArray(p.dropped_files) && p.dropped_files.length) {
+        restored[p.id] = p.dropped_files
+      }
     }
     if (Object.keys(restored).length) subDropFiles = { ...subDropFiles, ...restored }
 
@@ -551,7 +543,7 @@
     e.preventDefault()
     subDragging = { ...subDragging, [patch.id]: false }
     const audioExts = new Set(['.wav', '.mp3', '.aiff', '.aif', '.m4a'])
-    const current = subDropFiles[patch.id] || []
+    const current = [...(subDropFiles[patch.id] || [])]
     for (const file of Array.from(e.dataTransfer.files)) {
       const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
       if (!audioExts.has(ext)) continue
@@ -559,23 +551,31 @@
       const { code: parsedCode, title, bpm } = parseDemoFilenameFront(file.name)
       const { data: matched } = await supabase.from('songs')
         .select('id, code, title').eq('audio_path', file.name).maybeSingle()
-      let prevPatches = []
+      let prev_sent = []
       if (matched) {
         const { data: ps } = await supabase.from('patch_songs')
           .select('patches(name, status)').eq('song_id', matched.id)
-        prevPatches = (ps || []).filter(r => r.patches?.status === 'sent').map(r => r.patches?.name).filter(Boolean)
+        prev_sent = (ps || []).filter(r => r.patches?.status === 'sent').map(r => r.patches?.name).filter(Boolean)
       }
-      const displayCode = matched?.code || parsedCode || ''
-      current.push({ file, filename: file.name, code: displayCode, title: title || file.name.replace(/\.[^.]+$/, ''), bpm, songId: matched?.id || null, prevPatches })
+      current.push({
+        filename: file.name,
+        title:    title || file.name.replace(/\.[^.]+$/, ''),
+        code:     matched?.code || parsedCode || '',
+        bpm:      bpm || null,
+        song_id:  matched?.id || null,
+        prev_sent
+      })
     }
-    subDropFiles = { ...subDropFiles, [patch.id]: [...current] }
-    supabase.from('patches').update({ dropped_files: serializeDropFiles(current) }).eq('id', patch.id).then(() => {})
+    subDropFiles = { ...subDropFiles, [patch.id]: current }
+    const { error } = await supabase.from('patches').update({ dropped_files: current }).eq('id', patch.id)
+    console.log('DROPPED FILES SAVED:', patch.id, JSON.stringify(current), error ? 'ERR:' + error.message : 'ok')
   }
 
   async function removeDropFile(patchId, filename) {
     const updated = (subDropFiles[patchId] || []).filter(f => f.filename !== filename)
     subDropFiles = { ...subDropFiles, [patchId]: updated }
-    await supabase.from('patches').update({ dropped_files: serializeDropFiles(updated) }).eq('id', patchId)
+    const { error } = await supabase.from('patches').update({ dropped_files: updated }).eq('id', patchId)
+    if (error) console.warn('removeDropFile save error:', error.message)
   }
 
   async function addSongToPatch(patch, song) {
@@ -599,17 +599,7 @@
     if (!allFiles.length) { alert('Drop some audio files first.'); return }
     if (!confirm(`Send submission "${patch.name}" with ${allFiles.length} file(s) and copy link to clipboard?`)) return
 
-    // Save any unmatched files (not already in DEMOS_DIR) — only if File object present
-    for (const df of dropFiles) {
-      if (!df.songId && df.file) {
-        try {
-          const buf = await df.file.arrayBuffer()
-          await fetch(`http://localhost:4242/save-audio?dir=demo&filename=${encodeURIComponent(df.filename)}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf
-          })
-        } catch(e) {}
-      }
-    }
+    // Files are in DEMOS_DIR — watcher copies by filename on send
 
     try {
       const res = await fetch('http://localhost:4242/create-submission', {
@@ -624,7 +614,7 @@
       if (linkToSave) navigator.clipboard.writeText(linkToSave).catch(() => {})
 
       // Insert patch_songs for newly dropped matched songs
-      const newSongIds = dropFiles.filter(f => f.songId).map(f => f.songId)
+      const newSongIds = dropFiles.filter(f => f.song_id).map(f => f.song_id)
       if (newSongIds.length) {
         await supabase.from('patch_songs').insert(newSongIds.map(id => ({ patch_id: patch.id, song_id: id })))
         await supabase.from('songs').update({ status: 'sent' }).in('id', newSongIds)
@@ -1171,10 +1161,10 @@
                         {#if df.code}<span class="song-code-in-list">{df.code}</span><span class="sep-dot">·</span>{/if}
                         <span class="sub-filename">{df.title || df.filename}</span>
                         {#if df.bpm}<span class="meta-pill">{df.bpm} BPM</span>{/if}
-                        {#if df.prevPatches?.length}
+                        {#if df.prev_sent?.length}
                           <span class="prev-sent-row">
                             sent:
-                            {#each df.prevPatches as pp}
+                            {#each df.prev_sent as pp}
                               <span class="prev-sent-chip">{pp}</span>
                             {/each}
                           </span>

@@ -1905,21 +1905,21 @@ async function runEssentiaAnalysis(filePath) {
 
 function parseDemoFilename(filename) {
   const nameNoExt = filename.replace(/\.[^.]+$/, '')
-  const parts = nameNoExt.split('_')
-  let code = null, bpm = null
 
-  // First segment: code if 6-8 digit number
-  if (parts.length > 1 && /^\d{6,8}$/.test(parts[0])) {
-    code = parts.shift()
-  }
+  // Check for leading 6-digit code
+  const codeMatch = nameNoExt.match(/^(\d{6})_(.*)$/)
+  let code = null, rest = nameNoExt
+  if (codeMatch) { code = codeMatch[1]; rest = codeMatch[2] }
 
-  // Last segment: BPM if it matches NNNbpm
-  if (parts.length > 0 && /^\d{2,3}bpm$/i.test(parts[parts.length - 1])) {
-    bpm = parseInt(parts.pop())
-  }
+  // Extract BPM from trailing _NNNbpm
+  let bpm = null
+  const bpmMatch = rest.match(/^(.*?)_(\d{2,3})bpm$/i)
+  if (bpmMatch) { bpm = parseInt(bpmMatch[2]); rest = bpmMatch[1] }
 
-  const title = parts.join(' ').trim() || nameNoExt
-  return { code, title, bpm }
+  // Strip version tags (V00, V01 etc) split on underscore, filter, rejoin
+  rest = rest.split('_').filter(p => !/^V\d+$/i.test(p)).join(' ').trim()
+
+  return { code, title: rest || null, bpm }
 }
 
 async function generateDemoCode() {
@@ -1936,6 +1936,24 @@ async function generateDemoCode() {
     const max = existing.length ? Math.max(...existing) : 0
     return prefix + String(max + 1).padStart(2,'0')
   } catch(e) { return prefix + '01' }
+}
+
+async function inventDemoTitle() {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return null
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001', max_tokens: 20,
+        messages: [{ role: 'user', content: 'Give me one short punchy music track title, 2 words max, all caps, dark/emotional vibe. Return ONLY the title, nothing else.' }]
+      })
+    })
+    const d = await r.json()
+    const raw = d.content?.[0]?.text?.trim() || ''
+    return raw.replace(/[^A-Z0-9\s]/gi, '').trim().toUpperCase() || null
+  } catch(e) { return null }
 }
 
 // ── Background library track processing queue ─────────────────────────────
@@ -13922,37 +13940,62 @@ server.listen(PORT, '127.0.0.1', () => {
         const chkData = await chk.json()
         if (Array.isArray(chkData) && chkData.length) { console.log(`⏭  Demo already in DB: ${filename}`); return }
 
-        const { code: parsedCode, title, bpm: filenameBpm } = parseDemoFilename(filename)
+        // ── Step 1: Parse filename ──
+        const { code: parsedCode, title: parsedTitle, bpm: filenameBpm } = parseDemoFilename(filename)
         const code = (parsedCode && /^\d{6}$/.test(parsedCode)) ? parsedCode : await generateDemoCode()
-        const { bpm: essBpm, key } = await runEssentiaAnalysis(filePath)
-        const bpm = filenameBpm || essBpm
 
-        const songData = {
+        // ── Step 2: Title — invent via Haiku if empty ──
+        let title = parsedTitle
+        if (!title) {
+          console.log(`  ℹ No title in filename — asking Haiku…`)
+          title = await inventDemoTitle() || filename.replace(/\.[^.]+$/, '')
+          console.log(`  ✓ Invented title: "${title}"`)
+        }
+
+        // ── Step 3: INSERT immediately (card appears in ~5s via polling) ──
+        const now = new Date().toISOString()
+        const rowBase = {
           code, title, status: 'demo', project_id: null, tags: [], reference_links: [],
           audio_path: filename,
-          work_data: { auto_detected: true, detected_at: new Date().toISOString() }
+          work_data: { auto_detected: true, detected_at: now }
         }
-        if (bpm) songData.tempo = bpm
-        if (key) songData.key = key
+        if (filenameBpm) rowBase.tempo = filenameBpm
 
         const ins = await fetch(`${SUPABASE_URL}/rest/v1/songs`, {
-          method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
-          body: JSON.stringify(songData)
+          method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=representation' },
+          body: JSON.stringify(rowBase)
         })
         if (!ins.ok) throw new Error('Supabase insert failed: ' + await ins.text())
+        const inserted = await ins.json()
+        const songId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
+        console.log(`✓ Demo inserted: ${code} "${title}"${filenameBpm ? ' ' + filenameBpm + 'bpm' : ''} (id ${songId})`)
 
-        // Copy to 29TH AVENUE archive
+        // ── Step 4: Essentia — always run for key; also BPM if not in filename ──
+        const { bpm: essBpm, key } = await runEssentiaAnalysis(filePath)
+        const finalBpm = filenameBpm || essBpm
+        const updates = {}
+        if (!filenameBpm && essBpm) updates.tempo = essBpm
+        if (key) updates.key = key
+        if (songId && Object.keys(updates).length) {
+          await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${songId}`, {
+            method: 'PATCH', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify(updates)
+          })
+          console.log(`  ✓ Analysis: ${finalBpm||'?'}bpm ${key||'?'}`)
+        }
+
+        // ── Step 5: Archive + Telegram ──
         try {
           if (!fs.existsSync(ARCHIVE_29TH)) fs.mkdirSync(ARCHIVE_29TH, { recursive: true })
           await fs.promises.copyFile(filePath, path.join(ARCHIVE_29TH, filename))
-          console.log(`✓ Archived to 29TH AVENUE: ${filename}`)
+          console.log(`  ✓ Archived to 29TH AVENUE: ${filename}`)
         } catch(e) { console.warn('⚠ 29TH AVENUE copy failed:', e.message) }
 
-        const parts = [`🎵 New demo detected: ${title || filename}`]
-        if (bpm) parts.push(`${bpm} BPM`)
-        if (key) parts.push(key)
-        if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, parts.join(' | ')).catch(() => {})
-        console.log(`✓ Demo auto-detected: ${filename} → ${code} "${title}" ${bpm||'?'}bpm ${key||'?'}`)
+        const tgParts = [`🎵 New demo: ${code} ${title}`]
+        if (finalBpm) tgParts.push(`${finalBpm} BPM`)
+        if (key) tgParts.push(key)
+        if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, tgParts.join(' | ')).catch(() => {})
+
       } catch(e) { logError('demo-auto-detect', e.message); console.error('✗ Demo auto-detect error:', e.message) }
     })
     .on('unlink', async filePath => {

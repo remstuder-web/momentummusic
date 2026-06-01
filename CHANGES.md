@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/lib/DemoTab.svelte — DONE
+TASK: Restore visible player, release audio resources to prevent exhaustion
+WHAT: Reverted DemoTab from sharedAudio back to native <audio controls> per card (preload=none, lazy src via data-src). Added releaseOtherAudio(keep): querySelectorAll('audio').forEach pause+src=''+load on all elements except the one being played — keeps only ONE active audio context at a time, fixing the browser 6-element limit. onpointerdown calls releaseOtherAudio before native controls click. Keydown handler restored to DOM query + releaseOtherAudio + play. stopAll() uses same release pattern. Removed sharedAudio, playingSongId, playAudio(songId,src). Restored .player-wrap, .mini-player CSS. Inline onerror retries via /audio-compat/.
+RESULT: builds clean, visible player restored
+BLOCKERS: none
+
 ## [2026-06-02] ProjectsTab.svelte + DemoTab.svelte — DONE
 TASK: Remove QT button + stars from Projects header; fix audio exhaustion with shared Audio instance
 WHAT: (1) ProjectsTab: removed stars and entire song-player-slot from song card header. Removed unused {#each} @const vars (bestAudio, blobUrl, audioPath). .song-head-right width constraint removed. Removed all DOM audio elements and related CSS (mini-player, player-wrap-head). (2) Both files: replaced DOM audio approach with const sharedAudio = new Audio() + playAudio(songId, src) + stopAll(). playingSongId $state tracks which song is active via sharedAudio play/pause/ended events. Error handler retries via /audio-compat/. keydownHandler in onMount resolves src from songs array, never queries DOM audio elements. (3) DemoTab: removed <audio> element + open-preview-btn. Added .play-btn (circular ▶/⏸ button) that calls playAudio(song.id, src). Removed mini-player/player-wrap CSS.

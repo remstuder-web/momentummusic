@@ -78,9 +78,7 @@
   let showGenrePicker = $state({}) // song.id → boolean
   let availableGenres = $state(GENRE_LIST.filter(g => g.type === 'sub').map(g => g.tag))
 
-  let audioTick = $state(0) // kept for compatibility — no longer drives audio re-render
-  const sharedAudio = new Audio()
-  let playingSongId = $state(null)
+  let audioTick = $state(0) // incremented after audio drop to re-render player src
 
   let showPatchModal = $state(false)
   let newPatchArtistName = $state('')
@@ -345,23 +343,18 @@
 
   // On mount: increment audioTick so audio server URLs render for existing songs
   onMount(() => {
-    sharedAudio.addEventListener('play', () => { playingSongId = sharedAudio.dataset.songId || null })
-    sharedAudio.addEventListener('pause', () => { playingSongId = null })
-    sharedAudio.addEventListener('ended', () => { playingSongId = null })
-    sharedAudio.addEventListener('error', () => {
-      const src = sharedAudio.src || ''
-      if (src && !src.includes('/audio-compat/')) {
-        const filename = decodeURIComponent(src.split('/').pop())
-        if (filename) sharedAudio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
-      }
-    })
     keydownHandler = (e) => {
       if (e.code !== 'Space' || !hoveredSongId) return
       e.preventDefault()
-      const song = songs.find(s => s.id === hoveredSongId)
-      if (!song) return
-      const src = audioSrc(song)
-      if (src) playAudio(song.id, src)
+      const audio = document.querySelector(`audio[data-song-id="${hoveredSongId}"]`)
+      if (!audio) return
+      if (audio.paused) {
+        if (!audio.currentSrc) { audio.src = audio.dataset.src || ''; audio.preload = 'auto' }
+        releaseOtherAudio(audio)
+        audio.play().catch(() => {})
+      } else {
+        audio.pause()
+      }
     }
     window.addEventListener('keydown', keydownHandler)
   })
@@ -951,25 +944,14 @@
   let hoveredSongId = null
   let keydownHandler = null
 
-  function playAudio(songId, src) {
-    const id = String(songId)
-    if (sharedAudio.dataset.songId === id) {
-      if (sharedAudio.paused) sharedAudio.play().catch(() => {})
-      else sharedAudio.pause()
-      return
-    }
-    sharedAudio.pause()
-    sharedAudio.src = src
-    sharedAudio.dataset.songId = id
-    sharedAudio.load()
-    sharedAudio.play().catch(() => {})
+  function releaseOtherAudio(keep) {
+    document.querySelectorAll('audio').forEach(a => {
+      if (a !== keep) { a.pause(); a.src = ''; a.load() }
+    })
   }
 
   function stopAll() {
-    sharedAudio.pause()
-    sharedAudio.src = ''
-    sharedAudio.dataset.songId = ''
-    playingSongId = null
+    document.querySelectorAll('audio').forEach(a => { a.pause(); a.src = ''; a.load() })
   }
 
   async function sendAI() {
@@ -1144,17 +1126,36 @@
                   onclick={e => { e.stopPropagation(); toggleFreeze(song) }}
                   title={song.work_data?.frozen ? 'Unfreeze track' : 'Freeze track'}>⛔</button>
               </div>
-              <div class="player-slot">
-                {#if audioSrc(song)}
-                  <button class="play-btn {playingSongId === song.id ? 'playing' : ''}"
-                    onpointerdown={e => e.stopPropagation()}
-                    onclick={e => { e.stopPropagation(); playAudio(song.id, audioSrc(song)) }}>
-                    {playingSongId === song.id ? '⏸' : '▶'}
-                  </button>
-                {:else if song.audio_path}
-                  <span class="audio-ref">🎵 {song.audio_path}</span>
-                {/if}
-              </div>
+              {#key audioTick}
+                {@const src = audioSrc(song)}
+                <div class="player-slot">
+                  {#if src}
+                    <div class="player-wrap" onpointerdown={e => {
+                      e.stopPropagation()
+                      const a = e.currentTarget.querySelector('audio')
+                      if (a) {
+                        if (!a.currentSrc) { a.src = a.dataset.src || ''; a.preload = 'auto' }
+                        releaseOtherAudio(a)
+                      }
+                    }}>
+                      <audio class="mini-player" controls preload="none"
+                        src=""
+                        data-src={src}
+                        data-song-id={song.id}
+                        onerror={e => {
+                          const a = e.target; const s = a.src || ''
+                          if (s && !s.includes('/audio-compat/')) {
+                            const fn = decodeURIComponent(s.split('/').pop())
+                            if (fn) a.src = `http://localhost:4242/audio-compat/${encodeURIComponent(fn)}`
+                          }
+                        }}
+                        use:applyGain={song.id}></audio>
+                    </div>
+                  {:else if song.audio_path}
+                    <span class="audio-ref">🎵 {song.audio_path}</span>
+                  {/if}
+                </div>
+              {/key}
             </div>
 
             <!-- col 4: expand arrow -->
@@ -1601,10 +1602,9 @@
   .title-audio-row label { font-size: 11px; color: rgba(201,168,76,.7); }
   .row1-inp { height: 40px; box-sizing: border-box; }
   .audio-row { display: flex; gap: 8px; margin-top: 2px; margin-bottom: 2px; }
-  .player-slot { flex-shrink: 0; display: flex; align-items: center; gap: 4px; }
-  .play-btn { width: 32px; height: 32px; border-radius: 50%; background: #252525; border: 1px solid #303030; color: #9e9690; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: border-color .15s, color .15s; }
-  .play-btn:hover { border-color: #c9a84c; color: #c9a84c; }
-  .play-btn.playing { border-color: rgba(201,168,76,.5); color: #c9a84c; background: rgba(201,168,76,.06); }
+  .player-slot { flex-shrink: 0; width: 280px; display: flex; align-items: center; overflow: hidden; }
+  .player-wrap { display: flex; align-items: center; width: 100%; }
+  .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
   .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .notes-preview { font-size: 10px; color: #444; font-style: italic; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
   .code-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 90px; flex-shrink: 0; }

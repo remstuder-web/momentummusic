@@ -36,7 +36,7 @@
 
 <script>
   import { supabase } from './supabase.js'
-  import { onDestroy } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { GENRE_LIST } from '$lib/genres.js'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
 

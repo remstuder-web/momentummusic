@@ -4408,7 +4408,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .player-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: #4a9fd4; letter-spacing: .08em; flex-shrink: 0; }
   .version-badge { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 2px; border: 1px solid #303030; color: #555; flex-shrink: 0; }
   .version-badge.sent { color: #4caf82; border-color: rgba(76,175,130,.4); background: rgba(76,175,130,.08); }
-  .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; }
+  .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
   .audio-ref { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
   .audio-drop-sm { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; padding: 3px 8px; border: 1px dashed #303030; border-radius: 3px; cursor: copy; transition: border-color .15s; }
   .audio-drop-sm:hover, .audio-drop-sm.drag-over { border-color: #c9a84c; color: #c9a84c; }

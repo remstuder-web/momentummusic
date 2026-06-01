@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/lib/DemoTab.svelte + src/lib/ProjectsTab.svelte — DONE
+TASK: Tone down audio player: less white, more grey
+WHAT: Added filter: invert(0.85) brightness(0.7) contrast(0.9) to .mini-player in both files. DemoTab has two .mini-player definitions (one for card player, one for patches section) — both updated via replace_all. ProjectsTab has one. Filter inverts the browser's white chrome to dark grey while keeping the layout intact.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-01] ProjectsTab.svelte + momentum-watcher.cjs — DONE
 TASK: Artist uppercase + exact title case in headers and filenames
 WHAT: (1) Added .song-artist-hdr div above title input in song header — renders selectedProject.artist.toUpperCase() in 9px Space Mono. Title input already saves/displays as-is from DB. (2) .song-title-input font-size 13px→16px, weight 300→400. Added .song-artist-hdr CSS. (3) POST /fix-title-case-filenames: builds reverse filename→song map from all work_data audio paths, extracts version via /_([Vv]\d+)$/ (no arithmetic), rebuilds ARTIST_ExactTitle_VNN.ext, renames on disk, updates work_data in Supabase. Run: 12 files renamed (ECHOTRONICO→Echotronico etc.), 9 DB rows updated.

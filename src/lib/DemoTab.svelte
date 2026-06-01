@@ -78,7 +78,12 @@
   let showGenrePicker = $state({}) // song.id → boolean
   let availableGenres = $state(GENRE_LIST.filter(g => g.type === 'sub').map(g => g.tag))
 
-  let audioTick = $state(0) // incremented after audio drop to re-render player src
+  let audioTick = $state(0) // incremented after audio drop — triggers src refresh in player
+  let sharedPlayer = null
+  let currentSongId = $state(null)
+  let isPlaying = $state(false)
+  let currentTime = $state(0)
+  let duration = $state(0)
 
   let showPatchModal = $state(false)
   let newPatchArtistName = $state('')
@@ -346,21 +351,14 @@
     keydownHandler = (e) => {
       if (e.code !== 'Space' || !hoveredSongId) return
       e.preventDefault()
-      const audio = document.querySelector(`audio[data-song-id="${hoveredSongId}"]`)
-      if (!audio) return
-      if (audio.paused) {
-        if (!audio.currentSrc) { audio.src = audio.dataset.src || ''; audio.preload = 'auto' }
-        releaseOtherAudio(audio)
-        audio.play().catch(() => {})
-      } else {
-        audio.pause()
-      }
+      const song = songs.find(s => s.id === hoveredSongId)
+      if (song) playSong(song.id, audioSrc(song))
     }
     window.addEventListener('keydown', keydownHandler)
   })
   onDestroy(() => {
     if (keydownHandler) { window.removeEventListener('keydown', keydownHandler); keydownHandler = null }
-    stopAll()
+    if (sharedPlayer) { sharedPlayer.pause(); sharedPlayer.src = ''; sharedPlayer = null; currentSongId = null }
   })
   function openInPreview(song) {
     if (!song.audio_path) return
@@ -944,14 +942,47 @@
   let hoveredSongId = null
   let keydownHandler = null
 
-  function releaseOtherAudio(keep) {
-    document.querySelectorAll('audio').forEach(a => {
-      if (a !== keep) { a.pause(); a.src = ''; a.load() }
-    })
+  function getSharedPlayer() {
+    if (!sharedPlayer) {
+      sharedPlayer = new Audio()
+      sharedPlayer.addEventListener('timeupdate', () => { currentTime = sharedPlayer.currentTime })
+      sharedPlayer.addEventListener('loadedmetadata', () => { duration = sharedPlayer.duration })
+      sharedPlayer.addEventListener('ended', () => { isPlaying = false; currentSongId = null })
+      sharedPlayer.addEventListener('play', () => { isPlaying = true })
+      sharedPlayer.addEventListener('pause', () => { isPlaying = false })
+      sharedPlayer.addEventListener('error', () => {
+        const src = sharedPlayer.src || ''
+        if (src && !src.includes('/audio-compat/')) {
+          const fn = decodeURIComponent(src.split('/').pop())
+          if (fn) { sharedPlayer.src = `http://localhost:4242/audio-compat/${encodeURIComponent(fn)}`; sharedPlayer.load(); sharedPlayer.play().catch(() => {}) }
+        }
+      })
+    }
+    return sharedPlayer
   }
 
-  function stopAll() {
-    document.querySelectorAll('audio').forEach(a => { a.pause(); a.src = ''; a.load() })
+  function playSong(songId, src) {
+    if (!src) return
+    const player = getSharedPlayer()
+    const id = String(songId)
+    if (currentSongId === id) {
+      if (player.paused) player.play().catch(() => {})
+      else player.pause()
+      return
+    }
+    player.pause()
+    player.src = src
+    player.currentTime = 0
+    currentSongId = id
+    player.load()
+    player.play().catch(() => {})
+  }
+
+  function formatTime(s) {
+    if (!s || isNaN(s)) return '0:00'
+    const m = Math.floor(s / 60)
+    const sec = Math.floor(s % 60)
+    return m + ':' + String(sec).padStart(2, '0')
   }
 
   async function sendAI() {
@@ -1126,36 +1157,26 @@
                   onclick={e => { e.stopPropagation(); toggleFreeze(song) }}
                   title={song.work_data?.frozen ? 'Unfreeze track' : 'Freeze track'}>⛔</button>
               </div>
-              {#key audioTick}
-                {@const src = audioSrc(song)}
-                <div class="player-slot">
-                  {#if src}
-                    <div class="player-wrap" onpointerdown={e => {
-                      e.stopPropagation()
-                      const a = e.currentTarget.querySelector('audio')
-                      if (a) {
-                        if (!a.currentSrc) { a.src = a.dataset.src || ''; a.preload = 'auto' }
-                        releaseOtherAudio(a)
-                      }
-                    }}>
-                      <audio class="mini-player" controls preload="none"
-                        src=""
-                        data-src={src}
-                        data-song-id={song.id}
-                        onerror={e => {
-                          const a = e.target; const s = a.src || ''
-                          if (s && !s.includes('/audio-compat/')) {
-                            const fn = decodeURIComponent(s.split('/').pop())
-                            if (fn) a.src = `http://localhost:4242/audio-compat/${encodeURIComponent(fn)}`
-                          }
-                        }}
-                        use:applyGain={song.id}></audio>
-                    </div>
-                  {:else if song.audio_path}
-                    <span class="audio-ref">🎵 {song.audio_path}</span>
-                  {/if}
-                </div>
-              {/key}
+              <div class="player-slot" onpointerdown={e => e.stopPropagation()}>
+                {#if audioSrc(song)}
+                  <div class="mini-player {currentSongId === String(song.id) ? 'active' : ''}">
+                    <button onclick={() => playSong(song.id, audioSrc(song))}>
+                      {currentSongId === String(song.id) && isPlaying ? '⏸' : '▶'}
+                    </button>
+                    {#if currentSongId === String(song.id)}
+                      <span class="time">{formatTime(currentTime)} / {formatTime(duration)}</span>
+                      <input type="range" class="seek-bar"
+                        min="0" max={duration || 100} value={currentTime}
+                        oninput={e => { if (sharedPlayer) sharedPlayer.currentTime = Number(e.target.value) }} />
+                    {:else}
+                      <span class="time">0:00</span>
+                      <div class="seek-bar-empty"></div>
+                    {/if}
+                  </div>
+                {:else if song.audio_path}
+                  <span class="audio-ref">🎵 {song.audio_path}</span>
+                {/if}
+              </div>
             </div>
 
             <!-- col 4: expand arrow -->
@@ -1602,9 +1623,14 @@
   .title-audio-row label { font-size: 11px; color: rgba(201,168,76,.7); }
   .row1-inp { height: 40px; box-sizing: border-box; }
   .audio-row { display: flex; gap: 8px; margin-top: 2px; margin-bottom: 2px; }
-  .player-slot { flex-shrink: 0; width: 280px; display: flex; align-items: center; overflow: hidden; }
-  .player-wrap { display: flex; align-items: center; width: 100%; }
-  .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
+  .player-slot { flex-shrink: 0; display: flex; align-items: center; min-width: 200px; max-width: 280px; }
+  .mini-player { display: flex; align-items: center; gap: 6px; width: 100%; }
+  .mini-player button { background: none; border: none; color: #9e9690; cursor: pointer; font-size: 14px; padding: 2px 4px; flex-shrink: 0; }
+  .mini-player.active button { color: #f5f1ea; }
+  .mini-player .time { font-size: 10px; font-family: 'Space Mono', monospace; color: #555; min-width: 72px; flex-shrink: 0; }
+  .mini-player.active .time { color: #9e9690; }
+  .seek-bar { flex: 1; height: 3px; accent-color: #c9a84c; cursor: pointer; min-width: 0; }
+  .seek-bar-empty { flex: 1; height: 3px; background: #252525; border-radius: 2px; min-width: 0; }
   .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .notes-preview { font-size: 10px; color: #444; font-style: italic; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
   .code-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 90px; flex-shrink: 0; }

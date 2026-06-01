@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] DemoTab.svelte + ProjectsTab.svelte — DONE
+TASK: Single shared Audio instance, custom mini player UI — definitive audio exhaustion fix
+WHAT: Both tabs: removed all DOM <audio> elements. Single sharedPlayer = new Audio() created lazily via getSharedPlayer(). State: currentSongId/isPlaying/currentTime/duration as $state. playSong(songId, src): toggle-safe, switches src only on new song. formatTime() helper. onDestroy: pause+src=''+null. Error handler retries via /audio-compat/. Keydown: resolves src from songs array, calls playSong(). Custom mini-player UI: ▶/⏸ button + time display + seek range input (active song shows live time, inactive shows 0:00). CSS: .mini-player, .seek-bar, .seek-bar-empty. DemoTab: uses audioSrc(song) for src. ProjectsTab: uses bestAudio?.src || blobUrl || songAudioBlobUrls.
+RESULT: builds clean, no DOM audio elements, no audio exhaustion
+BLOCKERS: none
+
 ## [2026-06-02] src/lib/ProjectsTab.svelte — DONE
 TASK: Restore audio player in song card header with resource release fix
 WHAT: Replaced sharedAudio back to DOM-based approach matching DemoTab. currentAudio tracks active element. releaseOtherAudio(keep): querySelectorAll+pause+src=''+load all others before playing. playAudio(audio): releaseOtherAudio + lazy src load + play (AbortError silenced). stopAll(): releases all elements. keydown handler: queries audio[data-song-id], calls playAudio/pause. Restored {#each} @const vars (bestAudio, blobUrl). Restored .song-player-slot with three audio branches + {#key audioTick}. .song-head-right width:460px restored. CSS: .player-wrap-head + .mini-player added back. Inline onerror with /audio-compat/ retry on each element.

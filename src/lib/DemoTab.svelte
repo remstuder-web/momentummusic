@@ -509,14 +509,20 @@
 
   async function createPatch() {
     const code = await generateSubmissionCode()
-    const artistSafe = (newPatchArtistName.trim()).toUpperCase()
-      .replace(/[^A-Z0-9 ]/g, '').trim().replace(/\s+/g, '_') || 'DEMOS'
-    const name = `${code}_${artistSafe}`
+    const safe = s => (s||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').trim().replace(/\s+/g,'_')
+    const artistSafe = safe(newPatchArtistName.trim())
+    const contact = connections.find(c => String(c.id) === String(newPatchContact))
+    const contactSafe = safe(contact?.name || '')
+    const parts = [code, contactSafe, artistSafe].filter(Boolean)
+    if (parts.length === 1) parts.push('DEMOS')
+    const name = parts.join('_')
     const { data } = await supabase.from('patches')
-      .insert({ name, artist: newPatchArtistName.trim() || null, contact_id: null, status: 'open' })
+      .insert({ name, artist: newPatchArtistName.trim() || null, contact_id: contact?.id || null, status: 'open' })
       .select().single()
     patches = [{ ...data, songs: [] }, ...patches]
     newPatchArtistName = ''
+    newPatchContact = ''
+    showNewPatchContactPicker = false
     showPatchModal = false
     expandedPatchId = data.id
   }
@@ -530,7 +536,7 @@
       const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
       if (!audioExts.has(ext)) continue
       if (current.find(f => f.filename === file.name)) continue
-      const { code, title, bpm } = parseDemoFilenameFront(file.name)
+      const { code: parsedCode, title, bpm } = parseDemoFilenameFront(file.name)
       const { data: matched } = await supabase.from('songs')
         .select('id, code, title').eq('audio_path', file.name).maybeSingle()
       let prevPatches = []
@@ -539,7 +545,8 @@
           .select('patches(name, status)').eq('song_id', matched.id)
         prevPatches = (ps || []).filter(r => r.patches?.status === 'sent').map(r => r.patches?.name).filter(Boolean)
       }
-      current.push({ file, filename: file.name, title: title || file.name.replace(/\.[^.]+$/, ''), bpm, songId: matched?.id || null, prevPatches })
+      const displayCode = matched?.code || parsedCode || ''
+      current.push({ file, filename: file.name, code: displayCode, title: title || file.name.replace(/\.[^.]+$/, ''), bpm, songId: matched?.id || null, prevPatches })
     }
     subDropFiles = { ...subDropFiles, [patch.id]: [...current] }
   }
@@ -626,17 +633,17 @@
   function getLatestOpenSub() {
     return patches.filter(p => p.status !== 'sent' && p.status !== 'deleted').at(-1) || null
   }
-  let patchSort = $state('date')
-  let archiveOpen = $state(false)
+  let patchView = $state('open')
+  let newPatchContact = $state('')
+  let showNewPatchContactPicker = $state(false)
 
-  let sortedPatches = $derived([...patches].filter(p => p.status !== 'deleted').sort((a, b) => {
-    if (patchSort === 'az') return (a.name||'').localeCompare(b.name||'')
-    return (b.created_at || b.id) > (a.created_at || a.id) ? 1 : -1
-  }))
-
-  let archivePatches = $derived([...patches].filter(p => p.status === 'deleted').sort((a, b) =>
-    (b.created_at || b.id) > (a.created_at || a.id) ? 1 : -1
-  ))
+  let sortedPatches = $derived(
+    [...patches]
+      .filter(p => patchView === 'open'
+        ? (p.status === 'open' || p.status === 'sent')
+        : p.status === 'archived')
+      .sort((a, b) => (b.created_at || b.id) > (a.created_at || a.id) ? 1 : -1)
+  )
 
   async function releaseSong(song) {
     if (!confirm('Release this song? It will become free to send again.')) return
@@ -677,6 +684,11 @@
     // Mark deleted in DB — keep row with all info intact
     await supabase.from('patches').update({ status: 'deleted' }).eq('id', id)
     patches = patches.filter(p => p.id !== id)
+  }
+
+  async function archivePatch(id) {
+    await supabase.from('patches').update({ status: 'archived' }).eq('id', id)
+    patches = patches.map(p => p.id === id ? { ...p, status: 'archived' } : p)
   }
 
   async function generateCode() {
@@ -829,8 +841,8 @@
     </div>
   {:else}
     <div class="patch-sort-row">
-      <button class="sort-sm {patchSort==='date'?'on':''}" onclick={() => patchSort='date'}>DATE</button>
-      <button class="sort-sm {patchSort==='az'?'on':''}" onclick={() => patchSort='az'}>A–Z</button>
+      <button class="sort-sm {patchView==='open'?'on':''}" onclick={() => patchView='open'}>OPEN</button>
+      <button class="sort-sm {patchView==='archive'?'on':''}" onclick={() => patchView='archive'}>ARCHIVE</button>
     </div>
     <button class="btn-gold" onclick={() => showPatchModal = true}>+ New Submission</button>
   {/if}
@@ -1108,6 +1120,9 @@
               </span>
             {/if}
             <span class="patch-status {patch.status} {patch.feedback ? 'has-feedback' : ''}">{patch.status.toUpperCase()}</span>
+            {#if patch.status !== 'archived'}
+              <button class="patch-archive-btn" onclick={e => { e.stopPropagation(); archivePatch(patch.id) }}>Archive</button>
+            {/if}
             <button class="del" onclick={e => { e.stopPropagation(); deletePatch(patch.id) }}>×</button>
             <span class="arr">▶</span>
           </div>
@@ -1129,6 +1144,7 @@
                   <div class="patch-songs">
                     {#each (subDropFiles[patch.id] || []) as df}
                       <div class="patch-song-row">
+                        {#if df.code}<span class="song-code-in-list">{df.code}</span><span class="sep-dot">·</span>{/if}
                         <span class="sub-filename">{df.title || df.filename}</span>
                         {#if df.bpm}<span class="meta-pill">{df.bpm} BPM</span>{/if}
                         {#if df.prevPatches?.length}
@@ -1139,13 +1155,16 @@
                             {/each}
                           </span>
                         {/if}
+                        <button class="sold-btn" onclick={() => alert('Coming soon — will create release and lock demo')}>SOLD</button>
                         <button class="del" onclick={() => removeDropFile(patch.id, df.filename)}>×</button>
                       </div>
                     {/each}
                     {#each patch.songs as song}
                       <div class="patch-song-row">
-                        <span class="code">{song.code}</span>
-                        {#if song.title}<span class="song-title">{song.title}</span>{/if}
+                        <span class="song-code-in-list">{song.code}</span>
+                        <span class="sep-dot">·</span>
+                        <span class="song-title">{song.title || song.code}</span>
+                        <button class="sold-btn" onclick={() => alert('Coming soon — will create release and lock demo')}>SOLD</button>
                         <button class="del" onclick={() => removeSongFromPatch(patch, song.id)}>×</button>
                       </div>
                     {/each}
@@ -1169,11 +1188,13 @@
                   <div class="patch-songs">
                     {#each patch.songs as song}
                       <div class="patch-song-row">
-                        <span class="code">{song.code}</span>
-                        {#if song.title}<span class="song-title">{song.title}</span>{/if}
+                        <span class="song-code-in-list">{song.code}</span>
+                        <span class="sep-dot">·</span>
+                        <span class="song-title">{song.title || song.code}</span>
                         {#if sessionDownloads[patch.name]?.codes?.includes(song.code)}
                           <span class="song-dl-indicator" title="Downloaded by recipient">↓ downloaded</span>
                         {/if}
+                        <button class="sold-btn" onclick={() => alert('Coming soon — will create release and lock demo')}>SOLD</button>
                       </div>
                     {/each}
                   </div>
@@ -1224,7 +1245,7 @@
 </div><!-- end demo-layout -->
 
 {#if showPatchModal}
-  <div class="modal-bg" onclick={() => showPatchModal = false}>
+  <div class="modal-bg" onclick={() => { showPatchModal = false; newPatchContact = ''; showNewPatchContactPicker = false }}>
     <div class="modal" onclick={e => e.stopPropagation()}>
       <div class="modal-title">New Submission</div>
       <div class="field">
@@ -1233,12 +1254,34 @@
           bind:value={newPatchArtistName}
           onkeydown={e => e.key === 'Enter' && createPatch()} />
       </div>
-      {#if newPatchArtistName.trim()}
-        {@const preview = newPatchArtistName.trim().toUpperCase().replace(/[^A-Z0-9 ]/g,'').trim().replace(/\s+/g,'_')}
-        <div class="patch-name-preview">{String(new Date().getFullYear()).slice(2)}???_{preview}</div>
+      <div class="field" style="margin-top:6px">
+        <label>SEND TO <span style="font-weight:300;color:#444;text-transform:none">— optional</span></label>
+        <div class="contact-current" onclick={() => showNewPatchContactPicker = !showNewPatchContactPicker}>
+          {#if newPatchContact}
+            <span class="contact-chosen">{connections.find(c => c.id == newPatchContact)?.name || '—'}</span>
+          {:else}
+            <span class="contact-none">— No contact —</span>
+          {/if}
+          <span class="contact-arr">▶</span>
+        </div>
+        {#if showNewPatchContactPicker}
+          <div class="contact-list">
+            <button class="contact-opt {!newPatchContact?'sel':''}" onclick={() => { newPatchContact = ''; showNewPatchContactPicker = false }}>— None —</button>
+            {#each connections.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')) as c}
+              <button class="contact-opt {newPatchContact == c.id ? 'sel' : ''}" onclick={() => { newPatchContact = c.id; showNewPatchContactPicker = false }}>{c.name}</button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      {#if newPatchArtistName.trim() || newPatchContact}
+        {@const safe = s => (s||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').trim().replace(/\s+/g,'_')}
+        {@const artistPart = safe(newPatchArtistName.trim())}
+        {@const contactPart = safe(connections.find(c => c.id == newPatchContact)?.name || '')}
+        {@const parts = [contactPart, artistPart].filter(Boolean)}
+        <div class="patch-name-preview">{String(new Date().getFullYear()).slice(2)}???_{parts.length ? parts.join('_') : 'DEMOS'}</div>
       {/if}
       <button class="btn-gold-full" style="margin-top:10px" onclick={createPatch}>Create Submission</button>
-      <button class="modal-cancel" onclick={() => showPatchModal = false}>Cancel</button>
+      <button class="modal-cancel" onclick={() => { showPatchModal = false; newPatchContact = ''; showNewPatchContactPicker = false }}>Cancel</button>
     </div>
   </div>
 {/if}
@@ -1477,6 +1520,13 @@
   .patch-status.open { color: #c9a84c; border-color: rgba(201,168,76,.3); background: rgba(201,168,76,.06); }
   .patch-status.sent { color: #4a9fd4; border-color: rgba(74,159,212,.3); background: rgba(74,159,212,.06); }
   .patch-status.sent.has-feedback { color: #4caf82; border-color: rgba(76,175,130,.4); background: rgba(76,175,130,.08); }
+  .patch-status.archived { color: #555; border-color: #303030; background: transparent; }
+  .patch-archive-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 2px 7px; background: transparent; border: 1px solid rgba(201,168,76,.3); color: rgba(201,168,76,.7); border-radius: 2px; cursor: pointer; flex-shrink: 0; letter-spacing: .06em; }
+  .patch-archive-btn:hover { background: rgba(201,168,76,.08); color: #c9a84c; }
+  .song-code-in-list { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: #c9a84c; flex-shrink: 0; }
+  .sep-dot { color: #333; font-size: 10px; flex-shrink: 0; padding: 0 2px; }
+  .sold-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 2px 7px; background: transparent; border: 1px solid rgba(224,90,74,.35); color: #e05a4a; border-radius: 2px; cursor: pointer; flex-shrink: 0; letter-spacing: .06em; }
+  .sold-btn:hover { background: rgba(224,90,74,.08); }
   .del { background: transparent; border: none; color: #555; font-size: 18px; cursor: pointer; padding: 0 4px; flex-shrink: 0; }
   .del:hover { color: #e05a4a; }
   .patch-body { padding: 16px; border-top: 1px solid #303030; display: flex; flex-direction: column; gap: 12px; background: #0a0a0a; }

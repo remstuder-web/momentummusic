@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-02] src/lib/DemoTab.svelte — DONE
+TASK: Match player width to ProjectsTab, expand left not right
+WHAT: .card-head: grid→flex (removes fixed 401px first column). .head-left: flex:1, min-width:0 (compresses toward title when space is tight). .demo-meta-right: flex-shrink:0 (stays fixed). .head-buttons: already flex-shrink:0. .player-slot: width 260→280px, flex-shrink:0, min-width:280px (matches ProjectsTab 280px player). Both .mini-player rules: max-width 260→280px.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] src/lib/DemoTab.svelte — DONE
 TASK: Constrain player width to fit within card header
 WHAT: .player-slot: flex-shrink:1, width/max-width:260px, min-width:160px, overflow:hidden (was width:250px flex-shrink:0). .player-wrap: flex:1 1 0, min-width:0, overflow:hidden (was flex-shrink:0 min-width:320px). Both .mini-player rules: max-width 320px→260px, flex-shrink:1. .head-buttons: added overflow:hidden.
 RESULT: builds clean

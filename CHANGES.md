@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-01] src/lib/DemoTab.svelte — DONE
+TASK: Remove tags+AUTO from header, align TYPE/@artist with New Demo button
+WHAT: (1) head-meta (tags/collab/notes) removed from header entirely — only in card body. (2) auto-badge removed. (3) card-head switched to CSS grid (401px 1fr auto 20px, col-gap 0) so demo-meta-right starts at 14+401=415px from card left. TITLE field in expanded row fixed at 293px so TYPE starts at 16+90+8+293+8=415px. Both columns align with + New Demo button at ~415px.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-01] src/lib/DemoTab.svelte — DONE
 TASK: Header layout fixes, remove duplicate filename, consistent spacing
 WHAT: (1) Tags already behind {#if isExpanded} — confirmed correct. (2) Collapsed header: 3-column layout head-left(33%)/head-type(120px)/head-at(flex:1)/head-buttons(fixed); removes old head-right/type-at-group/head-spacer. (3) Expanded row 1: TYPE field 120px, row1-inp class (height:40px), dim-gold labels (rgba(201,168,76,.7)), filename-hint removed from under title. (4) audio-row margin-top/bottom 2px (card-body gap handles the rest).
 RESULT: builds clean

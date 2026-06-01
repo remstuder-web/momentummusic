@@ -1036,6 +1036,7 @@
 
           <!-- CARD HEADER -->
           <div class="card-head" onclick={() => toggleDemo(song)}>
+            <!-- col 1: code + title -->
             <div class="head-left">
               <div class="code-wrap">
                 <div class="code-stars-row">
@@ -1049,34 +1050,20 @@
                 </div>
                 {#if song.title}<span class="song-title">{song.title}</span>{/if}
               </div>
-              {#if song.work_data?.auto_detected}<span class="auto-badge">AUTO</span>{/if}
-              {#if isExpanded}
-                <div class="head-meta">
-                  {#each (song.tags || []).slice(0,3) as tag}
-                    <span class="tag-sm">{tag}</span>
-                  {/each}
-                  {#if song.work_data?.collaborator}<span class="meta-pill collab-pill">feat. {song.work_data.collaborator}</span>{/if}
-                  {#if song.notes}<span class="notes-preview">{song.notes.slice(0,60)}{song.notes.length>60?'…':''}</span>{/if}
-                </div>
-              {/if}
             </div>
 
-            <!-- TYPE column — aligns with TYPE dropdown in expanded row -->
-            <div class="head-type">
+            <!-- col 2: TYPE badge + @artist (starts at 415px from card left) -->
+            <div class="demo-meta-right">
               {#if (song.work_data?.demo_type || 'SONG') === 'SAMPLE'}
                 <span class="type-badge">SAMPLE</span>
               {/if}
-            </div>
-
-            <!-- @ARTIST column — aligns with @ input in expanded row -->
-            <div class="head-at">
               {#if song.work_data?.at_artist}
                 <span class="at-display">@{song.work_data.at_artist}</span>
               {/if}
               {#if song.work_data?.frozen}<span class="frozen-badge">FROZEN</span>{/if}
             </div>
 
-            <!-- Buttons — fixed right -->
+            <!-- col 3: S + freeze + player -->
             <div class="head-buttons" onclick={e => e.stopPropagation()}>
               <div class="s-wrap">
                 <button class="s-btn {song.work_data?.frozen ? 'frozen-disabled' : selectedForSub.has(song.id) ? 'sel' : songBatchCount[song.id] >= 2 ? 'multi-batch' : songBatchCount[song.id] === 1 ? 'in-batch' : ''}"
@@ -1102,6 +1089,8 @@
                 </div>
               {/key}
             </div>
+
+            <!-- col 4: expand arrow -->
             <span class="arr" onclick={e => { e.stopPropagation(); toggleDemo(song) }}>▶</span>
           </div>
 
@@ -1114,7 +1103,7 @@
                   <label>CODE</label>
                   <input class="inp-sm row1-inp" value={song.code} onchange={e => updateField(song, 'code', e.target.value)} style="font-family:'Space Mono',monospace;font-size:12px" />
                 </div>
-                <div class="field" style="flex:2;min-width:0">
+                <div class="field" style="flex:0 0 293px;min-width:0">
                   <label style="display:flex;align-items:center;gap:6px">
                     TITLE
                     <button class="btn-rand-title" onclick={() => handleTitleChange(song, randomTitle())} title="Random title">✦</button>
@@ -1534,13 +1523,12 @@
 
   .card { border: 1px solid #303030; border-radius: 4px; overflow: visible; }
   .card.exp { border-color: rgba(201,168,76,.5); }
-  .card-head { padding: 0 14px; height: 52px; display: flex; align-items: center; gap: 10px; cursor: pointer; background: #1c1c1c; user-select: none; transition: background .15s; overflow: visible; position: relative; }
+  .card-head { padding: 0 14px; height: 52px; display: grid; grid-template-columns: 401px 1fr auto 20px; column-gap: 0; align-items: center; cursor: pointer; background: #1c1c1c; user-select: none; transition: background .15s; overflow: visible; position: relative; }
   .card-head:hover { background: #252525; }
   .card.exp .card-head { background: #252525; }
-  .head-left { display: flex; align-items: center; gap: 10px; width: 33%; flex-shrink: 0; min-width: 0; overflow: hidden; }
-  .head-type { width: 120px; flex-shrink: 0; display: flex; align-items: center; }
-  .head-at { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
-  .head-buttons { flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+  .head-left { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; }
+  .demo-meta-right { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; padding-left: 8px; }
+  .head-buttons { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .type-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 2px; color: #c9a84c; border: 1px solid rgba(201,168,76,.4); background: rgba(201,168,76,.06); letter-spacing: .08em; flex-shrink: 0; }
   .at-display { font-family: 'Space Mono', monospace; font-size: 10px; color: rgba(201,168,76,.55); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .03em; }
   .title-audio-row label { font-size: 11px; color: rgba(201,168,76,.7); }

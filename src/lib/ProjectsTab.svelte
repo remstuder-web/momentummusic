@@ -29,8 +29,7 @@
   let instrBlobUrls = {} // song.id -> blob URL for instrumental audio
   let instrPendingName = {} // song.id -> filename being saved (shows immediately)
   let audioTick = $state(0) // increment to force header player re-render
-  const sharedAudio = new Audio()
-  let playingSongId = $state(null)
+  let currentAudio = null
   let hoveredSongId = null
   let keydownHandler = null
   let activeSongTab = $state({})
@@ -626,25 +625,23 @@
   }
 
   // Best available audio src for header player — mixing > production only
-  function playAudio(songId, src) {
-    const id = String(songId)
-    if (sharedAudio.dataset.songId === id) {
-      if (sharedAudio.paused) sharedAudio.play().catch(() => {})
-      else sharedAudio.pause()
-      return
-    }
-    sharedAudio.pause()
-    sharedAudio.src = src
-    sharedAudio.dataset.songId = id
-    sharedAudio.load()
-    sharedAudio.play().catch(() => {})
+  function releaseOtherAudio(keep) {
+    document.querySelectorAll('audio').forEach(a => {
+      if (a !== keep) { a.pause(); a.src = ''; a.load() }
+    })
+  }
+
+  function playAudio(audio) {
+    releaseOtherAudio(audio)
+    const isEmpty = !audio.src || audio.src === window.location.href || audio.getAttribute('src') === ''
+    if (isEmpty) { audio.src = audio.dataset.src || ''; audio.preload = 'auto' }
+    currentAudio = audio
+    audio.play().catch(e => { if (e.name !== 'AbortError') console.warn('Audio:', e) })
   }
 
   function stopAll() {
-    sharedAudio.pause()
-    sharedAudio.src = ''
-    sharedAudio.dataset.songId = ''
-    playingSongId = null
+    document.querySelectorAll('audio').forEach(a => { a.pause(); a.src = ''; a.load() })
+    currentAudio = null
   }
 
   function bestAudioSrc(song) {
@@ -2596,23 +2593,16 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   }
 
   onMount(() => {
-    sharedAudio.addEventListener('play', () => { playingSongId = sharedAudio.dataset.songId || null })
-    sharedAudio.addEventListener('pause', () => { playingSongId = null })
-    sharedAudio.addEventListener('ended', () => { playingSongId = null })
-    sharedAudio.addEventListener('error', () => {
-      const src = sharedAudio.src || ''
-      if (src && !src.includes('/audio-compat/')) {
-        const filename = decodeURIComponent(src.split('/').pop())
-        if (filename) sharedAudio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
-      }
-    })
     keydownHandler = (e) => {
       if (e.code !== 'Space' || !hoveredSongId) return
       e.preventDefault()
-      const song = songs.find(s => s.id === hoveredSongId)
-      if (!song) return
-      const audio = bestAudioSrc(song)
-      if (audio?.src) playAudio(song.id, audio.src)
+      const audio = document.querySelector(`audio[data-song-id="${hoveredSongId}"]`)
+      if (!audio) return
+      if (audio.paused) {
+        playAudio(audio)
+      } else {
+        audio.pause()
+      }
     }
     window.addEventListener('keydown', keydownHandler)
   })
@@ -2952,6 +2942,8 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
           {@const doneCount = STAGES.filter(s => wd.stages[s.id]?.done).length}
           {@const currentStageConf = STAGES.find(s => s.id === wd.current_stage)}
           {@const expanded = expandedSongId === song.id}
+          {@const bestAudio = bestAudioSrc(song)}
+          {@const blobUrl = activeVersionBlobUrl(song)}
           {@const lv = lastVersion(song)}
 
           <div class="song-card {expanded?'exp':''}">
@@ -2995,6 +2987,29 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   {#if lv}
                     <span class="version-badge {lv.sent_to_artist?'sent':''}">{lv.name}</span>
                   {/if}
+                </div>
+                <div class="song-player-slot">
+                  {#key audioTick}
+                    {#if bestAudio}
+                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) { releaseOtherAudio(a); if (!a.currentSrc) { a.src = a.dataset.src || ''; a.preload = 'auto' } } }}>
+                        <audio class="mini-player" controls preload="none" src=""
+                          data-src={bestAudio.src} data-song-id={song.id}
+                          onerror={e => { const a=e.target,s=a.src||''; if(s&&!s.includes('/audio-compat/')){const fn=decodeURIComponent(s.split('/').pop());if(fn)a.src=`http://localhost:4242/audio-compat/${encodeURIComponent(fn)}`}}}></audio>
+                      </div>
+                    {:else if blobUrl}
+                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) { releaseOtherAudio(a); if (!a.currentSrc) { a.src = a.dataset.src || ''; a.preload = 'auto' } } }}>
+                        <audio class="mini-player" controls preload="none" src=""
+                          data-src={blobUrl} data-song-id={song.id}
+                          onerror={e => { const a=e.target,s=a.src||''; if(s&&!s.includes('/audio-compat/')){const fn=decodeURIComponent(s.split('/').pop());if(fn)a.src=`http://localhost:4242/audio-compat/${encodeURIComponent(fn)}`}}}></audio>
+                      </div>
+                    {:else if songAudioBlobUrls[song.id]}
+                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) { releaseOtherAudio(a); if (!a.currentSrc) { a.src = a.dataset.src || ''; a.preload = 'auto' } } }}>
+                        <audio class="mini-player" controls preload="none" src=""
+                          data-src={songAudioBlobUrls[song.id]} data-song-id={song.id}
+                          onerror={e => { const a=e.target,s=a.src||''; if(s&&!s.includes('/audio-compat/')){const fn=decodeURIComponent(s.split('/').pop());if(fn)a.src=`http://localhost:4242/audio-compat/${encodeURIComponent(fn)}`}}}></audio>
+                      </div>
+                    {/if}
+                  {/key}
                 </div>
                 <button class="daw-capture-btn" title="Capture DAW session for this song" onclick={e => { e.stopPropagation(); captureDawSession(song) }}>📸</button>
                 <span class="arr {expanded?'open':''}" onclick={() => expandSong(song, !expanded)}>▶</span>
@@ -4338,7 +4353,9 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .song-head { display: flex; align-items: center; gap: 9px; padding: 11px 14px; background: #1c1c1c; }
   .song-card.exp .song-head { background: #252525; }
   .song-head-left { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; cursor: pointer; overflow: hidden; }
-  .song-head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; justify-content: flex-end; }
+  .song-head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; width: 460px; justify-content: flex-end; }
+  .player-wrap-head { display: flex; align-items: center; width: 100%; }
+  .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
   .song-head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .song-player-slot { width: 280px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-start; }
   .reorder-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }

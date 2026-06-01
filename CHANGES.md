@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/lib/ProjectsTab.svelte — DONE
+TASK: Restore audio player in song card header with resource release fix
+WHAT: Replaced sharedAudio back to DOM-based approach matching DemoTab. currentAudio tracks active element. releaseOtherAudio(keep): querySelectorAll+pause+src=''+load all others before playing. playAudio(audio): releaseOtherAudio + lazy src load + play (AbortError silenced). stopAll(): releases all elements. keydown handler: queries audio[data-song-id], calls playAudio/pause. Restored {#each} @const vars (bestAudio, blobUrl). Restored .song-player-slot with three audio branches + {#key audioTick}. .song-head-right width:460px restored. CSS: .player-wrap-head + .mini-player added back. Inline onerror with /audio-compat/ retry on each element.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] src/lib/DemoTab.svelte — DONE
 TASK: Restore visible player, release audio resources to prevent exhaustion
 WHAT: Reverted DemoTab from sharedAudio back to native <audio controls> per card (preload=none, lazy src via data-src). Added releaseOtherAudio(keep): querySelectorAll('audio').forEach pause+src=''+load on all elements except the one being played — keeps only ONE active audio context at a time, fixing the browser 6-element limit. onpointerdown calls releaseOtherAudio before native controls click. Keydown handler restored to DOM query + releaseOtherAudio + play. stopAll() uses same release pattern. Removed sharedAudio, playingSongId, playAudio(songId,src). Restored .player-wrap, .mini-player CSS. Inline onerror retries via /audio-compat/.

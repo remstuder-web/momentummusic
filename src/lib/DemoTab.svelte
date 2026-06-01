@@ -78,7 +78,9 @@
   let showGenrePicker = $state({}) // song.id → boolean
   let availableGenres = $state(GENRE_LIST.filter(g => g.type === 'sub').map(g => g.tag))
 
-  let audioTick = $state(0) // increment to force player re-render after drop
+  let audioTick = $state(0) // kept for compatibility — no longer drives audio re-render
+  const sharedAudio = new Audio()
+  let playingSongId = $state(null)
 
   let showPatchModal = $state(false)
   let newPatchArtistName = $state('')
@@ -343,12 +345,23 @@
 
   // On mount: increment audioTick so audio server URLs render for existing songs
   onMount(() => {
-    audioTick++
+    sharedAudio.addEventListener('play', () => { playingSongId = sharedAudio.dataset.songId || null })
+    sharedAudio.addEventListener('pause', () => { playingSongId = null })
+    sharedAudio.addEventListener('ended', () => { playingSongId = null })
+    sharedAudio.addEventListener('error', () => {
+      const src = sharedAudio.src || ''
+      if (src && !src.includes('/audio-compat/')) {
+        const filename = decodeURIComponent(src.split('/').pop())
+        if (filename) sharedAudio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
+      }
+    })
     keydownHandler = (e) => {
       if (e.code !== 'Space' || !hoveredSongId) return
       e.preventDefault()
-      const audio = document.querySelector(`audio[data-song-id="${hoveredSongId}"]`)
-      if (audio) playAudio(audio)
+      const song = songs.find(s => s.id === hoveredSongId)
+      if (!song) return
+      const src = audioSrc(song)
+      if (src) playAudio(song.id, src)
     }
     window.addEventListener('keydown', keydownHandler)
   })
@@ -935,49 +948,28 @@
   let aiInput = $state('')
   let aiMessages = $state([])
   let aiLoading = $state(false)
-  let currentAudio = null
   let hoveredSongId = null
   let keydownHandler = null
 
-  function handleAudioError(e) {
-    const audio = e.target
-    const src = audio.src || ''
-    if (!src || src.includes('/audio-compat/')) return
-    const filename = decodeURIComponent(src.split('/').pop())
-    if (!filename) return
-    console.warn('Audio load failed, retrying via compat:', filename)
-    audio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
-  }
-
-  function loadSrcIfEmpty(audio) {
-    const isEmpty = !audio.src || audio.src === window.location.href || audio.getAttribute('src') === ''
-    if (isEmpty) { audio.src = audio.dataset.src || ''; audio.preload = 'auto' }
-  }
-
-  function playAudio(audio) {
-    if (currentAudio === audio) {
-      if (audio.paused) audio.play().catch(e => { if (e.name !== 'AbortError') console.warn('Audio play error:', e) })
-      else audio.pause()
+  function playAudio(songId, src) {
+    const id = String(songId)
+    if (sharedAudio.dataset.songId === id) {
+      if (sharedAudio.paused) sharedAudio.play().catch(() => {})
+      else sharedAudio.pause()
       return
     }
-    if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0 }
-    loadSrcIfEmpty(audio)
-    currentAudio = audio
-    audio.play().catch(e => { if (e.name !== 'AbortError') console.warn('Audio play error:', e) })
+    sharedAudio.pause()
+    sharedAudio.src = src
+    sharedAudio.dataset.songId = id
+    sharedAudio.load()
+    sharedAudio.play().catch(() => {})
   }
 
   function stopAll() {
-    if (currentAudio) { currentAudio.pause(); currentAudio = null }
-  }
-
-  function audioTracker(node) {
-    const onPlay = () => {
-      if (currentAudio && currentAudio !== node) { currentAudio.pause(); currentAudio.currentTime = 0 }
-      currentAudio = node
-      node.preload = 'auto'
-    }
-    node.addEventListener('play', onPlay)
-    return { destroy() { node.removeEventListener('play', onPlay) } }
+    sharedAudio.pause()
+    sharedAudio.src = ''
+    sharedAudio.dataset.songId = ''
+    playingSongId = null
   }
 
   async function sendAI() {
@@ -1152,27 +1144,18 @@
                   onclick={e => { e.stopPropagation(); toggleFreeze(song) }}
                   title={song.work_data?.frozen ? 'Unfreeze track' : 'Freeze track'}>⛔</button>
               </div>
-              {#key audioTick}
-                {@const src = audioSrc(song)}
-                <div class="player-slot">
-                  {#if src}
-                    <div class="player-wrap" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) loadSrcIfEmpty(a) }}>
-                      <audio class="mini-player" controls preload="none"
-                        src=""
-                        data-src={src}
-                        data-song-id={song.id}
-                        onerror={handleAudioError}
-                        use:audioTracker
-                        use:applyGain={song.id}></audio>
-                    </div>
-                  {:else if song.audio_path}
-                    <button class="audio-ref clickable" onclick={e => { e.stopPropagation(); openInPreview(song) }} title="Open in QuickTime">🎵 {song.audio_path}</button>
-                  {/if}
-                </div>
+              {@const src = audioSrc(song)}
+              <div class="player-slot">
                 {#if src}
-                  <button class="open-preview-btn" onclick={e => { e.stopPropagation(); openInPreview(song) }} title="Open in QuickTime">▶︎</button>
+                  <button class="play-btn {playingSongId === song.id ? 'playing' : ''}"
+                    onpointerdown={e => e.stopPropagation()}
+                    onclick={e => { e.stopPropagation(); playAudio(song.id, src) }}>
+                    {playingSongId === song.id ? '⏸' : '▶'}
+                  </button>
+                {:else if song.audio_path}
+                  <span class="audio-ref">🎵 {song.audio_path}</span>
                 {/if}
-              {/key}
+              </div>
             </div>
 
             <!-- col 4: expand arrow -->
@@ -1619,7 +1602,10 @@
   .title-audio-row label { font-size: 11px; color: rgba(201,168,76,.7); }
   .row1-inp { height: 40px; box-sizing: border-box; }
   .audio-row { display: flex; gap: 8px; margin-top: 2px; margin-bottom: 2px; }
-  .player-slot { flex-shrink: 0; width: 280px; display: flex; align-items: center; overflow: hidden; }
+  .player-slot { flex-shrink: 0; display: flex; align-items: center; gap: 4px; }
+  .play-btn { width: 32px; height: 32px; border-radius: 50%; background: #252525; border: 1px solid #303030; color: #9e9690; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: border-color .15s, color .15s; }
+  .play-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+  .play-btn.playing { border-color: rgba(201,168,76,.5); color: #c9a84c; background: rgba(201,168,76,.06); }
   .head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .notes-preview { font-size: 10px; color: #444; font-style: italic; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
   .code-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 90px; flex-shrink: 0; }
@@ -1687,12 +1673,7 @@
   .btn-release { font-family: 'Space Mono', monospace; font-size: 10px; padding: 3px 8px; background: transparent; border: 1px solid rgba(224,90,74,.4); color: #e05a4a; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .btn-release:hover { background: rgba(224,90,74,.08); }
 
-  .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
   .audio-ref { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
-  .audio-ref.clickable { background: transparent; border: none; cursor: pointer; padding: 0; color: #4a9fd4; }
-  .audio-ref.clickable:hover { color: #c9a84c; }
-  .open-preview-btn { font-family: 'Space Mono', monospace; font-size: 11px; padding: 3px 7px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; margin-left: 4px; }
-  .open-preview-btn:hover { border-color: #c9a84c; color: #c9a84c; }
 
   .card-body { padding: 16px; border-top: 1px solid #303030; display: flex; flex-direction: column; gap: 14px; background: #0a0a0a; }
   .key-tempo-row { display: flex; gap: 8px; align-items: center; }
@@ -1823,8 +1804,6 @@
   .contact-opt:hover { background: #1c1c1c; color: #c9a84c; }
   .contact-group-label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .12em; color: #4caf82; padding: 10px 12px 5px; text-transform: uppercase; border-bottom: 1px solid #252525; border-top: 1px solid #1a1a1a; background: #0f0f0f; margin-top: 2px; }
   .contact-opt.sel { color: #4a9fd4; background: rgba(74,159,212,.06); }
-  .player-wrap { display: flex; align-items: center; width: 100%; }
-  .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
   .btn-send { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; padding: 10px 20px; background: rgba(74,159,212,.1); border: 1px solid rgba(74,159,212,.4); color: #4a9fd4; border-radius: 3px; cursor: pointer; width: 100%; }
   .btn-send:hover { background: rgba(74,159,212,.18); }
   .patch-count { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; }

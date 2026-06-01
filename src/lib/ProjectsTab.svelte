@@ -29,7 +29,8 @@
   let instrBlobUrls = {} // song.id -> blob URL for instrumental audio
   let instrPendingName = {} // song.id -> filename being saved (shows immediately)
   let audioTick = $state(0) // increment to force header player re-render
-  let currentAudio = null
+  const sharedAudio = new Audio()
+  let playingSongId = $state(null)
   let hoveredSongId = null
   let keydownHandler = null
   let activeSongTab = $state({})
@@ -625,45 +626,25 @@
   }
 
   // Best available audio src for header player — mixing > production only
-  function handleAudioError(e) {
-    const audio = e.target
-    const src = audio.src || ''
-    if (!src || src.includes('/audio-compat/')) return
-    const filename = decodeURIComponent(src.split('/').pop())
-    if (!filename) return
-    console.warn('Audio load failed, retrying via compat:', filename)
-    audio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
-  }
-
-  function loadSrcIfEmpty(audio) {
-    const isEmpty = !audio.src || audio.src === window.location.href || audio.getAttribute('src') === ''
-    if (isEmpty) { audio.src = audio.dataset.src || ''; audio.preload = 'auto' }
-  }
-
-  function playAudio(audio) {
-    if (currentAudio === audio) {
-      if (audio.paused) audio.play().catch(e => { if (e.name !== 'AbortError') console.warn('Audio play error:', e) })
-      else audio.pause()
+  function playAudio(songId, src) {
+    const id = String(songId)
+    if (sharedAudio.dataset.songId === id) {
+      if (sharedAudio.paused) sharedAudio.play().catch(() => {})
+      else sharedAudio.pause()
       return
     }
-    if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0 }
-    loadSrcIfEmpty(audio)
-    currentAudio = audio
-    audio.play().catch(e => { if (e.name !== 'AbortError') console.warn('Audio play error:', e) })
+    sharedAudio.pause()
+    sharedAudio.src = src
+    sharedAudio.dataset.songId = id
+    sharedAudio.load()
+    sharedAudio.play().catch(() => {})
   }
 
   function stopAll() {
-    if (currentAudio) { currentAudio.pause(); currentAudio = null }
-  }
-
-  function audioTracker(node) {
-    const onPlay = () => {
-      if (currentAudio && currentAudio !== node) { currentAudio.pause(); currentAudio.currentTime = 0 }
-      currentAudio = node
-      node.preload = 'auto'
-    }
-    node.addEventListener('play', onPlay)
-    return { destroy() { node.removeEventListener('play', onPlay) } }
+    sharedAudio.pause()
+    sharedAudio.src = ''
+    sharedAudio.dataset.songId = ''
+    playingSongId = null
   }
 
   function bestAudioSrc(song) {
@@ -2615,11 +2596,23 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   }
 
   onMount(() => {
+    sharedAudio.addEventListener('play', () => { playingSongId = sharedAudio.dataset.songId || null })
+    sharedAudio.addEventListener('pause', () => { playingSongId = null })
+    sharedAudio.addEventListener('ended', () => { playingSongId = null })
+    sharedAudio.addEventListener('error', () => {
+      const src = sharedAudio.src || ''
+      if (src && !src.includes('/audio-compat/')) {
+        const filename = decodeURIComponent(src.split('/').pop())
+        if (filename) sharedAudio.src = `http://localhost:4242/audio-compat/${encodeURIComponent(filename)}`
+      }
+    })
     keydownHandler = (e) => {
       if (e.code !== 'Space' || !hoveredSongId) return
       e.preventDefault()
-      const audio = document.querySelector(`audio[data-song-id="${hoveredSongId}"]`)
-      if (audio) playAudio(audio)
+      const song = songs.find(s => s.id === hoveredSongId)
+      if (!song) return
+      const audio = bestAudioSrc(song)
+      if (audio?.src) playAudio(song.id, audio.src)
     }
     window.addEventListener('keydown', keydownHandler)
   })
@@ -2959,9 +2952,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
           {@const doneCount = STAGES.filter(s => wd.stages[s.id]?.done).length}
           {@const currentStageConf = STAGES.find(s => s.id === wd.current_stage)}
           {@const expanded = expandedSongId === song.id}
-          {@const blobUrl = activeVersionBlobUrl(song)}
-          {@const audioPath = activeVersionAudioPath(song)}
-          {@const bestAudio = bestAudioSrc(song)}
           {@const lv = lastVersion(song)}
 
           <div class="song-card {expanded?'exp':''}">
@@ -3005,43 +2995,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   {#if lv}
                     <span class="version-badge {lv.sent_to_artist?'sent':''}">{lv.name}</span>
                   {/if}
-                  <div class="stars" onclick={e => e.stopPropagation()}>
-                    {#each [1,2,3] as n}
-                      <button class="star {(song.rating||0) >= n ? 'on' : ''}"
-                        onclick={() => { updateSongField(song, 'rating', (song.rating||0) === n ? 0 : n) }}>★</button>
-                    {/each}
-                  </div>
-                </div>
-                <div class="song-player-slot">
-                  {#key audioTick}
-                    {#if bestAudio}
-                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) loadSrcIfEmpty(a) }}>
-                        <audio class="mini-player" controls preload="none" src=""
-                          data-src={bestAudio.src}
-                          data-song-id={song.id} onerror={handleAudioError} use:audioTracker></audio>
-                      </div>
-                    {:else if blobUrl}
-                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) loadSrcIfEmpty(a) }}>
-                        <audio class="mini-player" controls preload="none" src=""
-                          data-src={blobUrl}
-                          data-song-id={song.id} onerror={handleAudioError} use:audioTracker></audio>
-                      </div>
-                    {:else if songAudioBlobUrls[song.id]}
-                      <div class="player-wrap-head" onpointerdown={e => { e.stopPropagation(); const a = e.currentTarget.querySelector('audio'); if (a) loadSrcIfEmpty(a) }}>
-                        <audio class="mini-player" controls preload="none" src=""
-                          data-src={songAudioBlobUrls[song.id]}
-                          data-song-id={song.id} onerror={handleAudioError} use:audioTracker></audio>
-                      </div>
-                    {:else if song.audio_path}
-                      <div class="audio-drop-sm"
-                        ondragover={e => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
-                        ondragleave={e => e.currentTarget.classList.remove('drag-over')}
-                        ondrop={e => { e.preventDefault(); e.currentTarget.classList.remove('drag-over'); handleSongAudioDrop(e, song) }}
-                        title="Drop audio file here to play">
-                        🎵 {song.audio_path}
-                      </div>
-                    {/if}
-                  {/key}
                 </div>
                 <button class="daw-capture-btn" title="Capture DAW session for this song" onclick={e => { e.stopPropagation(); captureDawSession(song) }}>📸</button>
                 <span class="arr {expanded?'open':''}" onclick={() => expandSong(song, !expanded)}>▶</span>
@@ -4385,7 +4338,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .song-head { display: flex; align-items: center; gap: 9px; padding: 11px 14px; background: #1c1c1c; }
   .song-card.exp .song-head { background: #252525; }
   .song-head-left { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; cursor: pointer; overflow: hidden; }
-  .song-head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; width: 460px; justify-content: flex-end; }
+  .song-head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; justify-content: flex-end; }
   .song-head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .song-player-slot { width: 280px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-start; }
   .reorder-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
@@ -4421,11 +4374,9 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .stage-audio-drop.drag-over { border-color: #c9a84c; background: rgba(201,168,76,.04); }
   .stage-audio-drop:hover { border-color: #303030; }
   .stage-audio-name { font-family: 'Space Mono', monospace; font-size: 11px; color: #4caf82; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .player-wrap-head { display: flex; align-items: center; gap: 4px; width: 100%; }
   .player-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: #4a9fd4; letter-spacing: .08em; flex-shrink: 0; }
   .version-badge { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 2px; border: 1px solid #303030; color: #555; flex-shrink: 0; }
   .version-badge.sent { color: #4caf82; border-color: rgba(76,175,130,.4); background: rgba(76,175,130,.08); }
-  .mini-player { height: 40px; width: 100%; accent-color: #c9a84c; filter: invert(0.85) brightness(0.7) contrast(0.9); }
   .audio-ref { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
   .audio-drop-sm { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; padding: 3px 8px; border: 1px dashed #303030; border-radius: 3px; cursor: copy; transition: border-color .15s; }
   .audio-drop-sm:hover, .audio-drop-sm.drag-over { border-color: #c9a84c; color: #c9a84c; }

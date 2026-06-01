@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] ProjectsTab.svelte + DemoTab.svelte — DONE
+TASK: Remove QT button + stars from Projects header; fix audio exhaustion with shared Audio instance
+WHAT: (1) ProjectsTab: removed stars and entire song-player-slot from song card header. Removed unused {#each} @const vars (bestAudio, blobUrl, audioPath). .song-head-right width constraint removed. Removed all DOM audio elements and related CSS (mini-player, player-wrap-head). (2) Both files: replaced DOM audio approach with const sharedAudio = new Audio() + playAudio(songId, src) + stopAll(). playingSongId $state tracks which song is active via sharedAudio play/pause/ended events. Error handler retries via /audio-compat/. keydownHandler in onMount resolves src from songs array, never queries DOM audio elements. (3) DemoTab: removed <audio> element + open-preview-btn. Added .play-btn (circular ▶/⏸ button) that calls playAudio(song.id, src). Removed mini-player/player-wrap CSS.
+RESULT: builds clean, no stale references
+BLOCKERS: none
+
 ## [2026-06-02] src/lib/DemoTab.svelte + src/lib/ProjectsTab.svelte — DONE
 TASK: Fix audio player stability: single manager, no src reset, catch AbortError
 WHAT: Replaced scattered audio state (currentlyPlaying, ensureAudioLoaded, handlePlay, handleKeydown) with: currentAudio (single ref), playAudio() (toggle-safe, src-guard, AbortError catch), stopAll() (onDestroy cleanup), loadSrcIfEmpty() (only sets src if truly empty — checks src===window.location.href and getAttribute('src')===''), audioTracker Svelte action (programmatic play listener, correctly destroyed on unmount — replaces onplay={handlePlay} in template). keydownHandler closure created in onMount (never duplicated). Both files: all onplay= template attributes removed, onpointerdown calls loadSrcIfEmpty(), use:audioTracker on all audio elements. ProjectsTab onDestroy now also calls stopAll().

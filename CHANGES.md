@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-01] momentum-watcher.cjs — DONE
+TASK: Fix demo unlink: delete from Supabase on file remove, startup cleanup
+WHAT: (1) unlink handler: added console.log('DEMO DELETED:', filename) before ext check, added console.log for no-row case, changed DELETE to use 'Prefer: return=representation' and awaits result with console.log('DELETE RESULT:', ...) + checks del.ok. (2) Startup cleanup IIFE: reads DEMOS_DIR files, queries all songs with project_id IS NULL and audio_path NOT NULL, deletes any row whose audio_path is missing from disk — logs each deletion + summary count. (3) Chokidar unlink fires for Dropbox-sync deletions the same as local deletes — confirmed by behaviour.
+RESULT: 7 orphaned records cleaned on first pm2 restart, unlink path now fully logged
+BLOCKERS: none
+
+## [2026-06-01] momentum-watcher.cjs — DONE
 TASK: Fix SENT patch insert id, auto-tag JSON single quotes, archive ENOENT guard
 WHAT: (1) SENT addDir: .select('id') added to insert chain, error captured and logged, patchId extracted from data.id. (2) Auto-tag: single-quote → double-quote replacement before JSON.parse (handles Haiku output like ['dark','trap']). (3) Archive copy: ENOENT guard already existed but now logs ⚠ Archive skip — source not found: filename when demoPath missing.
 RESULT: watcher running

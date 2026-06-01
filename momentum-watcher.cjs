@@ -14034,6 +14034,23 @@ server.listen(PORT, '127.0.0.1', () => {
   const DEMO_WATCH_EXTS = new Set(['.wav', '.mp3', '.aiff', '.aif', '.m4a'])
   const demoSkip = new Set()  // filenames being renamed — suppress chokidar re-fire
 
+  // ── Startup cleanup: delete Supabase rows whose audio file no longer exists ──
+  ;(async () => {
+    try {
+      const dirFiles = new Set(fs.readdirSync(DEMOS_DIR))
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?project_id=is.null&audio_path=not.is.null&select=id,audio_path,title,code`, { headers: sbHeaders })
+      const rows = await r.json()
+      if (!Array.isArray(rows)) return
+      const orphans = rows.filter(s => s.audio_path && !dirFiles.has(s.audio_path))
+      if (!orphans.length) { console.log('🧹 No orphaned demo records found'); return }
+      for (const song of orphans) {
+        const del = await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, { method: 'DELETE', headers: sbHeaders })
+        console.log(`🧹 Deleted orphan: ${song.audio_path} (id ${song.id}, status ${del.status})`)
+      }
+      console.log(`🧹 Cleaned up ${orphans.length} orphaned demo record${orphans.length !== 1 ? 's' : ''}`)
+    } catch(e) { console.error('✗ Demo orphan cleanup error:', e.message) }
+  })()
+
   chokidar.watch(DEMOS_DIR, { ignoreInitial: true, persistent: true, awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 500 } })
     .on('add', async filePath => {
       const filename = path.basename(filePath)
@@ -14215,13 +14232,17 @@ server.listen(PORT, '127.0.0.1', () => {
     })
     .on('unlink', async filePath => {
       const filename = path.basename(filePath)
+      console.log('DEMO DELETED:', filename)
       if (!DEMO_WATCH_EXTS.has(path.extname(filename).toLowerCase())) return
       try {
         const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?audio_path=eq.${encodeURIComponent(filename)}&project_id=is.null&select=id,title,code&limit=1`, { headers: sbHeaders })
         const rows = await r.json()
-        if (!Array.isArray(rows) || !rows.length) return
+        if (!Array.isArray(rows) || !rows.length) { console.log(`  ↳ No DB row found for: ${filename}`); return }
         const song = rows[0]
-        await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, { method: 'DELETE', headers: sbHeaders })
+        const del = await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, { method: 'DELETE', headers: { ...sbHeaders, 'Prefer': 'return=representation' } })
+        const result = await del.json()
+        console.log('DELETE RESULT:', JSON.stringify(result))
+        if (!del.ok) { console.error('✗ Supabase DELETE failed:', del.status, JSON.stringify(result)); return }
         if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, `🗑 Demo removed: ${song.title || song.code || filename}`).catch(() => {})
         console.log(`✓ Demo removed from DB: ${filename}`)
       } catch(e) { console.error('✗ Demo unlink error:', e.message) }

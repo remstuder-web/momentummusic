@@ -36,7 +36,7 @@
 
 <script>
   import { supabase } from './supabase.js'
-  import { onMount, onDestroy } from 'svelte'
+  import { onDestroy } from 'svelte'
   import { GENRE_LIST } from '$lib/genres.js'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
 
@@ -816,27 +816,21 @@
 
   load()
 
-  const realtimeChannel = supabase
-    .channel('demos-realtime')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'songs' }, (payload) => {
-      if (payload.eventType === 'INSERT') {
-        if (payload.new.project_id == null) songs = [payload.new, ...songs]
-      } else if (payload.eventType === 'DELETE') {
-        songs = songs.filter(s => s.id !== payload.old.id)
-      } else if (payload.eventType === 'UPDATE') {
-        if (payload.new.project_id == null) {
-          const exists = songs.some(s => s.id === payload.new.id)
-          songs = exists
-            ? songs.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s)
-            : [payload.new, ...songs]
-        } else {
-          songs = songs.filter(s => s.id !== payload.new.id)
-        }
-      }
-    })
-    .subscribe()
+  const pollInterval = setInterval(async () => {
+    const { data } = await supabase
+      .from('songs')
+      .select('*')
+      .is('project_id', null)
+      .order('created_at', { ascending: false })
+    if (!data) return
+    const incoming = new Map(data.map(s => [s.id, s]))
+    const current  = new Map(songs.map(s => [s.id, s]))
+    const hasNew     = data.some(s => !current.has(s.id))
+    const hasMissing = songs.some(s => !incoming.has(s.id))
+    if (hasNew || hasMissing) songs = data
+  }, 5000)
 
-  onDestroy(() => supabase.removeChannel(realtimeChannel))
+  onDestroy(() => clearInterval(pollInterval))
 </script>
 
 <svelte:window onclick={() => { if (Object.values(showBatchPicker).some(Boolean)) showBatchPicker = {}; if (showPatchArtistPicker) showPatchArtistPicker = false; if (Object.values(showGenrePicker).some(Boolean)) showGenrePicker = {}; if (showHeaderGenrePicker) showHeaderGenrePicker = false }} />

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] momentum-watcher.cjs — DONE
+TASK: POST /set-all-demos-to-sample migration endpoint; no default demo_type on auto-detect
+WHAT: Added POST /set-all-demos-to-sample: fetches all songs where project_id IS NULL, filters to those with null/empty work_data.demo_type, PATCHes each with demo_type='SAMPLE', returns {ok,updated}. Auto-detect rowBase already had no demo_type — confirmed no change needed. Migration run: 18 songs updated.
+RESULT: migration ran successfully, 18 updated
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte — DONE
 TASK: Sort demo list by code descending, newest on top
 WHAT: Applied .sort((a, b) => parseInt(b.code) - parseInt(a.code)) at three points: (1) initial load assignment, (2) after INSERT via addSong(), (3) after poll detects hasNew or hasMissing. Removed implicit created_at ordering dependency.

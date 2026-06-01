@@ -12420,6 +12420,44 @@ ${formatted}`
     return
   }
 
+  // ── POST /set-all-demos-to-sample — one-time migration ───────────────────
+  if (req.method === 'POST' && req.url === '/set-all-demos-to-sample') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/songs?project_id=is.null&select=id,work_data`,
+        { headers: sbHeaders }
+      )
+      const rows = await r.json()
+      if (!Array.isArray(rows)) throw new Error('Unexpected response: ' + JSON.stringify(rows))
+
+      const targets = rows.filter(s => {
+        const dt = s.work_data?.demo_type
+        return dt === undefined || dt === null || dt === ''
+      })
+
+      let updated = 0
+      for (const song of targets) {
+        const wd = { ...(song.work_data || {}), demo_type: 'SAMPLE' }
+        const upd = await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, {
+          method: 'PATCH',
+          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ work_data: wd })
+        })
+        if (upd.ok) updated++
+      }
+
+      console.log(`✓ /set-all-demos-to-sample: updated ${updated}/${targets.length} songs`)
+      res.writeHead(200)
+      res.end(JSON.stringify({ ok: true, updated }))
+    } catch(e) {
+      res.writeHead(500)
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /seed-production-rules ───────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/seed-production-rules') {
     res.setHeader('Access-Control-Allow-Origin', '*')

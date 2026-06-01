@@ -1144,12 +1144,11 @@
                   onclick={e => { e.stopPropagation(); toggleFreeze(song) }}
                   title={song.work_data?.frozen ? 'Unfreeze track' : 'Freeze track'}>⛔</button>
               </div>
-              {@const src = audioSrc(song)}
               <div class="player-slot">
-                {#if src}
+                {#if audioSrc(song)}
                   <button class="play-btn {playingSongId === song.id ? 'playing' : ''}"
                     onpointerdown={e => e.stopPropagation()}
-                    onclick={e => { e.stopPropagation(); playAudio(song.id, src) }}>
+                    onclick={e => { e.stopPropagation(); playAudio(song.id, audioSrc(song)) }}>
                     {playingSongId === song.id ? '⏸' : '▶'}
                   </button>
                 {:else if song.audio_path}

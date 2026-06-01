@@ -14036,11 +14036,16 @@ server.listen(PORT, '127.0.0.1', () => {
           try { fs.writeFileSync(USED_TITLES_FILE, JSON.stringify(usedTitles)) } catch(e) {}
         }
 
-        // ── Step 6: Essentia — always run; BPM from filename takes priority ──
+        // ── Step 6: Essentia — for KEY + signals always; BPM only if not in filename ──
+        if (filenameBpm) console.log(`  ℹ BPM from filename: ${filenameBpm} — skipping Essentia BPM`)
         const ess = await runEssentiaAnalysis(newPath)
         const finalBpm = filenameBpm || ess.bpm
-        const { key, energy, brightness, bass_energy, danceability, warmth, loudness, raw: essRaw } = ess
-        console.log(`  ✓ Essentia: ${finalBpm || '?'}bpm ${key || '?'} nrg:${energy?.toFixed(2)} dns:${danceability?.toFixed(2)}`)
+        const { key, energy, brightness, bass_energy, danceability, warmth, loudness } = ess
+        if (filenameBpm) {
+          console.log(`  ✓ Essentia (key only): ${key || '?'} nrg:${energy?.toFixed(2)} dns:${danceability?.toFixed(2)}`)
+        } else {
+          console.log(`  ✓ Essentia: ${finalBpm || '?'}bpm ${key || '?'} nrg:${energy?.toFixed(2)} dns:${danceability?.toFixed(2)}`)
+        }
 
         // ── Step 7: Auto-tag via Claude Haiku ──
         let autoTags = []
@@ -14077,11 +14082,11 @@ server.listen(PORT, '127.0.0.1', () => {
           } catch(e) { console.warn('  ⚠ Auto-tag failed:', e.message) }
         }
 
-        // ── Step 8: PATCH with all analysis results ──
+        // ── Step 8: PATCH with analysis results (tempo from filename already in INSERT) ──
         if (songId) {
           const updates = {
-            tempo: finalBpm || undefined,
-            key:   key     || undefined,
+            tempo: filenameBpm ? undefined : (ess.bpm || undefined),  // skip if filename had BPM
+            key:   key || undefined,
             tags:  autoTags.length ? autoTags : undefined,
             work_data: {
               auto_detected: true,

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte + momentum-watcher.cjs — DONE
+TASK: Demo tempo change: rename file in Demos + archive to reflect new BPM
+WHAT: Backend: POST /rename-demo-file — strips code prefix and old _NNNbpm suffix from filename, appends new_tempo, PATCHes Supabase audio_path first (so chokidar add sees it in DB and skips), then fs.renameSync in DEMOS_DIR and ARCHIVE_29TH. Frontend: updateTempo() calls /rename-demo-file after Supabase tempo update; updates song.audio_path reactively on success. Files without existing BPM in name get BPM appended.
+RESULT: watcher running, endpoint smoke-tested (26035_MOONZ_94bpm.wav → 26035_MOONZ_110bpm.wav etc.)
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte — DONE
 TASK: Stop other audio players when a new one starts
 WHAT: Added currentlyPlaying (plain let, not $state — no reactivity needed). handlePlay(event) pauses+resets the previous audio element before assigning the new one. onplay={handlePlay} added to the single <audio class="mini-player"> element.

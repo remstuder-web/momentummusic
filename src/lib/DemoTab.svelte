@@ -249,6 +249,20 @@
     song._bpmDouble = t * 2
     songs = [...songs]
     await supabase.from('songs').update({ tempo: t }).eq('id', song.id)
+    if (song.audio_path) {
+      try {
+        const res = await fetch('http://localhost:4242/rename-demo-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ song_id: song.id, old_filename: song.audio_path, new_tempo: t })
+        })
+        const result = await res.json()
+        if (result.ok && result.new_filename && result.new_filename !== song.audio_path) {
+          song.audio_path = result.new_filename
+          songs = [...songs]
+        }
+      } catch(e) { console.warn('rename-demo-file failed:', e.message) }
+    }
   }
 
   async function handleAudioDrop(e, song) {

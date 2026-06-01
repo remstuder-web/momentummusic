@@ -6339,6 +6339,66 @@ async function restore(input) {
     return
   }
 
+  // ── POST /rename-demo-file — rename demo file when BPM changes ───────────
+  if (req.method === 'POST' && req.url === '/rename-demo-file') {
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      try {
+        const { song_id, old_filename, new_tempo } = JSON.parse(Buffer.concat(chunks).toString())
+        if (!song_id || !old_filename || !new_tempo) {
+          res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing fields' })); return
+        }
+
+        const ext = path.extname(old_filename)
+        const nameNoExt = path.basename(old_filename, ext)
+        const code = (nameNoExt.match(/^(\d{5,6})_/) || [])[1] || nameNoExt.split('_')[0]
+        const titleSegment = nameNoExt
+          .replace(/^(\d{5,6})_/, '')    // strip code prefix
+          .replace(/_\d{2,3}bpm$/i, '')  // strip old BPM suffix
+        const new_filename = `${code}_${titleSegment}_${new_tempo}bpm${ext}`
+
+        if (new_filename === old_filename) {
+          res.end(JSON.stringify({ ok: true, new_filename })); return
+        }
+
+        // Update Supabase FIRST — chokidar add on new name will see it and skip
+        await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song_id}`, {
+          method: 'PATCH',
+          headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ audio_path: new_filename })
+        })
+
+        // Rename in DEMOS_DIR
+        const oldPath = path.join(DEMOS_DIR, old_filename)
+        const newPath = path.join(DEMOS_DIR, new_filename)
+        if (fs.existsSync(oldPath)) {
+          fs.renameSync(oldPath, newPath)
+          console.log(`  ✓ Demo BPM rename: ${old_filename} → ${new_filename}`)
+        } else {
+          console.warn(`  ⚠ rename-demo-file: source not found: ${old_filename}`)
+        }
+
+        // Rename in archive if present
+        try {
+          const archiveOld = path.join(ARCHIVE_29TH, old_filename)
+          const archiveNew = path.join(ARCHIVE_29TH, new_filename)
+          if (fs.existsSync(archiveOld)) {
+            fs.renameSync(archiveOld, archiveNew)
+            console.log(`  ✓ Archive BPM rename: ${old_filename} → ${new_filename}`)
+          }
+        } catch(e) { console.warn('⚠ Archive BPM rename failed:', e.message) }
+
+        res.end(JSON.stringify({ ok: true, new_filename }))
+      } catch(e) {
+        console.error('rename-demo-file error:', e.message)
+        res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /freeze-demo — delete from archive, leave Demos untouched ─────
   if (req.method === 'POST' && req.url === '/freeze-demo') {
     let body = ''

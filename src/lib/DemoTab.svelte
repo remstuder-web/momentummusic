@@ -1023,9 +1023,11 @@
                 {#if song.title}<span class="song-title">{song.title}</span>{/if}
               </div>
               <div class="head-meta">
-                {#each (song.tags || []).slice(0,3) as tag}
-                  <span class="tag-sm">{tag}</span>
-                {/each}
+                {#if isExpanded}
+                  {#each (song.tags || []).slice(0,3) as tag}
+                    <span class="tag-sm">{tag}</span>
+                  {/each}
+                {/if}
                 {#if song.key}<span class="meta-pill">{song.key}</span>{/if}
                 {#if song.tempo}<span class="meta-pill">{song.tempo} BPM</span>{/if}
                 {#if song.work_data?.collaborator}<span class="meta-pill collab-pill">feat. {song.work_data.collaborator}</span>{/if}

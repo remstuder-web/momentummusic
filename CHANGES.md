@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] src/lib/DemoTab.svelte — DONE
+TASK: Hide tags in collapsed demo card header
+WHAT: Tags wrapped in {#if isExpanded} — only visible when card is open. Collapsed header shows code, title, key, BPM, collab, notes preview, AUTO, FROZEN badges only.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte + momentum-watcher.cjs — DONE
 TASK: Demo freeze button
 WHAT: ⛔ freeze button added after S button on every demo card. Frozen state: red-tint border, FROZEN badge, S button greyed/disabled. toggleFreeze() saves work_data.frozen to Supabase, calls POST /freeze-demo on freeze (deletes from ARCHIVE_29TH, leaves Demos untouched), no archive restore on unfreeze. createSubmissionFromSelection skips frozen songs with toast message. toggleSubSelect silently blocks frozen songs.

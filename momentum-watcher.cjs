@@ -1894,6 +1894,7 @@ function syncDemoArchive(filename, type, at_artist) {
   let result
   if (shouldBeInArchive && !inArchive) {
     if (!fs.existsSync(demoPath)) {
+      console.log(`⚠ Archive skip — source not found: ${filename}`)
       result = { action: 'no_change', reason: 'source not found' }
     } else {
       if (!fs.existsSync(ARCHIVE_29TH)) fs.mkdirSync(ARCHIVE_29TH, { recursive: true })
@@ -14164,7 +14165,8 @@ server.listen(PORT, '127.0.0.1', () => {
             })
             const td = await tr.json()
             const raw = (td.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
-            autoTags = JSON.parse(raw)
+            const cleaned = raw.replace(/'/g, '"').replace(/`/g, '"')
+            autoTags = JSON.parse(cleaned)
             if (!Array.isArray(autoTags)) autoTags = []
             autoTags = autoTags.slice(0, 5).map(t => String(t).toLowerCase().trim()).filter(Boolean)
             console.log(`  ✓ Auto-tags: ${autoTags.join(', ')}`)
@@ -14256,10 +14258,13 @@ server.listen(PORT, '127.0.0.1', () => {
         if (existing) return
         const codeMatch = folderName.match(/^(\d{5})/)
         const code = codeMatch ? codeMatch[1] : null
-        const { data } = await supabase.from('patches')
+        const { data, error: insertErr } = await supabase.from('patches')
           .insert({ name: folderName, status: 'open', artist: '', contact_id: null, dropped_files: [], work_data: { source: 'sent_dir' } })
-          .select('id,name').single()
-        console.log(`📁 SENT: new folder → patch "${folderName}" (id ${data?.id})`)
+          .select('id')
+          .single()
+        if (insertErr) { console.error('📁 SENT: patch insert error:', insertErr.message); return }
+        const patchId = data.id
+        console.log(`📁 SENT: created patch id ${patchId} for "${folderName}"`)
         if (code) {
           const slug = folderName.replace(/[^A-Z0-9_]/gi, '_').toUpperCase()
           const tgMsg = `📁 New SENT folder: ${folderName}`

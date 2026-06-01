@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-01] momentum-watcher.cjs — DONE
+TASK: Fix SENT patch insert id, auto-tag JSON single quotes, archive ENOENT guard
+WHAT: (1) SENT addDir: .select('id') added to insert chain, error captured and logged, patchId extracted from data.id. (2) Auto-tag: single-quote → double-quote replacement before JSON.parse (handles Haiku output like ['dark','trap']). (3) Archive copy: ENOENT guard already existed but now logs ⚠ Archive skip — source not found: filename when demoPath missing.
+RESULT: watcher running
+BLOCKERS: none
+
 ## [2026-06-01] src/lib/DemoTab.svelte + momentum-watcher.cjs — DONE
 TASK: Fix sync-demo-archive trigger on type+artist change
 WHAT: Both updateDemoType and updateAtArtist now await the fetch and log result with console.log('ARCHIVE SYNC:', result) — errors are no longer swallowed. syncDemoArchive helper now logs every call: filename | type | at_artist | shouldArchive | inArchive → action. Logic unchanged (SAMPLE+no@ → copy, SAMPLE+@ → delete, SONG → delete if present).

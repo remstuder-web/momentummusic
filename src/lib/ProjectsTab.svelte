@@ -81,6 +81,7 @@
   let mozartInsight = $state({}) // song.id -> { strategic, creative, next_step }
   let mozartInsightLoading = $state({}) // song.id -> bool
   let uploadingSongs = $state({}) // song.id -> 'prod'|'mix'|'instr'|'stems'|null
+  let dragOverSongId = $state(null) // song.id+'-prod'|'-instr'|'-mix'|'-stems' — CSS only, never mutates songs array
 
   function formatMinSec(sec) {
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60)
@@ -354,7 +355,6 @@
 
   async function handleProdDrop(e, song) {
     e.preventDefault()
-    song._prodDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
     const altKey = e.altKey
     uploadingSongs = { ...uploadingSongs, [song.id]: 'prod' }
@@ -368,15 +368,12 @@
       }).catch(() => {})
     } catch(err) { alert('Error: ' + err.message) }
     finally {
-      song._prodDrag = false
       uploadingSongs = { ...uploadingSongs, [song.id]: null }
-      songs = [...songs]
     }
   }
 
   async function handleMixDrop(e, song) {
     e.preventDefault()
-    song._mixDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
     const altKey = e.altKey
     uploadingSongs = { ...uploadingSongs, [song.id]: 'mix' }
@@ -390,15 +387,12 @@
       }).catch(() => {})
     } catch(err) { alert('Error: ' + err.message) }
     finally {
-      song._mixDrag = false
       uploadingSongs = { ...uploadingSongs, [song.id]: null }
-      songs = [...songs]
     }
   }
 
   async function handleInstrumentalDrop(e, song) {
     e.preventDefault()
-    song._instrDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
     uploadingSongs = { ...uploadingSongs, [song.id]: 'instr' }
 
@@ -448,9 +442,7 @@
     } catch(err) {
       alert('Error saving instrumental: ' + err.message + '\nMake sure the watcher is running.')
     } finally {
-      song._instrDrag = false
       uploadingSongs = { ...uploadingSongs, [song.id]: null }
-      songs = [...songs]
     }
   }
 
@@ -534,7 +526,6 @@
 
   async function handleStemsZipDrop(e, song) {
     e.preventDefault()
-    song._stemsDrag = false; songs = [...songs]
     const file = e.dataTransfer.files[0]; if (!file) return
     if (!file.name.toLowerCase().endsWith('.zip')) { alert('Please drop a ZIP file.'); return }
     uploadingSongs = { ...uploadingSongs, [song.id]: 'stems' }
@@ -581,9 +572,7 @@
     } catch(err) {
       alert('Error uploading stems: ' + err.message + '\nMake sure the watcher is running.')
     } finally {
-      song._stemsDrag = false
       uploadingSongs = { ...uploadingSongs, [song.id]: null }
-      songs = [...songs]
     }
   }
 
@@ -1822,18 +1811,30 @@
     if (!selectedProjectId || newSongCreating) return
     const title = newSongTitle.trim().toUpperCase()
     if (!title) return
+    console.log('[addSong] start — project:', selectedProjectId, 'title:', title)
     newSongCreating = true
     try {
+      console.log('[addSong] fetching /next-song-code...')
       const codeRes = await fetch('http://localhost:4242/next-song-code')
-      const { code } = await codeRes.json()
-      const { data } = await supabase.from('songs')
+      const codeJson = await codeRes.json()
+      if (!codeJson.ok) throw new Error('next-song-code failed: ' + codeJson.error)
+      const { code } = codeJson
+      console.log('[addSong] got code:', code, '— inserting into songs...')
+      const { data, error } = await supabase.from('songs')
         .insert({ code, title, project_id: selectedProjectId, status: 'demo', tags: [], reference_links: [], position: songs.length, work_data: {} })
         .select('id,title,code,project_id,work_data,position,key,tempo,tags,reference_links,audio_path,notes,feedback,status,release_date,spotify_url').single()
-      if (data) { songs = [...songs, data]; expandedSongId = data.id }
+      if (error) throw new Error('DB insert failed: ' + error.message)
+      console.log('[addSong] inserted:', data.id, data.code, data.title)
+      songs = [...songs, data]
+      expandedSongId = data.id
       showNewSong = false
       newSongTitle = ''
-    } catch(e) { alert('Error creating song: ' + e.message) }
-    newSongCreating = false
+    } catch(e) {
+      console.error('[addSong] error:', e)
+      alert('Error creating song: ' + e.message)
+    } finally {
+      newSongCreating = false
+    }
   }
 
   // ── Deadlines & Tasks ─────────────────────────────────────────
@@ -3264,10 +3265,11 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     <!-- Left: production audio -->
                     <div class="dual-drop-col">
                       <div class="dual-drop-label">YOUR MIX</div>
-                      <div class="stage-audio-drop dual-drop {song._prodDrag?'drag-over':''}"
-                        ondragover={e => { e.preventDefault(); song._prodDrag=true; songs=[...songs] }}
-                        ondragleave={() => { song._prodDrag=false; songs=[...songs] }}
-                        ondrop={e => handleProdDrop(e, song)}>
+                      <div class="stage-audio-drop dual-drop {dragOverSongId===song.id+'-prod'?'drag-over':''}"
+                        ondragover={e => { e.preventDefault(); dragOverSongId = song.id+'-prod' }}
+                        ondragleave={() => { dragOverSongId = null }}
+                        ondrop={e => { dragOverSongId = null; handleProdDrop(e, song) }}>
+                        {#if uploadingSongs[song.id] === 'prod'}<span class="locked-indicator">↑ uploading…</span>{/if}
                         {#if prodBlobUrls[song.id] || wd.prod_audio}
                           <span class="stage-audio-name">🎵 {wd.prod_audio || 'Loaded'}</span>
                           <span class="drop-rehint">Drop new version · <span class="drop-alt-hint">⌥+drop to overwrite</span></span>
@@ -3280,10 +3282,11 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     <!-- Right: instrumental -->
                     <div class="dual-drop-col">
                       <div class="dual-drop-label">INSTRUMENTAL</div>
-                      <div class="stage-audio-drop dual-drop {song._instrDrag?'drag-over':''}"
-                        ondragover={e => { e.preventDefault(); song._instrDrag=true; songs=[...songs] }}
-                        ondragleave={() => { song._instrDrag=false; songs=[...songs] }}
-                        ondrop={e => handleInstrumentalDrop(e, song)}>
+                      <div class="stage-audio-drop dual-drop {dragOverSongId===song.id+'-instr'?'drag-over':''}"
+                        ondragover={e => { e.preventDefault(); dragOverSongId = song.id+'-instr' }}
+                        ondragleave={() => { dragOverSongId = null }}
+                        ondrop={e => { dragOverSongId = null; handleInstrumentalDrop(e, song) }}>
+                        {#if uploadingSongs[song.id] === 'instr'}<span class="locked-indicator">↑ uploading…</span>{/if}
                         {#if instrBlobUrls[song.id] || wd.instr_audio}
                           <span class="stage-audio-name">🎵 {instrPendingName[song.id] || wd.instr_audio || 'Loaded'}</span>
                           <span class="drop-rehint">Drop to overwrite</span>
@@ -3322,10 +3325,11 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
                 <!-- Mixing audio drop zone -->
                 {#if wd.current_stage === 'mixing'}
-                  <div class="stage-audio-drop {song._mixDrag?'drag-over':''}"
-                    ondragover={e => { e.preventDefault(); song._mixDrag=true; songs=[...songs] }}
-                    ondragleave={() => { song._mixDrag=false; songs=[...songs] }}
-                    ondrop={e => handleMixDrop(e, song)}>
+                  <div class="stage-audio-drop {dragOverSongId===song.id+'-mix'?'drag-over':''}"
+                    ondragover={e => { e.preventDefault(); dragOverSongId = song.id+'-mix' }}
+                    ondragleave={() => { dragOverSongId = null }}
+                    ondrop={e => { dragOverSongId = null; handleMixDrop(e, song) }}>
+                    {#if uploadingSongs[song.id] === 'mix'}<span class="locked-indicator">↑ uploading…</span>{/if}
                     {#if mixBlobUrls[song.id] || wd.mix_audio}
                       <span class="stage-audio-name">🎵 {wd.mix_audio || 'Loaded'}</span>
                       <span class="drop-rehint">Drop new version · <span class="drop-alt-hint">⌥+drop to overwrite</span></span>
@@ -3355,10 +3359,11 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   {#if song._stemsSent}
                     <div class="sent-flash">✉ Stems link copied!</div>
                   {/if}
-                  <div class="stage-audio-drop {song._stemsDrag?'drag-over':''}"
-                    ondragover={e => { e.preventDefault(); song._stemsDrag=true; songs=[...songs] }}
-                    ondragleave={() => { song._stemsDrag=false; songs=[...songs] }}
-                    ondrop={e => handleStemsZipDrop(e, song)}>
+                  <div class="stage-audio-drop {dragOverSongId===song.id+'-stems'?'drag-over':''}"
+                    ondragover={e => { e.preventDefault(); dragOverSongId = song.id+'-stems' }}
+                    ondragleave={() => { dragOverSongId = null }}
+                    ondrop={e => { dragOverSongId = null; handleStemsZipDrop(e, song) }}>
+                    {#if uploadingSongs[song.id] === 'stems'}<span class="locked-indicator">↑ uploading…</span>{/if}
                     {#if wd.stems_zip}
                       <span class="stage-audio-name">📦 {wd.stems_zip}</span>
                       <span class="drop-rehint">Drop new ZIP to overwrite</span>
@@ -4527,6 +4532,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .drop-hint-sub { font-family: 'Space Mono', monospace; font-size: 10px; color: #252525; text-align: center; display: block; margin-top: 3px; }
   .drop-rehint { font-family: 'Space Mono', monospace; font-size: 11px; color: #333; }
   .drop-alt-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; }
+  .locked-indicator { font-family: 'Space Mono', monospace; font-size: 10px; color: #c9a84c; opacity: .7; }
   .instr-block { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding: 0 14px; }
   .instr-filename { color: #4caf82 !important; font-family: 'Space Mono', monospace; font-size: 11px; }
   .instr-player-row { padding: 4px 0; }

@@ -1734,17 +1734,26 @@
   }
 
   // ── Add song ──────────────────────────────────────────────────
+  let showNewSong = $state(false)
+  let newSongTitle = $state('')
+  let newSongCreating = $state(false)
+
   async function addSong() {
-    if (!selectedProjectId) return
-    const now = new Date()
-    const yy = String(now.getFullYear()).slice(2)
-    const mm = String(now.getMonth()+1).padStart(2,'0')
-    const dd = String(now.getDate()).padStart(2,'0')
-    const code = yy+mm+dd+String(songs.filter(s=>s.code&&s.code.startsWith(yy+mm+dd)).length+1).padStart(2,'0')
-    const { data } = await supabase.from('songs')
-      .insert({ code, project_id: selectedProjectId, status: 'demo', tags: [], reference_links: [], position: songs.length, work_data: {} })
-      .select('id,title,code,project_id,work_data,position').single()
-    if (data) { songs = [...songs, data]; expandedSongId = data.id }
+    if (!selectedProjectId || newSongCreating) return
+    const title = newSongTitle.trim().toUpperCase()
+    if (!title) return
+    newSongCreating = true
+    try {
+      const codeRes = await fetch('http://localhost:4242/next-song-code')
+      const { code } = await codeRes.json()
+      const { data } = await supabase.from('songs')
+        .insert({ code, title, project_id: selectedProjectId, status: 'demo', tags: [], reference_links: [], position: songs.length, work_data: {} })
+        .select('id,title,code,project_id,work_data,position,key,tempo,tags,reference_links,audio_path,notes,feedback,status,release_date,spotify_url').single()
+      if (data) { songs = [...songs, data]; expandedSongId = data.id }
+      showNewSong = false
+      newSongTitle = ''
+    } catch(e) { alert('Error creating song: ' + e.message) }
+    newSongCreating = false
   }
 
   // ── Deadlines & Tasks ─────────────────────────────────────────
@@ -2871,6 +2880,24 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
           </div>
         {/if}
       </div>
+
+      <!-- Songs header + new song -->
+      <div class="songs-header-row">
+        <span class="songs-section-label">SONGS</span>
+        <button class="btn-ghost-sm" onclick={() => { showNewSong = !showNewSong; newSongTitle = '' }}>+ New Song</button>
+      </div>
+      {#if showNewSong}
+        <div class="new-song-form">
+          <input class="inp-sm new-song-inp" placeholder="Title..." autofocus
+            bind:value={newSongTitle}
+            oninput={e => newSongTitle = e.target.value.toUpperCase()}
+            onkeydown={e => { if (e.key === 'Enter') addSong(); if (e.key === 'Escape') { showNewSong = false; newSongTitle = '' } }} />
+          <button class="btn-ghost-sm {newSongCreating ? 'dim' : ''}" onclick={addSong} disabled={newSongCreating}>
+            {newSongCreating ? '…' : 'Create'}
+          </button>
+          <button class="btn-ghost-sm" onclick={() => { showNewSong = false; newSongTitle = '' }}>Cancel</button>
+        </div>
+      {/if}
 
       <!-- Songs -->
       {#if !projectSongs.length}
@@ -4288,6 +4315,12 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .btn-move-demo:hover { background: rgba(74,159,212,.08); }
   .btn-delete-song { font-family: 'Space Mono', monospace; font-size: 11px; padding: 5px 12px; background: transparent; border: 1px solid rgba(224,90,74,.3); color: #e05a4a; border-radius: 3px; cursor: pointer; }
   .btn-delete-song:hover { background: rgba(224,90,74,.08); }
+
+  .songs-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .songs-section-label { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); }
+  .new-song-form { display: flex; gap: 6px; align-items: center; margin-bottom: 12px; }
+  .new-song-inp { flex: 1; }
+  .btn-ghost-sm.dim { opacity: .4; cursor: not-allowed; }
 
   /* Song cards */
   .song-card { border: 1px solid #1c1c1c; border-radius: 4px; overflow: hidden; }

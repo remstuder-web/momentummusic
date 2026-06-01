@@ -10220,6 +10220,37 @@ print(json.dumps({'files': files}))
     return
   }
 
+  // ── GET /next-song-code — highest code from DEMOS_DIR + songs table + 1 ──
+  if (req.method === 'GET' && req.url === '/next-song-code') {
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      // Scan DEMOS_DIR for highest 6-digit code
+      let maxFromFiles = 0
+      try {
+        const files = fs.readdirSync(DEMOS_DIR)
+        for (const f of files) {
+          const m = f.match(/^(\d{6})_/)
+          if (m) { const n = parseInt(m[1]); if (n > maxFromFiles) maxFromFiles = n }
+        }
+      } catch(e) {}
+      // Query songs table for highest 6-digit code
+      let maxFromDb = 0
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?select=code&code=like.2%25&order=code.desc&limit=1`, { headers: sbHeaders })
+        const rows = await r.json()
+        if (Array.isArray(rows) && rows[0]?.code && /^\d{6}$/.test(rows[0].code)) {
+          maxFromDb = parseInt(rows[0].code)
+        }
+      } catch(e) {}
+      const next = String(Math.max(maxFromFiles, maxFromDb, 260600) + 1)
+      res.end(JSON.stringify({ ok: true, code: next }))
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /generate-titles — Claude Haiku track title suggestions ────────
   if (req.method === 'POST' && req.url === '/generate-titles') {
     const chunks = []; req.on('data', c => chunks.push(c))

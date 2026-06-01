@@ -749,8 +749,19 @@
   let filteredSongs = $derived((() => {
     let list = songs
     if (tagSearch.trim()) {
-      const q = tagSearch.toLowerCase()
-      list = list.filter(s => (s.tags||[]).some(t => t.toLowerCase().includes(q)))
+      // Split on spaces/commas — each term must match (AND logic)
+      const terms = tagSearch.trim().toLowerCase().split(/[\s,]+/).filter(Boolean)
+      list = list.filter(s => terms.every(term => {
+        // Match against tags
+        if ((s.tags||[]).some(t => t.toLowerCase().includes(term))) return true
+        // Match against tempo: "94", "94bpm", "bpm94"
+        if (s.tempo) {
+          const bpmStr = String(s.tempo)
+          if (bpmStr.includes(term.replace(/bpm/i, ''))) return true
+          if (term.replace(/bpm/i, '') === bpmStr) return true
+        }
+        return false
+      }))
     }
     if (headerGenre) {
       list = list.filter(s => (s.tags||[]).includes(headerGenre))
@@ -834,7 +845,7 @@
         </div>
       {/if}
     </div>
-    <input class="tag-search-inp" bind:value={tagSearch} placeholder="Search tags..." />
+    <input class="tag-search-inp" bind:value={tagSearch} placeholder="tag1 tag2 94bpm..." />
     <div
       class="new-demo-dropzone {newDemoDragging ? 'drag-over' : ''}"
       ondragover={e => { e.preventDefault(); newDemoDragging = true }}

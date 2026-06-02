@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] +page.svelte + DemoTab.svelte + routes/sono/+page.svelte — DONE
+TASK: Rename DEMO tab, SONO filter button, SONO public page
+WHAT: (1) Tab renamed DEMO→DEMOS in +page.svelte. (2) SONO button added to DemoTab header — gold active state, stacks with DISCO filters via sonoMode state in filteredSongs derived. (3) New standalone route /sono: password gate (PUBLIC_SONO_PASSWORD env var, default sono2026, stored in localStorage sono_auth), shows only work_data.at_artist='sono' demos, read-only card list with audio player + DISCO tags, no navigation to main app. PUBLIC_SONO_PASSWORD=sono2026 added to .env.
+RESULT: builds clean
+BLOCKERS: Add PUBLIC_SONO_PASSWORD=sono2026 to Vercel env vars before deploying
+
 ## [2026-06-02] src/lib/DemoTab.svelte — DONE
 TASK: DISCO-style filter panel for Demos tab
 WHAT: Replaced old tag-filter dropdown with full DISCO filter panel. Toggle button "⊞ Filter" with active indicator (●). Panel slides in/out via svelte/transition slide. 7 DISCO tag category pill grids (tempo single-select, rest multi-select), dual-handle BPM range slider (60-200), custom tag text search, live result count, Clear All button. filteredSongs derived rewired to use all new filter state. Old selectedTags/showTagDropdown/allTagsInSystem removed.

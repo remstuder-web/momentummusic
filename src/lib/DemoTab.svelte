@@ -100,6 +100,7 @@
 
   let newDemoDragging = $state(false)
   let showFilterPanel = $state(false)
+  let sonoMode = $state(false)
 
   const DISCO_FILTER = {
     tempo:         ['Downtempo','Midtempo','Uptempo','Fast','Slow'],
@@ -837,6 +838,7 @@
   let showContactPicker = $state({})
   let filteredSongs = $derived((() => {
     return songs.filter(s => {
+      if (sonoMode && (s.work_data?.at_artist || '').toLowerCase() !== 'sono') return false
       const dt = s.work_data?.disco_tags || {}
       if (fTempo.size      && !(dt.tempo         ||[]).some(t => fTempo.has(t)))      return false
       if (fMood.size       && !(dt.mood          ||[]).some(t => fMood.has(t)))       return false
@@ -1143,6 +1145,10 @@
     <button class="filter-toggle-btn {hasActiveFilter ? 'active' : ''} {showFilterPanel ? 'open' : ''}"
       onclick={() => showFilterPanel = !showFilterPanel}>
       ⊞ Filter{hasActiveFilter ? ' ●' : ''}
+    </button>
+    <button class="sono-btn {sonoMode ? 'on' : ''}" onclick={() => sonoMode = !sonoMode}
+      title="Show only SONO tracks">
+      SONO{sonoMode ? ' ✕' : ''}
     </button>
     <div
       class="new-demo-dropzone {newDemoDragging ? 'drag-over' : ''}"
@@ -1866,6 +1872,9 @@
   .fp-count { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
   .fp-clear-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 4px 12px; background: transparent; border: 1px solid rgba(201,168,76,.35); color: rgba(201,168,76,.8); border-radius: 2px; cursor: pointer; letter-spacing: .06em; }
   .fp-clear-btn:hover { background: rgba(201,168,76,.08); border-color: rgba(201,168,76,.6); color: #c9a84c; }
+  .sono-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 5px 12px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 3px; cursor: pointer; flex-shrink: 0; transition: all .15s; letter-spacing: .08em; }
+  .sono-btn:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
+  .sono-btn.on { background: #c9a84c; border-color: #c9a84c; color: #0a0a0a; }
   .genre-opt.sel { color: #c9a84c; background: rgba(201,168,76,.06); }
   .s-picker-above { position: absolute; bottom: calc(100% + 6px); right: 0; background: #1c1c1c; border: 1px solid #303030; border-radius: 4px; min-width: 240px; z-index: 99; overflow: hidden; box-shadow: 0 -4px 20px rgba(0,0,0,.5); }
   .s-pick-list { max-height: 220px; overflow-y: auto; }

@@ -137,7 +137,7 @@
 
   const tabs = [
     { id: 'daily',       label: 'DAILY' },
-    { id: 'demo',        label: 'DEMO' },
+    { id: 'demo',        label: 'DEMOS' },
     { id: 'submissions', label: 'SUBMISSIONS' },
     { id: 'projects',    label: 'PROJECTS' },
     { id: 'connections', label: 'CONNECTIONS' },

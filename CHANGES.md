@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-02] src/routes/sono/+page.svelte + src/lib/DemoTab.svelte — DONE
+TASK: SONO page filter panel + submission sidebar; SubmissionsTab SONO packs section
+WHAT: (1) SONO page completely rewritten — two-column layout (main + 260px sidebar); full DISCO filter panel (tempo/mood/genre/vocals/lyrical_theme/instrument/type pills + BPM dual-range + custom tag search + clear all + live count); (2) Submission sidebar — SONO SUBMISSIONS header, "+ New Pack" creates patches row with artist='SONO', each open pack shows song list with × removal + archive button; song card headers show "→ Pack Name" chips when in packs, "+" button opens pack picker dropdown per card; (3) DemoTab SubmissionsTab view: SONO PACKS divider + read-only cards at bottom for patches where artist='SONO'.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] src/routes/sono/+page.svelte + src/lib/DemoTab.svelte — DONE
 TASK: SONO page UX polish + DemoTab SONO filter
 WHAT: (1) Download ↓ button moved out of player-slot to sibling after it — now on same line as player with stopPropagation. (2) BPM and KEY merged into one pill: "94 BPM · Dm". (3) TYPE dropdown removed from expanded card body. (4) DemoTab filteredSongs: by default excludes SONO tracks (isSono → return false); when sonoMode=true shows only SONO tracks.
 RESULT: builds clean

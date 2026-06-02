@@ -1674,6 +1674,42 @@
   {/if}
 {/if}
 
+<!-- ── SONO PACKS section (submissions view only) ────────────────────── -->
+{#if view === 'patches'}
+  {@const sonoPacks = patches.filter(p => (p.artist||'').toLowerCase() === 'sono' && p.status !== 'deleted')}
+  {#if sonoPacks.length}
+    <div class="sono-packs-section">
+      <div class="sono-packs-divider">
+        <span class="sono-packs-label">SONO PACKS</span>
+      </div>
+      <div class="list">
+        {#each sonoPacks as pack}
+          <div class="patch-card">
+            <div class="patch-head" style="cursor:default">
+              <div class="patch-info">
+                <span class="patch-head-code">{pack.name}</span>
+              </div>
+              <span class="patch-count">{pack.songs.length} songs</span>
+              <span class="patch-status {pack.status}">{pack.status.toUpperCase()}</span>
+            </div>
+            {#if pack.songs.length}
+              <div class="patch-body" style="padding:10px 16px;gap:4px">
+                {#each pack.songs as song}
+                  <div class="patch-song-row">
+                    <span class="song-code-in-list">{song.code}</span>
+                    <span class="sep-dot">·</span>
+                    <span class="song-title">{song.title || song.code}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
+{/if}
+
 </div><!-- end demo-main -->
 
 <!-- Right panel: Mozart -->
@@ -1877,6 +1913,10 @@
   .sono-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 5px 12px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 3px; cursor: pointer; flex-shrink: 0; transition: all .15s; letter-spacing: .08em; }
   .sono-btn:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .sono-btn.on { background: #c9a84c; border-color: #c9a84c; color: #0a0a0a; }
+  .sono-packs-section { margin-top: 24px; }
+  .sono-packs-divider { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .sono-packs-divider::before, .sono-packs-divider::after { content: ''; flex: 1; height: 1px; background: #1c1c1c; }
+  .sono-packs-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.45); white-space: nowrap; }
   .genre-opt.sel { color: #c9a84c; background: rgba(201,168,76,.06); }
   .s-picker-above { position: absolute; bottom: calc(100% + 6px); right: 0; background: #1c1c1c; border: 1px solid #303030; border-radius: 4px; min-width: 240px; z-index: 99; overflow: hidden; box-shadow: 0 -4px 20px rgba(0,0,0,.5); }
   .s-pick-list { max-height: 220px; overflow-y: auto; }

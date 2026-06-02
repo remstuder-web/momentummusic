@@ -173,6 +173,7 @@ async function getValidAccessToken() {
 
 const WATCH_DIR       = path.join(process.env.HOME, 'Downloads')
 const DEMOS_DIR       = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Demos')
+const SONO_DIR        = path.join(DEMOS_DIR, '!SONO')
 const SUBMISSIONS_DIR = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Submissions')
 const PRODUCTION_DIR  = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Production')
 const INSTRUMENTALS_DIR = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Production', '-Instrumentals')
@@ -1888,9 +1889,33 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)) }
 function syncDemoArchive(filename, type, at_artist) {
   const demoPath    = path.join(DEMOS_DIR, filename)
   const archivePath = path.join(ARCHIVE_29TH, filename)
+  const sonoPath    = path.join(SONO_DIR, filename)
   const inArchive   = fs.existsSync(archivePath)
-  const shouldBeInArchive = (type || 'SONG') === 'SAMPLE' && !at_artist
+  const isSono      = at_artist && at_artist.toLowerCase() === 'sono'
+  const isInSono    = fs.existsSync(sonoPath)
 
+  // ── SONO routing ──
+  if (isSono) {
+    if (!fs.existsSync(SONO_DIR)) fs.mkdirSync(SONO_DIR, { recursive: true })
+    if (fs.existsSync(demoPath)) {
+      fs.renameSync(demoPath, sonoPath)
+      console.log(`sync-demo-archive: ${filename} → moved to !SONO`)
+    }
+    if (inArchive) {
+      fs.unlinkSync(archivePath)
+      console.log(`sync-demo-archive: ${filename} → removed from archive (SONO)`)
+    }
+    return { action: 'moved_to_sono' }
+  }
+
+  // ── Moving back from SONO (at_artist was cleared/changed) ──
+  if (isInSono) {
+    fs.renameSync(sonoPath, demoPath)
+    console.log(`sync-demo-archive: ${filename} → moved back from !SONO to Demos`)
+  }
+
+  // ── Normal archive logic ──
+  const shouldBeInArchive = (type || 'SONG') === 'SAMPLE' && !at_artist
   let result
   if (shouldBeInArchive && !inArchive) {
     if (!fs.existsSync(demoPath)) {
@@ -1905,7 +1930,7 @@ function syncDemoArchive(filename, type, at_artist) {
     fs.unlinkSync(archivePath)
     result = { action: 'deleted_from_archive' }
   } else {
-    result = { action: 'no_change' }
+    result = { action: isInSono ? 'moved_back_from_sono' : 'no_change' }
   }
 
   console.log(`sync-demo-archive: ${filename} | type=${type || 'SONG'} at=${at_artist || '(none)'} shouldArchive=${shouldBeInArchive} inArchive=${inArchive} → ${result.action}${result.reason ? ' ('+result.reason+')' : ''}`)
@@ -9010,7 +9035,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
   if (req.method === 'GET' && req.url.startsWith('/audio-compat/')) {
     const filename = decodeURIComponent(req.url.slice('/audio-compat/'.length))
     if (filename.includes('..') || filename.includes('/')) { res.writeHead(400); res.end(); return }
-    const audioDirs = [DEMOS_DIR, PRODUCTION_DIR, MIXING_DIR, INSTRUMENTALS_DIR]
+    const audioDirs = [DEMOS_DIR, SONO_DIR, PRODUCTION_DIR, MIXING_DIR, INSTRUMENTALS_DIR]
     let filepath = null
     for (const dir of audioDirs) {
       const c = path.join(dir, filename)
@@ -9065,6 +9090,10 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       const mp3Filename = filename.replace(/\.wav$/i, '.mp3')
       const mp3Filepath = path.join(routePrefixes[matchedPrefix], mp3Filename)
       if (fs.existsSync(mp3Filepath)) { filename = mp3Filename; filepath = mp3Filepath }
+    }
+    if (!fs.existsSync(filepath) && matchedPrefix === '/audio/') {
+      const sonoFilePath = path.join(SONO_DIR, filename)
+      if (fs.existsSync(sonoFilePath)) filepath = sonoFilePath
     }
     if (!fs.existsSync(filepath)) { res.writeHead(404); res.end('not found'); return }
     const stat  = fs.statSync(filepath)

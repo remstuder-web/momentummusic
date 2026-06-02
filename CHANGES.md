@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-02] momentum-watcher.cjs — DONE
+TASK: SONO artist routing for demo files
+WHAT: Added SONO_DIR = DEMOS_DIR/!SONO. syncDemoArchive: if at_artist='sono' (case-insensitive) → rename file from Demos to Demos/!SONO, delete from archive if present; if file was in SONO but at_artist cleared/changed → rename back to Demos, then run normal archive logic. Audio serving: /audio/ route now falls back to SONO_DIR if file not found in DEMOS_DIR. audio-compat dir list includes SONO_DIR. audio_path in DB stays as plain filename (no path prefix needed).
+RESULT: watcher ping OK
+BLOCKERS: none
+
+## [2026-06-02] momentum-watcher.cjs — DONE
 TASK: DISCO lyrical theme optional + clear custom tags endpoint
 WHAT: (1) Both /auto-tag-disco and /auto-tag-all-demos prompts: lyrical theme rule updated — "assign 1-3 IF you can reasonably infer them; return [] if no clear signal; never guess randomly — empty is better than wrong." DemoTab already skips empty categories so no template change needed. (2) POST /clear-all-custom-tags — sets tags=[] on all demo songs (project_id IS NULL), returns {ok, cleared}
 RESULT: watcher ping OK

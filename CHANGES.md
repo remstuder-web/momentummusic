@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-02] momentum-watcher.cjs + src/lib/DemoTab.svelte — DONE
+TASK: DISCO tags — lyrical theme, custom tag style, auto-tag all demos
+WHAT: (1) Custom tags now match disco-chip style (same border/padding/font/color), compact 110px input; (2) LYRICAL THEME added to DISCO categories — prompt updated with audio→theme inference rules, UI shows in correct DISCO order (tempo/mood/genre/vocals/lyrical_theme/instrument/type); (3) POST /auto-tag-all-demos bulk endpoint — tags all demos with Essentia analysis, 500ms rate limit, returns immediately with started:true; (4) Removed dead genre dropdown code (genreSearch, showGenrePicker, loadAvailableGenres, GENRE_LIST import)
+RESULT: builds clean, watcher ping OK
+BLOCKERS: none
+
+## [2026-06-02] momentum-watcher.cjs + src/lib/DemoTab.svelte — DONE
 TASK: DISCO tag system full implementation
 WHAT: Added POST /auto-tag-disco endpoint (Claude Haiku auto-assigns DISCO industry tags from Essentia analysis); DISCO_TAGS const at module scope; DemoTab: removed genre dropdown from TAGS, added TAGS DISCO section with category labels + × removal + Re-tag button; auto-runs after audio drop and Re-analyze; Mozart brain_knowledge save on tag add/remove
 RESULT: builds clean, watcher running (ping OK)

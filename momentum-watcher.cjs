@@ -13355,6 +13355,106 @@ ${formatted}`
     return
   }
 
+  // ── POST /auto-tag-all-demos — bulk DISCO tag all existing demos ─────────────
+  if (req.method === 'POST' && req.url === '/auto-tag-all-demos') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    req.on('data', () => {})
+    req.on('end', async () => {
+      try {
+        const apiKey = process.env.ANTHROPIC_API_KEY
+        if (!apiKey) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: 'No ANTHROPIC_API_KEY' })); return }
+
+        const { data: songs } = await supabase.from('songs').select('id, title, code, work_data').is('project_id', null)
+        if (!songs?.length) { res.writeHead(200); res.end(JSON.stringify({ ok: true, tagged: 0, skipped: 0 })); return }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, started: true, total: songs.length, message: `Auto-tagging ${songs.length} demos in background...` }))
+
+        let tagged = 0, skipped = 0
+        for (const song of songs) {
+          const a = song.work_data?.analysis || {}
+          const hasBpm = a.bpm || a.tempo
+          if (!hasBpm) {
+            console.log(`[auto-tag-all-demos] No analysis for: ${song.title || song.code}`)
+            skipped++
+            continue
+          }
+
+          try {
+            const prompt = `You are a music tagging expert using the DISCO industry standard.
+Based on this audio analysis, assign tags from EACH category:
+
+BPM: ${a.bpm || a.tempo || '?'}
+Key: ${a.key || '?'}
+Energy: ${a.energy ?? '?'} (0-1)
+Brightness: ${a.brightness ?? '?'} (0-1)
+Bass energy: ${a.bass_energy ?? '?'} (0-1)
+Danceability: ${a.danceability ?? '?'} (0-1)
+Warmth: ${a.warmth ?? '?'} (0-1)
+
+Available tags by category:
+TEMPO: ${DISCO_TAGS.tempo.join(', ')}
+MOOD: ${DISCO_TAGS.mood.join(', ')}
+GENRE: ${DISCO_TAGS.genre.join(', ')}
+VOCALS: ${DISCO_TAGS.vocals.join(', ')}
+LYRICAL THEME: ${DISCO_TAGS.lyrical_theme.join(', ')}
+INSTRUMENT: ${DISCO_TAGS.instrument.join(', ')}
+TYPE: ${DISCO_TAGS.type.join(', ')}
+
+Rules:
+- Assign 1-2 tags from TEMPO based on BPM
+- Assign 3-5 tags from MOOD based on energy/brightness/warmth
+- Assign 1-3 tags from GENRE based on overall sound profile
+- For VOCALS: only assign Instrumental if no vocals detected
+- For INSTRUMENT: assign based on detected tonal characteristics
+- For TYPE: default to Demo unless clearly otherwise
+- Assign 1-3 LYRICAL THEME tags inferred from audio characteristics
+- Only use tags from the lists above, exactly as written
+
+Return ONLY valid JSON:
+{"tempo":[],"mood":[],"genre":[],"vocals":[],"lyrical_theme":[],"instrument":[],"type":[]}`
+
+            const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+              body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
+            })
+            const aiData = await aiRes.json()
+            const raw = aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}'
+            let disco_tags
+            try { disco_tags = JSON.parse(raw) } catch(e) { skipped++; continue }
+
+            for (const cat of ['tempo','mood','genre','vocals','lyrical_theme','instrument','type']) {
+              disco_tags[cat] = Array.isArray(disco_tags[cat]) ? disco_tags[cat].filter(t => DISCO_TAGS[cat].includes(t)) : []
+            }
+
+            const work_data = { ...(song.work_data || {}), disco_tags }
+            await supabase.from('songs').update({ work_data }).eq('id', song.id)
+            tagged++
+            console.log(`[auto-tag-all-demos] ${tagged} tagged: ${song.title || song.code}`)
+
+            if (aiData.usage) {
+              fetch(`http://127.0.0.1:${PORT}/track-cost`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ endpoint: '/auto-tag-all-demos', model: 'claude-haiku-4-5-20251001', input_tokens: aiData.usage.input_tokens, output_tokens: aiData.usage.output_tokens, cost_usd: (aiData.usage.input_tokens * 0.0000008) + (aiData.usage.output_tokens * 0.000001) })
+              }).catch(() => {})
+            }
+
+            await new Promise(r => setTimeout(r, 500))
+          } catch(e) {
+            console.warn(`[auto-tag-all-demos] Error on ${song.code}:`, e.message)
+            skipped++
+          }
+        }
+
+        console.log(`[auto-tag-all-demos] Done — tagged:${tagged} skipped:${skipped}`)
+      } catch(e) {
+        console.warn('auto-tag-all-demos error:', e.message)
+      }
+    })
+    return
+  }
+
   // ── POST /auto-tag-disco — assign DISCO industry tags via Claude Haiku ──────
   if (req.method === 'POST' && req.url === '/auto-tag-disco') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -13384,6 +13484,7 @@ TEMPO: ${DISCO_TAGS.tempo.join(', ')}
 MOOD: ${DISCO_TAGS.mood.join(', ')}
 GENRE: ${DISCO_TAGS.genre.join(', ')}
 VOCALS: ${DISCO_TAGS.vocals.join(', ')}
+LYRICAL THEME: ${DISCO_TAGS.lyrical_theme.join(', ')}
 INSTRUMENT: ${DISCO_TAGS.instrument.join(', ')}
 TYPE: ${DISCO_TAGS.type.join(', ')}
 
@@ -13394,11 +13495,16 @@ Rules:
 - For VOCALS: only assign Instrumental if no vocals detected
 - For INSTRUMENT: assign based on detected tonal characteristics
 - For TYPE: default to Demo unless clearly otherwise
-- Skip LYRICAL THEME — cannot determine from audio analysis alone
+- Assign 1-3 LYRICAL THEME tags inferred from audio characteristics:
+  Dark key + low energy + high warmth → Loss, Longing, Nostalgia, Romance
+  Minor key + high energy → Rebellion, Struggle, Conflict, Power
+  Major key + high danceability → Celebration, Freedom, Empowerment, Party
+  Slow + warm + low brightness → Love, Nostalgia, Romance, Longing
+  High brightness + high energy → Empowerment, Confidence, Success
 - Only use tags from the lists above, exactly as written
 
 Return ONLY valid JSON:
-{"tempo":[],"mood":[],"genre":[],"vocals":[],"instrument":[],"type":[]}`
+{"tempo":[],"mood":[],"genre":[],"vocals":[],"lyrical_theme":[],"instrument":[],"type":[]}`
 
         const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -13410,7 +13516,7 @@ Return ONLY valid JSON:
         let disco_tags
         try { disco_tags = JSON.parse(raw) } catch(e) { throw new Error('JSON parse failed: ' + raw.slice(0, 100)) }
 
-        for (const cat of ['tempo','mood','genre','vocals','instrument','type']) {
+        for (const cat of ['tempo','mood','genre','vocals','lyrical_theme','instrument','type']) {
           if (Array.isArray(disco_tags[cat])) {
             disco_tags[cat] = disco_tags[cat].filter(t => DISCO_TAGS[cat].includes(t))
           } else {

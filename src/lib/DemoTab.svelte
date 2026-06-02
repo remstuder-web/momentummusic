@@ -37,7 +37,6 @@
 <script>
   import { supabase } from './supabase.js'
   import { onMount, onDestroy } from 'svelte'
-  import { GENRE_LIST } from '$lib/genres.js'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
 
   let { initialView = 'demos' } = $props()
@@ -74,9 +73,6 @@
   }
   let tagInput = $state({})
   let refInput = $state({})
-  let genreSearch = $state({})   // song.id → search string in genre picker
-  let showGenrePicker = $state({}) // song.id → boolean
-  let availableGenres = $state(GENRE_LIST.filter(g => g.type === 'sub').map(g => g.tag))
 
   let audioTick = $state(0) // incremented after audio drop — triggers src refresh in player
   let sharedPlayer = null
@@ -133,20 +129,7 @@
     }
   }
 
-  async function loadAvailableGenres() {
-    try {
-      const { data } = await supabase.from('reference_tracks').select('genre_tag, genres')
-      const genreSet = new Set(GENRE_LIST.filter(g => g.type === 'sub').map(g => g.tag))
-      for (const r of (data || [])) {
-        if (r.genre_tag) genreSet.add(r.genre_tag.toLowerCase())
-        if (Array.isArray(r.genres)) r.genres.forEach(g => g && genreSet.add(g.toLowerCase()))
-      }
-      availableGenres = [...genreSet].sort()
-    } catch(e) {}
-  }
-
   async function load() {
-    loadAvailableGenres()
     const [songsRes, patchesRes, connectionsRes, projSongsRes] = await Promise.all([
       supabase.from('songs').select('*').is('project_id', null).order('created_at', { ascending: false }),      supabase.from('patches').select('*, patch_songs(song_id)').order('created_at', { ascending: false }),
       supabase.from('connections').select('id, name, folder_link, sent_history, group_type, group_types').order('name'),
@@ -941,7 +924,7 @@
 
   // ── DISCO tag helpers ────────────────────────────────────────────────────
 
-  const DISCO_CATEGORIES = ['tempo','mood','genre','vocals','instrument','type']
+  const DISCO_CATEGORIES = ['tempo','mood','genre','vocals','lyrical_theme','instrument','type']
 
   function getDiscoTags(song) {
     return song.work_data?.disco_tags || {}
@@ -1091,7 +1074,7 @@
   onDestroy(() => clearInterval(pollInterval))
 </script>
 
-<svelte:window onclick={() => { if (Object.values(showGenrePicker).some(Boolean)) showGenrePicker = {}; if (showTagDropdown) showTagDropdown = false }} />
+<svelte:window onclick={() => { if (showTagDropdown) showTagDropdown = false }} />
 <div class="demo-layout">
 <div class="demo-main">
 
@@ -1334,16 +1317,12 @@
               <div class="field">
                 <label>TAGS</label>
                 <div class="tags-input-row" onclick={e => e.stopPropagation()}>
-                  <!-- Custom tag input only -->
-                  <div style="flex:0 0 130px">
-                    <input class="inp-sm" placeholder="Custom tag..." value={tagInput[song.id]||''}
-                      oninput={e => tagInput = {...tagInput, [song.id]: e.target.value}}
-                      onkeydown={e => e.key === 'Enter' && addTag(song)} />
-                  </div>
-                  <!-- Tags on same line -->
+                  <input class="tag-inp-compact" placeholder="+ tag..." value={tagInput[song.id]||''}
+                    oninput={e => tagInput = {...tagInput, [song.id]: e.target.value}}
+                    onkeydown={e => e.key === 'Enter' && addTag(song)} />
                   <div class="tags-inline">
                     {#each (song.tags || []) as tag}
-                      <span class="tag">{tag}<button class="tag-del" onclick={() => removeTag(song, tag)}>×</button></span>
+                      <span class="tag"><span class="disco-chip-tag">{tag}</span><button class="tag-del" onclick={() => removeTag(song, tag)}>×</button></span>
                     {/each}
                   </div>
                   <button class="btn-ghost-sm {song._generating ? 'dim' : ''}" style="margin-left:auto;flex-shrink:0" onclick={() => generateTags(song)}>
@@ -1806,10 +1785,13 @@
   .genre-opt:last-child { border-bottom: none; }
   .genre-opt:hover { background: #252525; color: #c9a84c; }
   .genre-header-label { font-weight: 700; color: rgba(201,168,76,.75); font-size: 9px; letter-spacing: .1em; padding: 5px 10px 2px; pointer-events: none; cursor: default; background: transparent; border: none; }
-  .tag { font-family: 'Space Mono', monospace; font-size: 11px; padding: 3px 8px; border-radius: 2px; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.3); color: #c9a84c; display: flex; align-items: center; gap: 4px; }
-  .tag-del { background: none; border: none; color: inherit; cursor: pointer; padding: 0; font-size: 14px; opacity: .6; }
+  .tag { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px 2px 8px; background: rgba(201,168,76,.05); border: 1px solid rgba(201,168,76,.2); border-radius: 2px; }
+  .tag-del { background: none; border: none; color: #9e9690; cursor: pointer; padding: 0; font-size: 13px; opacity: .6; line-height: 1; }
   .tag-del:hover { opacity: 1; }
   .tag-inp { background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 3px 8px; outline: none; border-radius: 3px; width: 120px; }
+  .tag-inp-compact { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 2px 8px; outline: none; border-radius: 2px; width: 110px; flex-shrink: 0; }
+  .tag-inp-compact:focus { border-color: rgba(201,168,76,.4); }
+  .tag-inp-compact::placeholder { color: #333; }
   .refs-wrap { display: flex; flex-direction: column; gap: 6px; }
   .refs-inline { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
   .ref-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; }
@@ -1987,7 +1969,7 @@
   .disco-label-row { display: flex; align-items: center; justify-content: space-between; }
   .disco-tags-wrap { display: flex; flex-direction: column; gap: 5px; }
   .disco-cat-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
-  .disco-cat-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.55); flex-shrink: 0; width: 72px; }
+  .disco-cat-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.55); flex-shrink: 0; width: 90px; }
   .disco-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px 2px 8px; background: rgba(201,168,76,.05); border: 1px solid rgba(201,168,76,.2); border-radius: 2px; }
   .disco-chip-tag { font-family: 'Space Mono', monospace; font-size: 10px; color: #cec9c1; }
   .disco-empty { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; }

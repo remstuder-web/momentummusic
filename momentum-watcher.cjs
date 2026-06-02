@@ -14787,7 +14787,11 @@ server.listen(PORT, '127.0.0.1', () => {
     } catch(e) { console.error('✗ Demo orphan cleanup error:', e.message) }
   })()
 
-  chokidar.watch(DEMOS_DIR, { ignoreInitial: true, persistent: true, awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 500 } })
+  chokidar.watch(DEMOS_DIR, {
+    ignoreInitial: true, persistent: true,
+    ignored: [path.join(SONO_DIR, '**'), /(^|[/\\])\../],
+    awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 500 }
+  })
     .on('add', async filePath => {
       const filename = path.basename(filePath)
       const ext = path.extname(filename).toLowerCase()
@@ -14965,6 +14969,12 @@ server.listen(PORT, '127.0.0.1', () => {
       const filename = path.basename(filePath)
       console.log('DEMO DELETED:', filename)
       if (!DEMO_WATCH_EXTS.has(path.extname(filename).toLowerCase())) return
+      // Skip delete if file was just moved to !SONO (rename fires unlink on old path)
+      const sonoPath = path.join(SONO_DIR, filename)
+      if (fs.existsSync(sonoPath)) {
+        console.log('⏭ Skipping delete — file moved to !SONO:', filename)
+        return
+      }
       try {
         const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?audio_path=eq.${encodeURIComponent(filename)}&project_id=is.null&select=id,title,code&limit=1`, { headers: sbHeaders })
         const rows = await r.json()

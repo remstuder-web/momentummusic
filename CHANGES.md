@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] momentum-watcher.cjs — DONE
+TASK: Fix SONO chokidar false-positive unlink + add events
+WHAT: (1) chokidar.watch(DEMOS_DIR) now ignores path.join(SONO_DIR,'**') and dotfiles — files landing in !SONO never trigger new-demo logic. (2) unlink handler checks fs.existsSync(SONO_DIR/filename) before deleting from Supabase — if file moved there, logs skip and returns early.
+RESULT: watcher ping OK
+BLOCKERS: none
+
 ## [2026-06-02] src/lib/DemoTab.svelte — DONE
 TASK: Fix sync-demo-archive double-fire on card close
 WHAT: Root cause — browser fires onblur on @artist input when card collapses (DOM removes the focused element), even with no value change. Fix: added early return `if (trimmed === (song.work_data?.at_artist || '')) return` in updateAtArtist. Same guard added to updateDemoType. No reactive statements ($effect/$:) were involved — event wiring was already correct.

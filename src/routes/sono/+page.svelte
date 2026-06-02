@@ -37,7 +37,10 @@
     songs = (data || [])
       .filter(s => (s.work_data?.at_artist || '').toLowerCase() === 'sono')
       .sort((a, b) => parseInt(b.code) - parseInt(a.code))
-    songs.forEach(s => console.log('disco_tags:', s.code, s.work_data?.disco_tags))
+    songs.forEach(s => {
+      console.log('disco_tags:', s.code, s.work_data?.disco_tags)
+      console.log('download url:', s.code, s.work_data?.dropbox_download_url)
+    })
     loading = false
     startPolling()
   }

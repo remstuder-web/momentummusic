@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] momentum-watcher.cjs + src/routes/sono/+page.svelte — DONE
+TASK: Fix MOONZ disappearing: orphan cleanup + restore improvements
+WHAT: ROOT CAUSE was the startup orphan cleanup (not the unlink handler) — it built dirFiles only from DEMOS_DIR, so SONO_DIR files appeared as orphans and were deleted. Fix: added `fs.readdirSync(SONO_DIR).forEach(f => dirFiles.add(f))` to include SONO files in the valid-file set. Also fixed restoreMissingSonoTracks to: (1) use neutral 0.5 values for unknown Essentia fields so Haiku returns valid JSON instead of prose; (2) fire generateDemoDropboxLink after restore. Download button code was already correct — it was missing only because MOONZ lacked dropbox_download_url (now fixed). Added console.log for download_url debug in SONO page loadSongs. MOONZ (id=239) now has disco_tags + dropbox link.
+RESULT: watcher running, orphan fix confirmed, MOONZ stable
+BLOCKERS: none
+
 ## [2026-06-02] momentum-watcher.cjs — DONE
 TASK: Startup: restore missing SONO tracks + auto-generate Dropbox links
 WHAT: Added two startup functions (called after 5s delay inside server.listen): restoreMissingSonoTracks() scans !SONO folder, inserts any missing rows with project_id=null, status=demo, at_artist=SONO; ensureAllDemoDropboxLinks() fetches all demo songs missing dropbox_stream_url and generates them at 800ms intervals. Both run on every watcher startup. MOONZ (26034_MOONZ_94bpm.wav) was restored on first startup (id=238, confirmed correct). Confirmed "✓ All demos have Dropbox links" on startup.

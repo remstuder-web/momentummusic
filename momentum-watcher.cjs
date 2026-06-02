@@ -14841,6 +14841,8 @@ server.listen(PORT, '127.0.0.1', () => {
   ;(async () => {
     try {
       const dirFiles = new Set(fs.readdirSync(DEMOS_DIR))
+      // Also include files in SONO subfolder — they are valid and should not be orphaned
+      if (fs.existsSync(SONO_DIR)) fs.readdirSync(SONO_DIR).forEach(f => dirFiles.add(f))
       const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?project_id=is.null&audio_path=not.is.null&select=id,audio_path,title,code`, { headers: sbHeaders })
       const rows = await r.json()
       if (!Array.isArray(rows)) return
@@ -15298,10 +15300,11 @@ Max 150 words. Be specific and actionable.` }]
       if (!fs.existsSync(SONO_DIR)) return
       const sonoFiles = fs.readdirSync(SONO_DIR).filter(f => /^\d{5,6}/.test(f) && DEMO_WATCH_EXTS.has(path.extname(f).toLowerCase()))
       for (const filename of sonoFiles) {
-        const { data } = await supabase.from('songs').select('id').eq('audio_path', filename).maybeSingle()
-        if (!data) {
+        const { data: existing } = await supabase.from('songs').select('id, work_data').eq('audio_path', filename).maybeSingle()
+        if (!existing) {
           const parsed = parseDemoFilename(filename)
-          const { error } = await supabase.from('songs').insert({
+          // No existing row — insert with base work_data (at_artist preserved from filename/folder context)
+          const { data: inserted, error } = await supabase.from('songs').insert({
             code:       parsed.code || filename.split('_')[0] || '00000',
             title:      parsed.title || filename.replace(/\.[^.]+$/, ''),
             tempo:      parsed.bpm || null,
@@ -15311,9 +15314,20 @@ Max 150 words. Be specific and actionable.` }]
             tags:       [],
             reference_links: [],
             work_data:  { auto_detected: true, at_artist: 'SONO', demo_type: 'SONG' }
-          })
-          if (!error) console.log(`✓ Restored missing SONO track: ${filename}`)
-          else console.warn(`⚠ Restore failed for ${filename}:`, error.message)
+          }).select('id').single()
+          if (!error && inserted?.id) {
+            console.log(`✓ Restored missing SONO track: ${filename} (id ${inserted.id})`)
+            // Generate Dropbox link + auto-tag DISCO in background
+            generateDemoDropboxLink(filename, inserted.id).catch(() => {})
+            // Use neutral values for unknown fields so Haiku returns valid JSON
+            const essentia = { bpm: parsed.bpm || null, key: null, energy: 0.5, brightness: 0.5, bass_energy: 0.5, danceability: 0.5, warmth: 0.5 }
+            fetch(`http://127.0.0.1:${PORT}/auto-tag-disco`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ song_id: inserted.id, essentia_analysis: essentia })
+            }).catch(() => {})
+          } else if (error) {
+            console.warn(`⚠ Restore failed for ${filename}:`, error.message)
+          }
         }
       }
     } catch(e) { console.warn('restoreMissingSonoTracks error:', e.message) }

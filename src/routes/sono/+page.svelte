@@ -125,9 +125,10 @@
     packs = [...packs]
   }
 
-  async function archivePack(pack) {
-    await supabase.from('patches').update({ status: 'archived' }).eq('id', pack.id)
-    pack.status = 'archived'; packs = [...packs]
+  async function deletePack(pack) {
+    if (!confirm(`Delete pack "${pack.name}"?`)) return
+    await supabase.from('patches').delete().eq('id', pack.id)
+    packs = packs.filter(p => p.id !== pack.id)
   }
 
   async function updatePackFeedback(pack, value) {
@@ -608,9 +609,7 @@
               <div class="sb-pack-head">
                 <span class="sb-pack-name">{pack.name}</span>
                 <span class="sb-pack-status {pack.status}">{pack.status.toUpperCase()}</span>
-                {#if pack.status === 'open'}
-                  <button class="sb-archive-btn" onclick={() => archivePack(pack)} title="Archive">▾</button>
-                {/if}
+                <button class="sb-del-btn" onclick={() => deletePack(pack)} title="Delete pack">×</button>
               </div>
               {#if songs.filter(s => (pack.song_ids||[]).includes(s.id)).length}
                 <div class="sb-pack-songs">
@@ -791,8 +790,8 @@
   .sb-pack-status.open     { color: #c9a84c; border: 1px solid rgba(201,168,76,.3); background: rgba(201,168,76,.06); }
   .sb-pack-status.archived { color: #444;    border: 1px solid #252525; }
   .sb-pack-status.sent     { color: #4a9fd4; border: 1px solid rgba(74,159,212,.3); background: rgba(74,159,212,.06); }
-  .sb-archive-btn { font-family: 'Space Mono', monospace; font-size: 11px; background: transparent; border: none; color: #444; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
-  .sb-archive-btn:hover { color: #9e9690; }
+  .sb-del-btn { background: transparent; border: none; color: #333; font-size: 16px; cursor: pointer; padding: 0 2px; flex-shrink: 0; line-height: 1; }
+  .sb-del-btn:hover { color: #e05a4a; }
   .sb-pack-songs { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
   .sb-song-row  { display: flex; align-items: center; gap: 6px; padding: 4px 10px; }
   .sb-song-code { font-family: 'Space Mono', monospace; font-size: 9px; color: #c9a84c; flex-shrink: 0; }

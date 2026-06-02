@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/routes/sono/+page.svelte — DONE
+TASK: Show submissions list per song in expanded card
+WHAT: Added SUBMISSIONS section after FEEDBACK textarea in card body. Only shown when song belongs to at least one non-deleted pack. Lists each pack as "→ PackName  OPEN/SENT/ARCHIVED" with color-coded status badge. Reads directly from packs array (not songPackMap, which only stores names — needed status too). Realtime subscription keeps pack membership current.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] src/routes/sono/+page.svelte + momentum-watcher.cjs — DONE
 TASK: SONO sidebar width, download button fix, title rename
 WHAT: (1) Grid 1fr 200px → 1fr 180px. (2) Fixed toDropboxDownloadUrl regex — was only matching ?dl=X, new Dropbox URLs have &dl=0 so regex now uses /([?&])dl=\d/; fixed MOONZ malformed download URL in DB directly. getDownloadUrl() helper in SONO page derives URL from stream URL as fallback (handles &dl=0&dl=1 malformed stored URLs). Download button shows whenever any Dropbox URL exists. (3) handleTitleChange() saves title.toUpperCase() to Supabase then calls /rename-demo-file with new_title (fire-and-forget). rename-demo-file extended: accepts new_title param, builds new_filename preserving code+bpmSuffix; checks DEMOS_DIR then SONO_DIR; adds demoSkip to suppress chokidar event.

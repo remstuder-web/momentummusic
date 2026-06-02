@@ -555,6 +555,21 @@
                     <label>FEEDBACK</label>
                     <textarea class="ta" placeholder="Feedback..." value={song.feedback||''} oninput={e => updateField(song,'feedback',e.target.value)}></textarea>
                   </div>
+
+                  {#if packs.some(p => (p.song_ids||[]).includes(song.id) && p.status !== 'deleted')}
+                    <div class="field">
+                      <label>SUBMISSIONS</label>
+                      <div class="song-subs">
+                        {#each packs.filter(p => (p.song_ids||[]).includes(song.id) && p.status !== 'deleted') as pack}
+                          <div class="song-sub-row">
+                            <span class="song-sub-arrow">→</span>
+                            <span class="song-sub-name">{pack.name}</span>
+                            <span class="song-sub-status {pack.status}">{pack.status.toUpperCase()}</span>
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               {/if}
 
@@ -787,4 +802,14 @@
   .sb-pack-notes { background: #111; border: none; border-top: 1px solid #1a1a1a; color: #6a6560; font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 300; padding: 6px 10px; resize: none; width: 100%; min-height: 44px; outline: none; line-height: 1.5; box-sizing: border-box; }
   .sb-pack-notes:focus { color: #9e9690; background: #141414; }
   .sb-pack-notes::placeholder { color: #2a2a2a; }
+
+  /* submissions list in card body */
+  .song-subs      { display: flex; flex-direction: column; gap: 4px; }
+  .song-sub-row   { display: flex; align-items: center; gap: 8px; }
+  .song-sub-arrow { font-family: 'Space Mono', monospace; font-size: 10px; color: #444; flex-shrink: 0; }
+  .song-sub-name  { font-family: 'Space Mono', monospace; font-size: 11px; color: #9e9690; flex: 1; }
+  .song-sub-status { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 2px; flex-shrink: 0; }
+  .song-sub-status.open     { color: #c9a84c; border: 1px solid rgba(201,168,76,.3); background: rgba(201,168,76,.06); }
+  .song-sub-status.sent     { color: #4a9fd4; border: 1px solid rgba(74,159,212,.3); background: rgba(74,159,212,.06); }
+  .song-sub-status.archived { color: #444;    border: 1px solid #252525; }
 </style>

@@ -3091,7 +3091,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     <button class="stage-name-btn" onclick={() => setStage(song, 'stems')}>STEMS</button>
                   </div>
                   <!-- ANALYZER tab -->
-                  <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}"
+                  <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}" style="margin-left:12px"
                     onclick={() => {
                       const isActive = activeSongTab[song.id] === 'analyzer'
                       activeSongTab = {...activeSongTab, [song.id]: isActive ? null : 'analyzer'}

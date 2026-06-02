@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/routes/sono/+page.svelte — DONE
+TASK: Fix SONO page showing stale DISCO tags
+WHAT: Both field paths were already correct (song.tags for custom tags, song.work_data?.disco_tags?.[cat] for DISCO). Bug was in poll: it only refreshed songs on add/remove, so work_data changes from /auto-tag-all-demos were invisible until page reload. Fixed poll to detect any change in work_data, tags, title, tempo, key via JSON.stringify comparison. Added console.log('disco_tags:', song.code, song.work_data?.disco_tags) in loadSongs to verify data in browser console.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] src/routes/sono/+page.ts + +page.svelte — DONE
 TASK: Fix /sono CSR-only + remove env var dependency
 WHAT: +page.ts: added `export const prerender = false` alongside existing `ssr = false`. +page.svelte: removed $env/static/public import, hardcoded SUPABASE_URL, SUPABASE_ANON_KEY, SONO_PASSWORD as constants (all are public/anon values safe to expose in client code). No Vercel env vars needed for sono page to function.

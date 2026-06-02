@@ -37,6 +37,7 @@
     songs = (data || [])
       .filter(s => (s.work_data?.at_artist || '').toLowerCase() === 'sono')
       .sort((a, b) => parseInt(b.code) - parseInt(a.code))
+    songs.forEach(s => console.log('disco_tags:', s.code, s.work_data?.disco_tags))
     loading = false
     startPolling()
   }
@@ -47,13 +48,19 @@
     pollInterval = setInterval(async () => {
       const { data } = await supabase.from('songs').select('*').is('project_id', null)
       if (!data) return
-      const incoming = new Map(data.map(s => [s.id, s]))
-      const current  = new Map(songs.map(s => [s.id, s]))
-      const hasNew     = data.some(s => (s.work_data?.at_artist||'').toLowerCase() === 'sono' && !current.has(s.id))
-      const hasMissing = songs.some(s => !incoming.has(s.id))
-      if (hasNew || hasMissing)
-        songs = data.filter(s => (s.work_data?.at_artist||'').toLowerCase() === 'sono')
-          .sort((a, b) => parseInt(b.code) - parseInt(a.code))
+      const fresh = data
+        .filter(s => (s.work_data?.at_artist||'').toLowerCase() === 'sono')
+        .sort((a, b) => parseInt(b.code) - parseInt(a.code))
+      // Detect any change: count, work_data (disco_tags), tags, title
+      const current = new Map(songs.map(s => [s.id, s]))
+      const hasChange = fresh.length !== songs.length || fresh.some(s => {
+        const c = current.get(s.id)
+        if (!c) return true
+        return JSON.stringify(c.work_data) !== JSON.stringify(s.work_data)
+          || JSON.stringify(c.tags) !== JSON.stringify(s.tags)
+          || c.title !== s.title || c.tempo !== s.tempo || c.key !== s.key
+      })
+      if (hasChange) songs = fresh
     }, 5000)
   }
 

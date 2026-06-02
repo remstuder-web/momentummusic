@@ -655,7 +655,7 @@
   .login-btn:hover { background: #d4b660; }
 
   /* ── outer layout ── */
-  .outer       { display: grid; grid-template-columns: 1fr 200px; gap: 24px; max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; min-height: 100vh; }
+  .outer       { display: grid; grid-template-columns: 1fr 180px; gap: 20px; max-width: 1060px; margin: 0 auto; padding: 40px 20px 80px; min-height: 100vh; }
   .main-col    { min-width: 0; display: flex; flex-direction: column; }
 
   /* ── page header ── */
@@ -711,13 +711,13 @@
   .pack-chip  { font-family: 'Space Mono', monospace; font-size: 9px; padding: 1px 6px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.3); border-radius: 2px; color: #c9a84c; white-space: nowrap; flex-shrink: 0; }
   .head-meta  { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
   .pill       { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 6px; border-radius: 2px; background: #1a1a1a; border: 1px solid #2a2a2a; color: #9e9690; }
-  .player-slot { flex-shrink: 0; }
-  .mini-player { display: flex; align-items: center; gap: 6px; width: 210px; }
-  .mini-player button { background: none; border: none; color: #9e9690; cursor: pointer; font-size: 14px; padding: 2px 4px; flex-shrink: 0; }
+  .player-slot { flex-shrink: 0; width: 180px; overflow: hidden; }
+  .mini-player { display: flex; align-items: center; gap: 5px; width: 100%; }
+  .mini-player button { background: none; border: none; color: #9e9690; cursor: pointer; font-size: 14px; padding: 2px 3px; flex-shrink: 0; }
   .mini-player.active button { color: #f5f1ea; }
-  .mini-player .time { font-size: 10px; font-family: 'Space Mono', monospace; color: #555; width: 80px; text-align: right; flex-shrink: 0; }
+  .mini-player .time { font-size: 10px; font-family: 'Space Mono', monospace; color: #555; width: 70px; text-align: right; flex-shrink: 0; }
   .mini-player.active .time { color: #9e9690; }
-  .seek-bar     { flex: 1; height: 3px; accent-color: #c9a84c; cursor: pointer; }
+  .seek-bar     { flex: 1; min-width: 0; height: 3px; accent-color: #c9a84c; cursor: pointer; }
   .audio-unavail { font-family: 'Space Mono', monospace; font-size: 9px; color: #333; flex-shrink: 0; }
   .download-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 10px; min-width: 36px; background: transparent; border: 1px solid rgba(201,168,76,.45); color: #c9a84c; border-radius: 2px; cursor: pointer; text-decoration: none; flex-shrink: 0; transition: all .15s; text-align: center; }
   .download-btn:hover { background: rgba(201,168,76,.12); border-color: #c9a84c; }
@@ -772,7 +772,7 @@
   .disco-pick-opt:hover { background: #252525; color: #c9a84c; }
 
   /* ── sidebar ── */
-  .sidebar      { border-left: 1px solid #303030; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .sidebar      { border-left: 1px solid #303030; padding: 0 0 0 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .sb-header    { display: flex; flex-direction: column; gap: 8px; }
   .sb-title     { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); }
   .sb-new-btn   { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 6px; width: 100%; background: transparent; border: 1px solid rgba(201,168,76,.4); color: #c9a84c; border-radius: 2px; cursor: pointer; text-align: center; letter-spacing: .06em; }
@@ -785,8 +785,8 @@
   .sb-packs     { display: flex; flex-direction: column; gap: 8px; }
   .sb-pack      { border: 1px solid #252525; border-radius: 3px; overflow: hidden; }
   .sb-pack.open { border-color: rgba(201,168,76,.25); }
-  .sb-pack-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: #1c1c1c; }
-  .sb-pack-name { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: #cec9c1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-pack-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 7px 8px; background: #1c1c1c; width: 100%; box-sizing: border-box; }
+  .sb-pack-name { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: #cec9c1; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sb-pack-status { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 2px; flex-shrink: 0; }
   .sb-pack-status.open     { color: #c9a84c; border: 1px solid rgba(201,168,76,.3); background: rgba(201,168,76,.06); }
   .sb-pack-status.archived { color: #444;    border: 1px solid #252525; }

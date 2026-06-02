@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/routes/sono/+page.svelte — DONE
+TASK: Fix player/DL overlap and sidebar pack header width
+WHAT: (1) player-slot: fixed width 180px (was unconstrained), overflow:hidden; mini-player width:100% (was 210px fixed); seek-bar min-width:0 so it can shrink within the 180px. DL button now always visible to the right. (2) Grid 1fr 200px → 1fr 180px, gap 24→20, padding 20px; sidebar padding-left 20→12, min-width:0; sb-pack-head: justify-content:space-between + width:100% + box-sizing:border-box so name+badge fill full width; pack name font-size 10→9px + min-width:0.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] src/routes/sono/+page.svelte + src/lib/DemoTab.svelte — DONE
 TASK: Download button visibility, sidebar layout, song notes/feedback in SubmissionsTab SONO packs
 WHAT: (1) Download button: text changed to "↓ DL", min-width:36px, color always gold (#c9a84c), stronger border rgba(.45). (2) Sidebar: grid 1fr 180px → 1fr 200px; border-left #1c1c1c → #303030; sb-header flex-direction column so "+ New Pack" is full-width below title; sb-new-btn full-width centered. (3) SubmissionsTab SONO PACKS: each song row now shows Notes + Feedback from songs table (data already in pack.songs via select('*') join); pack.feedback shown above songs list; styled with sono-song-block/sono-song-detail/sono-detail-lbl classes.

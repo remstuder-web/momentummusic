@@ -3255,6 +3255,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     </div>
                   </div>
                   <!-- Production audio drop + Instrumental drop — side by side -->
+                  <div class="drop-send-unit">
                   {#if song._instr_flash}<div class="sent-flash" style="font-size:10px;padding:4px 8px">✉ SENT!</div>{/if}
                   {#if song._instr_copied}<div class="sent-flash" style="font-size:10px;padding:4px 8px">🔗 COPIED!</div>{/if}
                   <div class="dual-drop-row">
@@ -3294,7 +3295,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     </div>
                   </div>
                   <!-- Send rows — same grid, both identical structure -->
-                  <div class="dual-drop-row" style="margin-top:6px">
+                  <div class="dual-drop-row">
                     <div class="dual-send-row-inner">
                       <ListenLinkBlock compact bind:backgroundStyle={selectedListenBg} />
                       {#if wd.prod_audio}
@@ -3316,6 +3317,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                         ✉ Send Instrumental
                       </button>
                     </div>
+                  </div>
                   </div>
                 {/if}
 
@@ -4533,6 +4535,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .instr-filename { color: #4caf82 !important; font-family: 'Space Mono', monospace; font-size: 11px; }
   .instr-player-row { padding: 4px 0; }
   .instr-actions-row { display: flex; gap: 8px; padding-bottom: 10px; }
+  .drop-send-unit { display: flex; flex-direction: column; gap: 6px; }
   .dual-drop-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; align-items: start; }
   .dual-drop-col { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
   .dual-send-row-inner { display: flex; flex-direction: row; align-items: center; gap: 5px; min-width: 0; }

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/routes/sono/+page.svelte + momentum-watcher.cjs — DONE
+TASK: SONO sidebar width, download button fix, title rename
+WHAT: (1) Grid 1fr 200px → 1fr 180px. (2) Fixed toDropboxDownloadUrl regex — was only matching ?dl=X, new Dropbox URLs have &dl=0 so regex now uses /([?&])dl=\d/; fixed MOONZ malformed download URL in DB directly. getDownloadUrl() helper in SONO page derives URL from stream URL as fallback (handles &dl=0&dl=1 malformed stored URLs). Download button shows whenever any Dropbox URL exists. (3) handleTitleChange() saves title.toUpperCase() to Supabase then calls /rename-demo-file with new_title (fire-and-forget). rename-demo-file extended: accepts new_title param, builds new_filename preserving code+bpmSuffix; checks DEMOS_DIR then SONO_DIR; adds demoSkip to suppress chokidar event.
+RESULT: builds clean, watcher OK, MOONZ download URL fixed
+BLOCKERS: none
+
 ## [2026-06-02] src/routes/sono/+page.svelte + src/lib/DemoTab.svelte — DONE
 TASK: SONO fixes — sidebar width, SONO pack filtering, realtime, pack notes
 WHAT: (1) Download button was already correct sibling after player-slot — no change needed. (2) Sidebar grid changed 1fr 260px → 1fr 200px. (3) sortedPatches now filters out artist='SONO' patches so they only appear in the SONO PACKS section below, not in OPEN/ARCHIVE list. (4) Replaced pack polling with Supabase Realtime channel 'sono-packs' — subscribes to postgres_changes on patches + patch_songs tables, refetches full packs on any event; song polling stays at 5s; channel cleaned up in onDestroy. (5) Pack notes textarea in sidebar (saves to patches.feedback on blur); DemoTab SONO packs section shows feedback text.

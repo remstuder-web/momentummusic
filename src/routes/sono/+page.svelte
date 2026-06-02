@@ -250,6 +250,36 @@
     return null
   }
 
+  function getDownloadUrl(song) {
+    // Prefer stored download URL; derive from stream URL if missing or malformed
+    const dl = song.work_data?.dropbox_download_url
+    if (dl && !dl.includes('&dl=0&dl=1')) return dl
+    const stream = song.work_data?.dropbox_stream_url
+    if (!stream) return null
+    return stream
+      .replace('dl.dropboxusercontent.com', 'www.dropbox.com')
+      .replace(/([?&])dl=\d/, '$1dl=1')
+      + (stream.includes('?') ? '&dl=1' : '?dl=1')
+  }
+
+  async function handleTitleChange(song, newTitle) {
+    const trimmed = newTitle.trim().toUpperCase()
+    if (!trimmed || trimmed === (song.title || '').trim().toUpperCase()) return
+    song.title = trimmed; songs = [...songs]
+    await supabase.from('songs').update({ title: trimmed }).eq('id', song.id)
+    if (song.audio_path) {
+      fetch('http://localhost:4242/rename-demo-file', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ song_id: song.id, old_filename: song.audio_path, new_title: trimmed })
+      }).then(async r => {
+        const result = await r.json().catch(() => ({}))
+        if (result.ok && result.new_filename && result.new_filename !== song.audio_path) {
+          song.audio_path = result.new_filename; songs = [...songs]
+        }
+      }).catch(() => {}) // fire-and-forget — watcher may be offline
+    }
+  }
+
   function formatTime(s) {
     if (!s||isNaN(s)) return '0:00'
     return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')
@@ -426,8 +456,8 @@
                     <span class="audio-unavail">not linked</span>
                   {/if}
                 </div>
-                {#if song.work_data?.dropbox_download_url}
-                  <a href={song.work_data.dropbox_download_url} target="_blank" rel="noopener" class="download-btn" onclick={e => e.stopPropagation()}>↓</a>
+                {#if getDownloadUrl(song)}
+                  <a href={getDownloadUrl(song)} target="_blank" rel="noopener" class="download-btn" onclick={e => e.stopPropagation()}>↓</a>
                 {/if}
                 <!-- Add to pack button -->
                 {#if packs.filter(p => p.status==='open').length}
@@ -457,7 +487,7 @@
                     <div class="field" style="flex:1;min-width:0">
                       <label>TITLE</label>
                       <input class="inp-sm" placeholder="Title..." value={song.title||''}
-                        onblur={e => { const v=e.target.value.trim(); if(v!==(song.title||'').trim()) updateField(song,'title',v) }}
+                        onblur={e => handleTitleChange(song, e.target.value)}
                         onkeydown={e => e.key==='Enter' && e.target.blur()} />
                     </div>
                     <div class="field" style="flex:0 0 90px">
@@ -609,7 +639,7 @@
   .login-btn:hover { background: #d4b660; }
 
   /* ── outer layout ── */
-  .outer       { display: grid; grid-template-columns: 1fr 200px; gap: 24px; max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; min-height: 100vh; }
+  .outer       { display: grid; grid-template-columns: 1fr 180px; gap: 24px; max-width: 1060px; margin: 0 auto; padding: 40px 24px 80px; min-height: 100vh; }
   .main-col    { min-width: 0; display: flex; flex-direction: column; }
 
   /* ── page header ── */

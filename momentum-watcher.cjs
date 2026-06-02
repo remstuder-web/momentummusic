@@ -383,7 +383,8 @@ function toDropboxStreamUrl(shareUrl) {
     .replace('?dl=0', '').replace('&dl=0', '')
 }
 function toDropboxDownloadUrl(shareUrl) {
-  if (shareUrl.includes('?dl=')) return shareUrl.replace(/dl=\d/, 'dl=1')
+  // Handle both ?dl=X (old format) and &dl=X (new ?rlkey=...&dl=0 format)
+  if (/[?&]dl=\d/.test(shareUrl)) return shareUrl.replace(/([?&])dl=\d/, '$1dl=1')
   if (shareUrl.includes('?')) return shareUrl + '&dl=1'
   return shareUrl + '?dl=1'
 }
@@ -6412,25 +6413,38 @@ async function restore(input) {
     return
   }
 
-  // ── POST /rename-demo-file — rename demo file when BPM changes ───────────
+  // ── POST /rename-demo-file — rename demo file (BPM change or title change) ──
   if (req.method === 'POST' && req.url === '/rename-demo-file') {
     const chunks = []; req.on('data', c => chunks.push(c))
     req.on('end', async () => {
       res.setHeader('Content-Type', 'application/json')
       res.setHeader('Access-Control-Allow-Origin', '*')
       try {
-        const { song_id, old_filename, new_tempo } = JSON.parse(Buffer.concat(chunks).toString())
-        if (!song_id || !old_filename || !new_tempo) {
+        const { song_id, old_filename, new_tempo, new_title } = JSON.parse(Buffer.concat(chunks).toString())
+        if (!song_id || !old_filename || (!new_tempo && !new_title)) {
           res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing fields' })); return
         }
 
         const ext = path.extname(old_filename)
         const nameNoExt = path.basename(old_filename, ext)
         const code = (nameNoExt.match(/^(\d{5,6})_/) || [])[1] || nameNoExt.split('_')[0]
-        const titleSegment = nameNoExt
-          .replace(/^(\d{5,6})_/, '')    // strip code prefix
-          .replace(/_\d{2,3}bpm$/i, '')  // strip old BPM suffix
-        const new_filename = `${code}_${titleSegment}_${new_tempo}bpm${ext}`
+        const bpmMatch = nameNoExt.match(/_(\d{2,3})bpm$/i)
+        const existingBpm = bpmMatch ? bpmMatch[1] : null
+
+        let new_filename
+        if (new_title) {
+          // Title rename: keep code + existing BPM suffix if present
+          const safeName = new_title.toUpperCase().replace(/[<>:"/\\|?*]/g,'').trim().replace(/\s+/g,'_')
+          new_filename = existingBpm
+            ? `${code}_${safeName}_${existingBpm}bpm${ext}`
+            : `${code}_${safeName}${ext}`
+        } else {
+          // BPM rename: keep code + existing title segment
+          const titleSegment = nameNoExt
+            .replace(/^(\d{5,6})_/, '')
+            .replace(/_\d{2,3}bpm$/i, '')
+          new_filename = `${code}_${titleSegment}_${new_tempo}bpm${ext}`
+        }
 
         if (new_filename === old_filename) {
           res.end(JSON.stringify({ ok: true, new_filename })); return
@@ -6443,15 +6457,21 @@ async function restore(input) {
           body: JSON.stringify({ audio_path: new_filename })
         })
 
-        // Rename in DEMOS_DIR
-        const oldPath = path.join(DEMOS_DIR, old_filename)
-        const newPath = path.join(DEMOS_DIR, new_filename)
-        if (fs.existsSync(oldPath)) {
-          fs.renameSync(oldPath, newPath)
-          console.log(`  ✓ Demo BPM rename: ${old_filename} → ${new_filename}`)
-        } else {
-          console.warn(`  ⚠ rename-demo-file: source not found: ${old_filename}`)
+        // Rename file — check DEMOS_DIR, then SONO_DIR
+        const candidates = [
+          [path.join(DEMOS_DIR, old_filename), path.join(DEMOS_DIR, new_filename)],
+          [path.join(SONO_DIR,  old_filename), path.join(SONO_DIR,  new_filename)],
+        ]
+        let renamed = false
+        for (const [oldPath, newPath] of candidates) {
+          if (fs.existsSync(oldPath)) {
+            demoSkip.add(new_filename) // suppress chokidar add event
+            fs.renameSync(oldPath, newPath)
+            console.log(`  ✓ Demo rename: ${old_filename} → ${new_filename}`)
+            renamed = true; break
+          }
         }
+        if (!renamed) console.warn(`  ⚠ rename-demo-file: source not found: ${old_filename}`)
 
         // Rename in archive if present
         try {
@@ -6459,9 +6479,9 @@ async function restore(input) {
           const archiveNew = path.join(ARCHIVE_29TH, new_filename)
           if (fs.existsSync(archiveOld)) {
             fs.renameSync(archiveOld, archiveNew)
-            console.log(`  ✓ Archive BPM rename: ${old_filename} → ${new_filename}`)
+            console.log(`  ✓ Archive rename: ${old_filename} → ${new_filename}`)
           }
-        } catch(e) { console.warn('⚠ Archive BPM rename failed:', e.message) }
+        } catch(e) { console.warn('⚠ Archive rename failed:', e.message) }
 
         res.end(JSON.stringify({ ok: true, new_filename }))
       } catch(e) {

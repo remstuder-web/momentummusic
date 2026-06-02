@@ -37,6 +37,7 @@
 <script>
   import { supabase } from './supabase.js'
   import { onMount, onDestroy } from 'svelte'
+  import { slide } from 'svelte/transition'
   import ListenLinkBlock from './ListenLinkBlock.svelte'
 
   let { initialView = 'demos' } = $props()
@@ -98,8 +99,52 @@
   const KEYS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','Cm','C#m','Dm','D#m','Em','Fm','F#m','Gm','G#m','Am','A#m','Bm']
 
   let newDemoDragging = $state(false)
-  let selectedTags = $state(new Set())
-  let showTagDropdown = $state(false)
+  let showFilterPanel = $state(false)
+
+  const DISCO_FILTER = {
+    tempo:         ['Downtempo','Midtempo','Uptempo','Fast','Slow'],
+    mood:          ['Anthemic','Atmospheric','Bright','Building','Catchy','Cinematic','Confident','Cool','Dark','Dramatic','Dreamy','Driving','Emotive','Energetic','Epic','Fun','Gritty','Happy','Hopeful','Intense','Light','Minimal','Moody','Mysterious','Party','Percussive','Playful','Positive','Powerful','Quirky','Reflective','Retro','Rhythmic','Romantic','Sad','Sexy','Swagger','Tension','Upbeat','Uplifting','Warm'],
+    genre:         ['Ambient','Blues','Classical','Country','Dance','Electronic','Folk','Funk','Hip hop/rap','Indie','Jazz','Latin','Metal','Pop','Punk','R&B','Reggae','Rock','Singer/songwriter','Soul','Urban','Vintage','World'],
+    vocals:        ['Aahs','A cappella','Background vocals','Choir','Clean','Duet','Explicit','Female vocal','Foreign language','French language','German language','Harmonies','Instrumental','Male vocal','Oohs','Spanish language','Whispering','Whistling'],
+    lyrical_theme: ['Adventure','Ambition','Betrayal','Celebration','Change','Christmas','Confidence','Conflict','Connection','Death','Desire','Destiny','Discovery','Dream','Empowerment','Energy','Escape','Faith','Family','Fear','Freedom','Friendship','Fun','Gratitude','Happiness','Heartbreak','Home','Hope','Identity','Individuality','Life','Loneliness','Longing','Loss','Love','Money','Nature','New beginning','Nostalgia','Pain','Party','Power','Rebellion','Regret','Relationship','Romance','Strength','Struggle','Success','Survival','Time','Together','Unity'],
+    instrument:    ['Acoustic guitar','Bass','Brass','Clarinet','Drums','Electric guitar','Flute','Handclaps','Horns','Keyboard','Orchestral','Organ','Percussion','Piano','Saxophone','Strings','Synth','Trumpet','Ukelele'],
+    type:          ['Cover','Demo','Easy-clear','Focus track','Mainstream','One stop','Recognizable','Rerecord','Samples','Score','Sound design','Soundtrack','Sting']
+  }
+
+  let fTempo     = $state(new Set())
+  let fMood      = $state(new Set())
+  let fGenre     = $state(new Set())
+  let fVocals    = $state(new Set())
+  let fLyrical   = $state(new Set())
+  let fInstrument= $state(new Set())
+  let fType      = $state(new Set())
+  let fBpmMin    = $state(60)
+  let fBpmMax    = $state(200)
+  let fCustomTag = $state('')
+
+  function toggleFTempo(tag) {
+    const n = new Set(fTempo)
+    if (n.has(tag)) n.delete(tag)
+    else { n.clear(); n.add(tag) }
+    fTempo = n
+  }
+  function toggleF(stateSet, tag) {
+    const n = new Set(stateSet)
+    if (n.has(tag)) n.delete(tag); else n.add(tag)
+    return n
+  }
+
+  function clearAllFilters() {
+    fTempo = new Set(); fMood = new Set(); fGenre = new Set()
+    fVocals = new Set(); fLyrical = new Set(); fInstrument = new Set(); fType = new Set()
+    fBpmMin = 60; fBpmMax = 200; fCustomTag = ''
+  }
+
+  let hasActiveFilter = $derived(
+    fTempo.size > 0 || fMood.size > 0 || fGenre.size > 0 ||
+    fVocals.size > 0 || fLyrical.size > 0 || fInstrument.size > 0 || fType.size > 0 ||
+    fBpmMin > 60 || fBpmMax < 200 || fCustomTag.trim().length > 0
+  )
 
   async function renameDemoAudio(song, newTitle) {
     if (!song.audio_path || !newTitle?.trim()) return
@@ -790,15 +835,23 @@
   let toast = $state(null)
   let toastTimer = null
   let showContactPicker = $state({})
-  let allTagsInSystem = $derived(
-    [...new Set(songs.flatMap(s => s.tags || []))].sort()
-  )
-
   let filteredSongs = $derived((() => {
-    if (!selectedTags.size) return songs
     return songs.filter(s => {
-      const st = s.tags || []
-      for (const t of selectedTags) if (!st.includes(t)) return false
+      const dt = s.work_data?.disco_tags || {}
+      if (fTempo.size      && !(dt.tempo         ||[]).some(t => fTempo.has(t)))      return false
+      if (fMood.size       && !(dt.mood          ||[]).some(t => fMood.has(t)))       return false
+      if (fGenre.size      && !(dt.genre         ||[]).some(t => fGenre.has(t)))      return false
+      if (fVocals.size     && !(dt.vocals        ||[]).some(t => fVocals.has(t)))     return false
+      if (fLyrical.size    && !(dt.lyrical_theme ||[]).some(t => fLyrical.has(t)))   return false
+      if (fInstrument.size && !(dt.instrument    ||[]).some(t => fInstrument.has(t))) return false
+      if (fType.size       && !(dt.type          ||[]).some(t => fType.has(t)))       return false
+      if (fBpmMin > 60 || fBpmMax < 200) {
+        if (!s.tempo || s.tempo < fBpmMin || s.tempo > fBpmMax) return false
+      }
+      if (fCustomTag.trim()) {
+        const q = fCustomTag.trim().toLowerCase()
+        if (!(s.tags||[]).some(t => t.toLowerCase().includes(q))) return false
+      }
       return true
     })
   })())
@@ -1076,7 +1129,7 @@
   onDestroy(() => clearInterval(pollInterval))
 </script>
 
-<svelte:window onclick={() => { if (showTagDropdown) showTagDropdown = false }} />
+<svelte:window />
 <div class="demo-layout">
 <div class="demo-main">
 
@@ -1087,49 +1140,10 @@
     <button class="vtab {view === 'patches' ? 'on' : ''}" onclick={() => view = 'patches'}>SUBMISSIONS</button>
   </div>
   {#if view === 'demos'}
-    <div class="tag-filter-wrap" onclick={e => e.stopPropagation()}>
-      <button class="tag-filter-btn {selectedTags.size ? 'active' : ''}"
-        onclick={() => showTagDropdown = !showTagDropdown}>
-        {#if selectedTags.size}
-          {[...selectedTags].join(', ')}
-        {:else}
-          Filter by tags
-        {/if}
-        <span class="tag-filter-arr">▼</span>
-      </button>
-      {#if showTagDropdown}
-        <div class="tag-filter-dropdown">
-          <div class="tag-filter-list">
-            {#if !allTagsInSystem.length}
-              <span class="tag-filter-empty">No tags yet</span>
-            {:else}
-              {#each allTagsInSystem as t}
-                {@const checked = selectedTags.has(t)}
-                {@const count = songs.filter(s => (s.tags||[]).includes(t)).length}
-                <label class="tag-ckb-row {checked ? 'on' : ''}">
-                  <input type="checkbox" {checked}
-                    onchange={() => {
-                      const next = new Set(selectedTags)
-                      if (next.has(t)) next.delete(t); else next.add(t)
-                      selectedTags = next
-                    }} />
-                  <span class="tag-ckb-label">{t}</span>
-                  <span class="tag-ckb-count">{count}</span>
-                </label>
-              {/each}
-            {/if}
-          </div>
-          {#if selectedTags.size}
-            <button class="tag-reset-btn" onclick={() => { selectedTags = new Set(); showTagDropdown = false }}>
-              ✕ Reset ({selectedTags.size})
-            </button>
-          {/if}
-        </div>
-      {/if}
-    </div>
-    {#if selectedTags.size}
-      <button class="tag-clear-inline" onclick={() => selectedTags = new Set()}>✕ {selectedTags.size}</button>
-    {/if}
+    <button class="filter-toggle-btn {hasActiveFilter ? 'active' : ''} {showFilterPanel ? 'open' : ''}"
+      onclick={() => showFilterPanel = !showFilterPanel}>
+      ⊞ Filter{hasActiveFilter ? ' ●' : ''}
+    </button>
     <div
       class="new-demo-dropzone {newDemoDragging ? 'drag-over' : ''}"
       ondragover={e => { e.preventDefault(); newDemoDragging = true }}
@@ -1156,6 +1170,114 @@
     <button class="btn-gold" onclick={() => showPatchModal = true}>+ New Submission</button>
   {/if}
 </div>
+
+{#if showFilterPanel && view === 'demos'}
+<div class="filter-panel" transition:slide={{ duration: 200 }}>
+
+  <!-- TEMPO (single-select) -->
+  <div class="fp-section">
+    <span class="fp-label">TEMPO</span>
+    <div class="fp-pills">
+      {#each DISCO_FILTER.tempo as tag}
+        <button class="fp-pill {fTempo.has(tag) ? 'sel' : ''}" onclick={() => toggleFTempo(tag)}>{tag}</button>
+      {/each}
+    </div>
+  </div>
+
+  <!-- MOOD -->
+  <div class="fp-section">
+    <span class="fp-label">MOOD</span>
+    <div class="fp-pills">
+      {#each DISCO_FILTER.mood as tag}
+        <button class="fp-pill {fMood.has(tag) ? 'sel' : ''}" onclick={() => fMood = toggleF(fMood, tag)}>{tag}</button>
+      {/each}
+    </div>
+  </div>
+
+  <!-- GENRE -->
+  <div class="fp-section">
+    <span class="fp-label">GENRE</span>
+    <div class="fp-pills">
+      {#each DISCO_FILTER.genre as tag}
+        <button class="fp-pill {fGenre.has(tag) ? 'sel' : ''}" onclick={() => fGenre = toggleF(fGenre, tag)}>{tag}</button>
+      {/each}
+    </div>
+  </div>
+
+  <!-- VOCALS -->
+  <div class="fp-section">
+    <span class="fp-label">VOCALS</span>
+    <div class="fp-pills">
+      {#each DISCO_FILTER.vocals as tag}
+        <button class="fp-pill {fVocals.has(tag) ? 'sel' : ''}" onclick={() => fVocals = toggleF(fVocals, tag)}>{tag}</button>
+      {/each}
+    </div>
+  </div>
+
+  <!-- LYRICAL THEME -->
+  <div class="fp-section">
+    <span class="fp-label">LYRICAL THEME</span>
+    <div class="fp-pills">
+      {#each DISCO_FILTER.lyrical_theme as tag}
+        <button class="fp-pill {fLyrical.has(tag) ? 'sel' : ''}" onclick={() => fLyrical = toggleF(fLyrical, tag)}>{tag}</button>
+      {/each}
+    </div>
+  </div>
+
+  <!-- INSTRUMENT -->
+  <div class="fp-section">
+    <span class="fp-label">INSTRUMENT</span>
+    <div class="fp-pills">
+      {#each DISCO_FILTER.instrument as tag}
+        <button class="fp-pill {fInstrument.has(tag) ? 'sel' : ''}" onclick={() => fInstrument = toggleF(fInstrument, tag)}>{tag}</button>
+      {/each}
+    </div>
+  </div>
+
+  <!-- TYPE -->
+  <div class="fp-section">
+    <span class="fp-label">TYPE</span>
+    <div class="fp-pills">
+      {#each DISCO_FILTER.type as tag}
+        <button class="fp-pill {fType.has(tag) ? 'sel' : ''}" onclick={() => fType = toggleF(fType, tag)}>{tag}</button>
+      {/each}
+    </div>
+  </div>
+
+  <!-- BPM RANGE -->
+  <div class="fp-section">
+    <span class="fp-label">BPM RANGE</span>
+    <div class="fp-bpm-wrap">
+      <span class="fp-bpm-val">{fBpmMin}</span>
+      <div class="fp-dual-range">
+        <input type="range" min="60" max="200" step="1" value={fBpmMin}
+          oninput={e => fBpmMin = Math.min(+e.target.value, fBpmMax - 5)} />
+        <input type="range" min="60" max="200" step="1" value={fBpmMax}
+          oninput={e => fBpmMax = Math.max(+e.target.value, fBpmMin + 5)} />
+        <div class="fp-range-track">
+          <div class="fp-range-fill" style="left:{(fBpmMin-60)/140*100}%;right:{(200-fBpmMax)/140*100}%"></div>
+        </div>
+      </div>
+      <span class="fp-bpm-val">{fBpmMax} BPM</span>
+    </div>
+  </div>
+
+  <!-- CUSTOM TAG SEARCH -->
+  <div class="fp-section">
+    <span class="fp-label">CUSTOM TAGS</span>
+    <input class="fp-tag-search" placeholder="Search custom tags..." bind:value={fCustomTag} />
+  </div>
+
+  <!-- Footer -->
+  <div class="fp-footer">
+    <span class="fp-count">{filteredSongs.length} result{filteredSongs.length === 1 ? '' : 's'}</span>
+    {#if hasActiveFilter}
+      <button class="fp-clear-btn" onclick={clearAllFilters}>✕ Clear All Filters</button>
+    {/if}
+  </div>
+
+</div>
+{/if}
 
 {#if loading}
   <p class="empty">Loading...</p>
@@ -1709,25 +1831,41 @@
   .s-btn.in-batch:hover { background: rgba(74,159,212,.1); }
   .s-btn.multi-batch { border-color: rgba(224,90,74,.6); color: #e05a4a; }
   .s-btn.multi-batch:hover { background: rgba(224,90,74,.1); }
-  .tag-filter-wrap { position: relative; }
-  .tag-filter-btn { font-family: 'Space Mono', monospace; font-size: 11px; padding: 5px 10px; background: #1c1c1c; border: 1px solid #252525; color: #9e9690; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 6px; max-width: 220px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .tag-filter-btn.active { border-color: rgba(201,168,76,.4); color: #c9a84c; }
-  .tag-filter-btn:hover { border-color: #303030; }
-  .tag-filter-arr { font-size: 8px; opacity: .6; flex-shrink: 0; }
-  .tag-filter-dropdown { position: absolute; top: calc(100% + 4px); left: 0; width: 220px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; z-index: 999; box-shadow: 0 6px 20px rgba(0,0,0,.6); overflow: hidden; }
-  .tag-filter-list { max-height: 260px; overflow-y: auto; padding: 4px 0; }
-  .tag-filter-empty { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; padding: 10px 12px; display: block; }
-  .tag-ckb-row { display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer; transition: background .1s; }
-  .tag-ckb-row:hover { background: #252525; }
-  .tag-ckb-row.on { background: rgba(201,168,76,.06); }
-  .tag-ckb-row input[type=checkbox] { accent-color: #c9a84c; flex-shrink: 0; cursor: pointer; }
-  .tag-ckb-label { font-family: 'Space Mono', monospace; font-size: 11px; color: #cec9c1; flex: 1; }
-  .tag-ckb-row.on .tag-ckb-label { color: #c9a84c; }
-  .tag-ckb-count { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; }
-  .tag-reset-btn { display: block; width: 100%; font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 8px 12px; background: rgba(201,168,76,.06); border: none; border-top: 1px solid #303030; color: #c9a84c; cursor: pointer; text-align: left; letter-spacing: .06em; }
-  .tag-reset-btn:hover { background: rgba(201,168,76,.12); }
-  .tag-clear-inline { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 4px 8px; background: transparent; border: 1px solid rgba(201,168,76,.3); color: rgba(201,168,76,.7); border-radius: 2px; cursor: pointer; flex-shrink: 0; }
-  .tag-clear-inline:hover { color: #c9a84c; border-color: rgba(201,168,76,.6); }
+  /* ── filter toggle button ── */
+  .filter-toggle-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 5px 12px; background: #1c1c1c; border: 1px solid #252525; color: #9e9690; border-radius: 3px; cursor: pointer; flex-shrink: 0; transition: all .15s; letter-spacing: .06em; }
+  .filter-toggle-btn:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
+  .filter-toggle-btn.active { border-color: rgba(201,168,76,.5); color: #c9a84c; background: rgba(201,168,76,.06); }
+  .filter-toggle-btn.open { border-color: rgba(201,168,76,.6); color: #c9a84c; background: rgba(201,168,76,.08); }
+
+  /* ── filter panel ── */
+  .filter-panel { background: #141414; border: 1px solid #252525; border-radius: 4px; padding: 14px 16px 10px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .fp-section { display: flex; flex-direction: column; gap: 5px; }
+  .fp-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; color: rgba(201,168,76,.6); text-transform: uppercase; }
+  .fp-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+  .fp-pill { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 8px; border-radius: 2px; background: transparent; border: 1px solid #2a2a2a; color: #6a6560; cursor: pointer; transition: all .1s; white-space: nowrap; line-height: 1.6; }
+  .fp-pill:hover { border-color: rgba(201,168,76,.35); color: #cec9c1; }
+  .fp-pill.sel { background: #c9a84c; border-color: #c9a84c; color: #0a0a0a; font-weight: 700; }
+
+  /* BPM dual range */
+  .fp-bpm-wrap { display: flex; align-items: center; gap: 10px; }
+  .fp-bpm-val { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; flex-shrink: 0; min-width: 44px; }
+  .fp-dual-range { position: relative; flex: 1; height: 20px; }
+  .fp-dual-range input[type=range] { position: absolute; width: 100%; top: 3px; height: 14px; background: transparent; -webkit-appearance: none; appearance: none; pointer-events: none; }
+  .fp-dual-range input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 13px; height: 13px; background: #c9a84c; border-radius: 50%; cursor: pointer; pointer-events: all; }
+  .fp-dual-range input[type=range]::-moz-range-thumb { width: 13px; height: 13px; background: #c9a84c; border-radius: 50%; cursor: pointer; pointer-events: all; border: none; }
+  .fp-range-track { position: absolute; top: 8px; left: 0; right: 0; height: 3px; background: #2a2a2a; border-radius: 2px; pointer-events: none; }
+  .fp-range-fill { position: absolute; top: 0; height: 100%; background: #c9a84c; border-radius: 2px; }
+
+  /* custom tag search */
+  .fp-tag-search { background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 5px 10px; outline: none; border-radius: 3px; width: 200px; }
+  .fp-tag-search:focus { border-color: rgba(201,168,76,.4); }
+  .fp-tag-search::placeholder { color: #333; }
+
+  /* footer */
+  .fp-footer { display: flex; align-items: center; gap: 12px; padding-top: 6px; border-top: 1px solid #1c1c1c; }
+  .fp-count { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
+  .fp-clear-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 4px 12px; background: transparent; border: 1px solid rgba(201,168,76,.35); color: rgba(201,168,76,.8); border-radius: 2px; cursor: pointer; letter-spacing: .06em; }
+  .fp-clear-btn:hover { background: rgba(201,168,76,.08); border-color: rgba(201,168,76,.6); color: #c9a84c; }
   .genre-opt.sel { color: #c9a84c; background: rgba(201,168,76,.06); }
   .s-picker-above { position: absolute; bottom: calc(100% + 6px); right: 0; background: #1c1c1c; border: 1px solid #303030; border-radius: 4px; min-width: 240px; z-index: 99; overflow: hidden; box-shadow: 0 -4px 20px rgba(0,0,0,.5); }
   .s-pick-list { max-height: 220px; overflow-y: auto; }

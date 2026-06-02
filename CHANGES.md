@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/lib/DemoTab.svelte — DONE
+TASK: DISCO-style filter panel for Demos tab
+WHAT: Replaced old tag-filter dropdown with full DISCO filter panel. Toggle button "⊞ Filter" with active indicator (●). Panel slides in/out via svelte/transition slide. 7 DISCO tag category pill grids (tempo single-select, rest multi-select), dual-handle BPM range slider (60-200), custom tag text search, live result count, Clear All button. filteredSongs derived rewired to use all new filter state. Old selectedTags/showTagDropdown/allTagsInSystem removed.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] momentum-watcher.cjs — DONE
 TASK: Fix SONO chokidar false-positive unlink + add events
 WHAT: (1) chokidar.watch(DEMOS_DIR) now ignores path.join(SONO_DIR,'**') and dotfiles — files landing in !SONO never trigger new-demo logic. (2) unlink handler checks fs.existsSync(SONO_DIR/filename) before deleting from Supabase — if file moved there, logs skip and returns early.

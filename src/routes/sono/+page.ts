@@ -1,4 +1,3 @@
-// Render entirely client-side — no SSR.
-// Avoids build-time env var issues on Vercel and prevents
-// any SSR error from causing fallback to the root route.
+// CSR-only — no SSR, no build-time env var requirements.
 export const ssr = false
+export const prerender = false

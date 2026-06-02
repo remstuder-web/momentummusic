@@ -1,9 +1,12 @@
 <script>
   import { onMount, onDestroy } from 'svelte'
   import { createClient } from '@supabase/supabase-js'
-  import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, PUBLIC_SONO_PASSWORD } from '$env/static/public'
 
-  const supabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY)
+  const SUPABASE_URL     = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
+  const SUPABASE_ANON_KEY = 'sb_publishable_4yMwlAo6OLpgGPN_6yWvIw_g5bnjnWS'
+  const SONO_PASSWORD    = 'sono2026'
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   const AUDIO_SERVER = 'http://localhost:4242/audio'
 
   // ── auth ─────────────────────────────────────────────────────────────────────
@@ -15,7 +18,7 @@
     return typeof localStorage !== 'undefined' && localStorage.getItem('sono_auth') === 'true'
   }
   function login() {
-    if (password === PUBLIC_SONO_PASSWORD) {
+    if (password === SONO_PASSWORD) {
       localStorage.setItem('sono_auth', 'true')
       authed = true; authError = ''; loadSongs()
     } else {

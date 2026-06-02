@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/routes/sono/+page.ts + +page.svelte — DONE
+TASK: Fix /sono CSR-only + remove env var dependency
+WHAT: +page.ts: added `export const prerender = false` alongside existing `ssr = false`. +page.svelte: removed $env/static/public import, hardcoded SUPABASE_URL, SUPABASE_ANON_KEY, SONO_PASSWORD as constants (all are public/anon values safe to expose in client code). No Vercel env vars needed for sono page to function.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] src/routes/sono/+page.ts — DONE
 TASK: Fix /sono route served as ListenPage on Vercel
 WHAT: Added +page.ts with `export const ssr = false`. Root cause: sono page imports PUBLIC_SONO_PASSWORD from $env/static/public (a build-time static env var). On Vercel, if that var isn't set before build, SSR of /sono throws → Vercel error fallback serves root SPA shell → root page's onMount runs at /sono URL → triggers ListenPage (somehow ?s= gets set). ssr=false makes sono CSR-only (no server execution, no build-time env vars needed), generates a static HTML shell served directly by Vercel CDN. Route IS correctly in the manifest (/^\/sono\/?$/) and build was already correct — this is a deployment hardening fix.

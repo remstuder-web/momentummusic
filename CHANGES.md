@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/routes/sono/+page.svelte — DONE
+TASK: SONO page full editable track cards
+WHAT: Expanded from read-only to full read/write mirror of DemoTab. Added: updateField/updateDemoType/addTag/removeTag/addDiscoTag/removeDiscoTag all saving to Supabase; card body with title input, code (readonly), TYPE dropdown, BPM/key meta display, TAGS section (compact input + chips), TAGS DISCO section (all 7 categories, chips with ×, + picker button per category showing unused tags), NOTES+FEEDBACK textareas; spacebar play/pause on hover; 5s poll for real-time sync; onDestroy cleanup. No delete/freeze/S button. Styles match Momentum dark theme exactly.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] +page.svelte + DemoTab.svelte + routes/sono/+page.svelte — DONE
 TASK: Rename DEMO tab, SONO filter button, SONO public page
 WHAT: (1) Tab renamed DEMO→DEMOS in +page.svelte. (2) SONO button added to DemoTab header — gold active state, stacks with DISCO filters via sonoMode state in filteredSongs derived. (3) New standalone route /sono: password gate (PUBLIC_SONO_PASSWORD env var, default sono2026, stored in localStorage sono_auth), shows only work_data.at_artist='sono' demos, read-only card list with audio player + DISCO tags, no navigation to main app. PUBLIC_SONO_PASSWORD=sono2026 added to .env.

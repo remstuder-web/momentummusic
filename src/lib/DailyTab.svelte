@@ -1530,175 +1530,181 @@ ${mozartContext}`
           <button class="add-btn" onclick={addHelper}>+</button>
         </div>
 
+        <div class="helpers-built-in">
+
         <!-- TITLE GENERATOR -->
-        <div class="normalizer-title">TITLE GENERATOR</div>
-        <div class="title-gen-row">
-          <input class="add-inp title-gen-inp" bind:value={titleGenInput}
-            placeholder="Describe the vibe, genre, mood, artist style..."
-            onkeydown={e => e.key === 'Enter' && generateTitles()} />
-          <button class="btn-gold-sm {titleGenLoading ? 'dim' : ''}" onclick={generateTitles} disabled={titleGenLoading}>
-            {titleGenLoading ? '...' : 'Generate Titles'}
-          </button>
-        </div>
-        {#if titleGenResults.length}
-          <div class="title-gen-results">
-            {#each titleGenResults as t}
-              <div class="title-gen-item">
-                <span class="title-gen-text">{t}</span>
-                <button class="title-copy-btn" onclick={() => navigator.clipboard.writeText(t)}>Copy</button>
-              </div>
-            {/each}
+        <div class="helper-block">
+          <div class="normalizer-title">TITLE GENERATOR</div>
+          <div class="title-gen-row">
+            <input class="add-inp title-gen-inp" bind:value={titleGenInput}
+              placeholder="Describe the vibe, genre, mood, artist style..."
+              onkeydown={e => e.key === 'Enter' && generateTitles()} />
+            <button class="btn-gold-sm {titleGenLoading ? 'dim' : ''}" onclick={generateTitles} disabled={titleGenLoading}>
+              {titleGenLoading ? '...' : 'Generate Titles'}
+            </button>
           </div>
-        {/if}
+          {#if titleGenResults.length}
+            <div class="title-gen-results">
+              {#each titleGenResults as t}
+                <div class="title-gen-item">
+                  <span class="title-gen-text">{t}</span>
+                  <button class="title-copy-btn" onclick={() => navigator.clipboard.writeText(t)}>Copy</button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
 
         <!-- NORMALIZER -->
-        <div class="normalizer-title" style="margin-top:16px">NORMALIZER</div>
-        <div class="normalizer-drop
-          {normDragging ? 'dragging' : ''}
-          {normStatus === 'ok' ? 'ok' : ''}
-          {normStatus === 'err' ? 'err' : ''}"
-          ondragover={e => { e.preventDefault(); normDragging = true }}
-          ondragleave={() => normDragging = false}
-          ondrop={async e => {
-            e.preventDefault()
-            normDragging = false
-            normStatus = 'working'
-            normMsg = ''
-            const file = e.dataTransfer.files[0]
-            if (!file) return
-            const exts = ['.mp3','.wav','.aiff','.aif','.flac','.m4a']
-            const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
-            if (!exts.includes(ext)) { normStatus = 'err'; normMsg = 'Unsupported format'; return }
-            try {
-              const buf = await file.arrayBuffer()
-              const res = await fetch('http://localhost:4242/normalize', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },
-                body: buf
-              })
-              const data = await res.json()
-              if (data.ok) { normStatus = 'ok'; normMsg = data.outFile }
-              else { normStatus = 'err'; normMsg = data.error || 'Error' }
-            } catch(err) { normStatus = 'err'; normMsg = err.message }
-          }}>
-          {#if normStatus === 'working'}
-            <span class="norm-hint">Normalizing...</span>
-          {:else if normStatus === 'ok'}
-            <span class="norm-ok">✓ {normMsg}</span>
-          {:else if normStatus === 'err'}
-            <span class="norm-err">✗ {normMsg}</span>
-          {:else}
-            <span class="norm-hint">Drop audio here → –14 LUFS → Desktop</span>
-          {/if}
+        <div class="helper-block">
+          <div class="normalizer-title">NORMALIZER</div>
+          <div class="normalizer-drop
+            {normDragging ? 'dragging' : ''}
+            {normStatus === 'ok' ? 'ok' : ''}
+            {normStatus === 'err' ? 'err' : ''}"
+            ondragover={e => { e.preventDefault(); normDragging = true }}
+            ondragleave={() => normDragging = false}
+            ondrop={async e => {
+              e.preventDefault()
+              normDragging = false
+              normStatus = 'working'
+              normMsg = ''
+              const file = e.dataTransfer.files[0]
+              if (!file) return
+              const exts = ['.mp3','.wav','.aiff','.aif','.flac','.m4a']
+              const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+              if (!exts.includes(ext)) { normStatus = 'err'; normMsg = 'Unsupported format'; return }
+              try {
+                const buf = await file.arrayBuffer()
+                const res = await fetch('http://localhost:4242/normalize', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },
+                  body: buf
+                })
+                const data = await res.json()
+                if (data.ok) { normStatus = 'ok'; normMsg = data.outFile }
+                else { normStatus = 'err'; normMsg = data.error || 'Error' }
+              } catch(err) { normStatus = 'err'; normMsg = err.message }
+            }}>
+            {#if normStatus === 'working'}
+              <span class="norm-hint">Normalizing...</span>
+            {:else if normStatus === 'ok'}
+              <span class="norm-ok">✓ {normMsg}</span>
+            {:else if normStatus === 'err'}
+              <span class="norm-err">✗ {normMsg}</span>
+            {:else}
+              <span class="norm-hint">Drop audio here → –14 LUFS → Desktop</span>
+            {/if}
+          </div>
         </div>
 
         <!-- ACAPELLA EXTRACTOR -->
-        <div class="normalizer-title" style="margin-top:16px">ACAPELLA EXTRACTOR</div>
-        <div class="helper-sub">Drop track → strips vocals → trims to vocal start → saves to Desktop with BPM tag</div>
-
-        <div class="acapella-drop {acapellaDragging ? 'dragging' : ''}"
-          ondragover={e => { e.preventDefault(); acapellaDragging = true }}
-          ondragleave={() => acapellaDragging = false}
-          ondrop={handleAcapellaDrop}>
-          {#if acapellaLoading}
-            <div class="acapella-loading">● Extracting... 2-5 min</div>
-          {:else if acapellaFile}
-            <div class="acapella-ready">
-              📁 {acapellaFile.name}
-              <button class="extract-btn" onclick={runAcapellaExtract}>Extract Acapella</button>
-            </div>
-          {:else}
-            <div class="acapella-placeholder">
-              🎤 Drop audio file here
-              <span style="font-size:9px;color:#252525">mp3 · wav · aif · m4a</span>
+        <div class="helper-block">
+          <div class="normalizer-title">ACAPELLA EXTRACTOR</div>
+          <div class="helper-sub">Drop track → strips vocals → trims to vocal start → saves to Desktop with BPM tag</div>
+          <div class="acapella-drop {acapellaDragging ? 'dragging' : ''}"
+            ondragover={e => { e.preventDefault(); acapellaDragging = true }}
+            ondragleave={() => acapellaDragging = false}
+            ondrop={handleAcapellaDrop}>
+            {#if acapellaLoading}
+              <div class="acapella-loading">● Extracting... 2-5 min</div>
+            {:else if acapellaFile}
+              <div class="acapella-ready">
+                📁 {acapellaFile.name}
+                <button class="extract-btn" onclick={runAcapellaExtract}>Extract Acapella</button>
+              </div>
+            {:else}
+              <div class="acapella-placeholder">
+                🎤 Drop audio file here
+                <span style="font-size:9px;color:#252525">mp3 · wav · aif · m4a</span>
+              </div>
+            {/if}
+          </div>
+          {#if acapellaResult}
+            <div class="acapella-result">
+              {#if acapellaResult.ok}
+                <div class="result-row">
+                  <span class="result-label">FILE</span>
+                  <span class="result-val">{acapellaResult.filename}</span>
+                </div>
+                {#if acapellaResult.bpm}
+                  <div class="result-row">
+                    <span class="result-label">BPM</span>
+                    <span class="result-val">{acapellaResult.bpm}</span>
+                  </div>
+                {/if}
+                {#if acapellaResult.key}
+                  <div class="result-row">
+                    <span class="result-label">KEY</span>
+                    <span class="result-val">{acapellaResult.key}{acapellaResult.camelot ? ' · ' + acapellaResult.camelot : ''}</span>
+                  </div>
+                {/if}
+                {#if acapellaResult.onset !== undefined}
+                  <div class="result-row">
+                    <span class="result-label">VOCAL IN</span>
+                    <span class="result-val">{typeof acapellaResult.onset === 'number' ? acapellaResult.onset.toFixed(2) : acapellaResult.onset}s</span>
+                  </div>
+                {/if}
+                <div style="font-family:'Space Mono',monospace;font-size:9px;color:#4caf82;margin-top:6px">✓ Saved to Desktop</div>
+              {:else}
+                <div style="color:#e57373;font-size:11px">{acapellaResult.error}</div>
+              {/if}
             </div>
           {/if}
         </div>
-
-        {#if acapellaResult}
-          <div class="acapella-result">
-            {#if acapellaResult.ok}
-              <div class="result-row">
-                <span class="result-label">FILE</span>
-                <span class="result-val">{acapellaResult.filename}</span>
-              </div>
-              {#if acapellaResult.bpm}
-                <div class="result-row">
-                  <span class="result-label">BPM</span>
-                  <span class="result-val">{acapellaResult.bpm}</span>
-                </div>
-              {/if}
-              {#if acapellaResult.key}
-                <div class="result-row">
-                  <span class="result-label">KEY</span>
-                  <span class="result-val">{acapellaResult.key}{acapellaResult.camelot ? ' · ' + acapellaResult.camelot : ''}</span>
-                </div>
-              {/if}
-              {#if acapellaResult.onset !== undefined}
-                <div class="result-row">
-                  <span class="result-label">VOCAL IN</span>
-                  <span class="result-val">{typeof acapellaResult.onset === 'number' ? acapellaResult.onset.toFixed(2) : acapellaResult.onset}s</span>
-                </div>
-              {/if}
-              <div style="font-family:'Space Mono',monospace;font-size:9px;color:#4caf82;margin-top:6px">✓ Saved to Desktop</div>
-            {:else}
-              <div style="color:#e57373;font-size:11px">{acapellaResult.error}</div>
-            {/if}
-          </div>
-        {/if}
 
         <!-- MIDI FROM REFERENCE -->
-        <div class="normalizer-title" style="margin-top:16px">MIDI FROM REFERENCE</div>
-        <div class="helper-sub">Drop a MIDI file to generate 5 new ideas in the same style</div>
-
-        <div class="acapella-drop {midiDragging ? 'dragging' : ''}"
-          ondragover={e => { e.preventDefault(); midiDragging = true }}
-          ondragleave={() => midiDragging = false}
-          ondrop={handleMidiDrop}>
-          {#if midiLoading}
-            <div class="acapella-loading">● Generating{midiSteps.length ? ` · step ${midiSteps.length}/4` : '...'}</div>
-          {:else if midiFile}
-            <div class="acapella-ready">
-              📁 {midiFile.name}
-              <button class="extract-btn" onclick={runMidiGenerate}>Analyze &amp; Generate MIDIs</button>
+        <div class="helper-block">
+          <div class="normalizer-title">MIDI FROM REFERENCE</div>
+          <div class="helper-sub">Drop a MIDI file to generate 5 new ideas in the same style</div>
+          <div class="acapella-drop {midiDragging ? 'dragging' : ''}"
+            ondragover={e => { e.preventDefault(); midiDragging = true }}
+            ondragleave={() => midiDragging = false}
+            ondrop={handleMidiDrop}>
+            {#if midiLoading}
+              <div class="acapella-loading">● Generating{midiSteps.length ? ` · step ${midiSteps.length}/4` : '...'}</div>
+            {:else if midiFile}
+              <div class="acapella-ready">
+                📁 {midiFile.name}
+                <button class="extract-btn" onclick={runMidiGenerate}>Analyze &amp; Generate MIDIs</button>
+              </div>
+            {:else}
+              <div class="acapella-placeholder">
+                🎹 Drop a .mid file — chords + melody → 5 new sequences
+                <span style="font-size:9px;color:#444">analyzed temporarily · never saved</span>
+              </div>
+            {/if}
+          </div>
+          {#if midiSteps.length > 0 || midiResult}
+            <div class="midi-progress">
+              {#each midiSteps as step}
+                <div class="midi-step">✓ {step}</div>
+              {/each}
+              {#if midiLoading && midiSteps.length < 4}
+                <div class="midi-step pending">◌ Processing...</div>
+              {/if}
             </div>
-          {:else}
-            <div class="acapella-placeholder">
-              🎹 Drop a .mid file — chords + melody → 5 new sequences
-              <span style="font-size:9px;color:#444">analyzed temporarily · never saved</span>
+          {/if}
+          {#if midiResult}
+            <div class="acapella-result">
+              {#if midiResult.ok}
+                {#each (midiResult.files || []) as fname, i}
+                  <div class="result-row">
+                    <span class="result-label">{String(i+1).padStart(2,'0')}</span>
+                    <span class="result-val">{fname}</span>
+                  </div>
+                {/each}
+                <div style="font-family:'Space Mono',monospace;font-size:9px;color:#4caf82;margin-top:6px">✓ Saved to Desktop</div>
+              {:else}
+                <div style="color:#e57373;font-size:11px">{midiResult.error}</div>
+              {/if}
             </div>
           {/if}
         </div>
 
-        {#if midiSteps.length > 0 || midiResult}
-          <div class="midi-progress">
-            {#each midiSteps as step}
-              <div class="midi-step">✓ {step}</div>
-            {/each}
-            {#if midiLoading && midiSteps.length < 4}
-              <div class="midi-step pending">◌ Processing...</div>
-            {/if}
-          </div>
-        {/if}
-
-        {#if midiResult}
-          <div class="acapella-result" style="margin-top:6px">
-            {#if midiResult.ok}
-              {#each (midiResult.files || []) as fname, i}
-                <div class="result-row">
-                  <span class="result-label">{String(i+1).padStart(2,'0')}</span>
-                  <span class="result-val">{fname}</span>
-                </div>
-              {/each}
-              <div style="font-family:'Space Mono',monospace;font-size:9px;color:#4caf82;margin-top:6px">✓ Saved to Desktop</div>
-            {:else}
-              <div style="color:#e57373;font-size:11px">{midiResult.error}</div>
-            {/if}
-          </div>
-        {/if}
-
         <!-- ABLETON CONTROL -->
-        <div class="normalizer-title" style="margin-top:16px">ABLETON CONTROL</div>
+        <div class="helper-block">
+        <div class="normalizer-title">ABLETON CONTROL</div>
         <div class="ableton-status-row">
           <span class="ableton-dot {abletonConnected ? 'on' : 'off'}"></span>
           <span class="ableton-status-text {abletonConnected ? 'on' : 'off'}">{abletonConnected ? 'Ableton connected' : 'Ableton offline'}</span>
@@ -1760,6 +1766,9 @@ ${mozartContext}`
         {#if abletonResponse && abletonResponse._mode === 'sequence' && abletonResponse.error}
           <div class="ableton-response err"><div class="ableton-response-error">✗ {abletonResponse.error}</div></div>
         {/if}
+        </div><!-- /helper-block ableton -->
+
+        </div><!-- /helpers-built-in -->
       {/if}
 
     </div>
@@ -2208,7 +2217,9 @@ ${mozartContext}`
   .add-row { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; align-items: center; }
   .add-inp { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 9px; outline: none; border-radius: 3px; }
   .add-inp:focus { border-color: rgba(201,168,76,.4); }
-  .normalizer-title { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .1em; color: #555; padding: 10px 0 5px; }
+  .helpers-built-in { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+  .helper-block { display: flex; flex-direction: column; gap: 8px; }
+  .normalizer-title { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .1em; color: #555; }
   .title-gen-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
   .title-gen-inp { flex: 1; }
   .title-gen-results { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
@@ -2224,7 +2235,7 @@ ${mozartContext}`
   .norm-hint { font-family: 'Space Mono', monospace; font-size: 11px; color: #333; }
   .norm-ok { font-family: 'Space Mono', monospace; font-size: 11px; color: #4caf82; }
   .norm-err { font-family: 'Space Mono', monospace; font-size: 11px; color: #e05a4a; }
-  .helper-sub { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #333; margin-bottom: 6px; }
+  .helper-sub { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #333; }
   .acapella-drop { border: 1px dashed #252525; border-radius: 3px; padding: 20px; text-align: center; min-height: 70px; display: flex; align-items: center; justify-content: center; cursor: pointer; margin: 6px 0; transition: border-color .15s; }
   .acapella-drop.dragging { border-color: #c9a84c; background: rgba(201,168,76,.04); }
   .acapella-placeholder { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #333; display: flex; flex-direction: column; gap: 4px; align-items: center; }

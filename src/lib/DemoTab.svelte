@@ -306,11 +306,13 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: savedName, dir: 'demo' })
       })
-      const { bpm, bpmHalf, bpmDouble, key } = await res.json()
+      const data = await res.json()
+      const { bpm, bpmHalf, bpmDouble, key } = data
       const updates = { audio_path: savedName, lufs_gain: gainMap[song.id] }
       if (bpm) { updates.tempo = bpm; song.tempo = bpm; song._bpmHalf = bpmHalf; song._bpmDouble = bpmDouble }
       if (key)  { updates.key   = key;  song.key   = key  }
       await supabase.from('songs').update(updates).eq('id', song.id)
+      runAutoTagDisco(song, data)
     } catch(err) {
       console.warn('Analysis failed (watcher not running?):', err.message)
       await supabase.from('songs').update({ audio_path: savedName, lufs_gain: gainMap[song.id] || 1.0 }).eq('id', song.id)
@@ -328,11 +330,13 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: song.audio_path, dir: 'demo' })
       })
-      const { bpm, bpmHalf, bpmDouble, key } = await res.json()
+      const data = await res.json()
+      const { bpm, bpmHalf, bpmDouble, key } = data
       const updates = {}
       if (bpm) { updates.tempo = bpm; song.tempo = bpm; song._bpmHalf = bpmHalf; song._bpmDouble = bpmDouble }
       if (key)  { updates.key   = key;  song.key   = key  }
       if (Object.keys(updates).length) await supabase.from('songs').update(updates).eq('id', song.id)
+      runAutoTagDisco(song, data)
     } catch(e) { console.warn('Re-analyze failed:', e.message) }
     song._analyzing = false; songs = [...songs]
   }
@@ -935,6 +939,67 @@
     }
   }
 
+  // ── DISCO tag helpers ────────────────────────────────────────────────────
+
+  const DISCO_CATEGORIES = ['tempo','mood','genre','vocals','instrument','type']
+
+  function getDiscoTags(song) {
+    return song.work_data?.disco_tags || {}
+  }
+
+  async function runAutoTagDisco(song, essentiaAnalysis) {
+    if (song._discoTagging) return
+    song._discoTagging = true; songs = [...songs]
+    try {
+      const res = await fetch('http://localhost:4242/auto-tag-disco', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ song_id: song.id, essentia_analysis: essentiaAnalysis || song.work_data?.analysis || {} })
+      })
+      const result = await res.json()
+      if (result.ok && result.disco_tags) {
+        song.work_data = { ...(song.work_data || {}), disco_tags: result.disco_tags }
+        songs = [...songs]
+      }
+    } catch(e) { console.warn('auto-tag-disco failed:', e.message) }
+    song._discoTagging = false; songs = [...songs]
+  }
+
+  async function removeDiscoTag(song, category, tag) {
+    const disco_tags = { ...(song.work_data?.disco_tags || {}) }
+    disco_tags[category] = (disco_tags[category] || []).filter(t => t !== tag)
+    const work_data = { ...(song.work_data || {}), disco_tags }
+    song.work_data = work_data
+    songs = [...songs]
+    await supabase.from('songs').update({ work_data }).eq('id', song.id)
+    saveDiscoLearning(song, 'removed', tag, category)
+  }
+
+  async function addDiscoTag(song, category, tag) {
+    const disco_tags = { ...(song.work_data?.disco_tags || {}) }
+    disco_tags[category] = [...new Set([...(disco_tags[category] || []), tag])]
+    const work_data = { ...(song.work_data || {}), disco_tags }
+    song.work_data = work_data
+    songs = [...songs]
+    await supabase.from('songs').update({ work_data }).eq('id', song.id)
+    saveDiscoLearning(song, 'added', tag, category)
+  }
+
+  function saveDiscoLearning(song, action, tag, category) {
+    const a = song.work_data?.analysis || {}
+    const content = `Tag preference: Song "${song.title || song.code}" (${song.tempo || a.bpm || '?'}BPM, ${song.key || a.key || '?'}, energy:${a.energy ?? '?'}) — user ${action} tag "${tag}" from ${category}. Remember this for future auto-tagging of similar tracks.`
+    supabase.from('brain_knowledge').insert({
+      category: 'mixing_technique',
+      content,
+      source_type: 'user',
+      confidence: 'locked',
+      active: true,
+      title: `DISCO pref: ${action} "${tag}" (${song.code})`
+    }).then(() => {})
+  }
+
+  let discoAddInput = $state({}) // song.id_category → input string
+  let showDiscoAdd = $state({})  // song.id_category → boolean
+
   // Mozart
   let aiInput = $state('')
   let aiMessages = $state([])
@@ -962,11 +1027,12 @@
   }
 
   function playSong(songId, src) {
-    if (!src) return
+    console.log('[DemoTab] playSong called:', songId, src)
+    if (!src) { console.warn('[DemoTab] playSong: no src — bailing'); return }
     const player = getSharedPlayer()
     const id = String(songId)
     if (currentSongId === id) {
-      if (player.paused) player.play().catch(() => {})
+      if (player.paused) player.play().catch(e => console.error('[DemoTab] play() rejected:', e))
       else player.pause()
       return
     }
@@ -975,7 +1041,7 @@
     player.currentTime = 0
     currentSongId = id
     player.load()
-    player.play().catch(() => {})
+    player.play().catch(e => console.error('[DemoTab] play() rejected:', e))
   }
 
   function formatTime(s) {
@@ -1160,7 +1226,7 @@
               <div class="player-slot" onpointerdown={e => e.stopPropagation()}>
                 {#if audioSrc(song)}
                   <div class="mini-player {currentSongId === String(song.id) ? 'active' : ''}">
-                    <button onclick={() => playSong(song.id, audioSrc(song))}>
+                    <button onclick={() => { console.log('[DemoTab] play button clicked — song:', song.id, 'src:', audioSrc(song)); playSong(song.id, audioSrc(song)) }}>
                       {currentSongId === String(song.id) && isPlaying ? '⏸' : '▶'}
                     </button>
                     <span class="time">
@@ -1268,30 +1334,7 @@
               <div class="field">
                 <label>TAGS</label>
                 <div class="tags-input-row" onclick={e => e.stopPropagation()}>
-                  <!-- Genre dropdown - same width as KEY box -->
-                  <div class="genre-picker-wrap" style="flex:0 0 130px">
-                    <input class="inp-sm genre-search-inp" placeholder="+ Genre..."
-                      value={genreSearch[song.id]||''}
-                      oninput={e => { genreSearch = {...genreSearch, [song.id]: e.target.value}; showGenrePicker = {...showGenrePicker, [song.id]: true} }}
-                      onfocus={() => { showGenrePicker = {...showGenrePicker, [song.id]: true} }} />
-                    {#if showGenrePicker[song.id]}
-                      {@const filteredGenres = availableGenres.filter(g => (!(genreSearch[song.id]||'') || g.includes((genreSearch[song.id]||'').toLowerCase())) && !(song.tags||[]).includes(g))}
-                      {#if filteredGenres.length}
-                        <div class="genre-dropdown">
-                          {#each filteredGenres as g}
-                            <button class="genre-opt" onclick={() => {
-                              const tags = [...(song.tags||[]), g]
-                              updateField(song, 'tags', tags)
-                              saveTagPattern(song, tags)
-                              genreSearch = {...genreSearch, [song.id]: ''}
-                              showGenrePicker = {...showGenrePicker, [song.id]: false}
-                            }}>{g}</button>
-                          {/each}
-                        </div>
-                      {/if}
-                    {/if}
-                  </div>
-                  <!-- Custom tag input - same width -->
+                  <!-- Custom tag input only -->
                   <div style="flex:0 0 130px">
                     <input class="inp-sm" placeholder="Custom tag..." value={tagInput[song.id]||''}
                       oninput={e => tagInput = {...tagInput, [song.id]: e.target.value}}
@@ -1307,6 +1350,35 @@
                     {song._generating ? '...' : '✦ Claude'}
                   </button>
                 </div>
+              </div>
+
+              <!-- TAGS DISCO -->
+              <div class="field">
+                <div class="disco-label-row">
+                  <label>TAGS DISCO</label>
+                  <button class="btn-ghost-sm {song._discoTagging ? 'dim' : ''}" onclick={() => runAutoTagDisco(song)}>
+                    {song._discoTagging ? '...' : '↻ Re-tag'}
+                  </button>
+                </div>
+                {#if !DISCO_CATEGORIES.some(cat => (getDiscoTags(song)[cat]||[]).length > 0) && !song._discoTagging}
+                  <span class="disco-empty">No DISCO tags yet — drop audio or click Re-tag.</span>
+                {:else}
+                  <div class="disco-tags-wrap">
+                    {#each DISCO_CATEGORIES as cat}
+                      {#if (getDiscoTags(song)[cat]||[]).length > 0}
+                        <div class="disco-cat-row">
+                          <span class="disco-cat-label">{cat.toUpperCase()}</span>
+                          {#each getDiscoTags(song)[cat] as tag}
+                            <span class="disco-chip">
+                              <span class="disco-chip-tag">{tag}</span>
+                              <button class="tag-del" onclick={() => removeDiscoTag(song, cat, tag)}>×</button>
+                            </span>
+                          {/each}
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
               </div>
               <div class="field">
                 <label>REFERENCE LINKS</label>
@@ -1910,4 +1982,13 @@
   .freeze-btn.on { border-color: rgba(224,90,74,.5); background: rgba(224,90,74,.08); }
   .s-btn.frozen-disabled { border-color: #1e1e1e; color: #2a2a2a; cursor: not-allowed; }
   .s-btn.frozen-disabled:hover { background: transparent; }
+
+  /* DISCO tags */
+  .disco-label-row { display: flex; align-items: center; justify-content: space-between; }
+  .disco-tags-wrap { display: flex; flex-direction: column; gap: 5px; }
+  .disco-cat-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+  .disco-cat-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.55); flex-shrink: 0; width: 72px; }
+  .disco-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px 2px 8px; background: rgba(201,168,76,.05); border: 1px solid rgba(201,168,76,.2); border-radius: 2px; }
+  .disco-chip-tag { font-family: 'Space Mono', monospace; font-size: 10px; color: #cec9c1; }
+  .disco-empty { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; }
 </style>

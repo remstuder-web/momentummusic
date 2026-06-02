@@ -6034,6 +6034,17 @@ MUSIC: get_scale_notes, generate_bassline, generate_drum_pattern
 IMPORTANT: For master track, ALWAYS use track_index: -1. This is the special index AbletonMCP uses for the master track.
 For third-party plugins (VST/AU/VST3): use get_browser_items_at_path with path "query:Plugins#VST3", "query:Plugins#VST", or "query:Plugins#AUv2". Then load_browser_item with the exact uri and track_index: -1 for master. URI param key for load_browser_item is "item_uri" (not "uri"). NEVER use search_browser or browse_path for plugins — only get_browser_items_at_path works.`
 
+// ── DISCO tag lists (module scope — used by /auto-tag-disco endpoint) ────────
+const DISCO_TAGS = {
+  tempo: ['Downtempo','Midtempo','Uptempo','Fast','Slow'],
+  mood: ['Anthemic','Atmospheric','Bright','Building','Catchy','Cinematic','Confident','Cool','Dark','Dramatic','Dreamy','Driving','Emotive','Energetic','Epic','Fun','Gritty','Happy','Hopeful','Intense','Light','Minimal','Moody','Mysterious','Party','Percussive','Playful','Positive','Powerful','Quirky','Reflective','Retro','Rhythmic','Romantic','Sad','Sexy','Swagger','Tension','Upbeat','Uplifting','Warm'],
+  genre: ['Ambient','Blues','Classical','Country','Dance','Electronic','Folk','Funk','Hip hop/rap','Indie','Jazz','Latin','Metal','Pop','Punk','R&B','Reggae','Rock','Singer/songwriter','Soul','Urban','Vintage','World'],
+  vocals: ['Aahs','A cappella','Background vocals','Choir','Clean','Duet','Explicit','Female vocal','Foreign language','French language','German language','Harmonies','Instrumental','Male vocal','Oohs','Spanish language','Whispering','Whistling'],
+  lyrical_theme: ['Adventure','Ambition','Betrayal','Celebration','Change','Christmas','Confidence','Conflict','Connection','Death','Desire','Destiny','Discovery','Dream','Empowerment','Energy','Escape','Faith','Family','Fear','Freedom','Friendship','Fun','Gratitude','Happiness','Heartbreak','Home','Hope','Identity','Individuality','Life','Loneliness','Longing','Loss','Love','Money','Nature','New beginning','Nostalgia','Pain','Party','Power','Rebellion','Regret','Relationship','Romance','Strength','Struggle','Success','Survival','Time','Together','Unity'],
+  instrument: ['Acoustic guitar','Bass','Brass','Clarinet','Drums','Electric guitar','Flute','Handclaps','Horns','Keyboard','Orchestral','Organ','Percussion','Piano','Saxophone','Strings','Synth','Trumpet','Ukelele'],
+  type: ['Cover','Demo','Easy-clear','Focus track','Mainstream','One stop','Recognizable','Rerecord','Samples','Score','Sound design','Soundtrack','Sting']
+}
+
 // ── HTTP server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -13341,6 +13352,92 @@ ${formatted}`
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))
     }
+    return
+  }
+
+  // ── POST /auto-tag-disco — assign DISCO industry tags via Claude Haiku ──────
+  if (req.method === 'POST' && req.url === '/auto-tag-disco') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const { song_id, essentia_analysis } = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!song_id) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'missing song_id' })); return }
+
+        const apiKey = process.env.ANTHROPIC_API_KEY
+        if (!apiKey) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: 'No ANTHROPIC_API_KEY' })); return }
+
+        const a = essentia_analysis || {}
+        const prompt = `You are a music tagging expert using the DISCO industry standard.
+Based on this audio analysis, assign tags from EACH category:
+
+BPM: ${a.bpm || '?'}
+Key: ${a.key || '?'}
+Energy: ${a.energy ?? '?'} (0-1)
+Brightness: ${a.brightness ?? '?'} (0-1)
+Bass energy: ${a.bass_energy ?? '?'} (0-1)
+Danceability: ${a.danceability ?? '?'} (0-1)
+Warmth: ${a.warmth ?? '?'} (0-1)
+
+Available tags by category:
+TEMPO: ${DISCO_TAGS.tempo.join(', ')}
+MOOD: ${DISCO_TAGS.mood.join(', ')}
+GENRE: ${DISCO_TAGS.genre.join(', ')}
+VOCALS: ${DISCO_TAGS.vocals.join(', ')}
+INSTRUMENT: ${DISCO_TAGS.instrument.join(', ')}
+TYPE: ${DISCO_TAGS.type.join(', ')}
+
+Rules:
+- Assign 1-2 tags from TEMPO based on BPM
+- Assign 3-5 tags from MOOD based on energy/brightness/warmth
+- Assign 1-3 tags from GENRE based on overall sound profile
+- For VOCALS: only assign Instrumental if no vocals detected
+- For INSTRUMENT: assign based on detected tonal characteristics
+- For TYPE: default to Demo unless clearly otherwise
+- Skip LYRICAL THEME — cannot determine from audio analysis alone
+- Only use tags from the lists above, exactly as written
+
+Return ONLY valid JSON:
+{"tempo":[],"mood":[],"genre":[],"vocals":[],"instrument":[],"type":[]}`
+
+        const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
+        })
+        const aiData = await aiRes.json()
+        const raw = aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}'
+        let disco_tags
+        try { disco_tags = JSON.parse(raw) } catch(e) { throw new Error('JSON parse failed: ' + raw.slice(0, 100)) }
+
+        for (const cat of ['tempo','mood','genre','vocals','instrument','type']) {
+          if (Array.isArray(disco_tags[cat])) {
+            disco_tags[cat] = disco_tags[cat].filter(t => DISCO_TAGS[cat].includes(t))
+          } else {
+            disco_tags[cat] = []
+          }
+        }
+
+        const { data: songRow } = await supabase.from('songs').select('work_data').eq('id', song_id).single()
+        const work_data = { ...(songRow?.work_data || {}), disco_tags }
+        await supabase.from('songs').update({ work_data }).eq('id', song_id)
+
+        if (aiData.usage) {
+          fetch(`http://127.0.0.1:${PORT}/track-cost`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: '/auto-tag-disco', model: 'claude-haiku-4-5-20251001', input_tokens: aiData.usage.input_tokens, output_tokens: aiData.usage.output_tokens, cost_usd: (aiData.usage.input_tokens * 0.0000008) + (aiData.usage.output_tokens * 0.000001) })
+          }).catch(() => {})
+        }
+
+        console.log(`✓ DISCO tags for song ${song_id}: ${JSON.stringify(disco_tags)}`)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, disco_tags }))
+      } catch(e) {
+        console.warn('auto-tag-disco error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
     return
   }
 

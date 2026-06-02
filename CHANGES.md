@@ -1,5 +1,53 @@
 # CHANGES
 
+## [2026-06-02] momentum-watcher.cjs + src/lib/DemoTab.svelte — DONE
+TASK: DISCO tag system full implementation
+WHAT: Added POST /auto-tag-disco endpoint (Claude Haiku auto-assigns DISCO industry tags from Essentia analysis); DISCO_TAGS const at module scope; DemoTab: removed genre dropdown from TAGS, added TAGS DISCO section with category labels + × removal + Re-tag button; auto-runs after audio drop and Re-analyze; Mozart brain_knowledge save on tag add/remove
+RESULT: builds clean, watcher running (ping OK)
+BLOCKERS: none
+
+## [2026-06-02] src/lib/DailyTab.svelte — DONE
+TASK: Uniform spacing between all helper blocks
+WHAT: Wrapped Title Generator, Normalizer, Acapella Extractor, MIDI from Reference, Ableton Control each in .helper-block inside .helpers-built-in (flex column gap:16px). Removed all inline margin-top and padding from normalizer-title — gap handles all spacing.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] src/lib/ProjectsTab.svelte — DONE
+TASK: Notes/brief/lyrics header style fix
+WHAT: .notes-label font-size → 11px, letter-spacing .14em, color rgba(201,168,76,.65) — matches base label element (TITLE field)
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] src/lib/ProjectsTab.svelte — DONE
+TASK: Collapse notes/brief/lyrics into single dropdown section
+WHAT: Combined "SONG NOTES / BRIEF" toggle + standalone lyrics-block into one outer collapsible "NOTES / BRIEF / LYRICS". Two sub-sections inside (NOTES/BRIEF → project_info, LYRICS → lyrics_text). Auto-opens if either field has content. Removed standalone lyrics-block from production stage. Removed unused lyricsOpen state. Checkboxes untouched.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] src/lib/ProjectsTab.svelte — DONE
+TASK: Reduce right sidebar (Mozart panel) width
+WHAT: grid-template-columns: 230px 1fr 500px → 230px 1fr 200px — mid-col (1fr) absorbs freed 300px automatically
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] momentum-watcher.cjs + Supabase — DONE
+TASK: Fix Manifesto audio path mismatch + add mismatch scanner
+WHAT: Patched songs id=121 work_data (prod_audio + active version audio_path) from V04 → V03 to match file on disk. Added GET /fix-audio-path-mismatch endpoint that scans all songs and checks every audio filename against disk.
+RESULT: Manifesto plays. Scanner reports 59 mismatches across 31 songs — mostly old-format version history entries (expected); Ying & Yang instr_audio also stale.
+BLOCKERS: none
+
+## [2026-06-02] src/lib/ProjectsTab.svelte — DONE
+TASK: Fix new song creation + drop zone drag churn
+WHAT: BUG1 addSong — destructure Supabase error and throw (was silently swallowed); newSongCreating=false moved to finally; console.log at every step. BUG2 — replaced all per-song _prodDrag/_mixDrag/_instrDrag/_stemsDrag state (which called songs=[...songs] on every dragover pixel) with single dragOverSongId scalar; CSS highlight is pure reactive comparison, zero array mutations during drag; added locked-indicator span while uploadingSongs[song.id] is set.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] src/lib/ProjectsTab.svelte — DONE
+TASK: Fix drop zones stop accepting files after 2 drops
+WHAT: Wrapped handleProdDrop, handleMixDrop, handleInstrumentalDrop, handleStemsZipDrop in try/catch/finally — finally always resets drag flags and songs array. Added uploadingSongs $state map (song.id → type) for per-song tracking. Captured e.altKey synchronously before any await.
+RESULT: builds clean, watcher running
+BLOCKERS: none
+
 ## [2026-06-02] momentum-watcher.cjs + ProjectsTab.svelte — DONE
 TASK: Instrumental: overwrite previous file in Dropbox, show new filename in UI
 WHAT: Watcher: before saving, scan INSTRUMENTALS_DIR for files whose name starts with the same prefix (everything before _INST_ in new fname, lowercased) — delete all matches. Fallback to oldfile param if no _INST_ marker. Frontend: after save, use result.filename (server-authoritative) for instrPendingName + wd.instr_audio so displayed name always reflects what the server saved.

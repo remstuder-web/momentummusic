@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-02] momentum-watcher.cjs — DONE
+TASK: Startup: restore missing SONO tracks + auto-generate Dropbox links
+WHAT: Added two startup functions (called after 5s delay inside server.listen): restoreMissingSonoTracks() scans !SONO folder, inserts any missing rows with project_id=null, status=demo, at_artist=SONO; ensureAllDemoDropboxLinks() fetches all demo songs missing dropbox_stream_url and generates them at 800ms intervals. Both run on every watcher startup. MOONZ (26034_MOONZ_94bpm.wav) was restored on first startup (id=238, confirmed correct). Confirmed "✓ All demos have Dropbox links" on startup.
+RESULT: watcher running, MOONZ restored
+BLOCKERS: none
+
+## [2026-06-02] momentum-watcher.cjs — DONE
 TASK: Fix SONO unlink guard race condition
 WHAT: The fs.existsSync(sonoPath) guard in the unlink handler fired before fs.renameSync completed on some macOS I/O scheduling — file hadn't landed in !SONO yet so the guard passed and the row was deleted. Fix: fetch the song row first (already needed for the DELETE), check work_data.at_artist === 'sono' — if true, skip and return. DB state is always consistent regardless of filesystem timing. Also restored MOONZ row (26034_MOONZ_94bpm.wav, id=237) that was deleted by the race.
 RESULT: watcher ping OK

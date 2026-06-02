@@ -15291,6 +15291,55 @@ Max 150 words. Be specific and actionable.` }]
   fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?select=genre_tag,playlist_name&limit=1`, { headers: sbHeaders })
     .then(r => { if (r.status === 400) console.warn('⚠ reference_tracks missing genre_tag/playlist_name — run SQL:\nALTER TABLE reference_tracks ADD COLUMN IF NOT EXISTS genre_tag text, ADD COLUMN IF NOT EXISTS playlist_name text;') })
     .catch(() => {})
+
+  // ── Startup: restore any SONO tracks missing from DB ─────────────────────
+  async function restoreMissingSonoTracks() {
+    try {
+      if (!fs.existsSync(SONO_DIR)) return
+      const sonoFiles = fs.readdirSync(SONO_DIR).filter(f => /^\d{5,6}/.test(f) && DEMO_WATCH_EXTS.has(path.extname(f).toLowerCase()))
+      for (const filename of sonoFiles) {
+        const { data } = await supabase.from('songs').select('id').eq('audio_path', filename).maybeSingle()
+        if (!data) {
+          const parsed = parseDemoFilename(filename)
+          const { error } = await supabase.from('songs').insert({
+            code:       parsed.code || filename.split('_')[0] || '00000',
+            title:      parsed.title || filename.replace(/\.[^.]+$/, ''),
+            tempo:      parsed.bpm || null,
+            audio_path: filename,
+            status:     'demo',
+            project_id: null,
+            tags:       [],
+            reference_links: [],
+            work_data:  { auto_detected: true, at_artist: 'SONO', demo_type: 'SONG' }
+          })
+          if (!error) console.log(`✓ Restored missing SONO track: ${filename}`)
+          else console.warn(`⚠ Restore failed for ${filename}:`, error.message)
+        }
+      }
+    } catch(e) { console.warn('restoreMissingSonoTracks error:', e.message) }
+  }
+
+  // ── Startup: generate Dropbox links for demos that are missing them ───────
+  async function ensureAllDemoDropboxLinks() {
+    try {
+      const { data } = await supabase.from('songs').select('id, audio_path, work_data').is('project_id', null).not('audio_path', 'is', null)
+      const missing = (data || []).filter(s => s.audio_path && !s.work_data?.dropbox_stream_url)
+      if (!missing.length) { console.log('✓ All demos have Dropbox links'); return }
+      console.log(`🔗 Generating Dropbox links for ${missing.length} demos...`)
+      for (const song of missing) {
+        await generateDemoDropboxLink(song.audio_path, song.id)
+        await new Promise(r => setTimeout(r, 800))
+      }
+      console.log('✓ All demo Dropbox links ready')
+    } catch(e) { console.warn('ensureAllDemoDropboxLinks error:', e.message) }
+  }
+
+  // Run startup integrity checks after a short delay so chokidar watchers are ready
+  setTimeout(() => {
+    restoreMissingSonoTracks().catch(() => {})
+    ensureAllDemoDropboxLinks().catch(() => {})
+  }, 5000)
+
   ;(async () => {
     const { error: chkErr } = await supabase.from('patches').select('dropped_files').limit(1)
     if (!chkErr) {

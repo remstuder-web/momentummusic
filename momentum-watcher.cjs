@@ -376,6 +376,44 @@ function fetchJSON(url, options = {}) {
   })
 }
 
+// ── Dropbox stream/download URL helpers ──────────────────────────────────────
+function toDropboxStreamUrl(shareUrl) {
+  return shareUrl
+    .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+    .replace('?dl=0', '').replace('&dl=0', '')
+}
+function toDropboxDownloadUrl(shareUrl) {
+  if (shareUrl.includes('?dl=')) return shareUrl.replace(/dl=\d/, 'dl=1')
+  if (shareUrl.includes('?')) return shareUrl + '&dl=1'
+  return shareUrl + '?dl=1'
+}
+function localToDropboxPath(localPath) {
+  return localPath.replace(path.join(process.env.HOME, 'Dropbox'), '').replace(/\\/g, '/')
+}
+
+// Generate + save Dropbox stream/download URLs for one demo song
+async function generateDemoDropboxLink(filename, songId) {
+  try {
+    let localPath = path.join(DEMOS_DIR, filename)
+    if (!fs.existsSync(localPath)) localPath = path.join(SONO_DIR, filename)
+    if (!fs.existsSync(localPath)) { console.log(`  ⚠ Dropbox link skip — file not found: ${filename}`); return null }
+    const dbxPath = localToDropboxPath(localPath)
+    const shareUrl = await getDropboxShareLink(dbxPath, 3, 2000)
+    if (!shareUrl) return null
+    const dropbox_stream_url   = toDropboxStreamUrl(shareUrl)
+    const dropbox_download_url = toDropboxDownloadUrl(shareUrl)
+    // Merge into work_data
+    const { data: row } = await supabase.from('songs').select('work_data').eq('id', songId).single()
+    const work_data = { ...(row?.work_data || {}), dropbox_stream_url, dropbox_download_url }
+    await supabase.from('songs').update({ work_data }).eq('id', songId)
+    console.log(`  ✓ Dropbox link saved: ${filename}`)
+    return { dropbox_stream_url, dropbox_download_url }
+  } catch(e) {
+    console.warn(`  Dropbox link failed for ${filename}:`, e.message)
+    return null
+  }
+}
+
 async function getDropboxShareLink(dbxPath, retries = 8, delayMs = 3000) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     const token = await getValidAccessToken()
@@ -13384,6 +13422,35 @@ ${formatted}`
     return
   }
 
+  // ── POST /generate-demo-dropbox-links — bulk generate Dropbox stream URLs ────
+  if (req.method === 'POST' && req.url === '/generate-demo-dropbox-links') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    req.on('data', () => {})
+    req.on('end', async () => {
+      try {
+        const { data: songs } = await supabase
+          .from('songs').select('id, audio_path, work_data').is('project_id', null)
+        const pending = (songs || []).filter(s =>
+          s.audio_path && !s.work_data?.dropbox_stream_url
+        )
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, started: true, total: pending.length }))
+
+        let done = 0
+        for (const song of pending) {
+          const result = await generateDemoDropboxLink(song.audio_path, song.id)
+          if (result) done++
+          await new Promise(r => setTimeout(r, 1000))
+        }
+        console.log(`[generate-demo-dropbox-links] Done — ${done}/${pending.length} linked`)
+      } catch(e) {
+        console.warn('generate-demo-dropbox-links error:', e.message)
+        if (!res.headersSent) { res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message })) }
+      }
+    })
+    return
+  }
+
   // ── POST /clear-all-custom-tags — wipe tags[] on all demo songs ──────────────
   if (req.method === 'POST' && req.url === '/clear-all-custom-tags') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -14962,6 +15029,9 @@ server.listen(PORT, '127.0.0.1', () => {
         if (key) tgParts.push(key)
         if (autoTags.length) tgParts.push(autoTags.join(' · '))
         if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, tgParts.join(' | ')).catch(() => {})
+
+        // ── Step 11: Dropbox stream link (fire-and-forget) ──
+        if (songId) generateDemoDropboxLink(newFilename, songId).catch(() => {})
 
       } catch(e) { logError('demo-auto-detect', e.message); console.error('✗ Demo auto-detect error:', e.message) }
     })

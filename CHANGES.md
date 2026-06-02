@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] momentum-watcher.cjs + src/routes/sono/+page.svelte — DONE
+TASK: SONO page Dropbox CDN streaming + download button
+WHAT: Watcher: added toDropboxStreamUrl/toDropboxDownloadUrl/localToDropboxPath helpers; generateDemoDropboxLink(filename, songId) helper that resolves DEMOS_DIR/SONO_DIR, calls getDropboxShareLink, converts to stream+download URLs, saves to work_data; POST /generate-demo-dropbox-links bulk endpoint (skips songs that already have dropbox_stream_url, 1s between each, responds immediately); chokidar add handler Step 11 fires generateDemoDropboxLink for new demos. SONO page: audioSrc() prefers work_data.dropbox_stream_url over localhost:4242; download ↓ button (gold outline) when dropbox_download_url exists; "audio not yet linked" notice when audio_path set but no Dropbox URL yet.
+RESULT: watcher ping OK, builds clean
+BLOCKERS: Run `curl -X POST http://localhost:4242/generate-demo-dropbox-links` to backfill existing demos
+
 ## [2026-06-02] src/routes/sono/+page.svelte — DONE
 TASK: Fix SONO page showing stale DISCO tags
 WHAT: Both field paths were already correct (song.tags for custom tags, song.work_data?.disco_tags?.[cat] for DISCO). Bug was in poll: it only refreshed songs on add/remove, so work_data changes from /auto-tag-all-demos were invisible until page reload. Fixed poll to detect any change in work_data, tags, title, tempo, key via JSON.stringify comparison. Added console.log('disco_tags:', song.code, song.work_data?.disco_tags) in loadSongs to verify data in browser console.

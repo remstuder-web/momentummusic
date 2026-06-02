@@ -153,7 +153,9 @@
   }
 
   function audioSrc(song) {
-    return song.audio_path ? `${AUDIO_SERVER}/${encodeURIComponent(song.audio_path)}` : null
+    if (song.work_data?.dropbox_stream_url) return song.work_data.dropbox_stream_url
+    if (song.audio_path) return `${AUDIO_SERVER}/${encodeURIComponent(song.audio_path)}`
+    return null
   }
 
   function formatTime(s) {
@@ -252,6 +254,11 @@
                       value={currentSongId === String(song.id) ? currentTime : 0}
                       oninput={e => { if (player) player.currentTime = +e.target.value }} />
                   </div>
+                {:else if song.audio_path}
+                  <span class="audio-unavail">audio not yet linked</span>
+                {/if}
+                {#if song.work_data?.dropbox_download_url}
+                  <a href={song.work_data.dropbox_download_url} target="_blank" rel="noopener" class="download-btn">↓</a>
                 {/if}
               </div>
               <span class="arr">{expanded ? '▾' : '▸'}</span>
@@ -410,7 +417,10 @@
   .mini-player .time { font-size: 10px; font-family: 'Space Mono', monospace; color: #555; width: 80px; text-align: right; flex-shrink: 0; }
   .mini-player.active .time { color: #9e9690; }
   .seek-bar   { flex: 1; height: 3px; accent-color: #c9a84c; cursor: pointer; }
-  .arr        { font-size: 12px; color: #555; flex-shrink: 0; }
+  .arr          { font-size: 12px; color: #555; flex-shrink: 0; }
+  .audio-unavail { font-family: 'Space Mono', monospace; font-size: 9px; color: #333; flex-shrink: 0; }
+  .download-btn  { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 8px; background: transparent; border: 1px solid rgba(201,168,76,.35); color: rgba(201,168,76,.8); border-radius: 2px; cursor: pointer; text-decoration: none; flex-shrink: 0; transition: all .15s; }
+  .download-btn:hover { background: rgba(201,168,76,.08); border-color: rgba(201,168,76,.6); color: #c9a84c; }
 
   /* body */
   .card-body { padding: 16px; border-top: 1px solid #252525; background: #0a0a0a; display: flex; flex-direction: column; gap: 14px; }

@@ -35,18 +35,17 @@
     packs = buildPacks(packsRes.data || [])
     loading = false
     startPolling()
+    startRealtimePacks()
   }
 
+  // Songs: 5s poll (work_data changes need full row refresh)
   let pollInterval = null
   function startPolling() {
     if (pollInterval) return
     pollInterval = setInterval(async () => {
-      const [sr, pr] = await Promise.all([
-        supabase.from('songs').select('*').is('project_id', null),
-        supabase.from('patches').select('*, patch_songs(song_id)').eq('artist','SONO')
-      ])
-      if (!sr.data) return
-      const fresh = sr.data.filter(s => (s.work_data?.at_artist||'').toLowerCase() === 'sono')
+      const { data } = await supabase.from('songs').select('*').is('project_id', null)
+      if (!data) return
+      const fresh = data.filter(s => (s.work_data?.at_artist||'').toLowerCase() === 'sono')
         .sort((a, b) => parseInt(b.code) - parseInt(a.code))
       const cur = new Map(songs.map(s => [s.id, s]))
       const hasChange = fresh.length !== songs.length || fresh.some(s => {
@@ -56,8 +55,26 @@
           || c.title !== s.title || c.tempo !== s.tempo || c.key !== s.key
       })
       if (hasChange) songs = fresh
-      if (pr.data) packs = buildPacks(pr.data)
     }, 5000)
+  }
+
+  // Packs: Supabase Realtime for instant cross-device sync
+  let realtimeChannel = null
+  function startRealtimePacks() {
+    if (realtimeChannel) return
+    realtimeChannel = supabase.channel('sono-packs')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'patches' }, async () => {
+        // Re-fetch full packs with patch_songs join on any change
+        const { data } = await supabase.from('patches').select('*, patch_songs(song_id)')
+          .eq('artist', 'SONO').order('created_at', { ascending: false })
+        if (data) packs = buildPacks(data)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'patch_songs' }, async () => {
+        const { data } = await supabase.from('patches').select('*, patch_songs(song_id)')
+          .eq('artist', 'SONO').order('created_at', { ascending: false })
+        if (data) packs = buildPacks(data)
+      })
+      .subscribe()
   }
 
   // ── packs (SONO patches) ──────────────────────────────────────────────────────
@@ -111,6 +128,12 @@
   async function archivePack(pack) {
     await supabase.from('patches').update({ status: 'archived' }).eq('id', pack.id)
     pack.status = 'archived'; packs = [...packs]
+  }
+
+  async function updatePackFeedback(pack, value) {
+    if (value === (pack.feedback || '')) return
+    pack.feedback = value; packs = [...packs]
+    await supabase.from('patches').update({ feedback: value }).eq('id', pack.id)
   }
 
   // ── field saves ──────────────────────────────────────────────────────────────
@@ -248,6 +271,7 @@
     if (keydownHandler) { window.removeEventListener('keydown', keydownHandler); keydownHandler = null }
     if (player) { player.pause(); player.src=''; player=null }
     if (pollInterval) clearInterval(pollInterval)
+    if (realtimeChannel) supabase.removeChannel(realtimeChannel)
   })
 </script>
 
@@ -557,6 +581,10 @@
               {:else}
                 <p class="sb-pack-empty">No songs yet — click + on a track.</p>
               {/if}
+              <textarea class="sb-pack-notes" placeholder="Pack notes..."
+                value={pack.feedback || ''}
+                oninput={e => { pack.feedback = e.target.value; packs = [...packs] }}
+                onblur={e => updatePackFeedback(pack, e.target.value)}></textarea>
             </div>
           {/each}
         </div>
@@ -581,7 +609,7 @@
   .login-btn:hover { background: #d4b660; }
 
   /* ── outer layout ── */
-  .outer       { display: grid; grid-template-columns: 1fr 260px; gap: 24px; max-width: 1140px; margin: 0 auto; padding: 40px 24px 80px; min-height: 100vh; }
+  .outer       { display: grid; grid-template-columns: 1fr 200px; gap: 24px; max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; min-height: 100vh; }
   .main-col    { min-width: 0; display: flex; flex-direction: column; }
 
   /* ── page header ── */
@@ -726,4 +754,7 @@
   .sb-song-del  { background: transparent; border: none; color: #333; font-size: 14px; cursor: pointer; padding: 0; flex-shrink: 0; }
   .sb-song-del:hover { color: #e05a4a; }
   .sb-pack-empty { font-family: 'Space Mono', monospace; font-size: 9px; color: #2a2a2a; padding: 6px 10px; margin: 0; }
+  .sb-pack-notes { background: #111; border: none; border-top: 1px solid #1a1a1a; color: #6a6560; font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 300; padding: 6px 10px; resize: none; width: 100%; min-height: 44px; outline: none; line-height: 1.5; box-sizing: border-box; }
+  .sb-pack-notes:focus { color: #9e9690; background: #141414; }
+  .sb-pack-notes::placeholder { color: #2a2a2a; }
 </style>

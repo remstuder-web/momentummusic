@@ -741,6 +741,7 @@
 
   let sortedPatches = $derived(
     [...patches]
+      .filter(p => (p.artist || '').toLowerCase() !== 'sono') // SONO packs shown separately below
       .filter(p => patchView === 'open'
         ? (p.status === 'open' || p.status === 'sent')
         : p.status === 'archived')
@@ -1701,6 +1702,9 @@
                     <span class="song-title">{song.title || song.code}</span>
                   </div>
                 {/each}
+                {#if pack.feedback}
+                  <p style="font-family:'DM Sans',sans-serif;font-size:12px;color:#6a6560;margin:6px 0 0;padding-top:6px;border-top:1px solid #1c1c1c;line-height:1.5">{pack.feedback}</p>
+                {/if}
               </div>
             {/if}
           </div>

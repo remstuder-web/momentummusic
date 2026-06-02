@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-02] src/routes/sono/+page.svelte + src/lib/DemoTab.svelte — DONE
+TASK: SONO fixes — sidebar width, SONO pack filtering, realtime, pack notes
+WHAT: (1) Download button was already correct sibling after player-slot — no change needed. (2) Sidebar grid changed 1fr 260px → 1fr 200px. (3) sortedPatches now filters out artist='SONO' patches so they only appear in the SONO PACKS section below, not in OPEN/ARCHIVE list. (4) Replaced pack polling with Supabase Realtime channel 'sono-packs' — subscribes to postgres_changes on patches + patch_songs tables, refetches full packs on any event; song polling stays at 5s; channel cleaned up in onDestroy. (5) Pack notes textarea in sidebar (saves to patches.feedback on blur); DemoTab SONO packs section shows feedback text.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] src/routes/sono/+page.svelte + src/lib/DemoTab.svelte — DONE
 TASK: SONO page filter panel + submission sidebar; SubmissionsTab SONO packs section
 WHAT: (1) SONO page completely rewritten — two-column layout (main + 260px sidebar); full DISCO filter panel (tempo/mood/genre/vocals/lyrical_theme/instrument/type pills + BPM dual-range + custom tag search + clear all + live count); (2) Submission sidebar — SONO SUBMISSIONS header, "+ New Pack" creates patches row with artist='SONO', each open pack shows song list with × removal + archive button; song card headers show "→ Pack Name" chips when in packs, "+" button opens pack picker dropdown per card; (3) DemoTab SubmissionsTab view: SONO PACKS divider + read-only cards at bottom for patches where artist='SONO'.
 RESULT: builds clean

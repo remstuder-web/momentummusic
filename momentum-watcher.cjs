@@ -13382,7 +13382,8 @@ ${formatted}`
 
           try {
             const prompt = `You are a music tagging expert using the DISCO industry standard.
-Based on this audio analysis, assign tags from EACH category:
+Based on this audio analysis, assign tags from EACH category.
+Assign UP TO 5 tags per category (minimum 1 where applicable). More tags = better searchability.
 
 BPM: ${a.bpm || a.tempo || '?'}
 Key: ${a.key || '?'}
@@ -13402,13 +13403,18 @@ INSTRUMENT: ${DISCO_TAGS.instrument.join(', ')}
 TYPE: ${DISCO_TAGS.type.join(', ')}
 
 Rules:
-- Assign 1-2 tags from TEMPO based on BPM
-- Assign 3-5 tags from MOOD based on energy/brightness/warmth
-- Assign 1-3 tags from GENRE based on overall sound profile
-- For VOCALS: only assign Instrumental if no vocals detected
-- For INSTRUMENT: assign based on detected tonal characteristics
-- For TYPE: default to Demo unless clearly otherwise
-- Assign 1-3 LYRICAL THEME tags inferred from audio characteristics
+- TEMPO: up to 5 tags based on BPM
+- MOOD: up to 5 tags based on energy/brightness/warmth — be generous
+- GENRE: up to 5 tags based on overall sound profile
+- VOCALS: only assign Instrumental if no vocals detected
+- INSTRUMENT: up to 5 tags based on detected tonal characteristics
+- TYPE: default to Demo unless clearly otherwise
+- LYRICAL THEME: up to 5 tags inferred from audio characteristics:
+  Dark key + low energy + high warmth → Loss, Longing, Nostalgia, Romance
+  Minor key + high energy → Rebellion, Struggle, Conflict, Power
+  Major key + high danceability → Celebration, Freedom, Empowerment, Party
+  Slow + warm + low brightness → Love, Nostalgia, Romance, Longing
+  High brightness + high energy → Empowerment, Confidence, Success
 - Only use tags from the lists above, exactly as written
 
 Return ONLY valid JSON:
@@ -13417,7 +13423,7 @@ Return ONLY valid JSON:
             const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-              body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
+              body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
             })
             const aiData = await aiRes.json()
             const raw = aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}'
@@ -13425,7 +13431,7 @@ Return ONLY valid JSON:
             try { disco_tags = JSON.parse(raw) } catch(e) { skipped++; continue }
 
             for (const cat of ['tempo','mood','genre','vocals','lyrical_theme','instrument','type']) {
-              disco_tags[cat] = Array.isArray(disco_tags[cat]) ? disco_tags[cat].filter(t => DISCO_TAGS[cat].includes(t)) : []
+              disco_tags[cat] = Array.isArray(disco_tags[cat]) ? disco_tags[cat].filter(t => DISCO_TAGS[cat].includes(t)).slice(0, 5) : []
             }
 
             const work_data = { ...(song.work_data || {}), disco_tags }
@@ -13469,7 +13475,8 @@ Return ONLY valid JSON:
 
         const a = essentia_analysis || {}
         const prompt = `You are a music tagging expert using the DISCO industry standard.
-Based on this audio analysis, assign tags from EACH category:
+Based on this audio analysis, assign tags from EACH category.
+Assign UP TO 5 tags per category (minimum 1 where applicable). More tags = better searchability.
 
 BPM: ${a.bpm || '?'}
 Key: ${a.key || '?'}
@@ -13489,13 +13496,13 @@ INSTRUMENT: ${DISCO_TAGS.instrument.join(', ')}
 TYPE: ${DISCO_TAGS.type.join(', ')}
 
 Rules:
-- Assign 1-2 tags from TEMPO based on BPM
-- Assign 3-5 tags from MOOD based on energy/brightness/warmth
-- Assign 1-3 tags from GENRE based on overall sound profile
-- For VOCALS: only assign Instrumental if no vocals detected
-- For INSTRUMENT: assign based on detected tonal characteristics
-- For TYPE: default to Demo unless clearly otherwise
-- Assign 1-3 LYRICAL THEME tags inferred from audio characteristics:
+- TEMPO: up to 5 tags based on BPM (e.g. 130bpm = Uptempo + Fast)
+- MOOD: up to 5 tags based on energy/brightness/warmth — be generous
+- GENRE: up to 5 tags based on overall sound profile
+- VOCALS: only assign Instrumental if no vocals detected
+- INSTRUMENT: up to 5 tags based on detected tonal characteristics
+- TYPE: default to Demo unless clearly otherwise
+- LYRICAL THEME: up to 5 tags inferred from audio characteristics:
   Dark key + low energy + high warmth → Loss, Longing, Nostalgia, Romance
   Minor key + high energy → Rebellion, Struggle, Conflict, Power
   Major key + high danceability → Celebration, Freedom, Empowerment, Party
@@ -13509,7 +13516,7 @@ Return ONLY valid JSON:
         const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
         })
         const aiData = await aiRes.json()
         const raw = aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}'
@@ -13518,7 +13525,7 @@ Return ONLY valid JSON:
 
         for (const cat of ['tempo','mood','genre','vocals','lyrical_theme','instrument','type']) {
           if (Array.isArray(disco_tags[cat])) {
-            disco_tags[cat] = disco_tags[cat].filter(t => DISCO_TAGS[cat].includes(t))
+            disco_tags[cat] = disco_tags[cat].filter(t => DISCO_TAGS[cat].includes(t)).slice(0, 5)
           } else {
             disco_tags[cat] = []
           }

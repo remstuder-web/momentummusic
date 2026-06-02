@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] momentum-watcher.cjs — DONE
+TASK: DISCO tags allow up to 5 per category
+WHAT: Both /auto-tag-disco and /auto-tag-all-demos prompts updated — "Assign UP TO 5 tags per category (minimum 1 where applicable). More tags = better searchability." Per-category rules changed from "1-2/3-5/1-3" to "up to 5". max_tokens bumped 400→600. Validation loop now does .filter().slice(0,5) on both endpoints.
+RESULT: watcher ping OK
+BLOCKERS: none
+
 ## [2026-06-02] momentum-watcher.cjs + src/lib/DemoTab.svelte — DONE
 TASK: DISCO tags — lyrical theme, custom tag style, auto-tag all demos
 WHAT: (1) Custom tags now match disco-chip style (same border/padding/font/color), compact 110px input; (2) LYRICAL THEME added to DISCO categories — prompt updated with audio→theme inference rules, UI shows in correct DISCO order (tempo/mood/genre/vocals/lyrical_theme/instrument/type); (3) POST /auto-tag-all-demos bulk endpoint — tags all demos with Essentia analysis, 500ms rate limit, returns immediately with started:true; (4) Removed dead genre dropdown code (genreSearch, showGenrePicker, loadAvailableGenres, GENRE_LIST import)

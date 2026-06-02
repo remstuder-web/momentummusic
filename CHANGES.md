@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/routes/sono/+page.ts — DONE
+TASK: Fix /sono route served as ListenPage on Vercel
+WHAT: Added +page.ts with `export const ssr = false`. Root cause: sono page imports PUBLIC_SONO_PASSWORD from $env/static/public (a build-time static env var). On Vercel, if that var isn't set before build, SSR of /sono throws → Vercel error fallback serves root SPA shell → root page's onMount runs at /sono URL → triggers ListenPage (somehow ?s= gets set). ssr=false makes sono CSR-only (no server execution, no build-time env vars needed), generates a static HTML shell served directly by Vercel CDN. Route IS correctly in the manifest (/^\/sono\/?$/) and build was already correct — this is a deployment hardening fix.
+RESULT: builds clean, route confirmed in manifest
+BLOCKERS: Remember to add PUBLIC_SONO_PASSWORD=sono2026 to Vercel project env vars before deploying
+
 ## [2026-06-02] src/routes/sono/+page.svelte — DONE
 TASK: SONO page full editable track cards
 WHAT: Expanded from read-only to full read/write mirror of DemoTab. Added: updateField/updateDemoType/addTag/removeTag/addDiscoTag/removeDiscoTag all saving to Supabase; card body with title input, code (readonly), TYPE dropdown, BPM/key meta display, TAGS section (compact input + chips), TAGS DISCO section (all 7 categories, chips with ×, + picker button per category showing unused tags), NOTES+FEEDBACK textareas; spacebar play/pause on hover; 5s poll for real-time sync; onDestroy cleanup. No delete/freeze/S button. Styles match Momentum dark theme exactly.

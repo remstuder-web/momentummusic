@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/routes/sono/+page.svelte + src/lib/DemoTab.svelte — DONE
+TASK: Download button visibility, sidebar layout, song notes/feedback in SubmissionsTab SONO packs
+WHAT: (1) Download button: text changed to "↓ DL", min-width:36px, color always gold (#c9a84c), stronger border rgba(.45). (2) Sidebar: grid 1fr 180px → 1fr 200px; border-left #1c1c1c → #303030; sb-header flex-direction column so "+ New Pack" is full-width below title; sb-new-btn full-width centered. (3) SubmissionsTab SONO PACKS: each song row now shows Notes + Feedback from songs table (data already in pack.songs via select('*') join); pack.feedback shown above songs list; styled with sono-song-block/sono-song-detail/sono-detail-lbl classes.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] src/routes/sono/+page.svelte — DONE
 TASK: Show submissions list per song in expanded card
 WHAT: Added SUBMISSIONS section after FEEDBACK textarea in card body. Only shown when song belongs to at least one non-deleted pack. Lists each pack as "→ PackName  OPEN/SENT/ARCHIVED" with color-coded status badge. Reads directly from packs array (not songPackMap, which only stores names — needed status too). Realtime subscription keeps pack membership current.

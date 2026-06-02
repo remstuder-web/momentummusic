@@ -1693,18 +1693,26 @@
               <span class="patch-count">{pack.songs.length} songs</span>
               <span class="patch-status {pack.status}">{pack.status.toUpperCase()}</span>
             </div>
-            {#if pack.songs.length}
-              <div class="patch-body" style="padding:10px 16px;gap:4px">
+            {#if pack.songs.length || pack.feedback}
+              <div class="patch-body" style="padding:10px 16px;gap:8px">
+                {#if pack.feedback}
+                  <p class="sono-pack-note">{pack.feedback}</p>
+                {/if}
                 {#each pack.songs as song}
-                  <div class="patch-song-row">
-                    <span class="song-code-in-list">{song.code}</span>
-                    <span class="sep-dot">·</span>
-                    <span class="song-title">{song.title || song.code}</span>
+                  <div class="sono-song-block">
+                    <div class="sono-song-head">
+                      <span class="song-code-in-list">{song.code}</span>
+                      <span class="sep-dot">·</span>
+                      <span class="song-title">{song.title || song.code}</span>
+                    </div>
+                    {#if song.notes}
+                      <div class="sono-song-detail"><span class="sono-detail-lbl">Notes</span><span class="sono-detail-txt">{song.notes}</span></div>
+                    {/if}
+                    {#if song.feedback}
+                      <div class="sono-song-detail"><span class="sono-detail-lbl">Feedback</span><span class="sono-detail-txt">{song.feedback}</span></div>
+                    {/if}
                   </div>
                 {/each}
-                {#if pack.feedback}
-                  <p style="font-family:'DM Sans',sans-serif;font-size:12px;color:#6a6560;margin:6px 0 0;padding-top:6px;border-top:1px solid #1c1c1c;line-height:1.5">{pack.feedback}</p>
-                {/if}
               </div>
             {/if}
           </div>
@@ -1921,6 +1929,13 @@
   .sono-packs-divider { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
   .sono-packs-divider::before, .sono-packs-divider::after { content: ''; flex: 1; height: 1px; background: #1c1c1c; }
   .sono-packs-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.45); white-space: nowrap; }
+  .sono-pack-note { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #6a6560; margin: 0 0 4px; line-height: 1.5; padding-bottom: 6px; border-bottom: 1px solid #1c1c1c; }
+  .sono-song-block { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; border-bottom: 1px solid #111; }
+  .sono-song-block:last-child { border-bottom: none; }
+  .sono-song-head { display: flex; align-items: center; gap: 8px; }
+  .sono-song-detail { display: flex; gap: 8px; padding-left: 2px; }
+  .sono-detail-lbl { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(201,168,76,.45); flex-shrink: 0; width: 56px; padding-top: 1px; letter-spacing: .06em; text-transform: uppercase; }
+  .sono-detail-txt { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #6a6560; line-height: 1.5; flex: 1; }
   .genre-opt.sel { color: #c9a84c; background: rgba(201,168,76,.06); }
   .s-picker-above { position: absolute; bottom: calc(100% + 6px); right: 0; background: #1c1c1c; border: 1px solid #303030; border-radius: 4px; min-width: 240px; z-index: 99; overflow: hidden; box-shadow: 0 -4px 20px rgba(0,0,0,.5); }
   .s-pick-list { max-height: 220px; overflow-y: auto; }

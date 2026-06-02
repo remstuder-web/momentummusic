@@ -457,7 +457,7 @@
                   {/if}
                 </div>
                 {#if getDownloadUrl(song)}
-                  <a href={getDownloadUrl(song)} target="_blank" rel="noopener" class="download-btn" onclick={e => e.stopPropagation()}>↓</a>
+                  <a href={getDownloadUrl(song)} target="_blank" rel="noopener" class="download-btn" onclick={e => e.stopPropagation()}>↓ DL</a>
                 {/if}
                 <!-- Add to pack button -->
                 {#if packs.filter(p => p.status==='open').length}
@@ -586,6 +586,7 @@
         <button class="sb-new-btn" onclick={() => showNewPack = !showNewPack}>+ New Pack</button>
       </div>
 
+
       {#if showNewPack}
         <div class="sb-new-form">
           <input class="inp-sm" placeholder="Pack name (e.g. SONY March 2026)"
@@ -654,7 +655,7 @@
   .login-btn:hover { background: #d4b660; }
 
   /* ── outer layout ── */
-  .outer       { display: grid; grid-template-columns: 1fr 180px; gap: 24px; max-width: 1060px; margin: 0 auto; padding: 40px 24px 80px; min-height: 100vh; }
+  .outer       { display: grid; grid-template-columns: 1fr 200px; gap: 24px; max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; min-height: 100vh; }
   .main-col    { min-width: 0; display: flex; flex-direction: column; }
 
   /* ── page header ── */
@@ -718,8 +719,8 @@
   .mini-player.active .time { color: #9e9690; }
   .seek-bar     { flex: 1; height: 3px; accent-color: #c9a84c; cursor: pointer; }
   .audio-unavail { font-family: 'Space Mono', monospace; font-size: 9px; color: #333; flex-shrink: 0; }
-  .download-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 8px; background: transparent; border: 1px solid rgba(201,168,76,.35); color: rgba(201,168,76,.8); border-radius: 2px; cursor: pointer; text-decoration: none; flex-shrink: 0; transition: all .15s; }
-  .download-btn:hover { background: rgba(201,168,76,.08); border-color: rgba(201,168,76,.6); color: #c9a84c; }
+  .download-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 10px; min-width: 36px; background: transparent; border: 1px solid rgba(201,168,76,.45); color: #c9a84c; border-radius: 2px; cursor: pointer; text-decoration: none; flex-shrink: 0; transition: all .15s; text-align: center; }
+  .download-btn:hover { background: rgba(201,168,76,.12); border-color: #c9a84c; }
   .arr          { font-size: 12px; color: #555; flex-shrink: 0; }
 
   /* pack add button */
@@ -771,11 +772,11 @@
   .disco-pick-opt:hover { background: #252525; color: #c9a84c; }
 
   /* ── sidebar ── */
-  .sidebar      { border-left: 1px solid #1c1c1c; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; }
-  .sb-header    { display: flex; align-items: center; justify-content: space-between; }
-  .sb-title     { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .12em; color: rgba(201,168,76,.75); }
-  .sb-new-btn   { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 3px 10px; background: transparent; border: 1px solid rgba(201,168,76,.35); color: rgba(201,168,76,.8); border-radius: 2px; cursor: pointer; }
-  .sb-new-btn:hover { background: rgba(201,168,76,.08); color: #c9a84c; }
+  .sidebar      { border-left: 1px solid #303030; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .sb-header    { display: flex; flex-direction: column; gap: 8px; }
+  .sb-title     { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); }
+  .sb-new-btn   { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 6px; width: 100%; background: transparent; border: 1px solid rgba(201,168,76,.4); color: #c9a84c; border-radius: 2px; cursor: pointer; text-align: center; letter-spacing: .06em; }
+  .sb-new-btn:hover { background: rgba(201,168,76,.08); border-color: #c9a84c; }
   .sb-new-form  { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: #141414; border: 1px solid #252525; border-radius: 3px; }
   .sb-new-actions { display: flex; gap: 6px; }
   .sb-create-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 4px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 2px; cursor: pointer; }

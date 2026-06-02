@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] momentum-watcher.cjs — DONE
+TASK: Fix SONO unlink guard race condition
+WHAT: The fs.existsSync(sonoPath) guard in the unlink handler fired before fs.renameSync completed on some macOS I/O scheduling — file hadn't landed in !SONO yet so the guard passed and the row was deleted. Fix: fetch the song row first (already needed for the DELETE), check work_data.at_artist === 'sono' — if true, skip and return. DB state is always consistent regardless of filesystem timing. Also restored MOONZ row (26034_MOONZ_94bpm.wav, id=237) that was deleted by the race.
+RESULT: watcher ping OK
+BLOCKERS: none
+
 ## [2026-06-02] momentum-watcher.cjs + src/routes/sono/+page.svelte — DONE
 TASK: SONO page Dropbox CDN streaming + download button
 WHAT: Watcher: added toDropboxStreamUrl/toDropboxDownloadUrl/localToDropboxPath helpers; generateDemoDropboxLink(filename, songId) helper that resolves DEMOS_DIR/SONO_DIR, calls getDropboxShareLink, converts to stream+download URLs, saves to work_data; POST /generate-demo-dropbox-links bulk endpoint (skips songs that already have dropbox_stream_url, 1s between each, responds immediately); chokidar add handler Step 11 fires generateDemoDropboxLink for new demos. SONO page: audioSrc() prefers work_data.dropbox_stream_url over localhost:4242; download ↓ button (gold outline) when dropbox_download_url exists; "audio not yet linked" notice when audio_path set but no Dropbox URL yet.

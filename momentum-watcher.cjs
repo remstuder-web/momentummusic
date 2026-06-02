@@ -15039,15 +15039,15 @@ server.listen(PORT, '127.0.0.1', () => {
       const filename = path.basename(filePath)
       console.log('DEMO DELETED:', filename)
       if (!DEMO_WATCH_EXTS.has(path.extname(filename).toLowerCase())) return
-      // Skip delete if file was just moved to !SONO (rename fires unlink on old path)
-      const sonoPath = path.join(SONO_DIR, filename)
-      if (fs.existsSync(sonoPath)) {
-        console.log('⏭ Skipping delete — file moved to !SONO:', filename)
-        return
-      }
       try {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?audio_path=eq.${encodeURIComponent(filename)}&project_id=is.null&select=id,title,code&limit=1`, { headers: sbHeaders })
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/songs?audio_path=eq.${encodeURIComponent(filename)}&project_id=is.null&select=id,title,code,work_data&limit=1`, { headers: sbHeaders })
         const rows = await r.json()
+        // Skip delete if this is a SONO track — rename fires unlink before file lands in !SONO
+        // Checking DB state is race-condition-proof; fs.existsSync on sonoPath is not
+        if (Array.isArray(rows) && rows[0]?.work_data?.at_artist?.toLowerCase() === 'sono') {
+          console.log('⏭ Skipping delete — SONO track:', filename)
+          return
+        }
         if (!Array.isArray(rows) || !rows.length) { console.log(`  ↳ No DB row found for: ${filename}`); return }
         const song = rows[0]
         const del = await fetch(`${SUPABASE_URL}/rest/v1/songs?id=eq.${song.id}`, { method: 'DELETE', headers: { ...sbHeaders, 'Prefer': 'return=representation' } })

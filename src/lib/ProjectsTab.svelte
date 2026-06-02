@@ -4844,7 +4844,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .proq-btn:hover { background: rgba(201,168,76,.15); }
   .notes-toggle-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 4px 0; user-select: none; }
   .notes-toggle-row:hover .notes-label { color: #cec9c1; }
-  .notes-label { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .08em; color: rgba(201,168,76,.75); text-transform: uppercase; }
+  .notes-label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.65); text-transform: uppercase; }
   .notes-toggle-arrow { font-size: 10px; color: #444; }
   .notes-sub-section { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
   .notes-sub-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; color: #444; text-transform: uppercase; }

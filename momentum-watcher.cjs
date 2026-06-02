@@ -13355,6 +13355,31 @@ ${formatted}`
     return
   }
 
+  // ── POST /clear-all-custom-tags — wipe tags[] on all demo songs ──────────────
+  if (req.method === 'POST' && req.url === '/clear-all-custom-tags') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    req.on('data', () => {})
+    req.on('end', async () => {
+      try {
+        const { data, error } = await supabase
+          .from('songs')
+          .update({ tags: [] })
+          .is('project_id', null)
+          .select('id')
+        if (error) throw error
+        const cleared = Array.isArray(data) ? data.length : 0
+        console.log(`[clear-all-custom-tags] cleared ${cleared} songs`)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, cleared }))
+      } catch(e) {
+        console.warn('clear-all-custom-tags error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
   // ── POST /auto-tag-all-demos — bulk DISCO tag all existing demos ─────────────
   if (req.method === 'POST' && req.url === '/auto-tag-all-demos') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -13409,12 +13434,8 @@ Rules:
 - VOCALS: only assign Instrumental if no vocals detected
 - INSTRUMENT: up to 5 tags based on detected tonal characteristics
 - TYPE: default to Demo unless clearly otherwise
-- LYRICAL THEME: up to 5 tags inferred from audio characteristics:
-  Dark key + low energy + high warmth → Loss, Longing, Nostalgia, Romance
-  Minor key + high energy → Rebellion, Struggle, Conflict, Power
-  Major key + high danceability → Celebration, Freedom, Empowerment, Party
-  Slow + warm + low brightness → Love, Nostalgia, Romance, Longing
-  High brightness + high energy → Empowerment, Confidence, Success
+- LYRICAL THEME: assign 1-3 themes IF you can reasonably infer them from the audio characteristics. If the audio gives no clear emotional/thematic signal, return an empty array []. Never guess randomly — empty is better than wrong.
+  Hints when signal IS clear: dark minor + low energy → Loss, Longing, Nostalgia; minor + high energy → Rebellion, Struggle, Power; major + high danceability → Celebration, Freedom, Empowerment; slow + warm → Love, Romance, Nostalgia; high brightness + high energy → Confidence, Success
 - Only use tags from the lists above, exactly as written
 
 Return ONLY valid JSON:
@@ -13502,12 +13523,8 @@ Rules:
 - VOCALS: only assign Instrumental if no vocals detected
 - INSTRUMENT: up to 5 tags based on detected tonal characteristics
 - TYPE: default to Demo unless clearly otherwise
-- LYRICAL THEME: up to 5 tags inferred from audio characteristics:
-  Dark key + low energy + high warmth → Loss, Longing, Nostalgia, Romance
-  Minor key + high energy → Rebellion, Struggle, Conflict, Power
-  Major key + high danceability → Celebration, Freedom, Empowerment, Party
-  Slow + warm + low brightness → Love, Nostalgia, Romance, Longing
-  High brightness + high energy → Empowerment, Confidence, Success
+- LYRICAL THEME: assign 1-3 themes IF you can reasonably infer them from the audio characteristics. If the audio gives no clear emotional/thematic signal, return an empty array []. Never guess randomly — empty is better than wrong.
+  Hints when signal IS clear: dark minor + low energy → Loss, Longing, Nostalgia; minor + high energy → Rebellion, Struggle, Power; major + high danceability → Celebration, Freedom, Empowerment; slow + warm → Love, Romance, Nostalgia; high brightness + high energy → Confidence, Success
 - Only use tags from the lists above, exactly as written
 
 Return ONLY valid JSON:

@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-02] momentum-watcher.cjs — DONE
+TASK: DISCO lyrical theme optional + clear custom tags endpoint
+WHAT: (1) Both /auto-tag-disco and /auto-tag-all-demos prompts: lyrical theme rule updated — "assign 1-3 IF you can reasonably infer them; return [] if no clear signal; never guess randomly — empty is better than wrong." DemoTab already skips empty categories so no template change needed. (2) POST /clear-all-custom-tags — sets tags=[] on all demo songs (project_id IS NULL), returns {ok, cleared}
+RESULT: watcher ping OK
+BLOCKERS: none
+
+## [2026-06-02] momentum-watcher.cjs — DONE
 TASK: DISCO tags allow up to 5 per category
 WHAT: Both /auto-tag-disco and /auto-tag-all-demos prompts updated — "Assign UP TO 5 tags per category (minimum 1 where applicable). More tags = better searchability." Per-category rules changed from "1-2/3-5/1-3" to "up to 5". max_tokens bumped 400→600. Validation loop now does .filter().slice(0,5) on both endpoints.
 RESULT: watcher ping OK

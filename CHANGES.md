@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-02] src/routes/sono/+page.svelte — DONE
+TASK: Fix pack header full width, widen main/sidebar split
+WHAT: (1) sb-packs + sb-pack: added width:100% + box-sizing:border-box — without these the flex children didn't fill the padded sidebar container, causing the pack header to be narrower than the card. (2) Grid 1fr 180px → 1fr 200px; max-width 1060 → 1400; gap 20 → 16; padding 20 → 16px sides. Main track list now takes ~85% of viewport at typical widths.
+RESULT: builds clean
+BLOCKERS: none
+
+## [2026-06-02] src/routes/sono/+page.svelte — DONE
 TASK: Fix player/DL overlap and sidebar pack header width
 WHAT: (1) player-slot: fixed width 180px (was unconstrained), overflow:hidden; mini-player width:100% (was 210px fixed); seek-bar min-width:0 so it can shrink within the 180px. DL button now always visible to the right. (2) Grid 1fr 200px → 1fr 180px, gap 24→20, padding 20px; sidebar padding-left 20→12, min-width:0; sb-pack-head: justify-content:space-between + width:100% + box-sizing:border-box so name+badge fill full width; pack name font-size 10→9px + min-width:0.
 RESULT: builds clean

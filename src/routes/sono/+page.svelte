@@ -655,7 +655,7 @@
   .login-btn:hover { background: #d4b660; }
 
   /* ── outer layout ── */
-  .outer       { display: grid; grid-template-columns: 1fr 180px; gap: 20px; max-width: 1060px; margin: 0 auto; padding: 40px 20px 80px; min-height: 100vh; }
+  .outer       { display: grid; grid-template-columns: 1fr 200px; gap: 16px; max-width: 1400px; margin: 0 auto; padding: 40px 16px 80px; min-height: 100vh; }
   .main-col    { min-width: 0; display: flex; flex-direction: column; }
 
   /* ── page header ── */
@@ -782,8 +782,8 @@
   .sb-create-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 4px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 2px; cursor: pointer; }
   .sb-cancel-btn { font-family: 'Space Mono', monospace; font-size: 10px; padding: 4px 10px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; }
   .sb-empty     { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; margin: 0; }
-  .sb-packs     { display: flex; flex-direction: column; gap: 8px; }
-  .sb-pack      { border: 1px solid #252525; border-radius: 3px; overflow: hidden; }
+  .sb-packs     { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+  .sb-pack      { border: 1px solid #252525; border-radius: 3px; overflow: hidden; width: 100%; box-sizing: border-box; }
   .sb-pack.open { border-color: rgba(201,168,76,.25); }
   .sb-pack-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 7px 8px; background: #1c1c1c; width: 100%; box-sizing: border-box; }
   .sb-pack-name { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: #cec9c1; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

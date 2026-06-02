@@ -237,11 +237,9 @@
                 {#if song.title}<span class="song-title">{song.title}</span>{/if}
               </div>
               <div class="head-meta">
-                {#if (song.work_data?.demo_type || 'SONG') === 'SAMPLE'}
-                  <span class="type-badge">SAMPLE</span>
+                {#if song.tempo || song.key}
+                  <span class="pill">{[song.tempo ? song.tempo + ' BPM' : '', song.key || ''].filter(Boolean).join(' · ')}</span>
                 {/if}
-                {#if song.tempo}<span class="pill">{song.tempo} BPM</span>{/if}
-                {#if song.key}<span class="pill">{song.key}</span>{/if}
               </div>
               <div class="player-slot" onclick={e => e.stopPropagation()}>
                 {#if src}
@@ -260,10 +258,10 @@
                 {:else if song.audio_path}
                   <span class="audio-unavail">audio not yet linked</span>
                 {/if}
-                {#if song.work_data?.dropbox_download_url}
-                  <a href={song.work_data.dropbox_download_url} target="_blank" rel="noopener" class="download-btn">↓</a>
-                {/if}
               </div>
+              {#if song.work_data?.dropbox_download_url}
+                <a href={song.work_data.dropbox_download_url} target="_blank" rel="noopener" class="download-btn" onclick={e => e.stopPropagation()}>↓</a>
+              {/if}
               <span class="arr">{expanded ? '▾' : '▸'}</span>
             </div>
 
@@ -271,7 +269,7 @@
             {#if expanded}
               <div class="card-body">
 
-                <!-- Row 1: title + code + type -->
+                <!-- Row 1: title + code -->
                 <div class="row1">
                   <div class="field" style="flex:1;min-width:0">
                     <label>TITLE</label>
@@ -282,14 +280,6 @@
                   <div class="field" style="flex:0 0 90px">
                     <label>CODE</label>
                     <input class="inp-sm mono" value={song.code} readonly />
-                  </div>
-                  <div class="field" style="flex:0 0 110px">
-                    <label>TYPE</label>
-                    <select class="inp-sm" value={song.work_data?.demo_type || 'SONG'}
-                      onchange={e => updateDemoType(song, e.target.value)}>
-                      <option value="SONG">SONG</option>
-                      <option value="SAMPLE">SAMPLE</option>
-                    </select>
                   </div>
                 </div>
 

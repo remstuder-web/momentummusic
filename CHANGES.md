@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/routes/sono/+page.svelte + src/lib/DemoTab.svelte — DONE
+TASK: SONO page UX polish + DemoTab SONO filter
+WHAT: (1) Download ↓ button moved out of player-slot to sibling after it — now on same line as player with stopPropagation. (2) BPM and KEY merged into one pill: "94 BPM · Dm". (3) TYPE dropdown removed from expanded card body. (4) DemoTab filteredSongs: by default excludes SONO tracks (isSono → return false); when sonoMode=true shows only SONO tracks.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] momentum-watcher.cjs + src/routes/sono/+page.svelte — DONE
 TASK: Fix MOONZ disappearing: orphan cleanup + restore improvements
 WHAT: ROOT CAUSE was the startup orphan cleanup (not the unlink handler) — it built dirFiles only from DEMOS_DIR, so SONO_DIR files appeared as orphans and were deleted. Fix: added `fs.readdirSync(SONO_DIR).forEach(f => dirFiles.add(f))` to include SONO files in the valid-file set. Also fixed restoreMissingSonoTracks to: (1) use neutral 0.5 values for unknown Essentia fields so Haiku returns valid JSON instead of prose; (2) fire generateDemoDropboxLink after restore. Download button code was already correct — it was missing only because MOONZ lacked dropbox_download_url (now fixed). Added console.log for download_url debug in SONO page loadSongs. MOONZ (id=239) now has disco_tags + dropbox link.

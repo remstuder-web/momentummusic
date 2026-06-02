@@ -838,7 +838,9 @@
   let showContactPicker = $state({})
   let filteredSongs = $derived((() => {
     return songs.filter(s => {
-      if (sonoMode && (s.work_data?.at_artist || '').toLowerCase() !== 'sono') return false
+      const isSono = (s.work_data?.at_artist || '').toLowerCase() === 'sono'
+      if (sonoMode) { if (!isSono) return false }
+      else          { if (isSono)  return false }
       const dt = s.work_data?.disco_tags || {}
       if (fTempo.size      && !(dt.tempo         ||[]).some(t => fTempo.has(t)))      return false
       if (fMood.size       && !(dt.mood          ||[]).some(t => fMood.has(t)))       return false

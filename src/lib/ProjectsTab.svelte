@@ -37,7 +37,6 @@
   let currentTime = $state(0)
   let duration = $state(0)
   let activeSongTab = $state({})
-  let lyricsOpen = $state({})
   let undoStack = $state([])
   let undoFlash = $state(false)
   const MAX_UNDO = 10
@@ -3224,12 +3223,19 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
                 <div class="field" style="margin-top:-8px">
                   <div class="notes-toggle-row"
-                    onclick={() => { notesOpen[song.id] = !(notesOpen[song.id] ?? !!wd.project_info?.trim()); notesOpen = { ...notesOpen } }}>
-                    <span class="notes-label">SONG NOTES / BRIEF</span>
-                    <span class="notes-toggle-arrow">{(notesOpen[song.id] ?? !!wd.project_info?.trim()) ? '▾' : '▸'}</span>
+                    onclick={() => { notesOpen[song.id] = !(notesOpen[song.id] ?? !!(wd.project_info?.trim() || wd.lyrics_text?.trim())); notesOpen = { ...notesOpen } }}>
+                    <span class="notes-label">NOTES / BRIEF / LYRICS</span>
+                    <span class="notes-toggle-arrow">{(notesOpen[song.id] ?? !!(wd.project_info?.trim() || wd.lyrics_text?.trim())) ? '▾' : '▸'}</span>
                   </div>
-                  {#if (notesOpen[song.id] ?? !!wd.project_info?.trim())}
-                    <textarea class="ta ta-auto" placeholder="Song-specific vision, references..." value={wd.project_info} use:autoResize oninput={e => saveProjectInfo(song, e.target.value)}></textarea>
+                  {#if (notesOpen[song.id] ?? !!(wd.project_info?.trim() || wd.lyrics_text?.trim()))}
+                    <div class="notes-sub-section">
+                      <div class="notes-sub-label">NOTES / BRIEF</div>
+                      <textarea class="ta ta-auto" placeholder="Song-specific vision, references..." value={wd.project_info} use:autoResize oninput={e => saveProjectInfo(song, e.target.value)}></textarea>
+                    </div>
+                    <div class="notes-sub-section">
+                      <div class="notes-sub-label">LYRICS</div>
+                      <textarea class="ta ta-auto" placeholder="Paste or write lyrics here..." value={wd.lyrics_text} use:autoResize oninput={e => saveWorkData(song, wd => { wd.lyrics_text = e.target.value })}></textarea>
+                    </div>
                   {/if}
                 </div>
                 <!-- Production sub-steps: Lyrics, Vocal Rec, Vocal Prep -->
@@ -3247,17 +3253,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                       <button class="prod-ckb {wd.prod_vocal_prep?'done':''}" onclick={() => saveWorkData(song, wd => { wd.prod_vocal_prep = !wd.prod_vocal_prep })}>{wd.prod_vocal_prep?'✓':''}</button>
                       <span class="prod-sub-label {wd.prod_vocal_prep?'done':''}">VOCAL PREP</span>
                     </div>
-                  </div>
-                  <!-- Lyrics + Production audio — only in production stage -->
-                  <div class="lyrics-block">
-                    <button class="lyrics-toggle" onclick={() => { lyricsOpen[song.id] = !lyricsOpen[song.id]; lyricsOpen = {...lyricsOpen} }}>
-                      <span>LYRICS</span>
-                      {#if wd.lyrics_text}<span class="lyrics-preview">{wd.lyrics_text.slice(0,40)}{wd.lyrics_text.length>40?'…':''}</span>{/if}
-                      <span class="lyrics-arr {lyricsOpen[song.id]?'open':''}">▶</span>
-                    </button>
-                    {#if lyricsOpen[song.id]}
-                      <textarea class="ta lyrics-ta" placeholder="Paste or write lyrics here..." value={wd.lyrics_text} use:autoResize oninput={e => saveWorkData(song, wd => { wd.lyrics_text = e.target.value })}></textarea>
-                    {/if}
                   </div>
                   <!-- Production audio drop + Instrumental drop — side by side -->
                   {#if song._instr_flash}<div class="sent-flash" style="font-size:10px;padding:4px 8px">✉ SENT!</div>{/if}
@@ -4851,6 +4846,8 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .notes-toggle-row:hover .notes-label { color: #cec9c1; }
   .notes-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; color: rgba(201,168,76,.6); text-transform: uppercase; }
   .notes-toggle-arrow { font-size: 10px; color: #444; }
+  .notes-sub-section { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+  .notes-sub-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; color: #444; text-transform: uppercase; }
   .add-ref-toggle { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px dashed #252525; color: #333; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 4px; }
   .add-ref-toggle:hover { border-color: #444; color: #555; }
   .analyzer-auto-status { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; font-style: italic; padding: 3px 0 5px; }

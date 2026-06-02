@@ -865,6 +865,7 @@
   }
 
   async function updateDemoType(song, type) {
+    if (type === (song.work_data?.demo_type || 'SONG')) return
     const newWorkData = { ...(song.work_data || {}), demo_type: type }
     song.work_data = newWorkData
     songs = [...songs]
@@ -883,6 +884,7 @@
 
   async function updateAtArtist(song, value) {
     const trimmed = value.trim()
+    if (trimmed === (song.work_data?.at_artist || '')) return
     const newWorkData = { ...(song.work_data || {}), at_artist: trimmed }
     song.work_data = newWorkData
     songs = [...songs]

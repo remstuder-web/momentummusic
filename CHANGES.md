@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-02] src/lib/DemoTab.svelte — DONE
+TASK: Fix sync-demo-archive double-fire on card close
+WHAT: Root cause — browser fires onblur on @artist input when card collapses (DOM removes the focused element), even with no value change. Fix: added early return `if (trimmed === (song.work_data?.at_artist || '')) return` in updateAtArtist. Same guard added to updateDemoType. No reactive statements ($effect/$:) were involved — event wiring was already correct.
+RESULT: builds clean
+BLOCKERS: none
+
 ## [2026-06-02] momentum-watcher.cjs — DONE
 TASK: SONO artist routing for demo files
 WHAT: Added SONO_DIR = DEMOS_DIR/!SONO. syncDemoArchive: if at_artist='sono' (case-insensitive) → rename file from Demos to Demos/!SONO, delete from archive if present; if file was in SONO but at_artist cleared/changed → rename back to Demos, then run normal archive logic. Audio serving: /audio/ route now falls back to SONO_DIR if file not found in DEMOS_DIR. audio-compat dir list includes SONO_DIR. audio_path in DB stays as plain filename (no path prefix needed).

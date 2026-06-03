@@ -2131,8 +2131,8 @@
   .bg-opt-label { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: #cec9c1; }
   .bg-opt.on .bg-opt-label { color: #c9a84c; }
   .bg-opt-desc { font-family: 'Space Mono', monospace; font-size: 10px; color: #444; }
-  .demo-add-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; white-space: nowrap; }
-  .demo-add-btn:hover { background: #d4b660; }
+  .demo-add-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 5px 12px; background: #1c1c1c; color: #c9a84c; border: 1px solid #252525; border-radius: 3px; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: all .15s; }
+  .demo-add-btn:hover { border-color: rgba(201,168,76,.4); background: rgba(201,168,76,.05); }
   .demo-add-btn.demo-add-btn-sm { font-size: 10px; padding: 4px 10px; }
 
   .s-btn.sel { background: #4caf82; border-color: #4caf82; color: #0a0a0a; }

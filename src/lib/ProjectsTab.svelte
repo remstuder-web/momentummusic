@@ -3187,7 +3187,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   <!-- Tab buttons — inline, gap to the left -->
                   <button class="log-tab-btn {activeSongTab[song.id]==='references'?'on':''}" style="margin-left:12px"
                     onclick={() => { activeSongTab[song.id] = activeSongTab[song.id] === 'references' ? null : 'references' }}>
-                    REF
+                    REFERENCES
                   </button>
                   <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}"
                     onclick={() => {

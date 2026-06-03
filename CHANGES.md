@@ -2909,3 +2909,9 @@ TASK: Filter panels: custom tags as pill picker instead of text input
 WHAT: Both files: fCustomTag changed from string $state to Set $state; allCustomTags as $derived([...new Set(songs.flatMap(s=>s.tags||[]))].sort()); CUSTOM TAGS section replaced text input with fp-pills grid (same style as DISCO pills); filter logic changed from text substring match to Set membership requiring ALL selected tags; clearAllFilters resets to new Set(); hasActiveFilter checks .size>0; section hidden when no custom tags exist
 RESULT: builds clean
 BLOCKERS: {#const} inside <div> invalid in Svelte 5 — fixed by moving to $derived in script
+
+## 2026-06-03 src/lib/DemoTab.svelte + src/lib/ProjectsTab.svelte — DONE
+TASK: DemoTab: New Demo button styled like Filter, ProjectsTab: REF→REFERENCES tab
+WHAT: (1) demo-add-btn CSS: changed from gold fill (bg #c9a84c, no border) to outline style matching filter-toggle-btn (bg #1c1c1c, border #252525, color #c9a84c gold text, hover brightens border); (2) ProjectsTab log-tab-btn label "REF" → "REFERENCES"
+RESULT: builds clean
+BLOCKERS: none

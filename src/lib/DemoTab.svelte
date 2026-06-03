@@ -1423,9 +1423,9 @@
                 </div>
               </div>
               <div class="key-tempo-row">
-                <div class="field" style="flex:0 0 130px">
+                <div class="field" style="flex-shrink:0">
                   <label>KEY</label>
-                  <select class="inp-sm" value={song.key || ''} onchange={e => updateField(song, 'key', e.target.value)}>
+                  <select class="inp-compact" value={song.key || ''} onchange={e => updateField(song, 'key', e.target.value)}>
                     <option value="">—</option>
                     {#each KEYS as k}<option value={k}>{k}</option>{/each}
                   </select>
@@ -1433,7 +1433,7 @@
                 <div class="field" style="flex-shrink:0">
                   <label>TEMPO</label>
                   <div class="tempo-input-row">
-                    <input class="inp-sm" type="number" placeholder="120" value={song.tempo || ''} onchange={e => updateTempo(song, parseInt(e.target.value))} style="width:70px" />
+                    <input class="inp-compact" type="number" placeholder="120" value={song.tempo || ''} onchange={e => updateTempo(song, parseInt(e.target.value))} />
                     {#if song.tempo}
                       <span class="bpm-alt" onclick={() => updateTempo(song, song._bpmHalf || Math.round(song.tempo / 2))}>÷2</span>
                       <span class="bpm-alt" onclick={() => updateTempo(song, song._bpmDouble || song.tempo * 2)}>×2</span>
@@ -1442,8 +1442,7 @@
                 </div>
                 <div class="field" style="flex-shrink:0">
                   <label>FEAT.</label>
-                  <input class="inp-sm" placeholder="Collaborator..."
-                    style="width:220px;max-width:220px"
+                  <input class="inp-compact" placeholder="Collaborator..."
                     value={song.work_data?.collaborator || ''}
                     onchange={e => updateCollaborator(song, e.target.value)} />
                 </div>
@@ -1508,31 +1507,6 @@
                       </div>
                     </div>
                   {/each}
-                </div>
-              </div>
-              <div class="field">
-                <label>REFERENCE LINKS</label>
-                <div class="refs-wrap">
-                  <div class="refs-inline">
-                    {#each (song.reference_links || []) as ref}
-                      {@const r = normRef(ref)}
-                      {@const isSpotify = r.url.includes('spotify')}
-                      <span class="ref-chip">
-                        {#if isSpotify}
-                          <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(r.url); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
-                          <button class="spotify-play-btn" onclick={() => openSpotifyPopup(r.url)}>▶</button>
-                        {:else}
-                          <a href={r.url} target="_blank" rel="noopener" class="ref-link-open">↗</a>
-                        {/if}
-                        <span class="ref-chip-name">{r.name || r.url}</span>
-                        <button class="tag-del" onclick={() => removeRef(song, r.url)}>×</button>
-                      </span>
-                    {/each}
-                  </div>
-                  <div class="ref-add">
-                    <input class="inp-sm" placeholder="Spotify / YouTube URL..." bind:value={refInput[song.id]} onkeydown={e => e.key === 'Enter' && addRef(song)} />
-                    <button class="btn-ghost-sm" onclick={() => addRef(song)}>+ Add</button>
-                  </div>
                 </div>
               </div>
               <div class="row2">
@@ -2020,6 +1994,9 @@
   .tag-inp-compact { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 2px 8px; outline: none; border-radius: 2px; width: 110px; flex-shrink: 0; }
   .tag-inp-compact:focus { border-color: rgba(201,168,76,.4); }
   .tag-inp-compact::placeholder { color: #333; }
+  .inp-compact { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 2px 8px; outline: none; border-radius: 2px; width: 110px; }
+  .inp-compact:focus { border-color: rgba(201,168,76,.4); }
+  .inp-compact::placeholder { color: #555; }
   .refs-wrap { display: flex; flex-direction: column; gap: 6px; }
   .refs-inline { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
   .ref-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; }

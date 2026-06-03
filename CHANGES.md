@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] src/lib/DemoTab.svelte — DONE
+TASK: Remove reference links, uniform input sizes for key/tempo/feat
+WHAT: (1) Removed REFERENCE LINKS field (label, chips, URL input, add button) from DemoTab expanded card. (2) KEY select, TEMPO number input, FEAT. text input all now use new .inp-compact class: 110px wide, 12px DM Sans, 2px/8px padding, #252525 border — matching the tag-inp-compact style.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-03] src/lib/DemoTab.svelte + src/routes/sono/+page.svelte + momentum-watcher.cjs — DONE
 TASK: DISCO tags manual add via + picker on both DemoTab and SONO page, shared tag list from watcher
 WHAT: (1) Watcher: GET /disco-tags returns full DISCO_TAGS object as JSON. (2) DemoTab: replaced hardcoded DISCO_FILTER const with $state DISCO_TAGS fetched from /disco-tags on mount; added discoPickerOpen state; DISCO tag HTML now shows ALL 7 categories (not just assigned ones) each with a + button that opens a dropdown of unassigned tags — click to add and save immediately; added disco-add-wrap/btn/picker CSS; svelte:window click handler closes picker. (3) SONO page: replaced hardcoded const DISCO_TAGS with $state fetched on mount — picker UI already existed, now uses live data from watcher.

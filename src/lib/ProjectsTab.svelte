@@ -1201,12 +1201,18 @@
         }
         return
       }
-      // Found — add immediately and clear inputs
+      // Found via MusicBrainz — add immediately and clear inputs
       const refId = 'r' + Date.now()
+      // Spotify URL: direct track link if spotify_id, else search URL
+      const refUrl = track.spotify_id
+        ? 'https://open.spotify.com/track/' + track.spotify_id
+        : track.spotify_url || `https://open.spotify.com/search/${encodeURIComponent(track.artist + ' ' + track.title)}/tracks`
       const newRef = {
-        id: refId, spotify_id: track.spotify_id,
+        id: refId,
+        spotify_id: track.spotify_id || null,
+        mb_id: track.mb_id || null,
         artist: track.artist, title: track.title,
-        url: 'https://open.spotify.com/track/' + track.spotify_id,
+        url: refUrl,
         name: track.artist + ' — ' + track.title,
         added_at: new Date().toISOString()
       }
@@ -1217,7 +1223,7 @@
       // Background analysis — never blocks the UI
       fetch('http://localhost:4242/analyze-ref-now', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spotify_id: track.spotify_id, title: track.title, artist: track.artist })
+        body: JSON.stringify({ spotify_id: track.spotify_id || null, mb_id: track.mb_id || null, title: track.title, artist: track.artist })
       }).then(r => r.json()).then(d => {
         songRefStatus[refId] = d.ok ? 'ready' : 'error'
         if (d.ok) loadVocalEq(song.id).catch(() => {})

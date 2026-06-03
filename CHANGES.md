@@ -2861,3 +2861,9 @@ TASK: Fix reference search, rename tab to REF
 WHAT: /search-spotify-track now returns fallback_url on any Spotify failure; frontend opens Spotify search in browser instead of dead-end error; added console.log of raw Spotify response; tab button renamed from REFS → REF
 RESULT: works — Spotify 403 (app needs premium) triggers browser fallback to open.spotify.com/search; console.log confirms raw response visible
 BLOCKERS: Spotify API returning 403 "Active premium subscription required" for app credentials — search is non-functional server-side; browser fallback is the working path
+
+## 2026-06-03 momentum-watcher.cjs + src/lib/ProjectsTab.svelte — DONE
+TASK: Replace Spotify search API with MusicBrainz (free, no auth required)
+WHAT: Added musicBrainzSearch() + musicBrainzLookupSpotifyId() helpers with 1 req/s rate limit; replaced /search-spotify-track (now returns mb_id, spotify_id=null, spotify_url as search link); replaced /spotify-track-meta (DB first → MusicBrainz URL lookup → empty fallback); replaced /find-on-spotify (MusicBrainz search); updated /analyze-ref-now to accept mb_id and work without spotify_id; processLibraryTrackInBackground skips Spotify API for mb: IDs; fetchSpotifyId falls back to MusicBrainz; frontend handles null spotify_id and stores mb_id on refs
+RESULT: works — MusicBrainz returns correct results (tested Drake/Weeknd)
+BLOCKERS: No Spotify IDs in results (MusicBrainz doesn't expose them); ref chip URLs are Spotify search links not direct track links; yt-dlp audio download still works via title+artist

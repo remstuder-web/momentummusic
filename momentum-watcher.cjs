@@ -2102,9 +2102,9 @@ async function processLibraryTrackInBackground(refTrack, force = false) {
 
     console.log('bg: processing:', refTrack.artist, '—', refTrack.title)
 
-    // Step 1: Spotify metadata — genres + preview URL (kept as fallback only)
+    // Step 1: Spotify metadata — genres + preview URL (kept as fallback only, skip for mb: IDs)
     let previewUrl = refTrack.preview_url || null
-    if (refTrack.spotify_id) {
+    if (refTrack.spotify_id && !refTrack.spotify_id.startsWith('mb:')) {
       try {
         const sr = await spotifyFetch('https://api.spotify.com/v1/tracks/' + refTrack.spotify_id)
         if (sr.ok) {
@@ -3089,6 +3089,54 @@ async function spotifyFetch(url, opts = {}) {
   return r
 }
 
+// ── MusicBrainz helpers (free, no auth required) ─────────────────────────────
+let mbLastCallTime = 0
+async function mbRateLimit() {
+  const wait = Math.max(0, 1100 - (Date.now() - mbLastCallTime))
+  if (wait > 0) await new Promise(r => setTimeout(r, wait))
+  mbLastCallTime = Date.now()
+}
+
+async function musicBrainzSearch(artist, title, limit = 5) {
+  await mbRateLimit()
+  const parts = []
+  if (artist) parts.push(`artist:"${artist.replace(/"/g, '')}"`)
+  if (title)  parts.push(`recording:"${title.replace(/"/g, '')}"`)
+  if (!parts.length) throw new Error('artist or title required')
+  const q = encodeURIComponent(parts.join(' '))
+  const r = await fetch(`https://musicbrainz.org/ws/2/recording/?query=${q}&fmt=json&limit=${limit}`, {
+    headers: { 'User-Agent': 'MomentumMusic/1.0 (rem.studer@gmail.com)' }
+  })
+  if (!r.ok) throw new Error('MusicBrainz ' + r.status)
+  const d = await r.json()
+  console.log('[musicBrainzSearch] raw:', JSON.stringify(d).slice(0, 300))
+  return (d.recordings || []).map(rec => ({
+    mb_id: rec.id,
+    title: rec.title,
+    artist: (rec['artist-credit'] || []).map(ac => ac.artist?.name || ac.name || '').filter(Boolean).join(', '),
+    year: rec.releases?.[0]?.date?.slice(0, 4) || '',
+    duration_ms: rec.length || null
+  }))
+}
+
+async function musicBrainzLookupSpotifyId(spotifyId) {
+  await mbRateLimit()
+  const resource = encodeURIComponent('https://open.spotify.com/track/' + spotifyId)
+  const r = await fetch(`https://musicbrainz.org/ws/2/url?resource=${resource}&inc=recording-rels&fmt=json`, {
+    headers: { 'User-Agent': 'MomentumMusic/1.0 (rem.studer@gmail.com)' }
+  })
+  if (!r.ok) return null
+  const d = await r.json()
+  const rel = (d.relations || []).find(rel => rel['target-type'] === 'recording')
+  if (!rel?.recording) return null
+  const rec = rel.recording
+  return {
+    mb_id: rec.id,
+    title: rec.title || '',
+    artist: (rec['artist-credit'] || []).map(ac => ac.artist?.name || '').filter(Boolean).join(', ')
+  }
+}
+
 // ── Spotify track search by title + artist ───────────────────────────────────
 async function fetchSpotifyId(title, artist) {
   if (!title) return null
@@ -3110,8 +3158,24 @@ async function fetchSpotifyId(title, artist) {
       preview_url: track.preview_url || null
     }
   } catch(e) {
-    console.warn('[fetchSpotifyId] failed for "' + title + '":', e.message)
-    return null
+    console.warn('[fetchSpotifyId] Spotify failed, trying MusicBrainz:', e.message.slice(0, 80))
+    try {
+      const results = await musicBrainzSearch(artist, title, 1)
+      if (!results.length) return null
+      const rec = results[0]
+      return {
+        spotify_id: null,
+        spotify_url: `https://open.spotify.com/search/${encodeURIComponent([artist, title].filter(Boolean).join(' '))}`,
+        title: rec.title,
+        artist: rec.artist,
+        popularity: null,
+        preview_url: null,
+        mb_id: rec.mb_id
+      }
+    } catch(e2) {
+      console.warn('[fetchSpotifyId] MusicBrainz also failed:', e2.message)
+      return null
+    }
   }
 }
 
@@ -8485,14 +8549,25 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     const trackId = new URL('http://x' + req.url).searchParams.get('id')
     if (!trackId) { res.writeHead(400); res.end(JSON.stringify({ error: 'no id' })); return }
     try {
-      await ensureSpotifyToken()
-      const r = await spotifyFetch(`https://api.spotify.com/v1/tracks/${trackId}`)
-      if (!r.ok) throw new Error(`Spotify ${r.status}`)
-      const d = await r.json()
-      const title = d.name || ''
-      const artist = (d.artists || []).map(a => a.name).join(', ')
+      // 1. Check local DB first (fast, no API needed)
+      const { data: dbTrack } = await supabase.from('reference_tracks').select('title,artist').eq('spotify_id', trackId).maybeSingle()
+      if (dbTrack?.title) {
+        const title = dbTrack.title, artist = dbTrack.artist || ''
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ title, artist, name: `${title} — ${artist}` }))
+        return
+      }
+      // 2. Try MusicBrainz reverse lookup by Spotify track URL
+      const mb = await musicBrainzLookupSpotifyId(trackId).catch(() => null)
+      if (mb?.title) {
+        const { title, artist } = mb
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ title, artist, name: `${title} — ${artist}`, mb_id: mb.mb_id }))
+        return
+      }
+      // 3. Return empty — name won't pre-fill but spotify_id is still stored
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ title, artist, name: title && artist ? `${title} — ${artist}` : title }))
+      res.end(JSON.stringify({ title: '', artist: '', name: '' }))
     } catch(e) {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: e.message }))
@@ -8500,7 +8575,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
-  // ── POST /search-spotify-track — search by artist + title, return first match ──
+  // ── POST /search-spotify-track — search by artist + title via MusicBrainz ──
   if (req.method === 'POST' && req.url === '/search-spotify-track') {
     res.setHeader('Access-Control-Allow-Origin', '*')
     let body = ''
@@ -8513,25 +8588,22 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       title  = (parsed.title  || '').trim()
       if (!artist && !title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'artist or title required' })); return }
       const fallback_url = `https://open.spotify.com/search/${encodeURIComponent([artist, title].filter(Boolean).join(' '))}/tracks`
-      await ensureSpotifyToken()
-      const q = encodeURIComponent(`${artist} ${title}`.trim())
-      console.log('[search-spotify-track] query:', `${artist} ${title}`)
-      const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=5`)
-      if (!r.ok) throw new Error(`Spotify ${r.status}`)
-      const d = await r.json()
-      console.log('[search-spotify-track] raw response:', JSON.stringify(d).slice(0, 400))
-      const items = d.tracks?.items || []
-      if (!items.length) {
+      console.log('[search-spotify-track] MusicBrainz query:', `${artist} ${title}`)
+      const recs = await musicBrainzSearch(artist, title, 5)
+      if (!recs.length) {
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: false, error: 'Track not found on Spotify', fallback_url }))
+        res.end(JSON.stringify({ ok: false, error: 'Track not found', fallback_url }))
         return
       }
-      const results = items.map(t => ({
-        spotify_id: t.id,
-        title: t.name,
-        artist: (t.artists || []).map(a => a.name).join(', '),
-        year: t.album?.release_date?.slice(0, 4) || '',
-        preview_url: t.preview_url || null
+      const results = recs.map(rec => ({
+        mb_id: rec.mb_id,
+        spotify_id: null,
+        title: rec.title,
+        artist: rec.artist,
+        year: rec.year,
+        preview_url: null,
+        // Spotify search URL — no direct track link without Spotify API
+        spotify_url: `https://open.spotify.com/search/${encodeURIComponent(rec.artist + ' ' + rec.title)}/tracks`
       }))
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, results }))
@@ -8839,42 +8911,45 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     await new Promise(r => req.on('end', r))
     try {
       const { artist, title, spotify_url } = JSON.parse(body)
-      await ensureSpotifyToken()
 
-      let track = null
+      let found = null
 
+      // 1. If Spotify URL given, extract track ID and try DB lookup then MusicBrainz
       if (spotify_url) {
         const idMatch = spotify_url.match(/track\/([A-Za-z0-9]+)/)
         if (idMatch) {
-          const r = await spotifyFetch(`https://api.spotify.com/v1/tracks/${idMatch[1]}`)
-          if (r.ok) track = await r.json()
+          const spotifyId = idMatch[1]
+          const { data: dbTrack } = await supabase.from('reference_tracks').select('title,artist,spotify_id').eq('spotify_id', spotifyId).maybeSingle()
+          if (dbTrack) {
+            found = { title: dbTrack.title, artist: dbTrack.artist, spotify_id: spotifyId }
+          } else {
+            const mb = await musicBrainzLookupSpotifyId(spotifyId).catch(() => null)
+            if (mb) found = { title: mb.title, artist: mb.artist, spotify_id: spotifyId, mb_id: mb.mb_id }
+          }
         }
       }
 
-      if (!track) {
-        const q = encodeURIComponent(`${artist} ${title}`.trim())
-        const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`)
-        if (!r.ok) throw new Error(`Spotify search ${r.status}`)
-        const d = await r.json()
-        track = d.tracks?.items?.[0] || null
+      // 2. Fall back to MusicBrainz text search
+      if (!found && (artist || title)) {
+        const recs = await musicBrainzSearch(artist, title, 1)
+        if (recs.length) found = { title: recs[0].title, artist: recs[0].artist, spotify_id: null, mb_id: recs[0].mb_id }
       }
 
-      if (!track) throw new Error('Track not found on Spotify')
+      if (!found) throw new Error('Track not found')
 
       const row = {
-        spotify_id: track.id,
-        title: track.name,
-        artist: (track.artists || []).map(a => a.name).join(', '),
+        spotify_id: found.spotify_id || null,
+        title: found.title,
+        artist: found.artist,
         source: 'reference_download',
         collection_name: 'reference_download',
-        approved: true,
-        popularity: track.popularity || null
+        approved: true
       }
       const { error } = await supabase.from('reference_tracks').insert(row)
       if (error && !error.message?.includes('duplicate')) throw new Error(error.message)
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, title: track.name, artist: (track.artists||[]).map(a=>a.name).join(', '), spotify_id: track.id }))
+      res.end(JSON.stringify({ ok: true, title: found.title, artist: found.artist, spotify_id: found.spotify_id || null }))
     } catch(e) {
       console.error('find-on-spotify error:', e.message)
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -10398,21 +10473,21 @@ Respond ONLY in JSON:
     req.on('end', async () => {
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString())
-        const { spotify_id, title, artist } = body
-        if (!spotify_id) {
+        const { spotify_id: rawSpotifyId, mb_id, title, artist } = body
+        // Accept spotify_id (real or mb:...) or mb_id; at minimum need title+artist
+        const spotify_id = rawSpotifyId || (mb_id ? 'mb:' + mb_id : null)
+        if (!spotify_id && !title && !artist) {
           res.writeHead(400, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: false, error: 'spotify_id required' }))
+          res.end(JSON.stringify({ ok: false, error: 'spotify_id or mb_id or title+artist required' }))
           return
         }
-        let { data: track } = await supabase
-          .from('reference_tracks')
-          .select('*')
-          .eq('spotify_id', spotify_id)
-          .maybeSingle()
+        let { data: track } = spotify_id
+          ? await supabase.from('reference_tracks').select('*').eq('spotify_id', spotify_id).maybeSingle()
+          : await supabase.from('reference_tracks').select('*').eq('title', title || '').eq('artist', artist || '').maybeSingle()
         if (!track) {
           const { data: newTrack, error: insErr } = await supabase
             .from('reference_tracks')
-            .insert({ spotify_id, title: title || '', artist: artist || '', source: 'agent', approved: true })
+            .insert({ spotify_id: spotify_id || null, title: title || '', artist: artist || '', source: 'agent', approved: true })
             .select()
             .single()
           if (insErr) throw new Error('insert failed: ' + insErr.message)

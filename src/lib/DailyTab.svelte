@@ -1565,20 +1565,23 @@ ${mozartContext}`
         <!-- REFERENCES -->
         <div class="helper-block">
           <div class="normalizer-title">REFERENCES</div>
-          <div class="ref-fields">
+          <div class="ref-row1">
             <input class="add-inp ref-field" bind:value={refArtist} placeholder="Artist" />
             <input class="add-inp ref-field" bind:value={refTitle} placeholder="Song / Album title" />
-          </div>
-          <input class="add-inp ref-url-inp" bind:value={refSpotifyUrl} placeholder="Paste Spotify URL (optional)..." />
-          <div class="ref-actions">
+            <button class="btn-ref-sm {refDownloading ? 'dim' : ''}" onclick={downloadReference} disabled={refDownloading}>
+              {refDownloading ? '...' : '↓ Download'}
+            </button>
             <label class="ref-album-check">
               <input type="checkbox" bind:checked={refAlbumMode} />
               Album
             </label>
-            <button class="btn-gold-sm {refDownloading ? 'dim' : ''}" onclick={downloadReference} disabled={refDownloading}>
-              {refDownloading ? '...' : '↓ Download'}
+          </div>
+          <div class="ref-row2">
+            <input class="add-inp ref-url-inp" bind:value={refSpotifyUrl} placeholder="Paste Spotify URL..." />
+            <button class="btn-ref-sm {refDownloading ? 'dim' : ''}" onclick={downloadReference} disabled={refDownloading}>
+              {refDownloading ? '...' : '↓ DL'}
             </button>
-            <button class="btn-ref-spotify {refFinding ? 'dim' : ''}" onclick={findOnSpotify} disabled={refFinding}>
+            <button class="btn-ref-spotify-sm {refFinding ? 'dim' : ''}" onclick={findOnSpotify} disabled={refFinding}>
               {refFinding ? '...' : '♫ Find on Spotify'}
             </button>
           </div>
@@ -2326,14 +2329,17 @@ ${mozartContext}`
   .add-inp { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 9px; outline: none; border-radius: 3px; }
   .add-inp:focus { border-color: rgba(201,168,76,.4); }
   .helpers-built-in { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
-  .ref-fields { display: flex; gap: 6px; margin-bottom: 5px; }
-  .ref-field { flex: 1; }
-  .ref-url-inp { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
-  .ref-actions { display: flex; gap: 6px; align-items: center; }
-  .ref-album-check { display: flex; align-items: center; gap: 4px; font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; cursor: pointer; margin-right: 2px; }
-  .btn-ref-spotify { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 5px 12px; background: rgba(30,215,96,.08); border: 1px solid rgba(30,215,96,.3); color: #1ed760; border-radius: 2px; cursor: pointer; white-space: nowrap; }
-  .btn-ref-spotify:hover { background: rgba(30,215,96,.14); }
-  .btn-ref-spotify.dim { opacity: .5; cursor: not-allowed; }
+  .ref-row1 { display: flex; gap: 5px; align-items: center; margin-bottom: 5px; }
+  .ref-row2 { display: flex; gap: 5px; align-items: center; }
+  .ref-field { flex: 1; min-width: 0; }
+  .ref-url-inp { flex: 1; min-width: 0; }
+  .ref-album-check { display: flex; align-items: center; gap: 3px; font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .btn-ref-sm { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 4px 10px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.35); color: #c9a84c; border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .btn-ref-sm:hover { background: rgba(201,168,76,.14); }
+  .btn-ref-sm.dim { opacity: .5; cursor: not-allowed; }
+  .btn-ref-spotify-sm { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 4px 10px; background: rgba(30,215,96,.08); border: 1px solid rgba(30,215,96,.3); color: #1ed760; border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .btn-ref-spotify-sm:hover { background: rgba(30,215,96,.14); }
+  .btn-ref-spotify-sm.dim { opacity: .5; cursor: not-allowed; }
   .ref-progress { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; padding: 6px 8px; background: #111; border-radius: 3px; max-height: 140px; overflow-y: auto; }
   .ref-progress-line { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; }
   .ref-status { font-family: 'Space Mono', monospace; font-size: 10px; margin-top: 5px; }

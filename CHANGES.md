@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] src/lib/DailyTab.svelte — DONE
+TASK: References layout reorganize
+WHAT: Row 1: Artist + Title inputs + ↓ Download button + Album checkbox. Row 2: Spotify URL input (flex:1) + ↓ DL button + ♫ Find on Spotify button. All buttons 4px 10px / 12px (down from 5px 12px / 10px). New classes: .btn-ref-sm (gold), .btn-ref-spotify-sm (green), .ref-row1, .ref-row2.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-03] momentum-watcher.cjs — DONE
 TASK: References download — replace Spotify search with yt-dlp + MusicBrainz
 WHAT: Removed all Spotify API search calls from /download-reference (kept only direct URL → metadata). Replaced with: (1) Latest album → yt-dlp "ytmsearch1:artist year latest album" --yes-playlist with fallback. (2) Latest song → yt-dlp "ytsearch1:artist new song YEAR official audio" direct search. (3) Specific album → MusicBrainz /ws/2/release tracklist (free, no auth, 1 req/sec rate limit respected) → individual track downloads; fallback to YouTube Music playlist if MusicBrainz misses. (4) Three new helpers: getMusicBrainzTracklist(), downloadAlbumPlaylist(), processPlaylistFiles(). Two-path download loop handles pre-downloaded playlist files and individual track downloads separately.

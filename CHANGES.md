@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
+TASK: Fix ANALYZER tab (investigation + dev server restart)
+WHAT: Investigation found ANALYZER button and panel are fully intact and structurally correct — nothing was removed by the recent commits. Root cause: Vite HMR had not recompiled ProjectsTab since 5:44 PM despite file changes (likely file-watcher exhaustion after a long dev session). Also fixed pre-existing Svelte 5 warning: instrPendingName was not declared with $state() causing non-reactive updates — added $state({}). Restarted momentum-dev (pm2) to force fresh compilation at 6:18 PM.
+RESULT: works — fresh compile at 6:18 PM, no ProjectsTab errors
+BLOCKERS: none
+
+## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
 TASK: Remove stems checklist, remove RELEASE tab/button
 WHAT: (1) Removed RELEASE button (create-release-entry call, brain log, etc.) from stage tabs row. (2) Removed release checklist from STEMS stage panel. (3) Removed release checklist shown for released songs in other stages. All three instances of release checklist UI gone.
 RESULT: works

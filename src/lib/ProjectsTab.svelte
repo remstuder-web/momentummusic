@@ -27,7 +27,7 @@
   let prodBlobUrls = {}  // song.id -> blob URL for production audio (module-level, survives tab switch)
   let mixBlobUrls  = {}  // song.id -> blob URL for mixing audio
   let instrBlobUrls = {} // song.id -> blob URL for instrumental audio
-  let instrPendingName = {} // song.id -> filename being saved (shows immediately)
+  let instrPendingName = $state({}) // song.id -> filename being saved (shows immediately)
   let audioTick = $state(0) // increment to force header player re-render
   let hoveredSongId = null
   let keydownHandler = null

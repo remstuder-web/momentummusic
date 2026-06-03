@@ -11116,15 +11116,17 @@ print(json.dumps({'files': files}))
     try {
       // Code format: YYNNN (5 digits) — year prefix + 3-digit sequential
       const yy = String(new Date().getFullYear()).slice(2)
-      // Scan DEMOS_DIR for highest NNN this year
+      // Scan DEMOS_DIR + SONO_DIR for highest NNN this year
       let fileMax = 0
-      try {
-        const files = fs.readdirSync(DEMOS_DIR)
-        for (const f of files) {
-          const m = f.match(/^(\d{5})_/)
-          if (m && m[1].startsWith(yy)) { const n = parseInt(m[1].slice(2)); if (n > fileMax) fileMax = n }
-        }
-      } catch(e) {}
+      for (const dir of [DEMOS_DIR, SONO_DIR]) {
+        try {
+          const files = fs.readdirSync(dir)
+          for (const f of files) {
+            const m = f.match(/^(\d{5})_/)
+            if (m && m[1].startsWith(yy)) { const n = parseInt(m[1].slice(2)); if (n > fileMax) fileMax = n }
+          }
+        } catch(e) {}
+      }
       // Query songs table for highest NNN this year
       let dbMax = 0
       try {

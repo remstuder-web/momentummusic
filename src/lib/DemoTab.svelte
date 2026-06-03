@@ -217,7 +217,9 @@
   }
 
   async function addSong() {
-    const code = await generateCode()
+    const codeRes = await fetch('http://localhost:4242/next-song-code')
+    const codeJson = await codeRes.json()
+    const code = codeJson.ok ? codeJson.code : await generateCode()
     const { data } = await supabase
       .from('songs')
       .insert({ code, status: 'demo', tags: [], reference_links: [] })

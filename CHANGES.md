@@ -2885,3 +2885,9 @@ TASK: Fix Supabase insert .catch() error in download-reference
 WHAT: insertRefTrack() in /download-reference used .catch(() => {}) on Supabase insert — Supabase client returns a result object not a Promise, so .catch never fires. Fixed to destructure { error } from await result and log with console.log('⚠ ref insert error:')
 RESULT: works — watcher running
 BLOCKERS: none
+
+## 2026-06-03 src/lib/DemoTab.svelte + momentum-watcher.cjs — DONE
+TASK: New Demo button: use next code from DEMOS + SONO folders
+WHAT: addSong() now calls GET /next-song-code (with generateCode() as fallback if watcher down); /next-song-code now scans both DEMOS_DIR and SONO_DIR (was only DEMOS_DIR). Fixes generateCode() which was generating wrong 6-digit YYMMNN codes — actual file format is 5-digit YYNNN (verified from disk)
+RESULT: works — /next-song-code returns 26035 (one above highest file 26034 in DEMOS_DIR)
+BLOCKERS: none

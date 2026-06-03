@@ -2265,7 +2265,7 @@ ${mozartContext}`
   .ref-moves { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
   .ref-move-item { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; }
   .helper-block { display: flex; flex-direction: column; gap: 8px; }
-  .normalizer-title { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .1em; color: #555; }
+  .normalizer-title { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: rgba(201,168,76,.75); }
   .title-gen-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
   .title-gen-inp { flex: 1; }
   .title-gen-results { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }

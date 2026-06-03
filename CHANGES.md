@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/DailyTab.svelte — DONE
+TASK: Gold section titles for all routine helper sections
+WHAT: Updated .normalizer-title CSS — was 11px #555 dim grey, now 13px Space Mono 700 rgba(201,168,76,.75) matching all other section titles in the app.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-03] src/lib/DailyTab.svelte — DONE
 TASK: Tools only in routine tab, not in helpers
 WHAT: Removed NORMALIZER, ACAPELLA EXTRACTOR, MIDI FROM REFERENCE, ABLETON CONTROL from HELPERS tab. HELPERS tab now contains only the user-saved website links (SAMPLETTE, SAMPLA, SUNO, etc). Tools remain in ROUTINE tab only.
 RESULT: works

@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
+TASK: Fix ANALYZER tab content restored and working
+WHAT: Investigation — ANALYZER code is fully intact and structurally correct (93/93 balanced blocks, correct button handler, correct {#if} condition). Root cause: the {#if true} workaround from the prior progress bar commit created a stale Vite HMR compile error ({@const} invalid placement) that blocked the browser from receiving updated code since 6:37 PM. Fix: inlined the stage index logic directly into the class expressions (no variable needed), removing the {#if true} hack entirely. Restarted momentum-dev for clean compile — no errors.
+RESULT: works — dev server clean, ANALYZER fully functional
+BLOCKERS: none
+
+## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
 TASK: Simplify progress bar to 3 segments (Production/Mixing/Stems)
 WHAT: Replaced dynamic STAGES loop + sub-dots + separate stems pill with 3 hardcoded equal segments. Logic: _curIdx maps current_stage to 0/1/2; past segments use seg-done (rgba gold .45), active segment uses seg-active (rgba gold .85), future stays dim. Removed sub-dot styles.
 RESULT: works

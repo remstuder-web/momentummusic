@@ -2969,3 +2969,9 @@ TASK: Analyzer: always load curves from Supabase on tab open, persists across re
 WHAT: Root bug fixed — onAnalyzerTabOpen was reading workData(song).stem_analysis which is undefined because workData() only returns specific normalized fields and strips stem_analysis. Fixed to read song.work_data?.stem_analysis directly (raw Supabase data, survives reload). Additionally: always queries vocal_eq_curves from Supabase on tab open to detect existing analysis; calls loadVocalEq() whenever curves exist so EQ data loads too; version mismatch check now also uses rawWd for stem_analysis_version
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-03 src/lib/ProjectsTab.svelte — DONE
+TASK: Analyzer FULL MIX: reference comparison with actionable suggestions + Mozart summary
+WHAT: New fullMixRefData $state + loadFullMixRef(song) — queries reference_tracks for first ref with Essentia metrics (loudness/energy/brightness/bass_energy/stereo_width); called in onAnalyzerTabOpen. Two helper functions: mixDiffSuggest(metric,diff) returns directional suggestion text; mixDiffColor(metric,absDiff) returns green/amber/red by threshold (LUFS >2/>4, others >0.1/>0.2). FULL MIX tab now shows: comparison block (fmc-row per metric — label, your mix vs ref, colored dot, actionable → suggestion) + MOZART SUMMARY section (strategic/creative/next_step with refresh button). Mozart summary moved to FULL MIX tab only. Stereo width uses stereo_width_per_band average when top-level value missing. Old REFERENCE COMPARISON section removed and replaced. 13 new CSS rules.
+RESULT: builds clean — watcher running
+BLOCKERS: none

@@ -76,9 +76,41 @@
   let mozartAnalyzeOpen = $state({}) // song.id -> bool
   let mozartTrackQuery = $state({}) // song.id -> string
   // Analyzer redesign
-  let stemAnalysis        = $state({}) // song.id -> {drums,bass,other,vocals} -> {lufs,energy,brightness,...}
-  let activeStemTab       = $state({}) // song.id -> 'mix'|'drums'|'bass'|'other'|'vocals'
+  let stemAnalysis          = $state({}) // song.id -> {drums,bass,other,vocals} -> {lufs,energy,brightness,...}
+  let activeStemTab         = $state({}) // song.id -> 'mix'|'drums'|'bass'|'other'|'vocals'
   let analyzerVersionBanner = $state({}) // song.id -> {stored,current} | null
+  let fullMixRefData        = $state({}) // song.id -> reference_tracks row with Essentia metrics + name
+
+  async function loadFullMixRef(song) {
+    const allRefs = [
+      ...(song.reference_links || []),
+      ...(projects.find(p => p.id === song.project_id)?.reference_links || [])
+    ].filter(r => r.spotify_id)
+    for (const ref of allRefs) {
+      const { data } = await supabase.from('reference_tracks')
+        .select('title,artist,loudness,energy,brightness,bass_energy,stereo_width')
+        .eq('spotify_id', ref.spotify_id).maybeSingle()
+      if (data && (data.loudness != null || data.energy != null)) {
+        const name = (ref.artist || data.artist || '') + (ref.title || data.title ? ' — ' + (ref.title || data.title) : '')
+        fullMixRefData = { ...fullMixRefData, [song.id]: { ...data, name } }
+        return
+      }
+    }
+  }
+
+  function mixDiffSuggest(metric, diff) {
+    if (metric === 'lufs')        return diff < 0 ? `Increase overall loudness by ~${Math.abs(diff).toFixed(0)} LUFS — push master limiter` : `Reduce overall loudness by ~${diff.toFixed(0)} LUFS — pull back master limiter`
+    if (metric === 'energy')      return diff < 0 ? 'Add more energy — increase compression punch or arrangement density' : 'Reduce energy — lighten arrangement or ease compression'
+    if (metric === 'brightness')  return diff < 0 ? 'Add high-frequency content — boost 8–12kHz on master or key elements' : 'Reduce high frequencies — tame harshness above 8kHz'
+    if (metric === 'bass_energy') return diff < 0 ? 'Add low-end weight — boost 60–100Hz or enhance kick/bass presence' : 'Reduce low end — cut 60–100Hz to avoid muddiness'
+    if (metric === 'stereo_width') return diff < 0 ? 'Widen the mix — use stereo imaging on synths, pads, or reverbs' : 'Narrow the mix — too wide sounds thin on mono systems'
+    return ''
+  }
+
+  function mixDiffColor(metric, absDiff) {
+    if (metric === 'lufs') return absDiff < 2 ? '#4caf82' : absDiff < 4 ? '#e8a838' : '#e05a4a'
+    return absDiff < 0.1 ? '#4caf82' : absDiff < 0.2 ? '#e8a838' : '#e05a4a'
+  }
   let mozartAnalysis = $state({}) // song.id -> { loading, ok, error }
   let mozartInsight = $state({}) // song.id -> { strategic, creative, next_step }
   let mozartInsightLoading = $state({}) // song.id -> bool
@@ -2511,6 +2543,9 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
         analyzerVersionBanner = { ...analyzerVersionBanner, [song.id]: null }
       }
 
+      // Load best available reference with Essentia metrics for FULL MIX comparison
+      if (!fullMixRefData[song.id]) loadFullMixRef(song).catch(() => {})
+
       // Auto-load summary if stem data available and not yet generated
       if (saved && Object.keys(saved).length && !mozartInsight[song.id] && !mozartInsightLoading[song.id]) {
         runAnalyzerSummary(song)
@@ -3864,54 +3899,64 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                           {/if}
                         {/if}
 
-                        <!-- ── AI INSIGHTS ── -->
-                        {#if mozartInsightLoading[song.id]}
-                          <div class="az-ai-loading" style="margin-top:12px">⟳ Generating insights...</div>
-                        {:else if mozartInsight[song.id]}
-                          {@const mz = mozartInsight[song.id]}
-                          {#if mz.strategic?.length}
-                            <div class="az-section-title" style="margin-top:12px">STRATEGIC CONTEXT</div>
-                            {#each mz.strategic as p}<div class="az-point">— {p}</div>{/each}
-                          {/if}
-                          {#if mz.creative?.length}
-                            <div class="az-section-title" style="margin-top:8px">CREATIVE DIRECTION</div>
-                            {#each mz.creative as p}<div class="az-point">— {p}</div>{/each}
-                          {/if}
-                          {#if mz.next_step}
-                            <div class="az-section-title" style="margin-top:8px">NEXT STEP</div>
-                            <div class="az-next-step">{mz.next_step}</div>
-                          {/if}
-                          <button class="az-refresh-btn" onclick={() => runAnalyzerSummary(song)}>↺ Refresh insights</button>
-                        {:else}
-                          <button class="analyze-now-btn" style="margin-top:12px" onclick={() => runAnalyzerSummary(song)}>
-                            ✦ Generate Insights
-                          </button>
-                        {/if}
-
-                        <!-- ── REFERENCE COMPARISON ── -->
-                        {#if (song.reference_links||[]).length && latestA}
-                          {@const refsWithData = (song.reference_links||[]).filter(r => r.spotify_id)}
-                          {#if refsWithData.length}
-                            <div class="az-section-title" style="margin-top:12px">REFERENCE COMPARISON</div>
-                            {#each refsWithData.slice(0,3) as ref}
-                              {@const rt = refTrackOptions.find(r => r.spotify_id === ref.spotify_id)}
-                              {#if rt?.energy != null || rt?.loudness != null}
-                                <div class="ref-comp-header">{ref.artist || ''} — {ref.title || ref.name || ''}</div>
-                                {#each [['LUFS', latestA.loudness_lufs, rt.loudness, '', 2], ['ENERGY', latestA.energy!=null?Math.round(latestA.energy*100):null, rt.energy!=null?Math.round(rt.energy*100):null, '%', 10], ['BRIGHTNESS', latestA.brightness!=null?Math.round(latestA.brightness*100):null, rt.brightness!=null?Math.round(rt.brightness*100):null, '%', 10]] as [label, myVal, refVal, unit, thresh]}
-                                  {#if myVal != null && refVal != null}
-                                    {@const diff = myVal - refVal}
-                                    {@const col = Math.abs(diff) < thresh ? '#4caf82' : Math.abs(diff) < thresh*2.5 ? '#e8a838' : '#e05a4a'}
-                                    <div class="ref-comp-row">
-                                      <span class="rc-label">{label}</span>
-                                      <span class="rc-mine">{typeof myVal === 'number' && Math.abs(myVal) < 10 ? myVal.toFixed(1) : myVal}{unit}</span>
-                                      <span class="rc-vs">vs</span>
-                                      <span class="rc-ref">{typeof refVal === 'number' && Math.abs(refVal) < 10 ? refVal.toFixed(1) : refVal}{unit}</span>
-                                      <span class="rc-diff" style="color:{col}">{diff > 0 ? '+' : ''}{typeof diff === 'number' && Math.abs(diff) < 10 ? diff.toFixed(1) : Math.round(diff)}{unit}</span>
+                        <!-- ── FULL MIX tab: reference comparison + Mozart summary ── -->
+                        {#if curStem === 'mix'}
+                          {@const fmRef = fullMixRefData[song.id]}
+                          {#if fmRef && latestA}
+                            <!-- Reference comparison with actionable suggestions -->
+                            <div class="az-section-title" style="margin-top:10px">FULL MIX vs {fmRef.name || 'REFERENCE'}</div>
+                            {#each [
+                              { label:'LOUDNESS',     metric:'lufs',         mine:latestA.loudness_lufs, refv:fmRef.loudness,     fmt: v => v != null ? v.toFixed(1)+' LUFS' : null },
+                              { label:'ENERGY',       metric:'energy',       mine:latestA.energy,        refv:fmRef.energy,       fmt: v => v != null ? Math.round(v*100)+'%' : null },
+                              { label:'BRIGHTNESS',   metric:'brightness',   mine:latestA.brightness,    refv:fmRef.brightness,   fmt: v => v != null ? Math.round(v*100)+'%' : null },
+                              { label:'BASS ENERGY',  metric:'bass_energy',  mine:latestA.bass_energy,   refv:fmRef.bass_energy,  fmt: v => v != null ? Math.round(v*100)+'%' : null },
+                              { label:'STEREO WIDTH', metric:'stereo_width', mine: (() => { const spb=latestA.stereo_width_per_band; if (!spb) return null; const v=Object.values(spb).filter(x=>x!=null); return v.length ? v.reduce((s,x)=>s+x,0)/v.length : null })(), refv:fmRef.stereo_width, fmt: v => v != null ? widthLabel(v) : null }
+                            ] as row}
+                              {#if row.mine != null && row.refv != null}
+                                {@const diff = row.mine - row.refv}
+                                {@const absDiff = Math.abs(diff)}
+                                {@const col = mixDiffColor(row.metric, absDiff)}
+                                <div class="fmc-row">
+                                  <div class="fmc-header">
+                                    <span class="fmc-label">{row.label}</span>
+                                    <div class="fmc-vals">
+                                      <span class="fmc-mine">Your mix: {row.fmt(row.mine)}</span>
+                                      <span class="fmc-sep"> | </span>
+                                      <span class="fmc-ref">Ref: {row.fmt(row.refv)}</span>
                                     </div>
+                                    <span class="fmc-dot" style="background:{col}"></span>
+                                  </div>
+                                  {#if row.metric === 'lufs' ? absDiff > 1 : absDiff > 0.05}
+                                    <div class="fmc-suggest" style="color:{col}">→ {mixDiffSuggest(row.metric, diff)}</div>
+                                  {:else}
+                                    <div class="fmc-suggest ok">✓ Close to reference</div>
                                   {/if}
-                                {/each}
+                                </div>
                               {/if}
                             {/each}
+                          {/if}
+
+                          <!-- Mozart summary (FULL MIX tab only) -->
+                          <div class="az-section-title" style="margin-top:12px">MOZART SUMMARY</div>
+                          {#if mozartInsightLoading[song.id]}
+                            <div class="az-ai-loading">⟳ Generating...</div>
+                          {:else if mozartInsight[song.id]}
+                            {@const mz = mozartInsight[song.id]}
+                            {#if mz.strategic?.length}
+                              <div class="az-section-subtitle">STRATEGIC CONTEXT</div>
+                              {#each mz.strategic as p}<div class="az-point">— {p}</div>{/each}
+                            {/if}
+                            {#if mz.creative?.length}
+                              <div class="az-section-subtitle" style="margin-top:6px">CREATIVE DIRECTION</div>
+                              {#each mz.creative as p}<div class="az-point">— {p}</div>{/each}
+                            {/if}
+                            {#if mz.next_step}
+                              <div class="az-section-subtitle" style="margin-top:6px">NEXT STEP</div>
+                              <div class="az-next-step">{mz.next_step}</div>
+                            {/if}
+                            <button class="az-refresh-btn" onclick={() => runAnalyzerSummary(song)}>↺ Refresh</button>
+                          {:else}
+                            <button class="analyze-now-btn" onclick={() => runAnalyzerSummary(song)}>✦ Generate Summary</button>
                           {/if}
                         {/if}
 
@@ -4715,6 +4760,18 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .rc-ref { color: #9e9690; min-width: 40px; }
   .rc-diff { font-weight: 700; min-width: 36px; text-align: right; }
   .az-empty { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; padding: 8px 0; }
+  .az-section-subtitle { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: rgba(201,168,76,.45); letter-spacing: .1em; text-transform: uppercase; padding: 3px 0 1px; }
+  .fmc-row { display: flex; flex-direction: column; gap: 2px; padding: 5px 0; border-bottom: 1px solid #151515; }
+  .fmc-row:last-of-type { border-bottom: none; }
+  .fmc-header { display: flex; align-items: center; gap: 8px; }
+  .fmc-label { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: #555; letter-spacing: .08em; min-width: 72px; flex-shrink: 0; }
+  .fmc-vals { display: flex; align-items: center; flex: 1; gap: 0; font-family: 'Space Mono', monospace; font-size: 9px; }
+  .fmc-mine { color: #cec9c1; }
+  .fmc-sep { color: #333; padding: 0 4px; }
+  .fmc-ref { color: #9e9690; }
+  .fmc-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .fmc-suggest { font-family: 'DM Sans', sans-serif; font-size: 11px; padding-left: 80px; line-height: 1.4; }
+  .fmc-suggest.ok { color: #4caf82; }
   .vocal-btn-analyzer { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #252525; color: #555; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 4px; }
   .vocal-btn-analyzer:hover { border-color: #444; color: #9e9690; }
   .vocal-style-result { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; line-height: 1.6; padding: 6px 0; border-top: 1px solid #1a1a1a; margin-top: 4px; white-space: pre-line; }

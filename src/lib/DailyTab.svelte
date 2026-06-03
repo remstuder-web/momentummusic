@@ -57,24 +57,43 @@
   let refDownloading = $state(false)
   let refFinding = $state(false)
   let refStatus = $state(null)  // { ok, msg }
+  let refProgress = $state([])
   let recentRefMoves = $state([])
 
   async function downloadReference() {
     if (!refArtist.trim() && !refTitle.trim() && !refSpotifyUrl.trim()) return
     refDownloading = true
     refStatus = null
+    refProgress = []
     try {
       const r = await fetch('http://localhost:4242/download-reference', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ artist: refArtist.trim(), title: refTitle.trim(), spotify_url: refSpotifyUrl.trim(), album_mode: refAlbumMode })
       })
-      const d = await r.json()
-      if (d.ok) {
-        refStatus = { ok: true, msg: `✓ Downloaded: ${d.files?.join(', ') || d.title}` }
-        recentRefMoves = [...(d.files || []), ...recentRefMoves].slice(0, 5)
-      } else {
-        refStatus = { ok: false, msg: d.error || 'Download failed' }
+      const reader = r.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop()
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const ev = JSON.parse(line.slice(6))
+            if (ev.type === 'progress') {
+              refProgress = [...refProgress, ev.msg]
+            } else if (ev.type === 'done') {
+              refStatus = { ok: true, msg: ev.msg }
+              if (ev.files?.length) recentRefMoves = [...ev.files, ...recentRefMoves].slice(0, 5)
+            } else if (ev.type === 'error') {
+              refStatus = { ok: false, msg: ev.msg }
+            }
+          } catch(_) {}
+        }
       }
     } catch(e) {
       refStatus = { ok: false, msg: e.message }
@@ -1563,6 +1582,13 @@ ${mozartContext}`
               {refFinding ? '...' : '♫ Find on Spotify'}
             </button>
           </div>
+          {#if refProgress.length}
+            <div class="ref-progress">
+              {#each refProgress as p}
+                <div class="ref-progress-line">{p}</div>
+              {/each}
+            </div>
+          {/if}
           {#if refStatus}
             <div class="ref-status {refStatus.ok ? 'ok' : 'err'}">{refStatus.msg}</div>
           {/if}
@@ -2308,6 +2334,8 @@ ${mozartContext}`
   .btn-ref-spotify { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 5px 12px; background: rgba(30,215,96,.08); border: 1px solid rgba(30,215,96,.3); color: #1ed760; border-radius: 2px; cursor: pointer; white-space: nowrap; }
   .btn-ref-spotify:hover { background: rgba(30,215,96,.14); }
   .btn-ref-spotify.dim { opacity: .5; cursor: not-allowed; }
+  .ref-progress { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; padding: 6px 8px; background: #111; border-radius: 3px; max-height: 140px; overflow-y: auto; }
+  .ref-progress-line { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; }
   .ref-status { font-family: 'Space Mono', monospace; font-size: 10px; margin-top: 5px; }
   .ref-status.ok { color: #4caf82; }
   .ref-status.err { color: #e05a4a; }

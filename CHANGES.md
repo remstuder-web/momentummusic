@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] momentum-watcher.cjs + src/lib/DailyTab.svelte — DONE
+TASK: References smart download — Spotify tracklist, proper naming, latest album/song support, SSE progress
+WHAT: Full rewrite of POST /download-reference. (1) SSE streaming — sends progress events as download proceeds. (2) Smart mode detection: "latest album/new album" → Spotify album search newest release → full tracklist; "latest song/release" → Spotify track search newest; album_mode → Spotify album lookup → tracklist; single → one track. (3) Multi-query YouTube fallback: tries Official Audio → Topic → Official → bare title. (4) Proper file naming: "Artist - Track Title.mp3" using exact Spotify metadata. (5) Duplicate check before reference_tracks insert. (6) Background Essentia analysis trigger. (7) UI reads SSE stream, shows live progress log panel (max-height 140px scrollable), final status line.
+RESULT: works — watcher healthy
+BLOCKERS: none
+
 ## [2026-06-03] src/lib/DailyTab.svelte + momentum-watcher.cjs — DONE
 TASK: References section overhaul
 WHAT: (1) UI: replaced single URL input with Artist + Song/Album title fields + optional Spotify URL input + Album checkbox. Two buttons: ↓ Download (yt-dlp → References/!Current + Supabase insert) and ♫ Find on Spotify (search or resolve URL → reference_tracks insert). Status feedback line + recent moves list. (2) Watcher: POST /download-reference — resolves Spotify URL if provided, runs yt-dlp ytsearch1, moves MP3 to References/!Current, inserts reference_tracks row. POST /find-on-spotify — searches Spotify by artist+title or resolves URL, inserts reference_tracks row.

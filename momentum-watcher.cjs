@@ -8500,85 +8500,191 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
-  // ── POST /download-reference — yt-dlp download → References/!Current ────
+  // ── POST /download-reference — smart yt-dlp download → References/!Current (SSE) ──
   if (req.method === 'POST' && req.url === '/download-reference') {
-    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Access-Control-Allow-Origin': '*',
+      'X-Accel-Buffering': 'no'
+    })
+    const send = msg => { try { res.write(`data: ${JSON.stringify(msg)}\n\n`) } catch(_) {} }
+
     let body = ''
     req.on('data', c => body += c)
     await new Promise(r => req.on('end', r))
+
+    const execAsync = require('util').promisify(exec)
+    const safeName = s => (s || '').replace(/[/\\:*?"<>|]/g, '_').trim()
+
+    // Download one track from YouTube, trying multiple search queries
+    async function downloadOneTrack(trackArtist, trackTitle, idx, total) {
+      const label = total > 1 ? ` (${idx}/${total})` : ''
+      send({ type: 'progress', msg: `📥 Downloading: ${trackArtist} - ${trackTitle}${label}...` })
+
+      const queries = [
+        `${trackArtist} - ${trackTitle} (Official Audio)`,
+        `${trackArtist} - ${trackTitle} - Topic`,
+        `${trackArtist} - ${trackTitle} Official`,
+        `${trackArtist} ${trackTitle}`
+      ]
+
+      const tag = `ref_dl_${Date.now()}_${Math.random().toString(36).slice(2,6)}`
+      const tmpOut = `/tmp/${tag}_%(title)s.%(ext)s`
+
+      for (const q of queries) {
+        try {
+          const safe = q.replace(/"/g, '').replace(/'/g, '')
+          await execAsync(
+            `yt-dlp "ytsearch1:${safe}" -x --audio-format mp3 --audio-quality 0 --no-playlist --match-filter "duration > 60" -o "${tmpOut}" 2>/dev/null`,
+            { timeout: 120000 }
+          )
+        } catch(_) {}
+
+        const found = fs.readdirSync('/tmp').filter(f => f.startsWith(tag) && f.endsWith('.mp3'))
+        if (found.length) {
+          const finalName = `${safeName(trackArtist)} - ${safeName(trackTitle)}.mp3`
+          const dest = path.join(REFERENCES_CURRENT_DIR, finalName)
+          try { fs.renameSync(path.join('/tmp', found[0]), dest) } catch(_) {
+            // dest exists — add index suffix
+            const alt = `${safeName(trackArtist)} - ${safeName(trackTitle)} (${idx}).mp3`
+            fs.renameSync(path.join('/tmp', found[0]), path.join(REFERENCES_CURRENT_DIR, alt))
+            return alt
+          }
+          return finalName
+        }
+      }
+      send({ type: 'progress', msg: `⚠ Not found: ${trackTitle}` })
+      return null
+    }
+
+    // Insert into reference_tracks if not already present
+    async function insertRefTrack(trackArtist, trackTitle, filename) {
+      const { data: existing } = await supabase.from('reference_tracks')
+        .select('id').ilike('title', trackTitle).ilike('artist', trackArtist).limit(1)
+      if (existing?.length) return
+      await supabase.from('reference_tracks').insert({
+        title: trackTitle, artist: trackArtist,
+        source: 'reference_download', collection_name: 'reference_download',
+        audio_path: filename, approved: true
+      }).catch(() => {})
+    }
+
     try {
       let { artist, title, spotify_url, album_mode } = JSON.parse(body)
+      artist = (artist || '').trim()
+      title  = (title  || '').trim()
 
-      // If spotify_url provided, resolve artist+title from it
-      if (spotify_url && (!artist || !title)) {
-        const idMatch = spotify_url.match(/track\/([A-Za-z0-9]+)/)
-        if (idMatch) {
-          await ensureSpotifyToken()
-          const sr = await spotifyFetch(`https://api.spotify.com/v1/tracks/${idMatch[1]}`)
-          if (sr.ok) {
-            const sd = await sr.json()
-            artist = artist || (sd.artists || []).map(a => a.name).join(', ')
-            title  = title  || sd.name || ''
+      await ensureSpotifyToken()
+      if (!fs.existsSync(REFERENCES_CURRENT_DIR)) fs.mkdirSync(REFERENCES_CURRENT_DIR, { recursive: true })
+
+      // Resolve Spotify URL → artist + title
+      if (spotify_url) {
+        const trackId = (spotify_url.match(/track\/([A-Za-z0-9]+)/) || [])[1]
+        const albumId = (spotify_url.match(/album\/([A-Za-z0-9]+)/)  || [])[1]
+        if (trackId && !album_mode) {
+          const r = await spotifyFetch(`https://api.spotify.com/v1/tracks/${trackId}`)
+          if (r.ok) {
+            const d = await r.json()
+            artist = artist || (d.artists||[]).map(a=>a.name).join(', ')
+            title  = title  || d.name || ''
+          }
+        } else if (albumId) {
+          album_mode = true
+          const r = await spotifyFetch(`https://api.spotify.com/v1/albums/${albumId}`)
+          if (r.ok) {
+            const d = await r.json()
+            artist = artist || (d.artists||[]).map(a=>a.name).join(', ')
+            title  = title  || d.name || ''
           }
         }
       }
 
-      if (!artist && !title) {
-        res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'artist or title required' }))
-        return
+      if (!artist && !title) { send({ type: 'error', msg: 'Artist or title required' }); res.end(); return }
+
+      const isLatestAlbum = /latest album|new album/i.test(title)
+      const isLatestSong  = /latest song|latest release|new song/i.test(title)
+
+      // ── Resolve tracklist from Spotify ──────────────────────────────────
+      let tracks = []  // [{ artist, title }]
+
+      if (isLatestAlbum) {
+        send({ type: 'progress', msg: `🔍 Finding latest album by ${artist}...` })
+        const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(artist)}&type=album&limit=10`)
+        const d = r.ok ? await r.json() : {}
+        const albums = (d.albums?.items || []).filter(a => (a.artists||[]).some(x => x.name.toLowerCase() === artist.toLowerCase()))
+        albums.sort((a,b) => (b.release_date||'').localeCompare(a.release_date||''))
+        const album = albums[0]
+        if (!album) throw new Error(`No album found for ${artist}`)
+        title = album.name
+        send({ type: 'progress', msg: `🔍 Found: "${album.name}" (${album.release_date}) — fetching tracklist...` })
+        const tr = await spotifyFetch(`https://api.spotify.com/v1/albums/${album.id}/tracks?limit=50`)
+        const td = tr.ok ? await tr.json() : {}
+        tracks = (td.items||[]).map(t => ({ artist, title: t.name }))
+
+      } else if (isLatestSong) {
+        send({ type: 'progress', msg: `🔍 Finding latest release by ${artist}...` })
+        const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(artist)}&type=track&limit=10`)
+        const d = r.ok ? await r.json() : {}
+        const items = (d.tracks?.items || []).filter(t => (t.artists||[]).some(x => x.name.toLowerCase() === artist.toLowerCase()))
+        items.sort((a,b) => (b.album?.release_date||'').localeCompare(a.album?.release_date||''))
+        const track = items[0]
+        if (!track) throw new Error(`No recent track found for ${artist}`)
+        title = track.name
+        send({ type: 'progress', msg: `🔍 Found: "${track.name}" — downloading...` })
+        tracks = [{ artist: (track.artists||[]).map(a=>a.name).join(', '), title: track.name }]
+
+      } else if (album_mode) {
+        send({ type: 'progress', msg: `🔍 Searching Spotify for album "${title}" by ${artist}...` })
+        const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(artist + ' ' + title)}&type=album&limit=1`)
+        const d = r.ok ? await r.json() : {}
+        const album = d.albums?.items?.[0]
+        if (album) {
+          send({ type: 'progress', msg: `🔍 Found: "${album.name}" — fetching ${album.total_tracks} tracks...` })
+          const tr = await spotifyFetch(`https://api.spotify.com/v1/albums/${album.id}/tracks?limit=50`)
+          const td = tr.ok ? await tr.json() : {}
+          tracks = (td.items||[]).map(t => ({ artist: artist || (t.artists||[]).map(a=>a.name).join(', '), title: t.name }))
+          title = album.name
+        } else {
+          tracks = [{ artist, title }]
+        }
+      } else {
+        tracks = [{ artist, title }]
       }
 
-      const execAsync = require('util').promisify(exec)
-      if (!fs.existsSync(REFERENCES_CURRENT_DIR)) fs.mkdirSync(REFERENCES_CURRENT_DIR, { recursive: true })
+      if (!tracks.length) throw new Error('No tracks to download')
+      send({ type: 'progress', msg: `📋 ${tracks.length} track${tracks.length>1?'s':''} to download` })
 
-      const query = album_mode
-        ? `${artist} ${title} full album`
-        : `${artist} ${title} official audio`
-
-      const tmpOut = path.join('/tmp', `ref_dl_${Date.now()}_%(title)s.%(ext)s`)
-      const cmd = album_mode
-        ? `yt-dlp "ytsearch1:${query.replace(/"/g, '')}" --yes-playlist -x --audio-format mp3 --audio-quality 0 -o "${tmpOut}"`
-        : `yt-dlp "ytsearch1:${query.replace(/"/g, '')}" -x --audio-format mp3 --audio-quality 0 --no-playlist -o "${tmpOut}"`
-
-      await execAsync(cmd, { timeout: 180000 })
-
-      // Find files written to /tmp matching our prefix
-      const prefix = path.basename(tmpOut).split('%(')[0]
-      const downloaded = fs.readdirSync('/tmp')
-        .filter(f => f.startsWith(prefix) && f.endsWith('.mp3'))
-        .map(f => ({ f, mtime: fs.statSync(path.join('/tmp', f)).mtimeMs }))
-        .sort((a, b) => b.mtime - a.mtime)
-
-      if (!downloaded.length) throw new Error('yt-dlp produced no output file')
-
+      // ── Download each track ──────────────────────────────────────────────
       const movedFiles = []
-      for (const { f } of downloaded) {
-        const src  = path.join('/tmp', f)
-        const dest = path.join(REFERENCES_CURRENT_DIR, f)
-        fs.renameSync(src, dest)
-        movedFiles.push(f)
-        recentRefMoves.unshift(f)
-        // Insert into reference_tracks
-        await supabase.from('reference_tracks').insert({
-          title: title || f,
-          artist: artist || '',
-          source: 'reference_download',
-          collection_name: 'reference_download',
-          audio_path: f,
-          approved: true
-        }).catch(() => {})
-        console.log('✓ Reference downloaded:', f)
+      for (let i = 0; i < tracks.length; i++) {
+        const { artist: a, title: t } = tracks[i]
+        const filename = await downloadOneTrack(a, t, i + 1, tracks.length)
+        if (filename) {
+          movedFiles.push(filename)
+          recentRefMoves.unshift(filename)
+          if (recentRefMoves.length > 5) recentRefMoves.length = 5
+          send({ type: 'progress', msg: `✓ Saved: ${filename}` })
+          await insertRefTrack(a, t, filename)
+          // Trigger background Essentia + Spotify analysis
+          const fullPath = path.join(REFERENCES_CURRENT_DIR, filename)
+          fetch(`http://127.0.0.1:${PORT}/analyze-audio-features`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filePath: fullPath })
+          }).catch(() => {})
+        }
+        // Small delay between tracks to avoid rate limiting
+        if (i < tracks.length - 1) await new Promise(r => setTimeout(r, 1500))
       }
-      if (recentRefMoves.length > 5) recentRefMoves.length = 5
 
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: true, files: movedFiles, title, artist }))
+      const summary = `✓ ${movedFiles.length}/${tracks.length} track${movedFiles.length>1?'s':''} downloaded`
+      send({ type: 'done', files: movedFiles, title, artist, msg: summary })
+      console.log(`✓ download-reference: ${summary}`)
     } catch(e) {
       console.error('download-reference error:', e.message)
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: false, error: e.message }))
+      send({ type: 'error', msg: e.message })
     }
+    res.end()
     return
   }
 

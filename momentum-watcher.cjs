@@ -1160,6 +1160,112 @@ async function fetchKworbGermany() {
   }
 }
 
+function decodeHtmlEntities(str) {
+  return (str || '').replace(/&amp;/g, '&').replace(/&#039;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
+}
+
+async function fetchBillboardHot100() {
+  try {
+    const res = await fetch('https://www.billboard.com/charts/hot-100/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    })
+    if (!res.ok) { console.warn('Billboard Hot 100: HTTP', res.status); return [] }
+    const html = await res.text()
+
+    // Billboard: each o-chart-results-list-row-container block = one chart entry
+    const containers = [...html.matchAll(/o-chart-results-list-row-container[\s\S]*?(?=o-chart-results-list-row-container|$)/g)]
+    const results = []
+    for (const container of containers) {
+      const block = container[0]
+      // Rank: first c-label span with the large font size class
+      const rankM = block.match(/class="c-label[^"]*"[^>]*>\s*\n\s*(\d{1,3})\s*\n/)
+      // Title: first h3.c-title in this block
+      const titleM = block.match(/<h3[^>]+c-title[^>]*>\s*([\s\S]*?)\s*<\/h3>/)
+      // Artist: a-no-trucate span → text inside anchor
+      const artistM = block.match(/a-no-trucate[^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/)
+      // Weeks on chart: number after WEEKS label
+      const weeksM = block.match(/>\s*WEEKS?\s*<\/span>[\s\S]{0,500}?<span[^>]*>\s*(\d+)\s*<\/span>/)
+
+      const title = titleM ? decodeHtmlEntities(titleM[1].replace(/<[^>]+>/g, '').trim()) : null
+      const artist = artistM ? decodeHtmlEntities(artistM[1].replace(/<[^>]+>/g, '').trim()) : null
+      if (title && artist && title.length > 1 && artist.length > 1) {
+        results.push({
+          position: rankM ? parseInt(rankM[1]) : results.length + 1,
+          title, artist,
+          weeks: weeksM ? parseInt(weeksM[1]) : null,
+          source: 'billboard_hot100'
+        })
+        if (results.length >= 10) break
+      }
+    }
+
+    if (results.length) { console.log(`Billboard Hot 100: ${results.length} tracks`); return results }
+    console.warn('Billboard Hot 100: no data extracted')
+    return []
+  } catch(e) {
+    console.warn('Billboard Hot 100 failed:', e.message)
+    return []
+  }
+}
+
+async function fetchUKOfficialCharts() {
+  try {
+    const res = await fetch('https://www.officialcharts.com/charts/singles-chart/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-GB,en;q=0.9'
+      }
+    })
+    if (!res.ok) { console.warn('UK Official Charts: HTTP', res.status); return [] }
+    const html = await res.text()
+
+    const results = []
+    // UK Charts: data-item="item-CHARTID-INDEX" where INDEX is 0-based rank
+    const items = [...html.matchAll(/data-item="item-\d+-(\d+)"([\s\S]*?)(?=data-item="item-|$)/g)]
+    for (const m of items) {
+      const position = parseInt(m[1]) + 1  // 0-indexed → 1-indexed rank
+      if (position > 40) continue
+      const inner = m[2]
+      // Title: last span in chart-name link (skip movement-icon spans)
+      const titleSpans = [...inner.matchAll(/class="chart-name[^"]*"[^>]*>[\s\S]*?(<span[^>]*>[^<]{2,80}<\/span>)[\s\S]*?<\/a>/g)]
+      const allSpans = [...inner.matchAll(/class="chart-name[^"]*"[\s\S]*?<\/a>/g)]
+      let title = null
+      if (allSpans.length) {
+        const anchor = allSpans[0][0]
+        const spans = [...anchor.matchAll(/<span[^>]*>([^<]{2,80})<\/span>/g)]
+        // Take the last non-empty, non-movement span
+        for (let i = spans.length - 1; i >= 0; i--) {
+          const t = spans[i][1].trim()
+          if (t && !/^(new|re-entry|↑|↓|=|new entry)/i.test(t)) { title = t; break }
+        }
+      }
+      // Artist: chart-artist link → inner span text
+      const artistM = inner.match(/class="chart-artist[^"]*"[^>]*>[\s\S]*?<span[^>]*>([^<]+)<\/span>/)
+      // Last week position
+      const lwM = inner.match(/LW:[^<]*font-bold[^>]*>(\d+)</)
+
+      const artist = artistM ? decodeHtmlEntities(artistM[1].trim()) : null
+      title = title ? decodeHtmlEntities(title) : null
+      if (title && artist) {
+        results.push({ position, title, artist, last_week: lwM ? parseInt(lwM[1]) : null, source: 'uk_official' })
+        if (results.length >= 10) break
+      }
+    }
+
+    if (results.length) { console.log(`UK Official Charts: ${results.length} tracks`); return results }
+    console.warn('UK Official Charts: no data extracted')
+    return []
+  } catch(e) {
+    console.warn('UK Official Charts failed:', e.message)
+    return []
+  }
+}
+
 async function extractTracksFromText(text, apiKey) {
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1363,7 +1469,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
   const today = new Date().toISOString().slice(0, 10)
 
   // Fetch all data sources in parallel
-  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, kworbDE, pressItems, gearThreads, waInboxRes] = await Promise.all([
+  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, kworbDE, billboardTop, ukChartsTop, pressItems, gearThreads, waInboxRes] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/connections?select=name`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?order=tempo.desc&limit=5&select=title,artist,genre_tags,tempo,key`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/watched_artists?active=eq.true&select=*`, { headers: sbHeaders }),
@@ -1374,6 +1480,8 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     fetchKworbTrending(),
     fetchKworbSpotify(),
     fetchKworbGermany(),
+    fetchBillboardHot100(),
+    fetchUKOfficialCharts(),
     fetchMusicPressItems(),
     fetchGearNewsItems(),
     fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.message&or=(read.is.null,read.eq.false)&order=created_at.desc&limit=10&select=song_title,message,patch_name,created_at`, { headers: sbHeaders }),
@@ -1459,6 +1567,12 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     'SPOTIFY GERMANY TOP 5:',
     kworbDE.slice(0, 5).map((t, i) => `${i+1}. ${t.artist} — ${t.title}`).join('\n') || 'Unavailable',
     '',
+    'BILLBOARD HOT 100 TOP 10:',
+    billboardTop.slice(0, 10).map((t, i) => `${t.position || i+1}. ${t.artist} — ${t.title}${t.weeks ? ` (${t.weeks}wk)` : ''}`).join('\n') || 'Unavailable',
+    '',
+    'UK OFFICIAL SINGLES TOP 10:',
+    ukChartsTop.slice(0, 10).map((t, i) => `${t.position || i+1}. ${t.artist} — ${t.title}${t.last_week ? ` (was ${t.last_week})` : ''}`).join('\n') || 'Unavailable',
+    '',
     'TIKTOK TOP 5:',
     tiktokTop.map((t, i) => `${i+1}. ${t.artist ? t.artist + ' — ' : ''}${t.title}`).join('\n') || 'Unavailable',
     '',
@@ -1482,7 +1596,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     .map(([src, items]) => `${src.toUpperCase()}:\n` + items.map(i => `- ${i.title}${i.body ? `: ${i.body.slice(0, 300)}` : ''} (source: ${src})`).join('\n'))
     .join('\n\n') || 'No press fetched'
 
-  const sourcesUsed = ['spotify_new_releases', 'pitchfork', 'factmag', 'hypebot', 'kworb_youtube', 'kworb_spotify', 'watched_artists', 'gear_news', ...MUSIC_SOURCES.map(s => s.name)]
+  const sourcesUsed = ['spotify_new_releases', 'pitchfork', 'factmag', 'hypebot', 'kworb_youtube', 'kworb_spotify', 'watched_artists', 'gear_news', 'billboard_hot100', 'uk_official_charts', ...MUSIC_SOURCES.map(s => s.name)]
 
   const gearBlock = gearThreads.length
     ? gearThreads.map((t, i) => `${i+1}. ${t.title}`).join('\n')
@@ -1522,12 +1636,12 @@ ${brainContext ? `\n[BACKGROUND — read silently, do not reproduce]\n${brainCon
 Based ONLY on the above real data, write one complete scout report with these sections in this exact order:
 
 ## CHARTS
-List top 5 for each source in this exact format (2 columns per row):
-🌍 SPOTIFY GLOBAL          🇩🇪 SPOTIFY DE
-[top 5 from global]        [top 5 from DE]
+List top 5 for each source in this exact format (3 columns per row):
+🌍 SPOTIFY GLOBAL    🇩🇪 SPOTIFY DE      🇺🇸 BILLBOARD HOT 100
+[top 5 from global]  [top 5 from DE]     [top 5 from billboard]
 
-📱 TIKTOK                  ▶ YOUTUBE
-[top 5 from tiktok]        [top 5 from youtube]
+📱 TIKTOK            ▶ YOUTUBE           🇬🇧 UK OFFICIAL
+[top 5 from tiktok]  [top 5 from youtube] [top 5 from UK]
 
 ## BREAKING ARTISTS
 - Name artists actually gaining momentum in new releases or chart data
@@ -1711,8 +1825,10 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
       patch_name: `Scout ${today}`,
       read: false,
       metadata: {
-        spotify_global: kworbSP.slice(0, 5),
-        spotify_de: kworbDE.slice(0, 5),
+        spotify_global: kworbSP.slice(0, 10),
+        spotify_de: kworbDE.slice(0, 10),
+        billboard: billboardTop.slice(0, 10),
+        uk_charts: ukChartsTop.slice(0, 10),
         tiktok: tiktokTop,
         youtube: ytEnriched,
         suggested_tracks: suggestedTracks.slice(0, 15)

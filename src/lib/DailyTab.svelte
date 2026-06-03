@@ -1279,49 +1279,22 @@ ${mozartContext}`
                 </div>
                 {#if n.type === 'briefing' || n.type === 'scout'}
                   {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*/m, '').trim() : n.message}
-                  {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
+                  {#if n.type === 'scout' && (n.metadata?.spotify_global?.length || n.metadata?.billboard?.length || n.metadata?.uk_charts?.length)}
                     <div class="chart-grid">
                       {#each [
                         {key:'spotify_global', label:'🌍 SPOTIFY GLOBAL'},
-                        {key:'spotify_de', label:'🇩🇪 SPOTIFY DE'},
-                        {key:'tiktok', label:'📱 TIKTOK'},
-                        {key:'youtube', label:'▶ YOUTUBE'}
+                        {key:'spotify_de',     label:'🇩🇪 SPOTIFY DE'},
+                        {key:'billboard',      label:'🇺🇸 BILLBOARD'},
+                        {key:'tiktok',         label:'📱 TIKTOK'},
+                        {key:'youtube',        label:'▶ YOUTUBE'},
+                        {key:'uk_charts',      label:'🇬🇧 UK CHARTS'}
                       ] as chart}
-                        {#if (n.metadata[chart.key]||[]).length === 0}{:else if chart.key === 'tiktok'}
-                          <div class="tiktok-col">
-                            <div class="chart-title">{chart.label}</div>
-                            {#each (n.metadata.tiktok || []) as t, i}
-                              <div class="chart-track-row">
-                                <span class="chart-pos">{i+1}</span>
-                                <div class="chart-track-info">
-                                  {#if typeof t === 'string'}
-                                    <span class="chart-track-artist">{t}</span>
-                                  {:else}
-                                    <span class="chart-track-artist">{t.artist || ''}</span>
-                                    <span class="chart-track-title-text">{t.title || ''}</span>
-                                  {/if}
-                                </div>
-                                <div class="chart-track-actions">
-                                  {#if typeof t !== 'string' && t.spotify_id}
-                                    <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
-                                  {/if}
-                                  {#if typeof t !== 'string'}
-                                    {#if !librarySpotifyIds.has(t.spotify_id)}
-                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
-                                    {:else}
-                                      <span class="in-library-badge">✓</span>
-                                    {/if}
-                                  {/if}
-                                </div>
-                              </div>
-                            {/each}
-                          </div>
-                        {:else}
+                        {#if (n.metadata[chart.key]||[]).length > 0}
                           <div class="chart-col">
                             <div class="chart-title">{chart.label}</div>
-                            {#each (n.metadata[chart.key] || []) as t, i}
+                            {#each (n.metadata[chart.key] || []).slice(0, 8) as t, i}
                               <div class="chart-track-row">
-                                <span class="chart-pos">{i+1}</span>
+                                <span class="chart-pos">{t.position || (i+1)}</span>
                                 <div class="chart-track-info">
                                   {#if typeof t === 'string'}
                                     <span class="chart-track-artist">{t}</span>
@@ -1333,10 +1306,12 @@ ${mozartContext}`
                                 <div class="chart-track-actions">
                                   {#if typeof t !== 'string' && t.spotify_id}
                                     <button class="chart-play-btn" onclick={() => playSpotifyTrack(t.spotify_id)} title="Open in Spotify">▶</button>
+                                  {:else if typeof t !== 'string' && (t.title || t.artist)}
+                                    <a class="chart-play-btn" href="https://open.spotify.com/search/{encodeURIComponent((t.artist||'')+' '+(t.title||''))}" target="_blank" title="Search on Spotify">▶</a>
                                   {/if}
                                   {#if typeof t !== 'string'}
                                     {#if !librarySpotifyIds.has(t.spotify_id)}
-                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>lib</button>
+                                      <button class="chart-lib-btn" onclick={() => addChartTrackToLibrary(t)}>→lib</button>
                                     {:else}
                                       <span class="in-library-badge">✓</span>
                                     {/if}
@@ -1350,7 +1325,7 @@ ${mozartContext}`
                     </div>
                   {/if}
                   {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
-                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\W/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
+                    {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.billboard||[]),...(n.metadata.uk_charts||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\W/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
                     {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
                     {#if uniqueScoutTracks.length}
                       <div class="suggested-tracks">
@@ -2224,10 +2199,8 @@ ${mozartContext}`
   .task-scroll.scrollable { max-height: calc(7 * 50px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .year-scroll { max-height: calc(10 * 32px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
   .inbox-scroll { max-height: 600px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #252525 transparent; }
-  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #1a1a1a; }
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #1a1a1a; }
   .chart-col { display: flex; flex-direction: column; gap: 3px; }
-  .tiktok-col { grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; }
-  .tiktok-col .chart-title { grid-column: span 2; }
   .chart-title { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; color: rgba(201,168,76,.6); letter-spacing: .08em; margin-bottom: 4px; }
   .chart-track-row { display: flex; align-items: center; gap: 5px; padding: 3px 0; border-bottom: 1px solid #151515; }
   .chart-track-row:last-child { border-bottom: none; }

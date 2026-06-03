@@ -8795,11 +8795,12 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       const { data: existing } = await supabase.from('reference_tracks')
         .select('id').ilike('title', trackTitle).ilike('artist', trackArtist).limit(1)
       if (existing?.length) return
-      await supabase.from('reference_tracks').insert({
+      const { error: insErr } = await supabase.from('reference_tracks').insert({
         title: trackTitle, artist: trackArtist,
         source: 'reference_download', collection_name: 'reference_download',
         audio_path: filename, approved: true
-      }).catch(() => {})
+      })
+      if (insErr) console.log('⚠ ref insert error:', insErr.message)
     }
 
     // ── MusicBrainz tracklist (free, no auth) ─────────────────────────────

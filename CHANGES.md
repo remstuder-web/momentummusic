@@ -2879,3 +2879,9 @@ TASK: Daily: remove Spotify URL row, hide Ableton, move WhatsApp after MIDI
 WHAT: (1) Removed ref-row2 (Spotify URL input + ↓ DL + ♫ Find on Spotify buttons) from REFERENCES section — row 1 only remains; (2) Wrapped ABLETON CONTROL helper-block in {#if false} — hidden but code intact, one-line to re-enable; (3) Removed WHATSAPP section-block from top-level position (was SECTION 2 before ROUTINE), reinserted as helper-block after MIDI FROM REFERENCE with normalizer-title header
 RESULT: builds clean (5.09s, 0 errors)
 BLOCKERS: none
+
+## 2026-06-03 momentum-watcher.cjs — DONE
+TASK: Fix Supabase insert .catch() error in download-reference
+WHAT: insertRefTrack() in /download-reference used .catch(() => {}) on Supabase insert — Supabase client returns a result object not a Promise, so .catch never fires. Fixed to destructure { error } from await result and log with console.log('⚠ ref insert error:')
+RESULT: works — watcher running
+BLOCKERS: none

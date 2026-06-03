@@ -3059,3 +3059,9 @@ TASK: Daily: reduce routine row spacing to compact
 WHAT: .check-list gap reduced 6px→2px; .check-item padding reduced 8px 8px→4px 8px — rows now tightly spaced like a simple list
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-04 src/lib/DailyTab.svelte — DONE
+TASK: Daily: remove checkboxes, green Applio+Kits buttons, bigger popup windows
+WHAT: (1) Removed .ckb checkbox buttons from all three lists (state.customs, state.checkItems, state.helpers). (2) Applio button label changed to "APPLIO" only (no emoji/spinner). Both buttons now green: border+color #4caf50, transparent bg, subtle green hover. (3) Both window.open calls now include width=1400,height=900,left=100,top=50 to open as sized popup.
+RESULT: builds clean
+BLOCKERS: none

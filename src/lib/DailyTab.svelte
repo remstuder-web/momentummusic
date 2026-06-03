@@ -1110,7 +1110,7 @@ ${mozartContext}`
     try {
       await fetch('http://localhost:4242/start-applio', { method: 'POST' })
     } catch(e) {}
-    window.open('http://localhost:6969', '_blank', '')
+    window.open('http://localhost:6969', '_blank', 'width=1400,height=900,left=100,top=50')
     applioLoading = false
   }
 
@@ -1471,8 +1471,7 @@ ${mozartContext}`
             : isGemini
             ? 'https://gemini.google.com/app?q=' + encodeURIComponent(q)
             : 'https://chat.deepseek.com/?q=' + encodeURIComponent(q)}
-          <div class="check-item {state.ticks[item.id]?'done':''}">
-            <button class="ckb" onclick={() => tick(item.id)}>{state.ticks[item.id]?'✓':''}</button>
+          <div class="check-item">
             {#if item.url}
               <a href={item.url} target="_blank" class="item-label">{item.label}</a>
             {:else}
@@ -1516,8 +1515,7 @@ ${mozartContext}`
               : isGemini
               ? 'https://gemini.google.com/app?q=' + encodeURIComponent(q)
               : 'https://chat.deepseek.com/?q=' + encodeURIComponent(q)}
-            <div class="check-item {state.checkTicks[item.id]?'done':''}">
-              <button class="ckb" onclick={async () => { state.checkTicks = {...state.checkTicks, [item.id]: !state.checkTicks[item.id]}; await save() }}>{state.checkTicks[item.id]?'✓':''}</button>
+            <div class="check-item">
               {#if item.url}
                 <a href={item.url} target="_blank" class="item-label">{item.label}</a>
               {:else}
@@ -1677,8 +1675,8 @@ ${mozartContext}`
             <button class="acapella-mode-btn {acapellaMode==='vocal_clean'?'on':''}" onclick={() => acapellaMode='vocal_clean'}>VOCAL CLEAN</button>
             <button class="acapella-mode-btn {acapellaMode==='instrumental'?'on':''}" onclick={() => acapellaMode='instrumental'}>INSTRUMENTAL</button>
             <div class="acapella-launch-group">
-              <button class="acapella-applio-btn" onclick={openApplio} disabled={applioLoading}>{applioLoading ? '⏳' : '🎤'} APPLIO</button>
-              <button class="acapella-applio-btn" onclick={() => window.open('https://app.kits.ai/', '_blank', '')}>KITS</button>
+              <button class="acapella-applio-btn" onclick={openApplio} disabled={applioLoading}>APPLIO</button>
+              <button class="acapella-applio-btn" onclick={() => window.open('https://app.kits.ai/', '_blank', 'width=1400,height=900,left=100,top=50')}>KITS</button>
             </div>
           </div>
           <div class="acapella-drop {acapellaDragging ? 'dragging' : ''}"
@@ -1930,8 +1928,7 @@ ${mozartContext}`
           {@const hasSearch  = isYoutube || isSpotify || isGemini || isDeepseek}
           {@const searchPlaceholder = isYoutube ? 'Search YouTube...' : isSpotify ? 'Search Spotify...' : isGemini ? 'Ask Gemini...' : 'Ask DeepSeek...'}
           {@const buildSearchUrl = (q) => isYoutube ? 'https://youtube.com/results?search_query=' + encodeURIComponent(q) : isSpotify ? 'https://open.spotify.com/search/' + encodeURIComponent(q) : isGemini ? 'https://gemini.google.com/app?q=' + encodeURIComponent(q) : 'https://chat.deepseek.com/?q=' + encodeURIComponent(q)}
-          <div class="check-item {state.helperTicks[item.id]?'done':''}">
-            <button class="ckb" onclick={() => tickHelper(item.id)}>{state.helperTicks[item.id]?'✓':''}</button>
+          <div class="check-item">
             {#if item.url}
               <a href={item.url} target="_blank" class="item-label">{item.label}</a>
             {:else}
@@ -2455,8 +2452,8 @@ ${mozartContext}`
   .acapella-mode-btn:hover { border-color: #444; color: #9e9690; }
   .acapella-mode-btn.on { border-color: rgba(201,168,76,.5); color: #c9a84c; background: rgba(201,168,76,.07); }
   .acapella-launch-group { margin-left: auto; display: flex; gap: 5px; }
-  .acapella-applio-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 3px 10px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; transition: all .12s; }
-  .acapella-applio-btn:hover { border-color: rgba(76,175,130,.4); color: #4caf82; }
+  .acapella-applio-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 3px 10px; background: transparent; border: 1px solid #4caf50; color: #4caf50; border-radius: 2px; cursor: pointer; transition: all .12s; }
+  .acapella-applio-btn:hover { background: rgba(76,175,80,.1); }
   .acapella-drop { border: 1px dashed #252525; border-radius: 3px; padding: 20px; text-align: center; min-height: 70px; display: flex; align-items: center; justify-content: center; cursor: pointer; margin: 6px 0; transition: border-color .15s; }
   .acapella-drop.dragging { border-color: #c9a84c; background: rgba(201,168,76,.04); }
   .acapella-placeholder { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #333; display: flex; flex-direction: column; gap: 4px; align-items: center; }

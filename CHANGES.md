@@ -3017,3 +3017,9 @@ TASK: Acapella Extractor: vocal clean mode, instrumental mode, Open Applio butto
 WHAT: (1) Mode selector buttons [ACAPELLA][VOCAL CLEAN][INSTRUMENTAL] + [🎤 Applio] added above drop zone; acapellaMode $state routes runAcapellaExtract to /extract-acapella|/extract-vocal-clean|/extract-instrumental; button label and loading text update per mode. (2) New extractVocalClean() function: Demucs --two-stems=vocals + onset detection + ffmpeg "highpass=f=80,afftdn=nf=-25,loudnorm=I=-14" → SONGNAME_vocals_clean.wav on Desktop. (3) New extractInstrumental() function: Demucs --two-stems=vocals → no_vocals.wav copied as SONGNAME_instrumental.wav on Desktop. (4) POST /extract-vocal-clean and POST /extract-instrumental endpoints. (5) 🎤 Applio button opens localhost:6969 in new tab. CSS: acapella-mode-btn, acapella-applio-btn.
 RESULT: builds clean — watcher running
 BLOCKERS: none
+
+## 2026-06-04 src/lib/DailyTab.svelte — DONE
+TASK: Acapella: open Applio as normal tab not popup
+WHAT: Added empty string as third parameter to window.open call for Applio button — window.open('http://localhost:6969', '_blank', '') forces Chrome to open as a regular tab instead of a popup window
+RESULT: builds clean (no build needed — trivial change)
+BLOCKERS: none

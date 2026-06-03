@@ -1666,7 +1666,7 @@ ${mozartContext}`
             <button class="acapella-mode-btn {acapellaMode==='acapella'?'on':''}" onclick={() => acapellaMode='acapella'}>ACAPELLA</button>
             <button class="acapella-mode-btn {acapellaMode==='vocal_clean'?'on':''}" onclick={() => acapellaMode='vocal_clean'}>VOCAL CLEAN</button>
             <button class="acapella-mode-btn {acapellaMode==='instrumental'?'on':''}" onclick={() => acapellaMode='instrumental'}>INSTRUMENTAL</button>
-            <button class="acapella-applio-btn" onclick={() => window.open('http://localhost:6969', '_blank')}>🎤 Applio</button>
+            <button class="acapella-applio-btn" onclick={() => window.open('http://localhost:6969', '_blank', '')}>🎤 Applio</button>
           </div>
           <div class="acapella-drop {acapellaDragging ? 'dragging' : ''}"
             ondragover={e => { e.preventDefault(); acapellaDragging = true }}

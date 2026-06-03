@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] momentum-watcher.cjs — DONE
+TASK: generateNextDemoCode include SONO_DIR
+WHAT: When scanning for the highest existing demo code, also include files from SONO_DIR alongside DEMOS_DIR so codes assigned to SONO tracks are not reused
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-02] src/routes/sono/+page.svelte — DONE
 TASK: Fix pack header full width, widen main/sidebar split
 WHAT: (1) sb-packs + sb-pack: added width:100% + box-sizing:border-box — without these the flex children didn't fill the padded sidebar container, causing the pack header to be narrower than the card. (2) Grid 1fr 180px → 1fr 200px; max-width 1060 → 1400; gap 20 → 16; padding 20 → 16px sides. Main track list now takes ~85% of viewport at typical widths.

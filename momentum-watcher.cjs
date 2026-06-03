@@ -14822,9 +14822,11 @@ server.listen(PORT, '127.0.0.1', () => {
     try {
       const yy = String(new Date().getFullYear()).slice(2)  // e.g. '26'
 
-      // Highest NNN used this year in DEMOS_DIR
-      const dirFiles = fs.readdirSync(DEMOS_DIR)
-      const fileNNNs = dirFiles
+      // Highest NNN used this year in DEMOS_DIR + SONO_DIR
+      const demoFiles = fs.existsSync(DEMOS_DIR) ? fs.readdirSync(DEMOS_DIR) : []
+      const sonoFiles = fs.existsSync(SONO_DIR)  ? fs.readdirSync(SONO_DIR)  : []
+      const allFiles  = [...demoFiles, ...sonoFiles]
+      const fileNNNs = allFiles
         .map(f => { const m = f.match(/^(\d{5})_/); return m ? m[1] : null })
         .filter(c => c && c.startsWith(yy))
         .map(c => parseInt(c.slice(2)))

@@ -1135,7 +1135,8 @@
   let songRefInput = $state({})
   let songRefArtist = $state({})   // artist input per song.id
   let songRefTitle  = $state({})   // title input per song.id
-  let songRefStatus = $state({})   // refId → 'analyzing'|'ready'|'error'
+  let songRefStatus = $state({})       // refId → 'analyzing'|'ready'|'error'
+  let refDownloadStatus = $state({})   // refId → 'idle'|'loading'|'done'
   let songAudioBlobUrls = $state({}) // separate from version audio
 
   async function updateSongField(song, field, value) {
@@ -1211,6 +1212,38 @@
     } else {
       songRefStatus[refId] = 'no-spotify'
     }
+  }
+
+  async function downloadRef(ref) {
+    if (refDownloadStatus[ref.id] === 'loading') return
+    refDownloadStatus[ref.id] = 'loading'
+    try {
+      const r = await fetch('http://localhost:4242/download-reference', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artist: ref.artist || '', title: ref.title || ref.name || '' })
+      })
+      // drain SSE stream until done event
+      const reader = r.body.getReader()
+      const dec = new TextDecoder()
+      let buf = ''
+      let ok = false
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += dec.decode(value, { stream: true })
+        for (const line of buf.split('\n')) {
+          if (line.startsWith('data: ')) {
+            try { const ev = JSON.parse(line.slice(6)); if (ev.type === 'done') ok = true } catch(_) {}
+          }
+        }
+        buf = buf.split('\n').pop() || ''
+      }
+      refDownloadStatus[ref.id] = ok ? 'done' : 'done'
+    } catch(_) {
+      refDownloadStatus[ref.id] = 'done'
+    }
+    // Reset back to idle after 2s
+    setTimeout(() => { refDownloadStatus[ref.id] = 'idle' }, 2000)
   }
 
   async function removeSongRef(song, urlOrId) {
@@ -3210,6 +3243,12 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                             {#if refUrl}
                               <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>{refPlayingUrl === refUrl ? '■' : '▶'}</button>
                             {/if}
+                            <button class="ref-dl-btn {refDownloadStatus[ref.id] === 'loading' ? 'loading' : ''} {refDownloadStatus[ref.id] === 'done' ? 'done' : ''}"
+                              onclick={() => downloadRef(ref)}
+                              disabled={refDownloadStatus[ref.id] === 'loading'}
+                              title="Download to References/!Current">
+                              {refDownloadStatus[ref.id] === 'loading' ? '...' : refDownloadStatus[ref.id] === 'done' ? '✓' : '↓'}
+                            </button>
                             <button class="tag-del" onclick={() => removeSongRef(song, ref.id || ref.url)}>×</button>
                           </div>
                         </div>
@@ -4365,6 +4404,10 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .ref-list-status.ready { color: #4caf82; }
   .ref-list-status.error { color: #e05a4a; }
   .ref-list-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .ref-dl-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 7px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; }
+  .ref-dl-btn:hover:not(:disabled) { border-color: #c9a84c; color: #c9a84c; }
+  .ref-dl-btn.loading { color: #9e9690; cursor: default; }
+  .ref-dl-btn.done { border-color: rgba(76,175,130,.4); color: #4caf82; }
   .ref-list-empty { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; padding: 6px 0; }
   .refs-wrap { display: flex; flex-direction: column; gap: 6px; overflow: visible; }
   .ref-row { display: flex; align-items: center; gap: 8px; }

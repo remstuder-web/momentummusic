@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
+TASK: References tab — download button per reference chip
+WHAT: Added ↓ download button on each reference row between ▶ play and × delete. Calls POST /download-reference with {artist, title}, reads SSE stream until done event, shows "..." while loading and "✓" (green) for 2s then resets to "↓". refDownloadStatus state tracks per ref.id.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-03] src/lib/ProjectsTab.svelte + momentum-watcher.cjs — DONE
 TASK: References play button + full auto-analysis pipeline
 WHAT: (1) addRefBySearch now saves {url, name, spotify_id, artist, title} in reference_links — url is 'https://open.spotify.com/track/ID' so playRefUrl can find preview_url in reference_tracks and play the 30s preview. (2) /analyze-ref-now endpoint now runs full 3-step pipeline: Tier 1 processLibraryTrackInBackground (yt-dlp download + Essentia BPM/key/energy → reference_tracks + preview_url), Tier 2 runStemAnalysis (Essentia EQ on preview → vocal_eq_curves for ANALYZER display), brain_knowledge insert with category reference_current.

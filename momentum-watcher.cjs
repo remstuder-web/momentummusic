@@ -182,6 +182,8 @@ const RELEASES_DIR    = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC'
 const STEMS_DIR       = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Stems')
 const ARCHIVE_29TH    = path.join(process.env.HOME, 'Dropbox', 'P2P', '29TH AVENUE', '!ARCHIVE')
 const SENT_DIR        = path.join(process.env.HOME, 'Dropbox', 'P2P', '29TH AVENUE', 'SENT')
+const REFERENCES_CURRENT_DIR = '/Users/remo/Dropbox/!MOMENTUM MUSIC/References/!Current'
+const DOWNLOADS_DIR   = path.join(process.env.HOME, 'Downloads')
 const USED_TITLES_FILE = path.join(__dirname, 'used_demo_titles.json')
 let usedTitles = []
 try { usedTitles = JSON.parse(fs.readFileSync(USED_TITLES_FILE, 'utf8')) } catch(e) { usedTitles = [] }
@@ -6109,6 +6111,9 @@ const DISCO_TAGS = {
   type: ['Cover','Demo','Easy-clear','Focus track','Mainstream','One stop','Recognizable','Rerecord','Samples','Score','Sound design','Soundtrack','Sting']
 }
 
+// ── Module-scope state for Downloads → References watcher ────────────────
+const recentRefMoves = []
+
 // ── HTTP server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -11128,6 +11133,14 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /recent-reference-moves — last 5 files moved to References/!Current ──
+  if (req.method === 'GET' && req.url === '/recent-reference-moves') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ files: recentRefMoves }))
+    return
+  }
+
   // ── GET /logs — watcher_logs from Supabase (last 50, newest first) ──────────
   if (req.method === 'GET' && req.url === '/logs') {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -15417,6 +15430,27 @@ Max 150 words. Be specific and actionable.` }]
       console.warn('⚠ exec_sql RPC failed — run manually in Supabase SQL Editor:\nALTER TABLE patches ADD COLUMN IF NOT EXISTS dropped_files jsonb DEFAULT \'[]\'::jsonb;')
     }
   })()
+
+  // ── Downloads watcher — auto-move audio to References/!Current ───────────
+  const REFERENCE_AUDIO_EXTS = new Set(['.mp3', '.wav', '.m4a', '.flac', '.aiff', '.aif'])
+  if (!fs.existsSync(REFERENCES_CURRENT_DIR)) fs.mkdirSync(REFERENCES_CURRENT_DIR, { recursive: true })
+  chokidar.watch(DOWNLOADS_DIR, { depth: 0, ignoreInitial: true, persistent: true })
+    .on('add', filePath => {
+      const ext = path.extname(filePath).toLowerCase()
+      if (!REFERENCE_AUDIO_EXTS.has(ext)) return
+      setTimeout(() => {
+        try {
+          if (!fs.existsSync(filePath)) return
+          const filename = path.basename(filePath)
+          const dest = path.join(REFERENCES_CURRENT_DIR, filename)
+          fs.renameSync(filePath, dest)
+          recentRefMoves.unshift(filename)
+          if (recentRefMoves.length > 5) recentRefMoves.length = 5
+          console.log('✓ Reference moved:', filename)
+        } catch(e) { console.warn('⚠ Reference move failed:', e.message) }
+      }, 3000)
+    })
+  console.log('✓ Downloads watcher active → References/!Current')
 })
 
 // ── File watcher ──────────────────────────────────────────────────────────

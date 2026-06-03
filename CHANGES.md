@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] src/lib/DailyTab.svelte + momentum-watcher.cjs — DONE
+TASK: Helpers always visible + REFERENCES section
+WHAT: (1) Removed HELPERS tab — all built-in helper sections (REFERENCES, TITLE GENERATOR, NORMALIZER, ACAPELLA, MIDI, ABLETON) now always visible after ROUTINE in main flow. (2) Added REFERENCES section with Spotify URL input + Open Spotidown button (opens spotidown.app/de4, copies URL to clipboard). (3) Watcher: chokidar on ~/Downloads auto-moves audio files to References/!Current after 3s delay; GET /recent-reference-moves returns last 5 filenames.
+RESULT: works — watcher shows "✓ Downloads watcher active → References/!Current", endpoint returns {files:[]}
+BLOCKERS: none
+
 ## [2026-06-03] momentum-watcher.cjs — DONE
 TASK: yt-dlp auto-update check on watcher startup
 WHAT: Added checkYtDlpUpdate() IIFE in server.listen startup block — runs yt-dlp --update-to stable non-blocking, logs ✓ up to date or ✓ updated with version line

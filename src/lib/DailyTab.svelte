@@ -50,6 +50,26 @@
   let abletonResponse = $state(null)
   let abletonSteps = $state([])
 
+  let refUrl = $state('')
+  let recentRefMoves = $state([])
+
+  async function openSpotidown() {
+    const url = refUrl.trim()
+    if (url) {
+      try { await navigator.clipboard.writeText(url) } catch(_) {}
+    }
+    window.open('https://spotidown.app/de4', '_blank')
+    pollRefMoves()
+  }
+
+  async function pollRefMoves() {
+    try {
+      const r = await fetch('http://localhost:4242/recent-reference-moves')
+      const d = await r.json()
+      if (Array.isArray(d.files)) recentRefMoves = d.files
+    } catch(_) {}
+  }
+
   const ABLETON_TOOLS = [
     { cat: 'SESSION', tools: [
       { name: 'get_session_info', hint: 'Get info about the current session' },
@@ -1405,12 +1425,10 @@ ${mozartContext}`
     <div class="section-block">
 
       <div class="sections">
-        <button class="sec-tab {activeSection==='routine'?'on':''}" onclick={() => activeSection='routine'}>ROUTINE</button>
-        <button class="sec-tab {activeSection==='helpers'?'on':''}" onclick={() => activeSection='helpers'}>HELPERS</button>
+        <button class="sec-tab on">ROUTINE</button>
       </div>
 
-      {#if activeSection === 'routine'}
-        <div class="check-list">
+      <div class="check-list">
         {#each state.customs as item (item.id)}
           {@const isYoutube  = /youtube\.com|youtu\.be/.test(item.url||'')}
           {@const isSpotify  = /spotify\.com/.test(item.url||'')}
@@ -1496,47 +1514,24 @@ ${mozartContext}`
           {/each}
           </div>
         {/if}
-      {/if}
 
-      {#if activeSection === 'helpers'}
-        <div class="check-list">
-        {#each (state.helpers||[]) as item (item.id)}
-          {@const isYoutube  = /youtube\.com|youtu\.be/.test(item.url||'')}
-          {@const isSpotify  = /spotify\.com/.test(item.url||'')}
-          {@const isGemini   = /gemini\.google\.com/.test(item.url||'')}
-          {@const isDeepseek = /deepseek\.com/.test(item.url||'')}
-          {@const hasSearch  = isYoutube || isSpotify || isGemini || isDeepseek}
-          {@const searchPlaceholder = isYoutube ? 'Search YouTube...' : isSpotify ? 'Search Spotify...' : isGemini ? 'Ask Gemini...' : 'Ask DeepSeek...'}
-          {@const buildSearchUrl = (q) => isYoutube ? 'https://youtube.com/results?search_query=' + encodeURIComponent(q) : isSpotify ? 'https://open.spotify.com/search/' + encodeURIComponent(q) : isGemini ? 'https://gemini.google.com/app?q=' + encodeURIComponent(q) : 'https://chat.deepseek.com/?q=' + encodeURIComponent(q)}
-          <div class="check-item {state.helperTicks[item.id]?'done':''}">
-            <button class="ckb" onclick={() => tickHelper(item.id)}>{state.helperTicks[item.id]?'✓':''}</button>
-            {#if item.url}
-              <a href={item.url} target="_blank" class="item-label">{item.label}</a>
-            {:else}
-              <span class="item-label">{item.label}</span>
-            {/if}
-            {#if hasSearch}
-              <input
-                class="helper-search-inp"
-                placeholder={searchPlaceholder}
-                value={helperSearchInputs[item.id] || ''}
-                oninput={e => helperSearchInputs = {...helperSearchInputs, [item.id]: e.target.value}}
-                onkeydown={e => { if (e.key === 'Enter') { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? buildSearchUrl(q) : item.url, '_blank') } }}
-              />
-              <button class="helper-search-go" onclick={() => { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? buildSearchUrl(q) : item.url, '_blank') }}>→</button>
-            {/if}
-            <div class="reorder-col"><button class="reorder-micro" onclick={() => moveHelper(item.id,-1)}>▲</button><button class="reorder-micro" onclick={() => moveHelper(item.id,1)}>▼</button></div>
-            <button class="del-btn" onclick={() => delHelper(item.id)}>×</button>
+      <div class="helpers-built-in">
+
+        <!-- REFERENCES -->
+        <div class="helper-block">
+          <div class="normalizer-title">REFERENCES</div>
+          <div class="ref-row">
+            <input class="add-inp ref-inp" bind:value={refUrl} placeholder="Paste Spotify track or album URL..." />
+            <button class="btn-gold-sm" onclick={openSpotidown}>Open Spotidown</button>
           </div>
-        {/each}
+          {#if recentRefMoves.length}
+            <div class="ref-moves">
+              {#each recentRefMoves as f}
+                <div class="ref-move-item">✓ Moved: {f}</div>
+              {/each}
+            </div>
+          {/if}
         </div>
-        <div class="add-row">
-          <input class="add-inp" bind:value={newHelper} placeholder="New helper..." onkeydown={e=>e.key==='Enter'&&addHelper()} />
-          <input class="add-inp url" bind:value={newHelperUrl} placeholder="URL (optional)..." />
-          <button class="add-btn" onclick={addHelper}>+</button>
-        </div>
-
-        <div class="helpers-built-in">
 
         <!-- TITLE GENERATOR -->
         <div class="helper-block">
@@ -1775,7 +1770,6 @@ ${mozartContext}`
         </div><!-- /helper-block ableton -->
 
         </div><!-- /helpers-built-in -->
-      {/if}
 
     </div>
 
@@ -2225,6 +2219,10 @@ ${mozartContext}`
   .add-inp { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 9px; outline: none; border-radius: 3px; }
   .add-inp:focus { border-color: rgba(201,168,76,.4); }
   .helpers-built-in { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+  .ref-row { display: flex; gap: 6px; align-items: center; }
+  .ref-inp { flex: 1; }
+  .ref-moves { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+  .ref-move-item { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; }
   .helper-block { display: flex; flex-direction: column; gap: 8px; }
   .normalizer-title { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .1em; color: #555; }
   .title-gen-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }

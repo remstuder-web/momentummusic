@@ -1555,7 +1555,7 @@ ${mozartContext}`
               {refFinding ? '...' : 'FIND'}
             </button>
             <button class="btn-ref-sm {refDownloading ? 'dim' : ''}" onclick={downloadReference} disabled={refDownloading}>
-              {refDownloading ? '...' : '↓ Download'}
+              {refDownloading ? '...' : '↓ DOWNLOAD'}
             </button>
             <label class="ref-album-check">
               <input type="checkbox" bind:checked={refAlbumMode} />
@@ -1609,7 +1609,7 @@ ${mozartContext}`
               placeholder="Describe the vibe, genre, mood, artist style..."
               onkeydown={e => e.key === 'Enter' && generateTitles()} />
             <button class="btn-ref-sm {titleGenLoading ? 'dim' : ''}" onclick={generateTitles} disabled={titleGenLoading}>
-              {titleGenLoading ? '...' : 'Generate Titles'}
+              {titleGenLoading ? '...' : 'GENERATE TITLES'}
             </button>
           </div>
           {#if titleGenResults.length}
@@ -2406,13 +2406,13 @@ ${mozartContext}`
   .ref-field { flex: 1; min-width: 0; }
   .ref-url-inp { flex: 1; min-width: 0; }
   .ref-album-check { display: flex; align-items: center; gap: 3px; font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
-  .btn-ref-sm { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 4px 10px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.35); color: #c9a84c; border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .btn-ref-sm { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 10px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.35); color: #c9a84c; border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0; letter-spacing: .06em; }
   .btn-ref-sm:hover { background: rgba(201,168,76,.14); }
   .btn-ref-sm.dim { opacity: .5; cursor: not-allowed; }
   .btn-ref-spotify-sm { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 4px 10px; background: rgba(30,215,96,.08); border: 1px solid rgba(30,215,96,.3); color: #1ed760; border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
   .btn-ref-spotify-sm:hover { background: rgba(30,215,96,.14); }
   .btn-ref-spotify-sm.dim { opacity: .5; cursor: not-allowed; }
-  .btn-ref-find { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 4px 10px; background: rgba(76,175,130,.08); border: 1px solid rgba(76,175,130,.35); color: #4caf82; border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .btn-ref-find { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 10px; background: rgba(76,175,130,.08); border: 1px solid rgba(76,175,130,.35); color: #4caf82; border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0; letter-spacing: .06em; }
   .btn-ref-find:hover { background: rgba(76,175,130,.14); }
   .btn-ref-find.dim { opacity: .5; cursor: not-allowed; }
   .similar-results { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding: 6px 8px; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 3px; }
@@ -2518,7 +2518,8 @@ ${mozartContext}`
   .ableton-seq-summary.partial { color: #e57373; background: rgba(229,115,115,.04); }
   .add-inp::placeholder { color: #555; }
   .add-inp.url { flex: 2; min-width: 120px; }
-  .add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 5px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+  .add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 5px 12px; background: transparent; color: #c9a84c; border: 1px solid rgba(201,168,76,.35); border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+  .add-btn:hover { background: rgba(201,168,76,.08); }
   .daily-toggle { font-size: 14px; padding: 3px 7px; background: transparent; border: 1px solid #252525; border-radius: 3px; cursor: pointer; color: #444; flex-shrink: 0; }
   .daily-toggle.on { border-color: #c9a84c; color: #c9a84c; background: rgba(201,168,76,.08); }
   .recurring-row { background: transparent; }

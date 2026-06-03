@@ -2891,3 +2891,9 @@ TASK: New Demo button: use next code from DEMOS + SONO folders
 WHAT: addSong() now calls GET /next-song-code (with generateCode() as fallback if watcher down); /next-song-code now scans both DEMOS_DIR and SONO_DIR (was only DEMOS_DIR). Fixes generateCode() which was generating wrong 6-digit YYMMNN codes — actual file format is 5-digit YYNNN (verified from disk)
 RESULT: works — /next-song-code returns 26035 (one above highest file 26034 in DEMOS_DIR)
 BLOCKERS: none
+
+## 2026-06-03 src/lib/DemoTab.svelte — DONE
+TASK: New Demo form: remove audio drop field, title only
+WHAT: Removed new-demo-dropzone wrapper div (drag/drop handlers, drop hint span, CSS). Button is now standalone. Removed newDemoDragging $state. createDemoFromDrop still exists for programmatic use if needed.
+RESULT: builds clean
+BLOCKERS: none

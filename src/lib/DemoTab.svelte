@@ -98,7 +98,6 @@
 
   const KEYS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','Cm','C#m','Dm','D#m','Em','Fm','F#m','Gm','G#m','Am','A#m','Bm']
 
-  let newDemoDragging = $state(false)
   let showFilterPanel = $state(false)
   let sonoMode = $state(false)
 
@@ -1162,24 +1161,7 @@
       title="Show only SONO tracks">
       SONO{sonoMode ? ' ✕' : ''}
     </button>
-    <div
-      class="new-demo-dropzone {newDemoDragging ? 'drag-over' : ''}"
-      ondragover={e => { e.preventDefault(); newDemoDragging = true }}
-      ondragleave={() => newDemoDragging = false}
-      ondrop={async e => {
-        e.preventDefault(); newDemoDragging = false
-        const file = e.dataTransfer.files[0]
-        if (!file) return
-        const ext = file.name.split('.').pop().toLowerCase()
-        if (!['wav','mp3','aiff','aif','flac','m4a'].includes(ext)) {
-          alert('Drop an audio file to create a demo')
-          return
-        }
-        await createDemoFromDrop(file)
-      }}>
-      <span class="new-demo-drop-hint">↓ Drop audio to create demo</span>
-      <button class="demo-add-btn" onclick={addSong}>+ New Demo</button>
-    </div>
+    <button class="demo-add-btn" onclick={addSong}>+ New Demo</button>
   {:else}
     <div class="patch-sort-row">
       <button class="sort-sm {patchView==='open'?'on':''}" onclick={() => patchView='open'}>OPEN</button>
@@ -2142,10 +2124,6 @@
   .bg-opt-label { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: #cec9c1; }
   .bg-opt.on .bg-opt-label { color: #c9a84c; }
   .bg-opt-desc { font-family: 'Space Mono', monospace; font-size: 10px; color: #444; }
-  .new-demo-dropzone { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px dashed #252525; border-radius: 3px; background: #080808; transition: all .15s; }
-  .new-demo-dropzone.drag-over { border-color: #4caf82; background: rgba(76,175,130,.05); }
-  .new-demo-drop-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #333; flex: 1; }
-  .new-demo-dropzone.drag-over .new-demo-drop-hint { color: #4caf82; }
   .demo-add-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; white-space: nowrap; }
   .demo-add-btn:hover { background: #d4b660; }
 

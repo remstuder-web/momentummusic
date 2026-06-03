@@ -1017,6 +1017,10 @@
   let activeInfoTab = $state('notes')
   let refLinkInput = $state({}) // project.id -> input value
   let refsOpen = $state({})    // project.id -> bool
+  let projRefArtist        = $state({}) // project.id -> artist input
+  let projRefTitle         = $state({}) // project.id -> title input
+  let projRefSearching     = $state({}) // project.id -> bool
+  let projRefSearchResults = $state({}) // project.id -> results[] | null
 
   function projectRefs(p) {
     const colRefs  = Array.isArray(p.reference_links) ? p.reference_links : []
@@ -1066,6 +1070,49 @@
         body: JSON.stringify({ spotify_id: spotifyId, url: url.trim(), name })
       }).catch(() => {})
     }
+  }
+
+  async function addProjRefBySearch(p) {
+    const artist = (projRefArtist[p.id] || '').trim()
+    const title  = (projRefTitle[p.id]  || '').trim()
+    if (!artist && !title) return
+    projRefSearching[p.id] = true
+    projRefSearchResults[p.id] = null
+    try {
+      const r = await fetch('http://localhost:4242/search-reference-tracks', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artist, title })
+      })
+      const d = await r.json()
+      projRefSearchResults[p.id] = (d.ok && d.results?.length) ? d.results : []
+    } catch(e) {
+      projRefSearchResults[p.id] = []
+    } finally {
+      projRefSearching[p.id] = false
+    }
+  }
+
+  async function addProjRefFromPicker(p, track) {
+    projRefSearchResults[p.id] = null
+    projRefArtist[p.id] = ''
+    projRefTitle[p.id]  = ''
+    const newRef = {
+      id: 'r' + Date.now(),
+      mb_id: track.mb_id || null,
+      spotify_id: null,
+      artist: track.artist, title: track.title,
+      url: `https://open.spotify.com/search/${encodeURIComponent(track.artist + ' ' + track.title)}/tracks`,
+      name: track.artist + ' — ' + track.title,
+      added_at: new Date().toISOString()
+    }
+    const refs = [...(p.reference_links || []), newRef]
+    await supabase.from('projects').update({ reference_links: refs }).eq('id', p.id)
+    p.reference_links = refs
+    projects = projects.map(proj => proj.id === p.id ? { ...proj, reference_links: refs } : proj)
+    fetch('http://localhost:4242/analyze-ref-now', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mb_id: track.mb_id, title: track.title, artist: track.artist })
+    }).catch(() => {})
   }
 
   // Preview audio player for reference links
@@ -3047,6 +3094,36 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
         {:else if activeInfoTab === 'references'}
           {@const refs = projectRefs(selectedProject)}
           <div class="ref-manager">
+            <!-- MusicBrainz search -->
+            <div class="ref-search-row" style="margin-bottom:4px">
+              <input class="inp-sm ref-search-inp" placeholder="Artist"
+                value={projRefArtist[selectedProject.id] || ''}
+                oninput={e => { projRefArtist[selectedProject.id] = e.target.value; projRefSearchResults[selectedProject.id] = null }}
+                onkeydown={e => e.key === 'Enter' && addProjRefBySearch(selectedProject)} />
+              <input class="inp-sm ref-search-inp" placeholder="Song Title"
+                value={projRefTitle[selectedProject.id] || ''}
+                oninput={e => { projRefTitle[selectedProject.id] = e.target.value; projRefSearchResults[selectedProject.id] = null }}
+                onkeydown={e => e.key === 'Enter' && addProjRefBySearch(selectedProject)} />
+              <button class="btn-ghost-sm {projRefSearching[selectedProject.id] ? 'dim' : ''}"
+                onclick={() => addProjRefBySearch(selectedProject)}
+                disabled={projRefSearching[selectedProject.id]}>
+                {projRefSearching[selectedProject.id] ? '...' : 'Search'}
+              </button>
+            </div>
+            {#if projRefSearchResults[selectedProject.id]?.length}
+              <div class="ref-picker-results" style="margin-bottom:6px">
+                {#each projRefSearchResults[selectedProject.id] as track}
+                  <button class="ref-picker-option" onclick={() => addProjRefFromPicker(selectedProject, track)}>
+                    <span class="ref-picker-name">{track.artist} — {track.title}</span>
+                    <span class="ref-picker-meta">{track.year || ''}{fmtDuration(track.duration_ms)}</span>
+                  </button>
+                {/each}
+                <button class="ref-picker-cancel" onclick={() => projRefSearchResults[selectedProject.id] = null}>✕</button>
+              </div>
+            {:else if projRefSearchResults[selectedProject.id]?.length === 0}
+              <div class="ref-search-msg err" style="margin-bottom:4px">Not found — check spelling</div>
+            {/if}
+            <!-- URL paste (secondary) -->
             <div class="ref-add-row"
               ondragover={e => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
               ondragleave={e => e.currentTarget.classList.remove('drag-over')}
@@ -3056,15 +3133,18 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 if (url.trim()) addRefLink(selectedProject, url)
               }}>
               <input class="ref-inp" bind:value={refLinkInput[selectedProject.id]}
-                placeholder="Paste Spotify / YouTube / any URL… or drop here"
+                placeholder="or paste URL…"
                 onkeydown={e => e.key === 'Enter' && addRefLink(selectedProject, refLinkInput[selectedProject.id]||'')} />
-              <button class="btn-ghost-sm" onclick={() => addRefLink(selectedProject, refLinkInput[selectedProject.id]||'')}>+ Add</button>
+              <button class="btn-ghost-sm" onclick={() => addRefLink(selectedProject, refLinkInput[selectedProject.id]||'')}>+ URL</button>
             </div>
             {#if refs.length}
               <div class="refs-inline">
                 {#each refs as ref}
                   {@const refUrl = ref.url || (ref.spotify_id ? 'https://open.spotify.com/track/' + ref.spotify_id : null)}
-                  {@const refName = ref.name || ref.title ? (ref.artist ? ref.artist + ' — ' + (ref.title||'') : ref.title||'') : (refUrl && refUrl.length>40 ? '…'+refUrl.slice(-36) : refUrl||'unknown')}
+                  {@const refName = ref.artist
+                    ? ref.artist + (ref.title ? ' — ' + ref.title : '')
+                    : ref.name || ref.title
+                    || (refUrl && refUrl.length > 40 ? '…' + refUrl.slice(-36) : refUrl || 'unknown')}
                   <span class="ref-chip">
                     <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>
                       {refPlayingUrl === refUrl ? '■' : '▶'}
@@ -3272,7 +3352,10 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     <div class="ref-list">
                       {#each (song.reference_links||[]) as ref}
                         {@const status = songRefStatus[ref.id] || (ref.spotify_id ? 'ready' : 'no-spotify')}
-                        {@const displayName = ref.artist ? ref.artist + ' — ' + ref.title : ref.name || ref.title || ref.url || '?'}
+                        {@const displayName = ref.artist
+                          ? ref.artist + (ref.title ? ' — ' + ref.title : '')
+                          : ref.name || ref.title
+                          || (ref.url && ref.url.length > 50 ? '…' + ref.url.slice(-40) : ref.url || '?')}
                         {@const refUrl = ref.spotify_id ? 'https://open.spotify.com/track/' + ref.spotify_id : ref.url}
                         <div class="ref-list-item">
                           <div class="ref-list-info">

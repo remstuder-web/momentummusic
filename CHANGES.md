@@ -2927,3 +2927,9 @@ TASK: Fix: only move files downloaded by Momentum to !Current, remove Downloads 
 WHAT: Removed chokidar.watch(DOWNLOADS_DIR) block (was auto-moving ALL audio from ~/Downloads to !Current). /download-reference already moves files directly from /tmp/ to !Current via fs.renameSync — no ~/Downloads involvement needed. Updated recentRefMoves comment. fs.watch(WATCH_DIR) for demo CODE_v00.ext files is unchanged.
 RESULT: works — watcher running, no Downloads watcher startup log
 BLOCKERS: none
+
+## 2026-06-03 src/lib/ProjectsTab.svelte — DONE
+TASK: ProjectsTab: show names on reference list, unified search for project+song refs
+WHAT: (1) Song-level ref displayName: fixed fallback — artist+' — '+title if both set, else name||title||truncatedUrl; handles null/undefined artist+title cleanly; (2) Project-level REFERENCES tab: added MusicBrainz search row (Artist+Title+Search button) above URL paste; added projRefArtist/Title/Searching/Results $state; added addProjRefBySearch(p) and addProjRefFromPicker(p,track) functions (same pattern as song-level); dropdown picker shows 3 results with duration; URL paste moved below as secondary; project chip refName logic fixed (same safe fallback); both use ref-picker-results CSS from existing styles
+RESULT: builds clean
+BLOCKERS: none

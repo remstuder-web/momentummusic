@@ -1470,13 +1470,10 @@ ${mozartContext}`
           onkeydown={e => e.key==='Enter' && quickSpotifyQ.trim() && window.open('https://open.spotify.com/search/'+encodeURIComponent(quickSpotifyQ.trim()),'_blank')} />
         <button class="helper-search-go" onclick={() => quickSpotifyQ.trim() && window.open('https://open.spotify.com/search/'+encodeURIComponent(quickSpotifyQ.trim()),'_blank')}>→</button>
       </div>
-      <div class="check-list">
+      <div class="routine-btns-wrap">
         {#each state.customs.filter(item => !['google gemini','youtube','spotify'].includes((item.label||'').toLowerCase().trim())) as item (item.id)}
           <div class="routine-box">
-            <span class="routine-box-label">{item.label}</span>
-            {#if item.url}
-              <button class="helper-search-go" onclick={() => window.open(item.url, '_blank', 'width=1400,height=900')}>→</button>
-            {/if}
+            <button class="routine-box-label" onclick={() => item.url && window.open(item.url, '_blank', '')}>{item.label}</button>
             <button class="del-btn" onclick={() => delCustom(item.id)}>×</button>
           </div>
         {/each}
@@ -1489,13 +1486,10 @@ ${mozartContext}`
 
         {#if (state.checkItems||[]).length}
           <div class="routine-divider">CHECK</div>
-          <div class="check-list">
+          <div class="routine-btns-wrap">
           {#each (state.checkItems||[]) as item (item.id)}
             <div class="routine-box">
-              <span class="routine-box-label">{item.label}</span>
-              {#if item.url}
-                <button class="helper-search-go" onclick={() => window.open(item.url, '_blank', 'width=1400,height=900')}>→</button>
-              {/if}
+              <button class="routine-box-label" onclick={() => item.url && window.open(item.url, '_blank', '')}>{item.label}</button>
               <button class="del-btn" onclick={() => delCheck(item.id)}>×</button>
             </div>
           {/each}
@@ -2327,9 +2321,10 @@ ${mozartContext}`
   .routine-divider { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.4); padding: 10px 0 4px; border-top: 1px solid #1a1a1a; margin-top: 16px; }
   .check-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: transparent; min-height: 0; }
   .check-item.done { opacity: .38; }
-  .routine-box { display: flex; align-items: center; padding: 3px 8px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; gap: 6px; }
+  .routine-btns-wrap { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .routine-box { display: flex; align-items: center; padding: 3px 6px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; gap: 4px; width: 150px; overflow: hidden; }
   .routine-box:hover { border-color: #444; }
-  .routine-box-label { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #cec9c1; background: none; border: none; text-align: left; padding: 0; cursor: pointer; }
+  .routine-box-label { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #cec9c1; background: none; border: none; text-align: left; padding: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .routine-box-label:hover { color: #f5f1ea; }
   .helper-search-inp { background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 3px 8px; border-radius: 3px; width: 150px; flex-shrink: 0; outline: none; }
   .helper-search-inp::placeholder { color: #666; }

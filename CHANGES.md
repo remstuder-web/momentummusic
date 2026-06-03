@@ -3011,3 +3011,9 @@ TASK: Find similar: exclude live/remix/cover versions, studio originals only
 WHAT: (1) downloadOneTrack queries changed — "Official Audio" suffix (lowercase), added --match-filter "duration > 60 & !is_live" and --reject-title "(?i).*(live|concert|tour|acoustic|remix|cover|karaoke|performance|session).*" to yt-dlp; (2) Claude Haiku prompt extended with "Only suggest original studio versions — no live versions, remixes, acoustic versions, covers, or karaoke"; (3) Last.fm results now fetched with limit=10 then filtered by LIVE_RE before slicing to 3; (4) MusicBrainz fallback also filters by LIVE_RE
 RESULT: works — watcher running
 BLOCKERS: none
+
+## 2026-06-04 src/lib/DailyTab.svelte + momentum-watcher.cjs — DONE
+TASK: Acapella Extractor: vocal clean mode, instrumental mode, Open Applio button
+WHAT: (1) Mode selector buttons [ACAPELLA][VOCAL CLEAN][INSTRUMENTAL] + [🎤 Applio] added above drop zone; acapellaMode $state routes runAcapellaExtract to /extract-acapella|/extract-vocal-clean|/extract-instrumental; button label and loading text update per mode. (2) New extractVocalClean() function: Demucs --two-stems=vocals + onset detection + ffmpeg "highpass=f=80,afftdn=nf=-25,loudnorm=I=-14" → SONGNAME_vocals_clean.wav on Desktop. (3) New extractInstrumental() function: Demucs --two-stems=vocals → no_vocals.wav copied as SONGNAME_instrumental.wav on Desktop. (4) POST /extract-vocal-clean and POST /extract-instrumental endpoints. (5) 🎤 Applio button opens localhost:6969 in new tab. CSS: acapella-mode-btn, acapella-applio-btn.
+RESULT: builds clean — watcher running
+BLOCKERS: none

@@ -6156,6 +6156,77 @@ print(json.dumps({'onset': float(onset_sec)}))
   return { filename: outFilename, path: outputPath, bpm: safeBpm, key: keyLabel, onset: onsetTime }
 }
 
+async function extractVocalClean(inputPath) {
+  const basename = path.basename(inputPath, path.extname(inputPath))
+  const tmpDir = `/tmp/vocalclean_${Date.now()}`
+  fs.mkdirSync(tmpDir, { recursive: true })
+
+  // Step 1: Demucs — vocals only
+  await new Promise((resolve, reject) => {
+    exec(
+      `"${ACAPELLA_PYTHON}" -m demucs -n htdemucs --two-stems=vocals -o ${shellEscape(tmpDir)} ${shellEscape(inputPath)}`,
+      { timeout: 300000 },
+      (err) => err ? reject(new Error('Demucs failed: ' + err.message)) : resolve()
+    )
+  })
+  const vocalsPath = path.join(tmpDir, 'htdemucs', basename, 'vocals.wav')
+  if (!fs.existsSync(vocalsPath)) throw new Error('Demucs vocals not found: ' + vocalsPath)
+
+  // Step 2: Onset detection
+  const onsetScript = `
+import librosa, numpy as np, json, sys
+y, sr = librosa.load(sys.argv[1], sr=None, mono=True)
+rms = librosa.feature.rms(y=y)[0]
+thresh = rms.max() * 0.05
+frames = np.where(rms > thresh)[0]
+onset_sec = max(0, librosa.frames_to_time(frames[0], sr=sr) - 0.1) if len(frames) else 0.0
+print(json.dumps({'onset': float(onset_sec)}))
+`
+  const onsetScriptPath = `/tmp/onset_vc_${Date.now()}.py`
+  fs.writeFileSync(onsetScriptPath, onsetScript)
+  const onsetRaw = execSync(`"${ACAPELLA_PYTHON}" ${shellEscape(onsetScriptPath)} ${shellEscape(vocalsPath)} 2>/dev/null`, { encoding: 'utf8', timeout: 60000 }).trim()
+  const { onset: onsetTime } = JSON.parse(onsetRaw)
+  fs.unlinkSync(onsetScriptPath)
+
+  // Step 3: ffmpeg trim + noise reduction + loudnorm
+  const outFilename = `${basename}_vocals_clean.wav`
+  const outputPath = path.join('/Users/remo/Desktop', outFilename)
+  await new Promise((resolve, reject) => {
+    exec(
+      `ffmpeg -y -ss ${onsetTime.toFixed(3)} -i "${vocalsPath}" -af "highpass=f=80,afftdn=nf=-25,loudnorm=I=-14" "${outputPath}"`,
+      { timeout: 120000 },
+      (err) => err ? reject(new Error('ffmpeg clean failed: ' + err.message)) : resolve()
+    )
+  })
+
+  exec('rm -rf "' + tmpDir + '"')
+  return { filename: outFilename, path: outputPath, onset: onsetTime }
+}
+
+async function extractInstrumental(inputPath) {
+  const basename = path.basename(inputPath, path.extname(inputPath))
+  const tmpDir = `/tmp/instrumental_${Date.now()}`
+  fs.mkdirSync(tmpDir, { recursive: true })
+
+  // Demucs --two-stems=vocals gives vocals.wav + no_vocals.wav
+  await new Promise((resolve, reject) => {
+    exec(
+      `"${ACAPELLA_PYTHON}" -m demucs -n htdemucs --two-stems=vocals -o ${shellEscape(tmpDir)} ${shellEscape(inputPath)}`,
+      { timeout: 300000 },
+      (err) => err ? reject(new Error('Demucs failed: ' + err.message)) : resolve()
+    )
+  })
+  const noVocalsPath = path.join(tmpDir, 'htdemucs', basename, 'no_vocals.wav')
+  if (!fs.existsSync(noVocalsPath)) throw new Error('Demucs no_vocals not found: ' + noVocalsPath)
+
+  const outFilename = `${basename}_instrumental.wav`
+  const outputPath = path.join('/Users/remo/Desktop', outFilename)
+  fs.copyFileSync(noVocalsPath, outputPath)
+
+  exec('rm -rf "' + tmpDir + '"')
+  return { filename: outFilename, path: outputPath }
+}
+
 // ── Vocal EQ — standalone reference analysis function ────────────────────
 const VOCAL_EQ_SCRIPT = path.join(__dirname, 'analyze_vocal_eq.py')
 const VOCAL_EQ_PYTHON = '/opt/homebrew/bin/python3.11'
@@ -11124,6 +11195,72 @@ Give specific production direction based on stem balance, loudness levels, and r
         res.end(JSON.stringify({ ok: true, ...result, saved_to: 'Desktop', original_untouched: true }))
       } catch(e) {
         console.error('extract-acapella error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /extract-vocal-clean — Demucs vocals + ffmpeg highpass/denoise/loudnorm ──
+  if (req.method === 'POST' && req.url === '/extract-vocal-clean') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString())
+        let inputPath
+        if (body.file_path) {
+          inputPath = body.file_path
+          if (!fs.existsSync(inputPath)) throw new Error('File not found: ' + inputPath)
+        } else if (body.file_data) {
+          const ext = (body.ext || 'wav').replace(/^\./, '')
+          inputPath = `/tmp/vocalclean_in_${Date.now()}.${ext}`
+          fs.writeFileSync(inputPath, Buffer.from(body.file_data, 'base64'))
+        } else {
+          throw new Error('file_path or file_data required')
+        }
+        console.log('⏳ Extracting vocal clean from:', path.basename(inputPath))
+        const result = await extractVocalClean(inputPath)
+        if (body.file_data && fs.existsSync(inputPath)) try { fs.unlinkSync(inputPath) } catch(e) {}
+        console.log('✓ Vocal clean:', result.filename)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, ...result, saved_to: 'Desktop' }))
+      } catch(e) {
+        console.error('extract-vocal-clean error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /extract-instrumental — Demucs no_vocals stem → Desktop ──────────
+  if (req.method === 'POST' && req.url === '/extract-instrumental') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString())
+        let inputPath
+        if (body.file_path) {
+          inputPath = body.file_path
+          if (!fs.existsSync(inputPath)) throw new Error('File not found: ' + inputPath)
+        } else if (body.file_data) {
+          const ext = (body.ext || 'wav').replace(/^\./, '')
+          inputPath = `/tmp/instrumental_in_${Date.now()}.${ext}`
+          fs.writeFileSync(inputPath, Buffer.from(body.file_data, 'base64'))
+        } else {
+          throw new Error('file_path or file_data required')
+        }
+        console.log('⏳ Extracting instrumental from:', path.basename(inputPath))
+        const result = await extractInstrumental(inputPath)
+        if (body.file_data && fs.existsSync(inputPath)) try { fs.unlinkSync(inputPath) } catch(e) {}
+        console.log('✓ Instrumental:', result.filename)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, ...result, saved_to: 'Desktop' }))
+      } catch(e) {
+        console.error('extract-instrumental error:', e.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: e.message }))
       }

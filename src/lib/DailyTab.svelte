@@ -36,6 +36,7 @@
   let acapellaLoading = $state(false)
   let acapellaResult = $state(null)
   let acapellaDragging = $state(false)
+  let acapellaMode = $state('acapella') // 'acapella' | 'vocal_clean' | 'instrumental'
 
   let midiFile = $state(null)
   let midiLoading = $state(false)
@@ -1086,8 +1087,11 @@ ${mozartContext}`
       reader.readAsDataURL(acapellaFile)
     })
     const ext = acapellaFile.name.split('.').pop()
+    const endpoint = acapellaMode === 'vocal_clean' ? '/extract-vocal-clean'
+                   : acapellaMode === 'instrumental' ? '/extract-instrumental'
+                   : '/extract-acapella'
     try {
-      const r = await fetch('http://localhost:4242/extract-acapella', {
+      const r = await fetch('http://localhost:4242' + endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_data: base64, ext })
@@ -1658,17 +1662,24 @@ ${mozartContext}`
         <!-- ACAPELLA EXTRACTOR -->
         <div class="helper-block">
           <div class="normalizer-title">ACAPELLA EXTRACTOR</div>
-          <div class="helper-sub">Drop track → strips vocals → trims to vocal start → saves to Desktop with BPM tag</div>
+          <div class="acapella-mode-row">
+            <button class="acapella-mode-btn {acapellaMode==='acapella'?'on':''}" onclick={() => acapellaMode='acapella'}>ACAPELLA</button>
+            <button class="acapella-mode-btn {acapellaMode==='vocal_clean'?'on':''}" onclick={() => acapellaMode='vocal_clean'}>VOCAL CLEAN</button>
+            <button class="acapella-mode-btn {acapellaMode==='instrumental'?'on':''}" onclick={() => acapellaMode='instrumental'}>INSTRUMENTAL</button>
+            <button class="acapella-applio-btn" onclick={() => window.open('http://localhost:6969', '_blank')}>🎤 Applio</button>
+          </div>
           <div class="acapella-drop {acapellaDragging ? 'dragging' : ''}"
             ondragover={e => { e.preventDefault(); acapellaDragging = true }}
             ondragleave={() => acapellaDragging = false}
             ondrop={handleAcapellaDrop}>
             {#if acapellaLoading}
-              <div class="acapella-loading">● Extracting... 2-5 min</div>
+              <div class="acapella-loading">● {acapellaMode === 'vocal_clean' ? 'Cleaning vocals' : acapellaMode === 'instrumental' ? 'Extracting instrumental' : 'Extracting acapella'}... 2-5 min</div>
             {:else if acapellaFile}
               <div class="acapella-ready">
                 📁 {acapellaFile.name}
-                <button class="extract-btn" onclick={runAcapellaExtract}>Extract Acapella</button>
+                <button class="extract-btn" onclick={runAcapellaExtract}>
+                  {acapellaMode === 'vocal_clean' ? 'Clean Vocals' : acapellaMode === 'instrumental' ? 'Extract Instrumental' : 'Extract Acapella'}
+                </button>
               </div>
             {:else}
               <div class="acapella-placeholder">
@@ -2426,6 +2437,12 @@ ${mozartContext}`
   .norm-ok { font-family: 'Space Mono', monospace; font-size: 11px; color: #4caf82; }
   .norm-err { font-family: 'Space Mono', monospace; font-size: 11px; color: #e05a4a; }
   .helper-sub { font-family: 'DM Sans', sans-serif; font-size: 10px; color: #333; }
+  .acapella-mode-row { display: flex; gap: 5px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+  .acapella-mode-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 10px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; letter-spacing: .06em; transition: all .12s; }
+  .acapella-mode-btn:hover { border-color: #444; color: #9e9690; }
+  .acapella-mode-btn.on { border-color: rgba(201,168,76,.5); color: #c9a84c; background: rgba(201,168,76,.07); }
+  .acapella-applio-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 3px 10px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; margin-left: auto; transition: all .12s; }
+  .acapella-applio-btn:hover { border-color: rgba(76,175,130,.4); color: #4caf82; }
   .acapella-drop { border: 1px dashed #252525; border-radius: 3px; padding: 20px; text-align: center; min-height: 70px; display: flex; align-items: center; justify-content: center; cursor: pointer; margin: 6px 0; transition: border-color .15s; }
   .acapella-drop.dragging { border-color: #c9a84c; background: rgba(201,168,76,.04); }
   .acapella-placeholder { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #333; display: flex; flex-direction: column; gap: 4px; align-items: center; }

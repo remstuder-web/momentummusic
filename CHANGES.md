@@ -2981,3 +2981,9 @@ TASK: Analyzer: FULL MIX button first before DRUMS
 WHAT: Removed {#if latestA} wrapper from FULL MIX stem tab button — now unconditionally rendered as position 1. Previously latestA=null could hide FULL MIX while DRUMS/BASS/MUSIC/VOCALS still showed. Now order is always: FULL MIX | DRUMS | BASS | MUSIC | VOCALS
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-03 src/lib/ProjectsTab.svelte — DONE
+TASK: Project REFERENCES: remove URL paste input, keep artist+title search only
+WHAT: Removed ref-add-row div (drag/drop handlers, URL paste input, + URL button) from project-level REFERENCES tab. Artist+Title search row and reference list remain.
+RESULT: builds clean
+BLOCKERS: none

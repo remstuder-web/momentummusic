@@ -3210,20 +3210,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
             {:else if projRefSearchResults[selectedProject.id]?.length === 0}
               <div class="ref-search-msg err" style="margin-bottom:4px">Not found — check spelling</div>
             {/if}
-            <!-- URL paste (secondary) -->
-            <div class="ref-add-row"
-              ondragover={e => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
-              ondragleave={e => e.currentTarget.classList.remove('drag-over')}
-              ondrop={e => {
-                e.preventDefault(); e.currentTarget.classList.remove('drag-over')
-                const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || ''
-                if (url.trim()) addRefLink(selectedProject, url)
-              }}>
-              <input class="ref-inp" bind:value={refLinkInput[selectedProject.id]}
-                placeholder="or paste URL…"
-                onkeydown={e => e.key === 'Enter' && addRefLink(selectedProject, refLinkInput[selectedProject.id]||'')} />
-              <button class="btn-ghost-sm" onclick={() => addRefLink(selectedProject, refLinkInput[selectedProject.id]||'')}>+ URL</button>
-            </div>
             {#if refs.length}
               <div class="ref-list">
                 {#each refs as ref}

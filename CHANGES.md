@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
+TASK: Remove stems checklist, remove RELEASE tab/button
+WHAT: (1) Removed RELEASE button (create-release-entry call, brain log, etc.) from stage tabs row. (2) Removed release checklist from STEMS stage panel. (3) Removed release checklist shown for released songs in other stages. All three instances of release checklist UI gone.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
 TASK: Remove YOUR MIX label, restore lyrics in dropdown, remove Move to Demos button
 WHAT: (1) Removed "YOUR MIX" dual-drop-label div (and stale gold CSS override). (2) Restored NOTES/BRIEF/LYRICS collapsible: label back to "NOTES / BRIEF / LYRICS", open condition includes lyrics_text, two sub-sections (NOTES/BRIEF + LYRICS) each with sub-label and textarea. (3) Removed "← Move to Demos" button from song footer row.
 RESULT: works

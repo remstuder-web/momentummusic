@@ -3101,38 +3101,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     }}>
                     ANALYZER
                   </button>
-                  <!-- RELEASE button after STEMS — one click creates release entry -->
-                  <button class="release-stage-btn {releasedSongIds.includes(song.id)||releasedSongIds.includes(song.code)?'done':''}"
-                    onclick={async () => {
-                      if (releasedSongIds.includes(song.id) || releasedSongIds.includes(song.code)) {
-                        alert('A release has already been created for this song. Edit it in the RELEASES tab.')
-                        return
-                      }
-                      const _wd = workData(song)
-                      const res = await fetch('http://localhost:4242/create-release-entry', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          song_id: song.id, code: song.code, title: song.title || song.code,
-                          artist: selectedProject?.artist || '', release_date: song.release_date || '',
-                          work_data: _wd
-                        })
-                      })
-                      const r = await res.json()
-                      if (!r.ok) { alert('Release creation failed: ' + r.error); return }
-                      // Delete instrumental file on release
-                      if (_wd.instr_audio) fetch(`http://localhost:4242/delete-audio?dir=instrumental&filename=${encodeURIComponent(_wd.instr_audio)}`, { method: 'POST' }).catch(() => {})
-                      releasedSongIds = [...releasedSongIds, song.id, song.code]
-                      // Log release milestone to brain
-                      supabase.from('brain_knowledge').insert({
-                        category: 'own_production',
-                        title: 'Released: ' + (song.title || song.code),
-                        content: (selectedProject?.artist ? selectedProject.artist + ' — ' : '') + (song.title || song.code) + ' released on ' + new Date().toLocaleDateString() + '. Mix versions: ' + (_wd.versions?.filter(v=>v.version_type==='mixing').length || 0) + '. Production versions: ' + (_wd.versions?.filter(v=>v.version_type==='production').length || 0) + '.',
-                        entry_type_v2: 'milestone', confidence: 'high', source_type: 'release_event', active: true
-                      }).then(() => {})
-                      generateNarrative(song)
-                    }}>
-                    {releasedSongIds.includes(song.id)||releasedSongIds.includes(song.code) ? 'RELEASED ✓' : 'RELEASE'}
-                  </button>
                   <!-- LOG tab flush right -->
                   <button class="log-tab-btn {activeSongTab[song.id]==='log'?'on':''}" style="margin-left: auto"
                     onclick={() => { activeSongTab = {...activeSongTab, [song.id]: activeSongTab[song.id]==='log' ? null : 'log'} }}>
@@ -3362,21 +3330,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                         {song._stemsSent ? '✓ Copied!' : '↗ Send Stems'}
                       </button>
                     {/if}
-                  </div>
-                  <!-- Release checklist -->
-                  {@const checklist = wd.release_checklist || {}}
-                  {@const doneCount = RELEASE_CHECKLIST.filter(i => checklist[i.id]).length}
-                  <div class="release-checklist">
-                    <div class="rl-title">RELEASE CHECKLIST
-                      <span class="rl-progress">{doneCount}/{RELEASE_CHECKLIST.length}</span>
-                    </div>
-                    {#each RELEASE_CHECKLIST as item}
-                      <label class="rl-item {checklist[item.id] ? 'done' : ''}">
-                        <input type="checkbox" checked={!!checklist[item.id]}
-                          onchange={e => toggleReleaseCheck(song, item.id, e.currentTarget.checked)} />
-                        <span>{item.label}</span>
-                      </label>
-                    {/each}
                   </div>
                 {/if}
 
@@ -4101,23 +4054,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 </div>
                 {/if}
 
-                <!-- Release checklist — for released songs not in stems stage -->
-                {#if (releasedSongIds.includes(song.id) || releasedSongIds.includes(song.code)) && wd.current_stage !== 'stems'}
-                  {@const checklist = wd.release_checklist || {}}
-                  {@const doneCount = RELEASE_CHECKLIST.filter(i => checklist[i.id]).length}
-                  <div class="release-checklist">
-                    <div class="rl-title">RELEASE CHECKLIST
-                      <span class="rl-progress">{doneCount}/{RELEASE_CHECKLIST.length}</span>
-                    </div>
-                    {#each RELEASE_CHECKLIST as item}
-                      <label class="rl-item {checklist[item.id] ? 'done' : ''}">
-                        <input type="checkbox" checked={!!checklist[item.id]}
-                          onchange={e => toggleReleaseCheck(song, item.id, e.currentTarget.checked)} />
-                        <span>{item.label}</span>
-                      </label>
-                    {/each}
-                  </div>
-                {/if}
 
                 <!-- Song footer: Send to Artist (hidden on prod/mix) | Delete -->
                 <div class="song-footer-row">

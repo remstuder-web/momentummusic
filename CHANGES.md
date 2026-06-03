@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/DailyTab.svelte — DONE
+TASK: Only show today's trends/news items, hide old ones
+WHAT: Removed olderInbox variable and the entire EARLIER section from the inbox stream. Inbox now filters to todayISO only. Removed "TODAY" divider label (redundant when it's the only group).
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-03] src/lib/DailyTab.svelte — DONE
 TASK: Remove greyed out unavailable items from Trends & News (pass 2)
 WHAT: Root cause — tiktok-trends agent stores "▶ YOUTUBE TOP 5\nUnavailable\n\n---\n\n## Viral Sounds..." as a single briefing message. parseAgentOutput was rendering the full block. Fixed: (1) strip "▶ YOUTUBE TOP N\n<content>" regex in preprocessor, (2) strip standalone "---"/"--" separators in preprocessor, (3) tighten per-line skip to catch /^[-—]{1,3}$/ pattern.
 RESULT: works

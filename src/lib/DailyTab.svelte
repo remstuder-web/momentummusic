@@ -1198,10 +1198,8 @@ ${mozartContext}`
         <p class="empty-sm" style="padding:10px 0;color:#333">No notifications yet. Run an agent or send a listen link.</p>
       {:else}
         {@const todayInbox = inboxStream.filter(n => n.created_at?.slice(0,10) === todayISO && !(n.type === 'briefing' && n.id === todayBriefing?.id))}
-        {@const olderInbox = inboxStream.filter(n => n.created_at?.slice(0,10) !== todayISO)}
         <div class="inbox-scroll">
           {#if todayInbox.length}
-            <div class="year-today-sep">TODAY</div>
             {#each todayInbox as n (n.id)}
               <div class="inbox-item {n.read ? 'read' : 'unread'}">
                 <div class="inbox-item-header">
@@ -1333,27 +1331,6 @@ ${mozartContext}`
             {/each}
           {:else}
             <p class="empty-sm" style="padding:8px 0;color:#333">Nothing today.</p>
-          {/if}
-          {#if olderInbox.length}
-            <div class="year-today-sep" style="margin-top:10px;opacity:.4">EARLIER</div>
-            {#each olderInbox as n (n.id)}
-              <div class="inbox-item read" style="opacity:.35">
-                <div class="inbox-item-header">
-                  {#if n.type === 'download'}<span class="inbox-type-badge dl">↓ DL</span>{:else if n.type === 'briefing'}<span class="inbox-type-badge br">✦ AI</span>{:else}<span class="inbox-type-badge fb">✎ FB</span>{/if}
-                  <span class="inbox-code">{n.song_code}</span>
-                  {#if n.artist}<span class="inbox-artist">{n.artist.toUpperCase()}</span>{/if}
-                  <span class="inbox-title">{n.song_title}</span>
-                  <span class="inbox-date">{new Date(n.created_at).toLocaleDateString('de-CH')}</span>
-                  <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
-                </div>
-                {#if n.type === 'briefing' || n.type === 'scout'}
-                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*/m, '').trim() : n.message}
-                  <div class="agent-output">{@html parseAgentOutput(scoutMsg)}</div>
-                {:else}
-                  <div class="inbox-msg">{n.message}</div>
-                {/if}
-              </div>
-            {/each}
           {/if}
         </div>
       {/if}

@@ -2987,3 +2987,9 @@ TASK: Project REFERENCES: remove URL paste input, keep artist+title search only
 WHAT: Removed ref-add-row div (drag/drop handlers, URL paste input, + URL button) from project-level REFERENCES tab. Artist+Title search row and reference list remain.
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-03 momentum-watcher.cjs — DONE
+TASK: References: auto-save to brain_knowledge when added
+WHAT: /analyze-ref-now: immediate brain_knowledge insert on reference add (category=reference_current, content="Reference track added: Artist — Title. Analysis queued.") — stores brainId; after processLibraryTrackInBackground completes, updates that entry with BPM/key/energy/LUFS from Essentia; fallback: query by title+category if brainId is lost, then update or insert fresh. /find-on-spotify: fire-and-forget brain insert after reference_tracks insert (same category/format, no analysis metrics since no Essentia runs here)
+RESULT: works — watcher running
+BLOCKERS: none

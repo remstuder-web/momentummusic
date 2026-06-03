@@ -9102,6 +9102,14 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       const { error } = await supabase.from('reference_tracks').insert(row)
       if (error && !error.message?.includes('duplicate')) throw new Error(error.message)
 
+      // Brain: immediate entry on reference add
+      supabase.from('brain_knowledge').insert({
+        category: 'reference_current',
+        title: `${found.artist} — ${found.title}`,
+        content: `Reference track added: ${found.artist} — ${found.title}. Added for analysis and comparison.`,
+        source_type: 'reference_event', entry_type_v2: 'reference', confidence: 'high', active: true
+      }).then(({ error: bErr }) => { if (bErr) console.warn('find-on-spotify brain insert:', bErr.message) })
+
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, title: found.title, artist: found.artist, spotify_id: found.spotify_id || null }))
     } catch(e) {
@@ -10753,6 +10761,19 @@ Give specific production direction based on stem balance, loudness levels, and r
           if (insErr) throw new Error('insert failed: ' + insErr.message)
           track = newTrack
         }
+        // Brain: immediate entry — before slow analysis so it shows up right away
+        const brainTitle = `${track.artist || ''} — ${track.title || ''}`
+        let brainId = null
+        try {
+          const { data: bRow, error: bErr } = await supabase.from('brain_knowledge').insert({
+            category: 'reference_current',
+            title: brainTitle,
+            content: `Reference track added: ${brainTitle}. Analysis queued.`,
+            source_type: 'reference_event', entry_type_v2: 'reference', confidence: 'high', active: true
+          }).select('id').single()
+          if (!bErr) brainId = bRow?.id
+        } catch(e) { console.warn('analyze-ref-now: brain immediate insert skipped —', e.message) }
+
         // Tier 1: yt-dlp + Essentia → reference_tracks (BPM, key, energy, preview_url)
         await processLibraryTrackInBackground(track, true)
 
@@ -10762,19 +10783,31 @@ Give specific production direction based on stem balance, loudness levels, and r
           if (refreshed?.preview_url) await runStemAnalysis(refreshed)
         } catch(e) { console.warn('analyze-ref-now: stem EQ skipped —', e.message) }
 
-        // Brain: add as reference_current entry
+        // Brain: update entry with Essentia metrics now that analysis is done
         try {
           const { data: refreshed } = await supabase.from('reference_tracks').select('*').eq('id', track.id).maybeSingle()
           const t = refreshed || track
-          const bpmStr  = t.tempo ? Math.round(t.tempo) + 'bpm' : ''
-          const keyStr  = t.key   ? t.key + (t.camelot ? ' (' + t.camelot + ')' : '') : ''
-          await supabase.from('brain_knowledge').insert({
-            category: 'reference_current',
-            title: (t.artist || '') + ' — ' + (t.title || ''),
-            content: ['Reference track added.', bpmStr, keyStr, t.energy ? 'energy:' + t.energy.toFixed(2) : ''].filter(Boolean).join(' '),
-            source_type: 'reference_event', entry_type_v2: 'reference', confidence: 'high', active: true
-          })
-        } catch(e) { console.warn('analyze-ref-now: brain insert skipped —', e.message) }
+          const bpmStr      = t.tempo    ? Math.round(t.tempo) + 'bpm' : ''
+          const keyStr      = t.key      ? t.key + (t.camelot ? ' (' + t.camelot + ')' : '') : ''
+          const energyStr   = t.energy   ? 'energy:' + t.energy.toFixed(2) : ''
+          const loudnessStr = t.loudness ? t.loudness.toFixed(1) + 'LUFS' : ''
+          const content = [brainTitle + '.', bpmStr, keyStr, energyStr, loudnessStr].filter(Boolean).join(' ')
+          if (brainId) {
+            await supabase.from('brain_knowledge').update({ content }).eq('id', brainId)
+          } else {
+            // Fallback: find by title+category and update, or insert fresh
+            const { data: existing } = await supabase.from('brain_knowledge').select('id')
+              .eq('title', brainTitle).eq('category', 'reference_current').order('created_at', { ascending: false }).limit(1).maybeSingle()
+            if (existing) {
+              await supabase.from('brain_knowledge').update({ content }).eq('id', existing.id)
+            } else {
+              await supabase.from('brain_knowledge').insert({
+                category: 'reference_current', title: brainTitle, content,
+                source_type: 'reference_event', entry_type_v2: 'reference', confidence: 'high', active: true
+              })
+            }
+          }
+        } catch(e) { console.warn('analyze-ref-now: brain update skipped —', e.message) }
 
         // Reload fresh data after full analysis
         const { data: updated } = await supabase.from('reference_tracks').select('*').eq('id', track.id).maybeSingle()

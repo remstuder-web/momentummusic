@@ -2903,3 +2903,9 @@ TASK: DemoTab: reorder header buttons, add SONO APP button
 WHAT: Reordered demos header to [DEMOS title][+ New Demo][Filter][SONO][SONO APP]; + New Demo moved before Filter with demo-add-btn-sm modifier (10px, 4/10px padding vs 11px, 6/14px); added SONO APP button (same sono-btn style, gold outline) that opens momentummusic.vercel.app/sono in new tab
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-03 src/lib/DemoTab.svelte + src/routes/sono/+page.svelte — DONE
+TASK: Filter panels: custom tags as pill picker instead of text input
+WHAT: Both files: fCustomTag changed from string $state to Set $state; allCustomTags as $derived([...new Set(songs.flatMap(s=>s.tags||[]))].sort()); CUSTOM TAGS section replaced text input with fp-pills grid (same style as DISCO pills); filter logic changed from text substring match to Set membership requiring ALL selected tags; clearAllFilters resets to new Set(); hasActiveFilter checks .size>0; section hidden when no custom tags exist
+RESULT: builds clean
+BLOCKERS: {#const} inside <div> invalid in Svelte 5 — fixed by moving to $derived in script

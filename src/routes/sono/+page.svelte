@@ -193,14 +193,15 @@
   let fType       = $state(new Set())
   let fBpmMin     = $state(60)
   let fBpmMax     = $state(200)
-  let fCustomTag  = $state('')
+  let fCustomTag  = $state(new Set())
+  let allCustomTags = $derived([...new Set(songs.flatMap(s => s.tags || []))].sort())
 
   function toggleFTempo(tag) { const n = new Set(fTempo); n.has(tag) ? n.delete(tag) : (n.clear(), n.add(tag)); fTempo = n }
   function toggleF(st, tag)  { const n = new Set(st); n.has(tag) ? n.delete(tag) : n.add(tag); return n }
-  function clearAllFilters()  { fTempo=new Set(); fMood=new Set(); fGenre=new Set(); fVocals=new Set(); fLyrical=new Set(); fInstrument=new Set(); fType=new Set(); fBpmMin=60; fBpmMax=200; fCustomTag='' }
+  function clearAllFilters()  { fTempo=new Set(); fMood=new Set(); fGenre=new Set(); fVocals=new Set(); fLyrical=new Set(); fInstrument=new Set(); fType=new Set(); fBpmMin=60; fBpmMax=200; fCustomTag=new Set() }
 
   let hasActiveFilter = $derived(
-    fTempo.size||fMood.size||fGenre.size||fVocals.size||fLyrical.size||fInstrument.size||fType.size||fBpmMin>60||fBpmMax<200||fCustomTag.trim().length>0
+    fTempo.size||fMood.size||fGenre.size||fVocals.size||fLyrical.size||fInstrument.size||fType.size||fBpmMin>60||fBpmMax<200||fCustomTag.size>0
   )
 
   let filteredSongs = $derived((() => songs.filter(s => {
@@ -213,7 +214,7 @@
     if (fInstrument.size && !(dt.instrument    ||[]).some(t => fInstrument.has(t))) return false
     if (fType.size       && !(dt.type          ||[]).some(t => fType.has(t)))       return false
     if (fBpmMin>60||fBpmMax<200) { if (!s.tempo||s.tempo<fBpmMin||s.tempo>fBpmMax) return false }
-    if (fCustomTag.trim()) { const q=fCustomTag.trim().toLowerCase(); if (!(s.tags||[]).some(t=>t.toLowerCase().includes(q))) return false }
+    if (fCustomTag.size && ![...fCustomTag].every(t => (s.tags||[]).includes(t))) return false
     return true
   }))())
 
@@ -400,10 +401,16 @@
               <span class="fp-bpm-val">{fBpmMax} BPM</span>
             </div>
           </div>
+          {#if allCustomTags.length}
           <div class="fp-section">
             <span class="fp-label">CUSTOM TAGS</span>
-            <input class="fp-tag-search" placeholder="Search custom tags..." bind:value={fCustomTag} />
+            <div class="fp-pills">
+              {#each allCustomTags as tag}
+                <button class="fp-pill {fCustomTag.has(tag) ? 'sel' : ''}" onclick={() => fCustomTag = toggleF(fCustomTag, tag)}>{tag}</button>
+              {/each}
+            </div>
           </div>
+          {/if}
           <div class="fp-footer">
             <span class="fp-count">{filteredSongs.length} result{filteredSongs.length===1?'':'s'}</span>
             {#if hasActiveFilter}

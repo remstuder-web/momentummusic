@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
+TASK: Move references to dedicated tab between STEMS and ANALYZER
+WHAT: (1) Removed "Reference links — always visible" block from song body. (2) Added REFERENCES tab button between STEMS and ANALYZER in the stage tabs row. (3) Added REFERENCES panel: URL input + Add button + ref chip list with ▶ play + × delete, same addSongRef/removeSongRef/playRefUrl functions. (4) Added REFERENCES to the non-content wrapper condition (hides normal body content when REFERENCES tab is active, same as ANALYZER). Added .refs-tab-panel CSS.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
 TASK: Fix ANALYZER tab (investigation + dev server restart)
 WHAT: Investigation found ANALYZER button and panel are fully intact and structurally correct — nothing was removed by the recent commits. Root cause: Vite HMR had not recompiled ProjectsTab since 5:44 PM despite file changes (likely file-watcher exhaustion after a long dev session). Also fixed pre-existing Svelte 5 warning: instrPendingName was not declared with $state() causing non-reactive updates — added $state({}). Restarted momentum-dev (pm2) to force fresh compilation at 6:18 PM.
 RESULT: works — fresh compile at 6:18 PM, no ProjectsTab errors

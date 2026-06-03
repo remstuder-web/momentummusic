@@ -3090,8 +3090,13 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     <button class="stage-ckb" onclick={() => saveWorkData(song, wd => { wd.stems_received = !wd.stems_received })}>{wd.stems_received?'✓':''}</button>
                     <button class="stage-name-btn" onclick={() => setStage(song, 'stems')}>STEMS</button>
                   </div>
+                  <!-- REFERENCES tab -->
+                  <button class="log-tab-btn {activeSongTab[song.id]==='references'?'on':''}" style="margin-left:12px"
+                    onclick={() => activeSongTab = {...activeSongTab, [song.id]: activeSongTab[song.id]==='references' ? null : 'references'}}>
+                    REFERENCES
+                  </button>
                   <!-- ANALYZER tab -->
-                  <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}" style="margin-left:12px"
+                  <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}" style="margin-left:4px"
                     onclick={() => {
                       const isActive = activeSongTab[song.id] === 'analyzer'
                       activeSongTab = {...activeSongTab, [song.id]: isActive ? null : 'analyzer'}
@@ -3143,23 +3148,16 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   </div>
                 {/if}
 
-                {#if activeSongTab[song.id] !== 'analyzer'}
-                <!-- Per-song project info — only in production stage -->
-                {#if wd.current_stage === 'production'}
-                <div class="song-meta-block">
-                  <div class="song-meta-row1">
-                    <div class="field" style="flex:1">
-                      <label>TITLE</label>
-                      <input class="inp-sm" value={song.title||''} placeholder="Working title..." onchange={e => { updateSongField(song, 'title', e.target.value); renameSongAudioFiles(song, e.target.value) }} />
-                    </div>
-                  </div>
-                </div>
-                {/if}
-
-                <!-- Reference links — always visible -->
-                <div class="song-meta-block" style="margin-top:-8px">
-                  <div class="field">
+                <!-- REFERENCES panel -->
+                {#if activeSongTab[song.id] === 'references'}
+                  <div class="refs-tab-panel">
                     <div class="refs-wrap">
+                      <div class="ref-add-row">
+                        <input class="inp-sm" placeholder="Paste Spotify / YouTube URL..."
+                          bind:value={songRefInput[song.id]}
+                          onkeydown={e => e.key === 'Enter' && addSongRef(song)} />
+                        <button class="btn-ghost-sm" onclick={() => addSongRef(song)}>+ Add</button>
+                      </div>
                       <div class="refs-inline">
                         {#each (song.reference_links||[]) as ref}
                           {@const refUrl = ref.url || (ref.spotify_id ? 'https://open.spotify.com/track/' + ref.spotify_id : null)}
@@ -3179,15 +3177,23 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                           </span>
                         {/each}
                       </div>
-                      <div class="ref-add-row">
-                        <input class="inp-sm" placeholder="Spotify / YouTube URL..."
-                          bind:value={songRefInput[song.id]}
-                          onkeydown={e => e.key === 'Enter' && addSongRef(song)} />
-                        <button class="btn-ghost-sm" onclick={() => addSongRef(song)}>+ Add</button>
-                      </div>
+                    </div>
+                  </div>
+                {/if}
+
+                {#if activeSongTab[song.id] !== 'analyzer' && activeSongTab[song.id] !== 'references'}
+                <!-- Per-song project info — only in production stage -->
+                {#if wd.current_stage === 'production'}
+                <div class="song-meta-block">
+                  <div class="song-meta-row1">
+                    <div class="field" style="flex:1">
+                      <label>TITLE</label>
+                      <input class="inp-sm" value={song.title||''} placeholder="Working title..." onchange={e => { updateSongField(song, 'title', e.target.value); renameSongAudioFiles(song, e.target.value) }} />
                     </div>
                   </div>
                 </div>
+                {/if}
+
 
                 <div class="field" style="margin-top:-8px">
                   <div class="notes-toggle-row"
@@ -4307,6 +4313,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .tag-genre-select:focus { border-color: rgba(201,168,76,.4); }
   .tag-genre-select option[disabled] { font-weight: 700; color: rgba(201,168,76,.75); background: #1c1c1c; }
   .tag-genre-select option:not([disabled]) { background: #141414; color: #cec9c1; }
+  .refs-tab-panel { padding: 10px 0 6px; display: flex; flex-direction: column; gap: 8px; }
   .refs-wrap { display: flex; flex-direction: column; gap: 6px; overflow: visible; }
   .ref-row { display: flex; align-items: center; gap: 8px; }
   .ref-link { font-family: 'Space Mono', monospace; font-size: 12px; color: #4a9fd4; text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

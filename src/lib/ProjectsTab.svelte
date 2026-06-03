@@ -3027,20 +3027,11 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     onkeydown={e => e.key==='Enter' && e.target.blur()} />
                 </div>
                 <div class="stage-pills">
-                  {#each STAGES.filter(s => s.id !== 'demo') as stage}
-                    {@const sdone = wd.stages[stage.id]?.done}
-                    {@const isActive = wd.current_stage === stage.id}
-                    <div class="stage-pill {sdone?'done':''} {isActive?'active':''}" title={stage.label}>
-                      {#if stage.id === 'production'}
-                        <span class="sub-dot {wd.prod_lyrics?'on':''}" title="Lyrics"></span>
-                        <span class="sub-dot {wd.prod_vocal_rec?'on':''}" title="Vocal Rec"></span>
-                        <span class="sub-dot {wd.prod_vocal_prep?'on':''}" title="Vocal Prep"></span>
-                      {/if}
-                    </div>
-                  {/each}
-                  <div class="stage-pill stems-pill {wd.stems_received?'done':''}" title="STEMS"
-                    onclick={e => { e.stopPropagation(); saveWorkData(song, wd => { wd.stems_received = !wd.stems_received }) }}>
-                  </div>
+                  {@const _stOrd = ['production','mixing','stems']}
+                  {@const _curIdx = wd.current_stage === 'stems' ? 2 : Math.max(_stOrd.indexOf(wd.current_stage), 0)}
+                  <div class="stage-pill {_curIdx > 0 ? 'seg-done' : ''} {wd.current_stage === 'production' ? 'seg-active' : ''}" title="PRODUCTION"></div>
+                  <div class="stage-pill {_curIdx > 1 ? 'seg-done' : ''} {wd.current_stage === 'mixing' ? 'seg-active' : ''}" title="MIXING"></div>
+                  <div class="stage-pill {wd.stems_received && wd.current_stage !== 'stems' ? 'seg-done' : ''} {wd.current_stage === 'stems' ? 'seg-active' : ''}" title="STEMS"></div>
                 </div>
               </div>
               <!-- RIGHT: fixed width, player always in same position -->
@@ -4363,14 +4354,10 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .song-title-input:hover { border-bottom-color: #303030; }
   .song-title-input:focus { border-bottom-color: rgba(201,168,76,.5); color: #cec9c1; }
   .song-title-input::placeholder { color: #333; }
-  .stage-pills { display: flex; gap: 4px; cursor: pointer; align-items: center; flex-shrink: 0; }
-  .stage-pill { width: 18px; height: 6px; border-radius: 2px; background: #252525; border: 1px solid #303030; flex-shrink: 0; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 2px; overflow: visible; }
-  .stage-pill.done { background: #4caf82; border-color: #4caf82; }
-  .stage-pill.active { background: rgba(201,168,76,.5); border-color: #c9a84c; }
-  .stage-pill.stems-pill { cursor: pointer; }
-  .stage-pill.stems-pill:hover { border-color: #c9a84c; }
-  .sub-dot { width: 3px; height: 3px; border-radius: 50%; background: #444; flex-shrink: 0; margin-bottom: -6px; }
-  .sub-dot.on { background: #c9a84c; }
+  .stage-pills { display: flex; gap: 3px; align-items: center; flex-shrink: 0; }
+  .stage-pill { width: 22px; height: 6px; border-radius: 2px; background: #252525; border: 1px solid #303030; flex-shrink: 0; transition: background .2s, border-color .2s; }
+  .stage-pill.seg-done { background: rgba(201,168,76,.45); border-color: rgba(201,168,76,.5); }
+  .stage-pill.seg-active { background: rgba(201,168,76,.85); border-color: #c9a84c; }
   .prod-substeps { display: flex; gap: 20px; padding: 4px 0 8px; margin-bottom: 6px; }
   .prod-sub-row { display: flex; align-items: center; gap: 8px; }
   .prod-ckb { width: 17px; height: 17px; border: 1px solid #3c3c3c; border-radius: 2px; background: transparent; color: #4caf82; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0; }

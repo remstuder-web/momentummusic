@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
+TASK: Simplify progress bar to 3 segments (Production/Mixing/Stems)
+WHAT: Replaced dynamic STAGES loop + sub-dots + separate stems pill with 3 hardcoded equal segments. Logic: _curIdx maps current_stage to 0/1/2; past segments use seg-done (rgba gold .45), active segment uses seg-active (rgba gold .85), future stays dim. Removed sub-dot styles.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
 TASK: Move references to dedicated tab between STEMS and ANALYZER
 WHAT: (1) Removed "Reference links — always visible" block from song body. (2) Added REFERENCES tab button between STEMS and ANALYZER in the stage tabs row. (3) Added REFERENCES panel: URL input + Add button + ref chip list with ▶ play + × delete, same addSongRef/removeSongRef/playRefUrl functions. (4) Added REFERENCES to the non-content wrapper condition (hides normal body content when REFERENCES tab is active, same as ANALYZER). Added .refs-tab-panel CSS.
 RESULT: works

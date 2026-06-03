@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] src/lib/DemoTab.svelte + src/routes/sono/+page.svelte + momentum-watcher.cjs — DONE
+TASK: DISCO tags manual add via + picker on both DemoTab and SONO page, shared tag list from watcher
+WHAT: (1) Watcher: GET /disco-tags returns full DISCO_TAGS object as JSON. (2) DemoTab: replaced hardcoded DISCO_FILTER const with $state DISCO_TAGS fetched from /disco-tags on mount; added discoPickerOpen state; DISCO tag HTML now shows ALL 7 categories (not just assigned ones) each with a + button that opens a dropdown of unassigned tags — click to add and save immediately; added disco-add-wrap/btn/picker CSS; svelte:window click handler closes picker. (3) SONO page: replaced hardcoded const DISCO_TAGS with $state fetched on mount — picker UI already existed, now uses live data from watcher.
+RESULT: works — /disco-tags returns all 7 categories
+BLOCKERS: none
+
 ## [2026-06-03] src/lib/DailyTab.svelte — DONE
 TASK: References layout reorganize
 WHAT: Row 1: Artist + Title inputs + ↓ Download button + Album checkbox. Row 2: Spotify URL input (flex:1) + ↓ DL button + ♫ Find on Spotify button. All buttons 4px 10px / 12px (down from 5px 12px / 10px). New classes: .btn-ref-sm (gold), .btn-ref-spotify-sm (green), .ref-row1, .ref-row2.

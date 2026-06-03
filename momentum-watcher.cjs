@@ -11472,6 +11472,14 @@ ${chatText.slice(0, 4000)}`
     return
   }
 
+  // ── GET /disco-tags — full DISCO_TAGS object for UI consumption ─────────────
+  if (req.method === 'GET' && req.url === '/disco-tags') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(DISCO_TAGS))
+    return
+  }
+
   // ── GET /recent-reference-moves — last 5 files moved to References/!Current ──
   if (req.method === 'GET' && req.url === '/recent-reference-moves') {
     res.setHeader('Access-Control-Allow-Origin', '*')

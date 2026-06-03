@@ -170,7 +170,8 @@
   let discoPickerOpen = $state({})
 
   // ── DISCO tag lists + categories ─────────────────────────────────────────────
-  const DISCO_TAGS = {
+  // DISCO_TAGS fetched from watcher on load (shared source of truth with DemoTab)
+  let DISCO_TAGS = $state({
     tempo:         ['Downtempo','Midtempo','Uptempo','Fast','Slow'],
     mood:          ['Anthemic','Atmospheric','Bright','Building','Catchy','Cinematic','Confident','Cool','Dark','Dramatic','Dreamy','Driving','Emotive','Energetic','Epic','Fun','Gritty','Happy','Hopeful','Intense','Light','Minimal','Moody','Mysterious','Party','Percussive','Playful','Positive','Powerful','Quirky','Reflective','Retro','Rhythmic','Romantic','Sad','Sexy','Swagger','Tension','Upbeat','Uplifting','Warm'],
     genre:         ['Ambient','Blues','Classical','Country','Dance','Electronic','Folk','Funk','Hip hop/rap','Indie','Jazz','Latin','Metal','Pop','Punk','R&B','Reggae','Rock','Singer/songwriter','Soul','Urban','Vintage','World'],
@@ -178,7 +179,7 @@
     lyrical_theme: ['Adventure','Ambition','Betrayal','Celebration','Change','Christmas','Confidence','Conflict','Connection','Death','Desire','Destiny','Discovery','Dream','Empowerment','Energy','Escape','Faith','Family','Fear','Freedom','Friendship','Fun','Gratitude','Happiness','Heartbreak','Home','Hope','Identity','Individuality','Life','Loneliness','Longing','Loss','Love','Money','Nature','New beginning','Nostalgia','Pain','Party','Power','Rebellion','Regret','Relationship','Romance','Strength','Struggle','Success','Survival','Time','Together','Unity'],
     instrument:    ['Acoustic guitar','Bass','Brass','Clarinet','Drums','Electric guitar','Flute','Handclaps','Horns','Keyboard','Orchestral','Organ','Percussion','Piano','Saxophone','Strings','Synth','Trumpet','Ukelele'],
     type:          ['Cover','Demo','Easy-clear','Focus track','Mainstream','One stop','Recognizable','Rerecord','Samples','Score','Sound design','Soundtrack','Sting']
-  }
+  })
   const DISCO_CATEGORIES = ['tempo','mood','genre','vocals','lyrical_theme','instrument','type']
 
   // ── filter state ─────────────────────────────────────────────────────────────
@@ -288,6 +289,10 @@
 
   onMount(() => {
     authed = checkAuth(); if (authed) loadAll()
+    fetch('http://localhost:4242/disco-tags')
+      .then(r => r.json())
+      .then(d => { if (d && typeof d === 'object') DISCO_TAGS = d })
+      .catch(() => {})
     keydownHandler = e => {
       if (e.code !== 'Space' || !hoveredSongId) return
       const tag = document.activeElement?.tagName

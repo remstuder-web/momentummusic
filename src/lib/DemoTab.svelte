@@ -102,7 +102,8 @@
   let showFilterPanel = $state(false)
   let sonoMode = $state(false)
 
-  const DISCO_FILTER = {
+  // DISCO_TAGS fetched from watcher on load (shared source of truth)
+  let DISCO_TAGS = $state({
     tempo:         ['Downtempo','Midtempo','Uptempo','Fast','Slow'],
     mood:          ['Anthemic','Atmospheric','Bright','Building','Catchy','Cinematic','Confident','Cool','Dark','Dramatic','Dreamy','Driving','Emotive','Energetic','Epic','Fun','Gritty','Happy','Hopeful','Intense','Light','Minimal','Moody','Mysterious','Party','Percussive','Playful','Positive','Powerful','Quirky','Reflective','Retro','Rhythmic','Romantic','Sad','Sexy','Swagger','Tension','Upbeat','Uplifting','Warm'],
     genre:         ['Ambient','Blues','Classical','Country','Dance','Electronic','Folk','Funk','Hip hop/rap','Indie','Jazz','Latin','Metal','Pop','Punk','R&B','Reggae','Rock','Singer/songwriter','Soul','Urban','Vintage','World'],
@@ -110,7 +111,7 @@
     lyrical_theme: ['Adventure','Ambition','Betrayal','Celebration','Change','Christmas','Confidence','Conflict','Connection','Death','Desire','Destiny','Discovery','Dream','Empowerment','Energy','Escape','Faith','Family','Fear','Freedom','Friendship','Fun','Gratitude','Happiness','Heartbreak','Home','Hope','Identity','Individuality','Life','Loneliness','Longing','Loss','Love','Money','Nature','New beginning','Nostalgia','Pain','Party','Power','Rebellion','Regret','Relationship','Romance','Strength','Struggle','Success','Survival','Time','Together','Unity'],
     instrument:    ['Acoustic guitar','Bass','Brass','Clarinet','Drums','Electric guitar','Flute','Handclaps','Horns','Keyboard','Orchestral','Organ','Percussion','Piano','Saxophone','Strings','Synth','Trumpet','Ukelele'],
     type:          ['Cover','Demo','Easy-clear','Focus track','Mainstream','One stop','Recognizable','Rerecord','Samples','Score','Sound design','Soundtrack','Sting']
-  }
+  })
 
   let fTempo     = $state(new Set())
   let fMood      = $state(new Set())
@@ -388,6 +389,11 @@
       if (song) playSong(song.id, audioSrc(song))
     }
     window.addEventListener('keydown', keydownHandler)
+    // Fetch shared DISCO tag list from watcher
+    fetch('http://localhost:4242/disco-tags')
+      .then(r => r.json())
+      .then(d => { if (d && typeof d === 'object') DISCO_TAGS = d })
+      .catch(() => {})
   })
   onDestroy(() => {
     if (keydownHandler) { window.removeEventListener('keydown', keydownHandler); keydownHandler = null }
@@ -1040,7 +1046,8 @@
     }).then(() => {})
   }
 
-  let discoAddInput = $state({}) // song.id_category → input string
+  let discoAddInput = $state({})
+  let discoPickerOpen = $state({})
   let showDiscoAdd = $state({})  // song.id_category → boolean
 
   // Mozart
@@ -1134,7 +1141,7 @@
   onDestroy(() => clearInterval(pollInterval))
 </script>
 
-<svelte:window />
+<svelte:window onclick={() => { if (Object.values(discoPickerOpen).some(Boolean)) discoPickerOpen = {} }} />
 <div class="demo-layout">
 <div class="demo-main">
 
@@ -1187,7 +1194,7 @@
   <div class="fp-section">
     <span class="fp-label">TEMPO</span>
     <div class="fp-pills">
-      {#each DISCO_FILTER.tempo as tag}
+      {#each DISCO_TAGS.tempo as tag}
         <button class="fp-pill {fTempo.has(tag) ? 'sel' : ''}" onclick={() => toggleFTempo(tag)}>{tag}</button>
       {/each}
     </div>
@@ -1197,7 +1204,7 @@
   <div class="fp-section">
     <span class="fp-label">MOOD</span>
     <div class="fp-pills">
-      {#each DISCO_FILTER.mood as tag}
+      {#each DISCO_TAGS.mood as tag}
         <button class="fp-pill {fMood.has(tag) ? 'sel' : ''}" onclick={() => fMood = toggleF(fMood, tag)}>{tag}</button>
       {/each}
     </div>
@@ -1207,7 +1214,7 @@
   <div class="fp-section">
     <span class="fp-label">GENRE</span>
     <div class="fp-pills">
-      {#each DISCO_FILTER.genre as tag}
+      {#each DISCO_TAGS.genre as tag}
         <button class="fp-pill {fGenre.has(tag) ? 'sel' : ''}" onclick={() => fGenre = toggleF(fGenre, tag)}>{tag}</button>
       {/each}
     </div>
@@ -1217,7 +1224,7 @@
   <div class="fp-section">
     <span class="fp-label">VOCALS</span>
     <div class="fp-pills">
-      {#each DISCO_FILTER.vocals as tag}
+      {#each DISCO_TAGS.vocals as tag}
         <button class="fp-pill {fVocals.has(tag) ? 'sel' : ''}" onclick={() => fVocals = toggleF(fVocals, tag)}>{tag}</button>
       {/each}
     </div>
@@ -1227,7 +1234,7 @@
   <div class="fp-section">
     <span class="fp-label">LYRICAL THEME</span>
     <div class="fp-pills">
-      {#each DISCO_FILTER.lyrical_theme as tag}
+      {#each DISCO_TAGS.lyrical_theme as tag}
         <button class="fp-pill {fLyrical.has(tag) ? 'sel' : ''}" onclick={() => fLyrical = toggleF(fLyrical, tag)}>{tag}</button>
       {/each}
     </div>
@@ -1237,7 +1244,7 @@
   <div class="fp-section">
     <span class="fp-label">INSTRUMENT</span>
     <div class="fp-pills">
-      {#each DISCO_FILTER.instrument as tag}
+      {#each DISCO_TAGS.instrument as tag}
         <button class="fp-pill {fInstrument.has(tag) ? 'sel' : ''}" onclick={() => fInstrument = toggleF(fInstrument, tag)}>{tag}</button>
       {/each}
     </div>
@@ -1247,7 +1254,7 @@
   <div class="fp-section">
     <span class="fp-label">TYPE</span>
     <div class="fp-pills">
-      {#each DISCO_FILTER.type as tag}
+      {#each DISCO_TAGS.type as tag}
         <button class="fp-pill {fType.has(tag) ? 'sel' : ''}" onclick={() => fType = toggleF(fType, tag)}>{tag}</button>
       {/each}
     </div>
@@ -1472,25 +1479,36 @@
                     {song._discoTagging ? '...' : '↻ Re-tag'}
                   </button>
                 </div>
-                {#if !DISCO_CATEGORIES.some(cat => (getDiscoTags(song)[cat]||[]).length > 0) && !song._discoTagging}
-                  <span class="disco-empty">No DISCO tags yet — drop audio or click Re-tag.</span>
-                {:else}
-                  <div class="disco-tags-wrap">
-                    {#each DISCO_CATEGORIES as cat}
-                      {#if (getDiscoTags(song)[cat]||[]).length > 0}
-                        <div class="disco-cat-row">
-                          <span class="disco-cat-label">{cat.toUpperCase()}</span>
-                          {#each getDiscoTags(song)[cat] as tag}
-                            <span class="disco-chip">
-                              <span class="disco-chip-tag">{tag}</span>
-                              <button class="tag-del" onclick={() => removeDiscoTag(song, cat, tag)}>×</button>
-                            </span>
-                          {/each}
-                        </div>
-                      {/if}
-                    {/each}
-                  </div>
-                {/if}
+                <div class="disco-tags-wrap">
+                  {#each DISCO_CATEGORIES as cat}
+                    {@const assigned = getDiscoTags(song)[cat] || []}
+                    {@const available = (DISCO_TAGS[cat] || []).filter(t => !assigned.includes(t))}
+                    {@const pk = `${song.id}_${cat}`}
+                    <div class="disco-cat-row">
+                      <span class="disco-cat-label">{cat.replace('_',' ').toUpperCase()}</span>
+                      <div class="disco-chips-wrap">
+                        {#each assigned as tag}
+                          <span class="disco-chip">
+                            <span class="disco-chip-tag">{tag}</span>
+                            <button class="tag-del" onclick={() => removeDiscoTag(song, cat, tag)}>×</button>
+                          </span>
+                        {/each}
+                        {#if available.length}
+                          <div class="disco-add-wrap" onclick={e => e.stopPropagation()}>
+                            <button class="disco-add-btn" onclick={() => discoPickerOpen = {...discoPickerOpen, [pk]: !discoPickerOpen[pk]}}>+</button>
+                            {#if discoPickerOpen[pk]}
+                              <div class="disco-picker">
+                                {#each available as t}
+                                  <button class="disco-pick-opt" onclick={() => { addDiscoTag(song, cat, t); discoPickerOpen = {...discoPickerOpen, [pk]: false} }}>{t}</button>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  {/each}
+                </div>
               </div>
               <div class="field">
                 <label>REFERENCE LINKS</label>
@@ -2178,9 +2196,17 @@
   /* DISCO tags */
   .disco-label-row { display: flex; align-items: center; justify-content: space-between; }
   .disco-tags-wrap { display: flex; flex-direction: column; gap: 5px; }
-  .disco-cat-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
-  .disco-cat-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.55); flex-shrink: 0; width: 90px; }
+  .disco-cat-row { display: flex; align-items: flex-start; gap: 6px; }
+  .disco-cat-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.55); flex-shrink: 0; width: 90px; padding-top: 4px; }
+  .disco-chips-wrap { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .disco-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px 2px 8px; background: rgba(201,168,76,.05); border: 1px solid rgba(201,168,76,.2); border-radius: 2px; }
   .disco-chip-tag { font-family: 'Space Mono', monospace; font-size: 10px; color: #cec9c1; }
+  .disco-add-wrap { position: relative; }
+  .disco-add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; width: 20px; height: 20px; background: transparent; border: 1px solid #2a2a2a; color: #444; border-radius: 2px; cursor: pointer; padding: 0; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  .disco-add-btn:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
+  .disco-picker { position: absolute; top: calc(100% + 4px); left: 0; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; z-index: 99; max-height: 160px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,.6); min-width: 140px; }
+  .disco-pick-opt { display: block; width: 100%; font-family: 'Space Mono', monospace; font-size: 10px; padding: 5px 10px; background: transparent; border: none; border-bottom: 1px solid #1a1a1a; color: #9e9690; cursor: pointer; text-align: left; }
+  .disco-pick-opt:last-child { border-bottom: none; }
+  .disco-pick-opt:hover { background: #252525; color: #c9a84c; }
   .disco-empty { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; }
 </style>

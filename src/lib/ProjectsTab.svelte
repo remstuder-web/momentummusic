@@ -1175,6 +1175,7 @@
   async function addRefBySearch(song) {
     const artist = (songRefArtist[song.id] || '').trim()
     const title  = (songRefTitle[song.id]  || '').trim()
+    console.log('Add Reference clicked', { artist, title, songId: song.id })
     if (!artist && !title) return
     refSearching[song.id] = true
     refSearchResults[song.id] = null
@@ -3225,9 +3226,13 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 {#if activeSongTab[song.id] === 'references'}
                   <div class="refs-tab-panel">
                     <div class="ref-search-row">
-                      <input class="inp-sm ref-search-inp" placeholder="Artist" bind:value={songRefArtist[song.id]}
+                      <input class="inp-sm ref-search-inp" placeholder="Artist"
+                        value={songRefArtist[song.id] || ''}
+                        oninput={e => { songRefArtist[song.id] = e.target.value }}
                         onkeydown={e => e.key === 'Enter' && addRefBySearch(song)} />
-                      <input class="inp-sm ref-search-inp" placeholder="Song Title" bind:value={songRefTitle[song.id]}
+                      <input class="inp-sm ref-search-inp" placeholder="Song Title"
+                        value={songRefTitle[song.id] || ''}
+                        oninput={e => { songRefTitle[song.id] = e.target.value }}
                         onkeydown={e => e.key === 'Enter' && addRefBySearch(song)} />
                       <button class="btn-ghost-sm {refSearching[song.id] ? 'dim' : ''}" onclick={() => addRefBySearch(song)} disabled={refSearching[song.id]}>
                         {refSearching[song.id] ? '...' : '+ Add Reference'}

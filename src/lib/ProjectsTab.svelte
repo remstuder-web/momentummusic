@@ -3083,20 +3083,20 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 <!-- Tab buttons row — own row, guaranteed visible -->
                 <div class="song-tab-row">
                   <button class="log-tab-btn {activeSongTab[song.id]==='references'?'on':''}"
-                    onclick={() => { activeSongTab = {...activeSongTab, [song.id]: activeSongTab[song.id]==='references' ? null : 'references'} }}>
+                    onclick={() => { activeSongTab[song.id] = activeSongTab[song.id] === 'references' ? null : 'references' }}>
                     REFERENCES
                   </button>
                   <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}"
                     onclick={() => {
                       const isActive = activeSongTab[song.id] === 'analyzer'
-                      activeSongTab = {...activeSongTab, [song.id]: isActive ? null : 'analyzer'}
+                      activeSongTab[song.id] = isActive ? null : 'analyzer'
                       if (!isActive) onAnalyzerTabOpen(song)
                     }}>
                     ANALYZER
                   </button>
                   <div style="flex:1"></div>
                   <button class="log-tab-btn {activeSongTab[song.id]==='log'?'on':''}"
-                    onclick={() => { activeSongTab = {...activeSongTab, [song.id]: activeSongTab[song.id]==='log' ? null : 'log'} }}>
+                    onclick={() => { activeSongTab[song.id] = activeSongTab[song.id] === 'log' ? null : 'log' }}>
                     LOG
                   </button>
                 </div>

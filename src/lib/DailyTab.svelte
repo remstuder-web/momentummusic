@@ -50,16 +50,58 @@
   let abletonResponse = $state(null)
   let abletonSteps = $state([])
 
-  let refUrl = $state('')
+  let refArtist = $state('')
+  let refTitle = $state('')
+  let refSpotifyUrl = $state('')
+  let refAlbumMode = $state(false)
+  let refDownloading = $state(false)
+  let refFinding = $state(false)
+  let refStatus = $state(null)  // { ok, msg }
   let recentRefMoves = $state([])
 
-  async function openSpotidown() {
-    const url = refUrl.trim()
-    if (url) {
-      try { await navigator.clipboard.writeText(url) } catch(_) {}
+  async function downloadReference() {
+    if (!refArtist.trim() && !refTitle.trim() && !refSpotifyUrl.trim()) return
+    refDownloading = true
+    refStatus = null
+    try {
+      const r = await fetch('http://localhost:4242/download-reference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artist: refArtist.trim(), title: refTitle.trim(), spotify_url: refSpotifyUrl.trim(), album_mode: refAlbumMode })
+      })
+      const d = await r.json()
+      if (d.ok) {
+        refStatus = { ok: true, msg: `✓ Downloaded: ${d.files?.join(', ') || d.title}` }
+        recentRefMoves = [...(d.files || []), ...recentRefMoves].slice(0, 5)
+      } else {
+        refStatus = { ok: false, msg: d.error || 'Download failed' }
+      }
+    } catch(e) {
+      refStatus = { ok: false, msg: e.message }
     }
-    window.open('https://spotidown.app/de4', '_blank')
-    pollRefMoves()
+    refDownloading = false
+  }
+
+  async function findOnSpotify() {
+    if (!refArtist.trim() && !refTitle.trim() && !refSpotifyUrl.trim()) return
+    refFinding = true
+    refStatus = null
+    try {
+      const r = await fetch('http://localhost:4242/find-on-spotify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artist: refArtist.trim(), title: refTitle.trim(), spotify_url: refSpotifyUrl.trim() })
+      })
+      const d = await r.json()
+      if (d.ok) {
+        refStatus = { ok: true, msg: `✓ Added: ${d.artist} — ${d.title}` }
+      } else {
+        refStatus = { ok: false, msg: d.error || 'Not found' }
+      }
+    } catch(e) {
+      refStatus = { ok: false, msg: e.message }
+    }
+    refFinding = false
   }
 
   async function pollRefMoves() {
@@ -1504,14 +1546,30 @@ ${mozartContext}`
         <!-- REFERENCES -->
         <div class="helper-block">
           <div class="normalizer-title">REFERENCES</div>
-          <div class="ref-row">
-            <input class="add-inp ref-inp" bind:value={refUrl} placeholder="Paste Spotify track or album URL..." />
-            <button class="btn-gold-sm" onclick={openSpotidown}>Open Spotidown</button>
+          <div class="ref-fields">
+            <input class="add-inp ref-field" bind:value={refArtist} placeholder="Artist" />
+            <input class="add-inp ref-field" bind:value={refTitle} placeholder="Song / Album title" />
           </div>
+          <input class="add-inp ref-url-inp" bind:value={refSpotifyUrl} placeholder="Paste Spotify URL (optional)..." />
+          <div class="ref-actions">
+            <label class="ref-album-check">
+              <input type="checkbox" bind:checked={refAlbumMode} />
+              Album
+            </label>
+            <button class="btn-gold-sm {refDownloading ? 'dim' : ''}" onclick={downloadReference} disabled={refDownloading}>
+              {refDownloading ? '...' : '↓ Download'}
+            </button>
+            <button class="btn-ref-spotify {refFinding ? 'dim' : ''}" onclick={findOnSpotify} disabled={refFinding}>
+              {refFinding ? '...' : '♫ Find on Spotify'}
+            </button>
+          </div>
+          {#if refStatus}
+            <div class="ref-status {refStatus.ok ? 'ok' : 'err'}">{refStatus.msg}</div>
+          {/if}
           {#if recentRefMoves.length}
             <div class="ref-moves">
               {#each recentRefMoves as f}
-                <div class="ref-move-item">✓ Moved: {f}</div>
+                <div class="ref-move-item">✓ {f}</div>
               {/each}
             </div>
           {/if}
@@ -2242,8 +2300,17 @@ ${mozartContext}`
   .add-inp { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 9px; outline: none; border-radius: 3px; }
   .add-inp:focus { border-color: rgba(201,168,76,.4); }
   .helpers-built-in { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
-  .ref-row { display: flex; gap: 6px; align-items: center; }
-  .ref-inp { flex: 1; }
+  .ref-fields { display: flex; gap: 6px; margin-bottom: 5px; }
+  .ref-field { flex: 1; }
+  .ref-url-inp { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
+  .ref-actions { display: flex; gap: 6px; align-items: center; }
+  .ref-album-check { display: flex; align-items: center; gap: 4px; font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; cursor: pointer; margin-right: 2px; }
+  .btn-ref-spotify { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 5px 12px; background: rgba(30,215,96,.08); border: 1px solid rgba(30,215,96,.3); color: #1ed760; border-radius: 2px; cursor: pointer; white-space: nowrap; }
+  .btn-ref-spotify:hover { background: rgba(30,215,96,.14); }
+  .btn-ref-spotify.dim { opacity: .5; cursor: not-allowed; }
+  .ref-status { font-family: 'Space Mono', monospace; font-size: 10px; margin-top: 5px; }
+  .ref-status.ok { color: #4caf82; }
+  .ref-status.err { color: #e05a4a; }
   .ref-moves { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
   .ref-move-item { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; }
   .helper-block { display: flex; flex-direction: column; gap: 8px; }

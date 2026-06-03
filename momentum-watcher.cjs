@@ -8500,6 +8500,140 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
+  // ── POST /download-reference — yt-dlp download → References/!Current ────
+  if (req.method === 'POST' && req.url === '/download-reference') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', c => body += c)
+    await new Promise(r => req.on('end', r))
+    try {
+      let { artist, title, spotify_url, album_mode } = JSON.parse(body)
+
+      // If spotify_url provided, resolve artist+title from it
+      if (spotify_url && (!artist || !title)) {
+        const idMatch = spotify_url.match(/track\/([A-Za-z0-9]+)/)
+        if (idMatch) {
+          await ensureSpotifyToken()
+          const sr = await spotifyFetch(`https://api.spotify.com/v1/tracks/${idMatch[1]}`)
+          if (sr.ok) {
+            const sd = await sr.json()
+            artist = artist || (sd.artists || []).map(a => a.name).join(', ')
+            title  = title  || sd.name || ''
+          }
+        }
+      }
+
+      if (!artist && !title) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'artist or title required' }))
+        return
+      }
+
+      const execAsync = require('util').promisify(exec)
+      if (!fs.existsSync(REFERENCES_CURRENT_DIR)) fs.mkdirSync(REFERENCES_CURRENT_DIR, { recursive: true })
+
+      const query = album_mode
+        ? `${artist} ${title} full album`
+        : `${artist} ${title} official audio`
+
+      const tmpOut = path.join('/tmp', `ref_dl_${Date.now()}_%(title)s.%(ext)s`)
+      const cmd = album_mode
+        ? `yt-dlp "ytsearch1:${query.replace(/"/g, '')}" --yes-playlist -x --audio-format mp3 --audio-quality 0 -o "${tmpOut}"`
+        : `yt-dlp "ytsearch1:${query.replace(/"/g, '')}" -x --audio-format mp3 --audio-quality 0 --no-playlist -o "${tmpOut}"`
+
+      await execAsync(cmd, { timeout: 180000 })
+
+      // Find files written to /tmp matching our prefix
+      const prefix = path.basename(tmpOut).split('%(')[0]
+      const downloaded = fs.readdirSync('/tmp')
+        .filter(f => f.startsWith(prefix) && f.endsWith('.mp3'))
+        .map(f => ({ f, mtime: fs.statSync(path.join('/tmp', f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime)
+
+      if (!downloaded.length) throw new Error('yt-dlp produced no output file')
+
+      const movedFiles = []
+      for (const { f } of downloaded) {
+        const src  = path.join('/tmp', f)
+        const dest = path.join(REFERENCES_CURRENT_DIR, f)
+        fs.renameSync(src, dest)
+        movedFiles.push(f)
+        recentRefMoves.unshift(f)
+        // Insert into reference_tracks
+        await supabase.from('reference_tracks').insert({
+          title: title || f,
+          artist: artist || '',
+          source: 'reference_download',
+          collection_name: 'reference_download',
+          audio_path: f,
+          approved: true
+        }).catch(() => {})
+        console.log('✓ Reference downloaded:', f)
+      }
+      if (recentRefMoves.length > 5) recentRefMoves.length = 5
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, files: movedFiles, title, artist }))
+    } catch(e) {
+      console.error('download-reference error:', e.message)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
+  // ── POST /find-on-spotify — search Spotify and insert into reference_tracks ─
+  if (req.method === 'POST' && req.url === '/find-on-spotify') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', c => body += c)
+    await new Promise(r => req.on('end', r))
+    try {
+      const { artist, title, spotify_url } = JSON.parse(body)
+      await ensureSpotifyToken()
+
+      let track = null
+
+      if (spotify_url) {
+        const idMatch = spotify_url.match(/track\/([A-Za-z0-9]+)/)
+        if (idMatch) {
+          const r = await spotifyFetch(`https://api.spotify.com/v1/tracks/${idMatch[1]}`)
+          if (r.ok) track = await r.json()
+        }
+      }
+
+      if (!track) {
+        const q = encodeURIComponent(`${artist} ${title}`.trim())
+        const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`)
+        if (!r.ok) throw new Error(`Spotify search ${r.status}`)
+        const d = await r.json()
+        track = d.tracks?.items?.[0] || null
+      }
+
+      if (!track) throw new Error('Track not found on Spotify')
+
+      const row = {
+        spotify_id: track.id,
+        title: track.name,
+        artist: (track.artists || []).map(a => a.name).join(', '),
+        source: 'reference_download',
+        collection_name: 'reference_download',
+        approved: true,
+        popularity: track.popularity || null
+      }
+      const { error } = await supabase.from('reference_tracks').insert(row)
+      if (error && !error.message?.includes('duplicate')) throw new Error(error.message)
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, title: track.name, artist: (track.artists||[]).map(a=>a.name).join(', '), spotify_id: track.id }))
+    } catch(e) {
+      console.error('find-on-spotify error:', e.message)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /create-submission ─────────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/create-submission') {
     let body = ''

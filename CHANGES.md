@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] src/lib/DailyTab.svelte + momentum-watcher.cjs — DONE
+TASK: References section overhaul
+WHAT: (1) UI: replaced single URL input with Artist + Song/Album title fields + optional Spotify URL input + Album checkbox. Two buttons: ↓ Download (yt-dlp → References/!Current + Supabase insert) and ♫ Find on Spotify (search or resolve URL → reference_tracks insert). Status feedback line + recent moves list. (2) Watcher: POST /download-reference — resolves Spotify URL if provided, runs yt-dlp ytsearch1, moves MP3 to References/!Current, inserts reference_tracks row. POST /find-on-spotify — searches Spotify by artist+title or resolves URL, inserts reference_tracks row.
+RESULT: works — watcher healthy
+BLOCKERS: none
+
 ## [2026-06-03] src/lib/DailyTab.svelte — DONE
 TASK: Only show today's trends/news items, hide old ones
 WHAT: Removed olderInbox variable and the entire EARLIER section from the inbox stream. Inbox now filters to todayISO only. Removed "TODAY" divider label (redundant when it's the only group).

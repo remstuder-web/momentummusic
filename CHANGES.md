@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] momentum-watcher.cjs — DONE
+TASK: yt-dlp auto-update check on watcher startup
+WHAT: Added checkYtDlpUpdate() IIFE in server.listen startup block — runs yt-dlp --update-to stable non-blocking, logs ✓ up to date or ✓ updated with version line
+RESULT: works — confirmed "✓ yt-dlp up to date" in pm2 logs
+BLOCKERS: none
+
+## [2026-06-03] momentum-watcher.cjs — DONE
 TASK: generateNextDemoCode include SONO_DIR
 WHAT: When scanning for the highest existing demo code, also include files from SONO_DIR alongside DEMOS_DIR so codes assigned to SONO tracks are not reused
 RESULT: works

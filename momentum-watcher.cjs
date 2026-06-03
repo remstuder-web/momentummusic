@@ -14808,6 +14808,21 @@ server.listen(PORT, '127.0.0.1', () => {
     console.log('⚠ Obsidian vault not found:', OBSIDIAN_VAULT_PATH, '— create vault to enable sync')
   }
 
+  // yt-dlp auto-update on startup (non-blocking)
+  ;(async function checkYtDlpUpdate() {
+    const execAsync = require('util').promisify(exec)
+    try {
+      const { stdout } = await execAsync('yt-dlp --update-to stable 2>&1')
+      if (stdout.includes('Updated') || stdout.includes('update')) {
+        console.log('✓ yt-dlp updated:', stdout.trim().split('\n')[0])
+      } else {
+        console.log('✓ yt-dlp up to date')
+      }
+    } catch(e) {
+      console.log('⚠ yt-dlp update check failed:', e.message)
+    }
+  })().catch(() => {})
+
   // Demos folder watcher — auto-detect new audio files
   const DEMO_WATCH_EXTS = new Set(['.wav', '.mp3', '.aiff', '.aif', '.m4a'])
   const demoSkip = new Set()  // filenames being renamed — suppress chokidar re-fire

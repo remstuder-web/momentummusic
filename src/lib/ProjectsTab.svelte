@@ -3138,20 +3138,28 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
               <button class="btn-ghost-sm" onclick={() => addRefLink(selectedProject, refLinkInput[selectedProject.id]||'')}>+ URL</button>
             </div>
             {#if refs.length}
-              <div class="refs-inline">
+              <div class="ref-list">
                 {#each refs as ref}
                   {@const refUrl = ref.url || (ref.spotify_id ? 'https://open.spotify.com/track/' + ref.spotify_id : null)}
                   {@const refName = ref.artist
                     ? ref.artist + (ref.title ? ' — ' + ref.title : '')
                     : ref.name || ref.title
                     || (refUrl && refUrl.length > 40 ? '…' + refUrl.slice(-36) : refUrl || 'unknown')}
-                  <span class="ref-chip">
-                    <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>
-                      {refPlayingUrl === refUrl ? '■' : '▶'}
-                    </button>
-                    <span class="ref-chip-name">{refName}</span>
+                  <div class="ref-list-item">
+                    <div class="ref-list-info">
+                      {#if refUrl}
+                        <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>{refPlayingUrl === refUrl ? '■' : '▶'}</button>
+                      {/if}
+                      <button class="ref-dl-btn {refDownloadStatus[ref.id] === 'loading' ? 'loading' : ''} {refDownloadStatus[ref.id] === 'done' ? 'done' : ''}"
+                        onclick={() => downloadRef(ref)}
+                        disabled={refDownloadStatus[ref.id] === 'loading'}
+                        title="Download to References/!Current">
+                        {refDownloadStatus[ref.id] === 'loading' ? '...' : refDownloadStatus[ref.id] === 'done' ? '✓' : '↓'}
+                      </button>
+                      <span class="ref-list-name">{refName}</span>
+                    </div>
                     <button class="tag-del" onclick={() => removeProjectRef(selectedProject, ref.id || ref.url)}>×</button>
-                  </span>
+                  </div>
                 {/each}
               </div>
             {:else}

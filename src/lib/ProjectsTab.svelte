@@ -1133,6 +1133,9 @@
 
   // Song field editing
   let songRefInput = $state({})
+  let songRefArtist = $state({})   // artist input per song.id
+  let songRefTitle  = $state({})   // title input per song.id
+  let songRefStatus = $state({})   // refId → 'analyzing'|'ready'|'error'
   let songAudioBlobUrls = $state({}) // separate from version audio
 
   async function updateSongField(song, field, value) {
@@ -1164,6 +1167,43 @@
       }).catch(() => {})
     }
     songRefInput[song.id] = ''
+  }
+
+  async function addRefBySearch(song) {
+    const artist = (songRefArtist[song.id] || '').trim()
+    const title  = (songRefTitle[song.id]  || '').trim()
+    if (!artist && !title) return
+    // Search Spotify for the track
+    let spotify_id = '', resolvedTitle = title, resolvedArtist = artist
+    try {
+      const r = await fetch('http://localhost:4242/search-spotify-track', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artist, title })
+      })
+      const d = await r.json()
+      if (d.ok) { spotify_id = d.spotify_id; resolvedTitle = d.title; resolvedArtist = d.artist }
+    } catch(_) {}
+    // Add to reference_links immediately with 'analyzing' status
+    const refId = 'r' + Date.now()
+    const newRef = { id: refId, spotify_id, artist: resolvedArtist, title: resolvedTitle, added_at: new Date().toISOString() }
+    const refs = [...(song.reference_links || []), newRef]
+    await updateSongField(song, 'reference_links', refs)
+    songRefStatus[refId] = 'analyzing'
+    songRefArtist[song.id] = ''
+    songRefTitle[song.id]  = ''
+    // Background: analyze via watcher (downloads, Essentia, stores curves)
+    if (spotify_id) {
+      fetch('http://localhost:4242/analyze-ref-now', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spotify_id, title: resolvedTitle, artist: resolvedArtist })
+      }).then(r => r.json()).then(d => {
+        songRefStatus[refId] = d.ok ? 'ready' : 'error'
+        // Refresh ref options so it appears in ANALYZER picker
+        if (d.ok) loadVocalEq(song.id).catch(() => {})
+      }).catch(() => { songRefStatus[refId] = 'error' })
+    } else {
+      songRefStatus[refId] = 'no-spotify'
+    }
   }
 
   async function removeSongRef(song, urlOrId) {
@@ -3065,7 +3105,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
             {#if expanded}
               <div class="song-body">
-                <!-- Stage row — stage boxes only, no wrapping with tab buttons -->
+                <!-- Stage + tab row — all on one line -->
                 <div class="stages-row">
                   {#each STAGES.filter(s => s.id !== 'demo') as stage}
                     {@const sd = wd.stages[stage.id]}
@@ -3079,12 +3119,10 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     <button class="stage-ckb" onclick={() => saveWorkData(song, wd => { wd.stems_received = !wd.stems_received })}>{wd.stems_received?'✓':''}</button>
                     <button class="stage-name-btn" onclick={() => setStage(song, 'stems')}>STEMS</button>
                   </div>
-                </div>
-                <!-- Tab buttons row — own row, guaranteed visible -->
-                <div class="song-tab-row">
-                  <button class="log-tab-btn {activeSongTab[song.id]==='references'?'on':''}"
+                  <!-- Tab buttons — inline, gap to the left -->
+                  <button class="log-tab-btn {activeSongTab[song.id]==='references'?'on':''}" style="margin-left:12px"
                     onclick={() => { activeSongTab[song.id] = activeSongTab[song.id] === 'references' ? null : 'references' }}>
-                    REFERENCES
+                    REFS
                   </button>
                   <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}"
                     onclick={() => {
@@ -3094,8 +3132,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     }}>
                     ANALYZER
                   </button>
-                  <div style="flex:1"></div>
-                  <button class="log-tab-btn {activeSongTab[song.id]==='log'?'on':''}"
+                  <button class="log-tab-btn {activeSongTab[song.id]==='log'?'on':''}" style="margin-left:auto"
                     onclick={() => { activeSongTab[song.id] = activeSongTab[song.id] === 'log' ? null : 'log' }}>
                     LOG
                   </button>
@@ -3139,32 +3176,40 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 <!-- REFERENCES panel -->
                 {#if activeSongTab[song.id] === 'references'}
                   <div class="refs-tab-panel">
-                    <div class="refs-wrap">
-                      <div class="ref-add-row">
-                        <input class="inp-sm" placeholder="Paste Spotify / YouTube URL..."
-                          bind:value={songRefInput[song.id]}
-                          onkeydown={e => e.key === 'Enter' && addSongRef(song)} />
-                        <button class="btn-ghost-sm" onclick={() => addSongRef(song)}>+ Add</button>
-                      </div>
-                      <div class="refs-inline">
-                        {#each (song.reference_links||[]) as ref}
-                          {@const refUrl = ref.url || (ref.spotify_id ? 'https://open.spotify.com/track/' + ref.spotify_id : null)}
-                          {@const refName = ref.name || (ref.artist ? ref.artist + ' — ' + ref.title : ref.title || ref.url || '')}
-                          {@const isSpotify = refUrl?.includes('spotify')}
-                          <span class="ref-chip">
-                            {#if refUrl}
-                              {#if isSpotify}
-                                <button class="spotidown-btn" onclick={() => { navigator.clipboard.writeText(refUrl); window.open('https://spotidown.app/de4', '_blank') }} title="Download from Spotidown">↓</button>
-                                <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>{refPlayingUrl === refUrl ? '■' : '▶'}</button>
-                              {:else}
-                                <a href={refUrl} target="_blank" class="ref-link-btn">↗</a>
-                              {/if}
+                    <div class="ref-search-row">
+                      <input class="inp-sm ref-search-inp" placeholder="Artist" bind:value={songRefArtist[song.id]}
+                        onkeydown={e => e.key === 'Enter' && addRefBySearch(song)} />
+                      <input class="inp-sm ref-search-inp" placeholder="Song Title" bind:value={songRefTitle[song.id]}
+                        onkeydown={e => e.key === 'Enter' && addRefBySearch(song)} />
+                      <button class="btn-ghost-sm" onclick={() => addRefBySearch(song)}>+ Add Reference</button>
+                    </div>
+                    <div class="ref-list">
+                      {#each (song.reference_links||[]) as ref}
+                        {@const status = songRefStatus[ref.id] || (ref.spotify_id ? 'ready' : 'no-spotify')}
+                        {@const displayName = ref.artist ? ref.artist + ' — ' + ref.title : ref.name || ref.title || ref.url || '?'}
+                        {@const refUrl = ref.spotify_id ? 'https://open.spotify.com/track/' + ref.spotify_id : ref.url}
+                        <div class="ref-list-item">
+                          <div class="ref-list-info">
+                            <span class="ref-list-name">{displayName}</span>
+                            {#if status === 'analyzing'}
+                              <span class="ref-list-status analyzing">analyzing...</span>
+                            {:else if status === 'ready'}
+                              <span class="ref-list-status ready">✓ ready</span>
+                            {:else if status === 'error'}
+                              <span class="ref-list-status error">✗ error</span>
                             {/if}
-                            <span class="ref-chip-name">{refName.length > 40 ? '…' + refName.slice(-36) : refName}</span>
-                            <button class="tag-del" onclick={() => removeSongRef(song, ref.url || ref.id)}>×</button>
-                          </span>
-                        {/each}
-                      </div>
+                          </div>
+                          <div class="ref-list-actions">
+                            {#if refUrl}
+                              <button class="spotify-play-btn-sm" onclick={() => playRefUrl(refUrl)}>{refPlayingUrl === refUrl ? '■' : '▶'}</button>
+                            {/if}
+                            <button class="tag-del" onclick={() => removeSongRef(song, ref.id || ref.url)}>×</button>
+                          </div>
+                        </div>
+                      {/each}
+                      {#if !(song.reference_links||[]).length}
+                        <div class="ref-list-empty">No references yet — add by Artist + Title above</div>
+                      {/if}
                     </div>
                   </div>
                 {/if}
@@ -4301,7 +4346,19 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .tag-genre-select:focus { border-color: rgba(201,168,76,.4); }
   .tag-genre-select option[disabled] { font-weight: 700; color: rgba(201,168,76,.75); background: #1c1c1c; }
   .tag-genre-select option:not([disabled]) { background: #141414; color: #cec9c1; }
-  .refs-tab-panel { padding: 10px 0 6px; display: flex; flex-direction: column; gap: 8px; }
+  .refs-tab-panel { padding: 10px 0 6px; display: flex; flex-direction: column; gap: 10px; }
+  .ref-search-row { display: flex; gap: 6px; align-items: center; }
+  .ref-search-inp { flex: 1; min-width: 0; }
+  .ref-list { display: flex; flex-direction: column; gap: 5px; }
+  .ref-list-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 8px; background: #111; border: 1px solid #1c1c1c; border-radius: 3px; }
+  .ref-list-info { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+  .ref-list-name { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref-list-status { font-family: 'Space Mono', monospace; font-size: 9px; flex-shrink: 0; }
+  .ref-list-status.analyzing { color: #9e9690; }
+  .ref-list-status.ready { color: #4caf82; }
+  .ref-list-status.error { color: #e05a4a; }
+  .ref-list-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .ref-list-empty { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; padding: 6px 0; }
   .refs-wrap { display: flex; flex-direction: column; gap: 6px; overflow: visible; }
   .ref-row { display: flex; align-items: center; gap: 8px; }
   .ref-link { font-family: 'Space Mono', monospace; font-size: 12px; color: #4a9fd4; text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -4322,7 +4379,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .btn-ghost-sm.dim { opacity: .4; cursor: not-allowed; }
 
   /* Song cards */
-  .song-card { border: 1px solid #1c1c1c; border-radius: 4px; overflow: hidden; }
+  .song-card { border: 1px solid #1c1c1c; border-radius: 4px; overflow: visible; }
   .song-card.exp { border-color: rgba(201,168,76,.4); }
   .song-head { display: flex; align-items: center; gap: 9px; padding: 11px 14px; background: #1c1c1c; }
   .song-card.exp .song-head { background: #252525; }
@@ -4380,8 +4437,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .arr.open { transform: rotate(90deg); }
 
   .song-body { padding: 16px; border-top: 1px solid #1c1c1c; display: flex; flex-direction: column; gap: 16px; background: #0a0a0a; }
-  .stages-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
-  .song-tab-row { display: flex; gap: 6px; align-items: center; border-bottom: 1px solid #1c1c1c; padding-bottom: 12px; }
+  .stages-row { display: flex; gap: 4px; flex-wrap: nowrap; align-items: center; border-bottom: 1px solid #1c1c1c; padding-bottom: 12px; overflow: visible; }
   .stage-box { display: flex; align-items: center; gap: 5px; padding: 7px 11px; border: 1px solid #1c1c1c; border-radius: 3px; background: #111; transition: all .15s; }
   .stage-box:hover { border-color: #252525; background: #151515; }
   .stage-box.active { border-color: rgba(201,168,76,.5); background: rgba(201,168,76,.06); }

@@ -8500,6 +8500,37 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
+  // ── POST /search-spotify-track — search by artist + title, return first match ──
+  if (req.method === 'POST' && req.url === '/search-spotify-track') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', c => body += c)
+    await new Promise(r => req.on('end', r))
+    try {
+      const { artist, title } = JSON.parse(body)
+      if (!artist && !title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'artist or title required' })); return }
+      await ensureSpotifyToken()
+      const q = encodeURIComponent(`${artist} ${title}`.trim())
+      const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`)
+      if (!r.ok) throw new Error(`Spotify ${r.status}`)
+      const d = await r.json()
+      const track = d.tracks?.items?.[0]
+      if (!track) { res.writeHead(200); res.end(JSON.stringify({ ok: false, error: 'Track not found on Spotify' })); return }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        ok: true,
+        spotify_id: track.id,
+        title: track.name,
+        artist: (track.artists || []).map(a => a.name).join(', '),
+        preview_url: track.preview_url || null
+      }))
+    } catch(e) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /download-reference — smart yt-dlp download → References/!Current (SSE) ──
   if (req.method === 'POST' && req.url === '/download-reference') {
     res.writeHead(200, {

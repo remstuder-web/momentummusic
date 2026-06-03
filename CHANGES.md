@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] src/lib/ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: Stage tabs back inline, REFERENCES tab redesign with auto-analyze
+WHAT: (1) Merged REFERENCES/ANALYZER/LOG buttons back into .stages-row (one row with stage boxes). Shortened REFERENCES label to "REFS" to fit. stages-row now flex-wrap:nowrap, overflow:visible. song-card overflow changed to visible. (2) REFERENCES tab: replaced URL input with Artist + Song Title inputs → "+ Add Reference" → calls POST /search-spotify-track (new watcher endpoint, Spotify search by name) → adds to reference_links immediately with "analyzing..." status → calls POST /analyze-ref-now in background (yt-dlp download + Essentia + stores vocal_eq_curves) → updates status to "ready" → loadVocalEq refresh so ref appears in ANALYZER picker. Reference list shows Artist — Title + status badge + play + delete. (3) Watcher: POST /search-spotify-track added.
+RESULT: works — watcher healthy
+BLOCKERS: none
+
 ## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
 TASK: Fix ANALYZER ReferenceError — refCurves not defined
 WHAT: Lines 3738-3742 used bare `refCurves` (undefined) instead of `refCurvesArr` (the {@const} declared in the analyzer block at line 3491). This ReferenceError crashed the entire ProjectsTab component silently, which is why clicking ANALYZER appeared to do nothing. Also cleaned up remaining debug console.log and debug div from prior debug session.

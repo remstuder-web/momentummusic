@@ -10315,6 +10315,21 @@ Respond ONLY in JSON:
             }
           }
 
+          // Save per-stem Essentia metrics to work_data.stem_analysis
+          const stemMetrics = result.stem_metrics || {}
+          if (Object.keys(stemMetrics).length) {
+            try {
+              const { data: songRow2 } = await supabaseAdmin.from('songs').select('work_data').eq('id', song_id).maybeSingle()
+              if (songRow2) {
+                const wd2 = songRow2.work_data || {}
+                wd2.stem_analysis = stemMetrics
+                const { error: wdErr } = await supabaseAdmin.from('songs').update({ work_data: wd2 }).eq('id', song_id)
+                if (wdErr) console.error('stem_analysis save error:', wdErr.message)
+                else console.log('✓ Saved stem_analysis for song', song_id, '— stems:', Object.keys(stemMetrics).join(', '))
+              }
+            } catch(e) { console.warn('stem_analysis save failed:', e.message) }
+          }
+
           // Auto-queue song's reference_links that haven't been analyzed yet
           const refLinks = wd.reference_links || []
           for (const ref of refLinks) {
@@ -10332,7 +10347,7 @@ Respond ONLY in JSON:
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: true, stems: result.stems, saved: savedCurves, stem_count: Object.keys(result.stems).length }))
+          res.end(JSON.stringify({ ok: true, stems: result.stems, stem_metrics: stemMetrics, saved: savedCurves, stem_count: Object.keys(result.stems).length }))
         } else {
           throw new Error('type must be reference or mix')
         }
@@ -10379,6 +10394,96 @@ Respond ONLY in JSON:
       } catch(err) {
         res.writeHead(400, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: err.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /generate-analyzer-summary — Claude Haiku strategic + creative summary ──
+  if (req.method === 'POST' && req.url === '/generate-analyzer-summary') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const { song_id, api_key } = JSON.parse(Buffer.concat(chunks).toString())
+        if (!song_id || !api_key) throw new Error('song_id and api_key required')
+
+        const { data: songRow } = await supabase.from('songs')
+          .select('title,code,work_data,reference_links')
+          .eq('id', song_id).maybeSingle()
+        if (!songRow) throw new Error('Song not found')
+
+        const wd = songRow.work_data || {}
+        const stemData = wd.stem_analysis || {}
+        const latestA = (wd.versions || []).filter(v => v.analysis)
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]?.analysis
+
+        // Load reference track data
+        const refLinks = (songRow.reference_links || []).filter(r => r.spotify_id || r.mb_id)
+        const refRows = []
+        for (const ref of refLinks.slice(0, 3)) {
+          let rt = null
+          if (ref.spotify_id) {
+            const { data } = await supabase.from('reference_tracks').select('title,artist,tempo,key,energy,loudness,brightness').eq('spotify_id', ref.spotify_id).maybeSingle()
+            rt = data
+          }
+          if (rt?.energy != null || rt?.loudness != null) refRows.push({ name: ref.artist ? ref.artist + ' — ' + ref.title : ref.name, ...rt })
+        }
+
+        const stemText = Object.entries(stemData).map(([stem, m]) =>
+          `${stem.toUpperCase()}: LUFS ${m.lufs ?? '?'} | Energy ${m.energy != null ? Math.round(m.energy * 100) + '%' : '?'} | Brightness ${m.brightness != null ? Math.round(m.brightness * 100) + '%' : '?'} | Bass/Mid/High ${m.bass_pct ?? '?'}/${m.mid_pct ?? '?'}/${m.high_pct ?? '?'}%`
+        ).join('\n') || 'No stem data yet'
+
+        const mixText = latestA
+          ? `BPM: ${latestA.bpm ? Math.round(latestA.bpm) : '?'} | Key: ${latestA.key || '?'} | LUFS: ${latestA.loudness_lufs != null ? latestA.loudness_lufs.toFixed(1) : '?'} | Energy: ${latestA.energy != null ? Math.round(latestA.energy * 100) + '%' : '?'}`
+          : 'No mix analysis'
+
+        const refText = refRows.length
+          ? refRows.map(r => `- ${r.name || 'Unknown'} | LUFS: ${r.loudness != null ? r.loudness.toFixed(1) : '?'} | Energy: ${r.energy != null ? Math.round(r.energy * 100) + '%' : '?'} | Brightness: ${r.brightness != null ? Math.round(r.brightness * 100) + '%' : '?'}`).join('\n')
+          : 'No reference tracks with analysis'
+
+        const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': api_key, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 600,
+            system: `You are Mozart, expert music producer advisor. Analyze stem data and give specific actionable direction.
+Return JSON only — no explanation outside the JSON:
+{
+  "strategic": ["2-3 strategic positioning points"],
+  "creative": ["2-3 specific creative actions for this mix"],
+  "next_step": "single most important action to take right now"
+}`,
+            messages: [{
+              role: 'user',
+              content: `Song: ${songRow.title || songRow.code}
+
+FULL MIX: ${mixText}
+
+STEM ANALYSIS:
+${stemText}
+
+REFERENCES:
+${refText}
+
+Give specific production direction based on stem balance, loudness levels, and reference comparison.`
+            }]
+          })
+        })
+        const aiData = await aiRes.json()
+        if (aiData.usage) {
+          supabase.from('api_usage').insert({ endpoint: '/generate-analyzer-summary', model: 'claude-haiku-4-5-20251001', input_tokens: aiData.usage.input_tokens || 0, output_tokens: aiData.usage.output_tokens || 0, cost_usd: ((aiData.usage.input_tokens||0)*0.0000008)+((aiData.usage.output_tokens||0)*0.000004) }).then(() => {})
+        }
+        const raw = (aiData.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
+        let result
+        try { result = JSON.parse(raw) } catch(e) { result = { next_step: raw } }
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, ...result }))
+      } catch(e) {
+        console.error('generate-analyzer-summary error:', e.message)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
       }
     })
     return

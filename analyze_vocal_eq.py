@@ -91,6 +91,78 @@ def analyze_spectrum(audio_path):
     return {str(k): round(v - mean_db, 2) for k, v in curve.items()}
 
 
+def analyze_stem_metrics(audio_path):
+    """Compute per-stem Essentia metrics: LUFS, energy, brightness, stereo width, band balance."""
+    import math
+    metrics = {}
+    try:
+        import essentia.standard as es
+        loader = es.MonoLoader(filename=audio_path, sampleRate=44100)
+        audio = loader()
+        start = int(len(audio) * 0.25)
+        end   = int(len(audio) * 0.75)
+        mid   = audio[start:end]
+
+        rms = float(np.sqrt(np.mean(mid ** 2))) if len(mid) else 0
+        if rms > 1e-6:
+            metrics['lufs'] = round(max(-60.0, min(-4.0, 20 * math.log10(rms) + 3.0)), 1)
+        else:
+            metrics['lufs'] = -60.0
+        metrics['energy'] = round(min(1.0, rms * 10), 3)
+
+        # Brightness via spectral centroid
+        fft_size = 8192
+        window  = es.Windowing(type='hann')
+        spec_ex = es.Spectrum(size=fft_size)
+        centroids = []
+        for i in range(0, len(mid) - fft_size, fft_size // 2):
+            spec  = spec_ex(window(mid[i:i + fft_size]))
+            pwr   = spec ** 2
+            freqs = np.linspace(0, 22050, len(spec))
+            total = float(pwr.sum())
+            if total > 1e-10:
+                centroids.append(float(np.sum(freqs * pwr) / total))
+        metrics['brightness'] = round(min(1.0, float(np.mean(centroids)) / 8000), 3) if centroids else 0.0
+
+        # Frequency balance: bass/mid/high % from spectrum
+        hop = fft_size // 2
+        powers = []
+        for i in range(0, min(len(mid), fft_size * 40) - fft_size, hop):
+            powers.append(spec_ex(window(mid[i:i + fft_size])) ** 2)
+        if powers:
+            avg = np.mean(powers, axis=0)
+            freq_res = 22050.0 / len(avg)
+            b_end = max(1, int(200  / freq_res))
+            m_end = max(b_end + 1, int(4000 / freq_res))
+            b_e = float(np.sum(avg[:b_end]))
+            m_e = float(np.sum(avg[b_end:m_end]))
+            h_e = float(np.sum(avg[m_end:]))
+            tot = b_e + m_e + h_e
+            if tot > 0:
+                metrics['bass_pct'] = round(b_e / tot * 100)
+                metrics['mid_pct']  = round(m_e / tot * 100)
+                metrics['high_pct'] = round(h_e / tot * 100)
+    except Exception:
+        pass
+
+    # Stereo width via L/R correlation (requires stereo file)
+    try:
+        import essentia.standard as es
+        loader2 = es.AudioLoader(filename=audio_path)
+        stereo, sr, nch = loader2()[:3]
+        if hasattr(stereo, 'ndim') and stereo.ndim == 2 and stereo.shape[1] == 2:
+            s = int(len(stereo) * 0.25)
+            e = int(len(stereo) * 0.75)
+            L, R = stereo[s:e, 0], stereo[s:e, 1]
+            if np.std(L) > 1e-6 and np.std(R) > 1e-6:
+                corr = float(np.corrcoef(L, R)[0, 1])
+                metrics['stereo_width'] = round(max(0.0, min(1.0, (1.0 - corr) / 2)), 3)
+    except Exception:
+        pass
+
+    return metrics
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({'error': 'Usage: analyze_vocal_eq.py <audio_path>'}))
@@ -110,14 +182,17 @@ def main():
             return
 
         stems_to_analyze = ['vocals', 'drums', 'bass', 'other']
-        results = {}
+        results      = {}
+        stem_metrics = {}
         for stem in stems_to_analyze:
             stem_path = find_stem_file(temp_dir, stem)
             if stem_path:
                 try:
-                    results[stem] = analyze_spectrum(stem_path)
-                except Exception as e:
-                    results[stem] = None
+                    results[stem]      = analyze_spectrum(stem_path)
+                    stem_metrics[stem] = analyze_stem_metrics(stem_path)
+                except Exception:
+                    results[stem]      = None
+                    stem_metrics[stem] = {}
 
         if not results:
             print(json.dumps({'error': 'No stems found after separation'}))
@@ -126,6 +201,7 @@ def main():
         print(json.dumps({
             'ok': True,
             'stems': results,
+            'stem_metrics': stem_metrics,
             'stem_count': len(results)
         }))
 

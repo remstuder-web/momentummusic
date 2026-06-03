@@ -3734,9 +3734,9 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                           {/each}
                         </div>
                       {/if}
-                      {#if refCurves.length || mixCurves.length}
+                      {#if refCurvesArr.length || mixCurves.length}
                         <div class="eq-curve-list">
-                          {#each refCurves as ref, i}
+                          {#each refCurvesArr as ref, i}
                             <div class="eq-curve-item eq-curve-ref" style="color: {['rgba(201,168,76,.7)','rgba(76,175,130,.7)','rgba(74,159,212,.7)'][i] || 'rgba(201,168,76,.7)'}">● {ref.label || 'Reference ' + (i+1)}</div>
                           {/each}
                           {#each mixCurves as mix}

@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
+TASK: Fix ANALYZER ReferenceError — refCurves not defined
+WHAT: Lines 3738-3742 used bare `refCurves` (undefined) instead of `refCurvesArr` (the {@const} declared in the analyzer block at line 3491). This ReferenceError crashed the entire ProjectsTab component silently, which is why clicking ANALYZER appeared to do nothing. Also cleaned up remaining debug console.log and debug div from prior debug session.
+RESULT: works — ReferenceError resolved, ANALYZER tab loads correctly
+BLOCKERS: none
+
+## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
 TASK: Fix ANALYZER tab content restored and working
 WHAT: Investigation — ANALYZER code is fully intact and structurally correct (93/93 balanced blocks, correct button handler, correct {#if} condition). Root cause: the {#if true} workaround from the prior progress bar commit created a stale Vite HMR compile error ({@const} invalid placement) that blocked the browser from receiving updated code since 6:37 PM. Fix: inlined the stage index logic directly into the class expressions (no variable needed), removing the {#if true} hack entirely. Restarted momentum-dev for clean compile — no errors.
 RESULT: works — dev server clean, ANALYZER fully functional

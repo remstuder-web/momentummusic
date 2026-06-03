@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
+TASK: References — simplify add flow, always reset state, no stuck states
+WHAT: Rewrote addRefBySearch: removed picker/confirmAddRef entirely, single function with finally block guaranteeing refSearching resets. Flow: validate (both empty → 2s error) → search Spotify → first result → add immediately + clear inputs → background analyze-ref-now. Not found → 2s "Not found" error then clear. Error messages via songRefStatus['_err_'+song.id] with 2s timeout. Removed refSearchResults state, picker HTML, picker CSS.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-03] src/lib/ProjectsTab.svelte + momentum-watcher.cjs — DONE
 TASK: References — top 3 Spotify results picker for typo handling
 WHAT: /search-spotify-track now returns limit=3 results with {spotify_id,title,artist,year}. UI: if 1 result → add directly (unchanged). If 2-3 results → show "Did you mean?" picker with numbered rows and [Select] buttons. Selecting confirms and triggers analyze-ref-now. [Cancel] dismisses. Button shows "..." while searching. Added refSearchResults and refSearching state, split addRefBySearch into search phase + confirmAddRef.

@@ -1137,7 +1137,6 @@
   let songRefTitle  = $state({})   // title input per song.id
   let songRefStatus = $state({})       // refId → 'analyzing'|'ready'|'error'
   let refDownloadStatus = $state({})    // refId → 'idle'|'loading'|'done'
-  let refSearchResults  = $state({})    // song.id → [{spotify_id,title,artist,year}] picker options
   let refSearching      = $state({})
   let songAudioBlobUrls = $state({}) // separate from version audio
 
@@ -1175,52 +1174,55 @@
   async function addRefBySearch(song) {
     const artist = (songRefArtist[song.id] || '').trim()
     const title  = (songRefTitle[song.id]  || '').trim()
-    console.log('Add Reference clicked', { artist, title, songId: song.id })
-    if (!artist && !title) return
+    // Validation — need at least one field
+    if (!artist && !title) {
+      songRefStatus['_err_' + song.id] = 'validation'
+      setTimeout(() => { songRefStatus['_err_' + song.id] = null }, 2000)
+      return
+    }
     refSearching[song.id] = true
-    refSearchResults[song.id] = null
+    songRefStatus['_err_' + song.id] = null
     try {
       const r = await fetch('http://localhost:4242/search-spotify-track', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ artist, title })
       })
       const d = await r.json()
-      if (!d.ok || !d.results?.length) { refSearching[song.id] = false; return }
-      if (d.results.length === 1) {
-        // Single result → add directly
-        refSearching[song.id] = false
-        await confirmAddRef(song, d.results[0])
-      } else {
-        // Multiple → show picker
-        refSearchResults[song.id] = d.results
-        refSearching[song.id] = false
+      const track = d.results?.[0]
+      if (!d.ok || !track) {
+        // Not found — show error for 2s then clear
+        songRefStatus['_err_' + song.id] = 'notfound'
+        setTimeout(() => { songRefStatus['_err_' + song.id] = null }, 2000)
+        return
       }
-    } catch(_) { refSearching[song.id] = false }
-  }
-
-  async function confirmAddRef(song, track) {
-    refSearchResults[song.id] = null
-    songRefArtist[song.id] = ''
-    songRefTitle[song.id]  = ''
-    const refId = 'r' + Date.now()
-    const spotifyUrl = 'https://open.spotify.com/track/' + track.spotify_id
-    const newRef = {
-      id: refId, spotify_id: track.spotify_id,
-      artist: track.artist, title: track.title,
-      url: spotifyUrl,
-      name: track.artist + ' — ' + track.title,
-      added_at: new Date().toISOString()
+      // Found — add immediately and clear inputs
+      const refId = 'r' + Date.now()
+      const newRef = {
+        id: refId, spotify_id: track.spotify_id,
+        artist: track.artist, title: track.title,
+        url: 'https://open.spotify.com/track/' + track.spotify_id,
+        name: track.artist + ' — ' + track.title,
+        added_at: new Date().toISOString()
+      }
+      await updateSongField(song, 'reference_links', [...(song.reference_links || []), newRef])
+      songRefArtist[song.id] = ''
+      songRefTitle[song.id]  = ''
+      songRefStatus[refId] = 'analyzing'
+      // Background analysis — never blocks the UI
+      fetch('http://localhost:4242/analyze-ref-now', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spotify_id: track.spotify_id, title: track.title, artist: track.artist })
+      }).then(r => r.json()).then(d => {
+        songRefStatus[refId] = d.ok ? 'ready' : 'error'
+        if (d.ok) loadVocalEq(song.id).catch(() => {})
+      }).catch(() => { songRefStatus[refId] = 'error' })
+    } catch(e) {
+      console.error('addRefBySearch error:', e.message)
+      songRefStatus['_err_' + song.id] = 'notfound'
+      setTimeout(() => { songRefStatus['_err_' + song.id] = null }, 2000)
+    } finally {
+      refSearching[song.id] = false  // always reset — never stuck
     }
-    const refs = [...(song.reference_links || []), newRef]
-    await updateSongField(song, 'reference_links', refs)
-    songRefStatus[refId] = 'analyzing'
-    fetch('http://localhost:4242/analyze-ref-now', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ spotify_id: track.spotify_id, title: track.title, artist: track.artist })
-    }).then(r => r.json()).then(d => {
-      songRefStatus[refId] = d.ok ? 'ready' : 'error'
-      if (d.ok) loadVocalEq(song.id).catch(() => {})
-    }).catch(() => { songRefStatus[refId] = 'error' })
   }
 
   async function downloadRef(ref) {
@@ -3234,22 +3236,16 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                         value={songRefTitle[song.id] || ''}
                         oninput={e => { songRefTitle[song.id] = e.target.value }}
                         onkeydown={e => e.key === 'Enter' && addRefBySearch(song)} />
-                      <button class="btn-ghost-sm {refSearching[song.id] ? 'dim' : ''}" onclick={() => addRefBySearch(song)} disabled={refSearching[song.id]}>
-                        {refSearching[song.id] ? '...' : '+ Add Reference'}
+                      <button class="btn-ghost-sm {refSearching[song.id] ? 'dim' : ''}"
+                        onclick={() => addRefBySearch(song)}
+                        disabled={refSearching[song.id]}>
+                        {refSearching[song.id] ? '...' : '+ Add'}
                       </button>
                     </div>
-                    {#if refSearchResults[song.id]?.length}
-                      <div class="ref-picker-results">
-                        <div class="ref-picker-label">Did you mean?</div>
-                        {#each refSearchResults[song.id] as result, i}
-                          <div class="ref-picker-row">
-                            <span class="ref-picker-num">{i + 1}.</span>
-                            <span class="ref-picker-name">{result.artist} — {result.title}{result.year ? ' (' + result.year + ')' : ''}</span>
-                            <button class="ref-picker-select" onclick={() => confirmAddRef(song, result)}>Select</button>
-                          </div>
-                        {/each}
-                        <button class="ref-picker-cancel" onclick={() => refSearchResults[song.id] = null}>Cancel</button>
-                      </div>
+                    {#if songRefStatus['_err_' + song.id] === 'notfound'}
+                      <div class="ref-search-msg err">Not found on Spotify — check spelling and try again</div>
+                    {:else if songRefStatus['_err_' + song.id] === 'validation'}
+                      <div class="ref-search-msg err">Enter artist or title</div>
                     {/if}
                     <div class="ref-list">
                       {#each (song.reference_links||[]) as ref}
@@ -4437,15 +4433,8 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .ref-dl-btn.loading { color: #9e9690; cursor: default; }
   .ref-dl-btn.done { border-color: rgba(76,175,130,.4); color: #4caf82; }
   .ref-list-empty { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; padding: 6px 0; }
-  .ref-picker-results { background: #111; border: 1px solid #252525; border-radius: 3px; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; }
-  .ref-picker-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; color: rgba(201,168,76,.6); margin-bottom: 2px; }
-  .ref-picker-row { display: flex; align-items: center; gap: 8px; }
-  .ref-picker-num { font-family: 'Space Mono', monospace; font-size: 10px; color: #444; flex-shrink: 0; }
-  .ref-picker-name { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ref-picker-select { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 10px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.3); color: #c9a84c; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
-  .ref-picker-select:hover { background: rgba(201,168,76,.14); }
-  .ref-picker-cancel { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; background: transparent; border: none; cursor: pointer; padding: 2px 0; text-align: left; margin-top: 2px; }
-  .ref-picker-cancel:hover { color: #9e9690; }
+  .ref-search-msg { font-family: 'Space Mono', monospace; font-size: 10px; padding: 3px 0; }
+  .ref-search-msg.err { color: #e05a4a; }
   .refs-wrap { display: flex; flex-direction: column; gap: 6px; overflow: visible; }
   .ref-row { display: flex; align-items: center; gap: 8px; }
   .ref-link { font-family: 'Space Mono', monospace; font-size: 12px; color: #4a9fd4; text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

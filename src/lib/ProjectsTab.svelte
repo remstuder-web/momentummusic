@@ -3026,13 +3026,14 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     onchange={e => { updateSongField(song, 'title', e.target.value); renameSongAudioFiles(song, e.target.value) }}
                     onkeydown={e => e.key==='Enter' && e.target.blur()} />
                 </div>
-                <div class="stage-pills">
-                  {@const _stOrd = ['production','mixing','stems']}
-                  {@const _curIdx = wd.current_stage === 'stems' ? 2 : Math.max(_stOrd.indexOf(wd.current_stage), 0)}
-                  <div class="stage-pill {_curIdx > 0 ? 'seg-done' : ''} {wd.current_stage === 'production' ? 'seg-active' : ''}" title="PRODUCTION"></div>
-                  <div class="stage-pill {_curIdx > 1 ? 'seg-done' : ''} {wd.current_stage === 'mixing' ? 'seg-active' : ''}" title="MIXING"></div>
-                  <div class="stage-pill {wd.stems_received && wd.current_stage !== 'stems' ? 'seg-done' : ''} {wd.current_stage === 'stems' ? 'seg-active' : ''}" title="STEMS"></div>
-                </div>
+                {#if true}
+                  {@const _curIdx = wd.current_stage === 'stems' ? 2 : wd.current_stage === 'mixing' ? 1 : 0}
+                  <div class="stage-pills">
+                    <div class="stage-pill {_curIdx > 0 ? 'seg-done' : ''} {wd.current_stage === 'production' ? 'seg-active' : ''}" title="PRODUCTION"></div>
+                    <div class="stage-pill {_curIdx > 1 ? 'seg-done' : ''} {wd.current_stage === 'mixing' ? 'seg-active' : ''}" title="MIXING"></div>
+                    <div class="stage-pill {wd.stems_received && wd.current_stage !== 'stems' ? 'seg-done' : ''} {wd.current_stage === 'stems' ? 'seg-active' : ''}" title="STEMS"></div>
+                  </div>
+                {/if}
               </div>
               <!-- RIGHT: fixed width, player always in same position -->
               <div class="song-head-right" onclick={e => e.stopPropagation()}>

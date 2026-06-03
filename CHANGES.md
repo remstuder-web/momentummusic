@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/DailyTab.svelte — DONE
+TASK: Remove greyed out unavailable items from Trends & News (pass 2)
+WHAT: Root cause — tiktok-trends agent stores "▶ YOUTUBE TOP 5\nUnavailable\n\n---\n\n## Viral Sounds..." as a single briefing message. parseAgentOutput was rendering the full block. Fixed: (1) strip "▶ YOUTUBE TOP N\n<content>" regex in preprocessor, (2) strip standalone "---"/"--" separators in preprocessor, (3) tighten per-line skip to catch /^[-—]{1,3}$/ pattern.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-03] src/lib/DailyTab.svelte — DONE
 TASK: Remove greyed out unavailable items from Trends & News
 WHAT: (1) Chart grid: skip columns with no data (empty youtube/spotify/tiktok arrays no longer render a header). (2) scoutMsg regex: changed to strip ## CHARTS to end-of-string, fixing case where CHARTS was the last section and the full text leaked into agent-output. (3) parseAgentOutput: skip bare "—", "-", "Unavailable", "N/A" lines.
 RESULT: works

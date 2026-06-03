@@ -824,6 +824,10 @@ ${mozartContext}`
     if (!text) return ''
     const tracks = getTracksFromMessage(text)
     text = stripTracksFromMessage(text)
+    // Strip "▶ YOUTUBE TOP N\n<anything>" blocks (YouTube data unavailable)
+    text = text.replace(/▶\s*YOUTUBE TOP \d+[^\n]*\n[^\n]*/gi, '')
+    // Strip standalone --- / -- separators
+    text = text.replace(/^-{2,}\s*$/gm, '')
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const lines = text.split('\n')
     let html = ''
@@ -846,7 +850,7 @@ ${mozartContext}`
     for (const rawLine of lines) {
       const t = rawLine.trim()
       if (!t) continue
-      if (t === '—' || t === '-' || t.toLowerCase() === 'unavailable' || t.toLowerCase() === 'n/a') continue
+      if (/^[-—]{1,3}$/.test(t) || t.toLowerCase() === 'unavailable' || t.toLowerCase() === 'n/a') continue
 
       if (t.startsWith('## ')) {
         closeNextMove()

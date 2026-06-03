@@ -1478,12 +1478,6 @@ ${mozartContext}`
           </div>
         {/each}
         </div>
-        <div class="add-row">
-          <input class="add-inp" bind:value={newCustom} placeholder="New item..." onkeydown={e=>e.key==='Enter'&&addCustom()} />
-          <input class="add-inp url" bind:value={newCustomUrl} placeholder="URL (optional)..." />
-          <button class="add-btn" onclick={addCustom}>+</button>
-        </div>
-
         {#if (state.checkItems||[]).length}
           <div class="routine-divider">CHECK</div>
           <div class="routine-btns-wrap">
@@ -2324,7 +2318,7 @@ ${mozartContext}`
   .routine-btns-wrap { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
   .routine-box { display: flex; align-items: center; padding: 3px 6px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; gap: 4px; width: 150px; overflow: hidden; }
   .routine-box:hover { border-color: #444; }
-  .routine-box-label { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #cec9c1; background: none; border: none; text-align: left; padding: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .routine-box-label { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #888; background: none; border: none; text-align: left; padding: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .routine-box-label:hover { color: #f5f1ea; }
   .helper-search-inp { background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 3px 8px; border-radius: 3px; width: 150px; flex-shrink: 0; outline: none; }
   .helper-search-inp::placeholder { color: #666; }

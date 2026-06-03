@@ -3053,3 +3053,9 @@ TASK: Daily: equal row spacing in helpers/routine list, Applio+Kits pushed far r
 WHAT: (1) .check-item padding changed from 5px 8px to 8px 8px — uniform vertical spacing across all HELPERS/ROUTINE rows. (2) Wrapped APPLIO+KITS buttons in .acapella-launch-group div (margin-left:auto, flex, gap:5px) — pushes both buttons to far right of mode row while keeping ACAPELLA/VOCAL CLEAN/INSTRUMENTAL left-aligned.
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-04 src/lib/DailyTab.svelte — DONE
+TASK: Daily: reduce routine row spacing to compact
+WHAT: .check-list gap reduced 6px→2px; .check-item padding reduced 8px 8px→4px 8px — rows now tightly spaced like a simple list
+RESULT: builds clean
+BLOCKERS: none

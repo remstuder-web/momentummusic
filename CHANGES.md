@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
+TASK: Remove lyrics/vocal checkboxes, gold YOUR MIX title
+WHAT: (1) Removed prod-substeps block (LYRICS / VOCAL REC / VOCAL PREP checkboxes) from production stage. (2) Removed LYRICS textarea from NOTES panel; renamed label to "NOTES / BRIEF", open condition simplified to project_info only. (3) YOUR MIX label now gold: .dual-drop-col:first-child .dual-drop-label gets rgba(201,168,76,.75).
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-03] src/lib/DemoTab.svelte — DONE
 TASK: Remove reference links, uniform input sizes for key/tempo/feat
 WHAT: (1) Removed REFERENCE LINKS field (label, chips, URL input, add button) from DemoTab expanded card. (2) KEY select, TEMPO number input, FEAT. text input all now use new .inp-compact class: 110px wide, 12px DM Sans, 2px/8px padding, #252525 border — matching the tag-inp-compact style.

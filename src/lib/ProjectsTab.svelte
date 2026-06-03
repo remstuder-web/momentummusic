@@ -3224,36 +3224,16 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 <div class="field" style="margin-top:-8px">
                   <div class="notes-toggle-row"
                     onclick={() => { notesOpen[song.id] = !(notesOpen[song.id] ?? !!(wd.project_info?.trim() || wd.lyrics_text?.trim())); notesOpen = { ...notesOpen } }}>
-                    <span class="notes-label">NOTES / BRIEF / LYRICS</span>
-                    <span class="notes-toggle-arrow">{(notesOpen[song.id] ?? !!(wd.project_info?.trim() || wd.lyrics_text?.trim())) ? '▾' : '▸'}</span>
+                    <span class="notes-label">NOTES / BRIEF</span>
+                    <span class="notes-toggle-arrow">{(notesOpen[song.id] ?? !!wd.project_info?.trim()) ? '▾' : '▸'}</span>
                   </div>
-                  {#if (notesOpen[song.id] ?? !!(wd.project_info?.trim() || wd.lyrics_text?.trim()))}
+                  {#if (notesOpen[song.id] ?? !!wd.project_info?.trim())}
                     <div class="notes-sub-section">
-                      <div class="notes-sub-label">NOTES / BRIEF</div>
                       <textarea class="ta ta-auto" placeholder="Song-specific vision, references..." value={wd.project_info} use:autoResize oninput={e => saveProjectInfo(song, e.target.value)}></textarea>
-                    </div>
-                    <div class="notes-sub-section">
-                      <div class="notes-sub-label">LYRICS</div>
-                      <textarea class="ta ta-auto" placeholder="Paste or write lyrics here..." value={wd.lyrics_text} use:autoResize oninput={e => saveWorkData(song, wd => { wd.lyrics_text = e.target.value })}></textarea>
                     </div>
                   {/if}
                 </div>
-                <!-- Production sub-steps: Lyrics, Vocal Rec, Vocal Prep -->
                 {#if wd.current_stage === 'production'}
-                  <div class="prod-substeps">
-                    <div class="prod-sub-row">
-                      <button class="prod-ckb {wd.prod_lyrics?'done':''}" onclick={() => saveWorkData(song, wd => { wd.prod_lyrics = !wd.prod_lyrics })}>{wd.prod_lyrics?'✓':''}</button>
-                      <span class="prod-sub-label {wd.prod_lyrics?'done':''}">LYRICS</span>
-                    </div>
-                    <div class="prod-sub-row">
-                      <button class="prod-ckb {wd.prod_vocal_rec?'done':''}" onclick={() => saveWorkData(song, wd => { wd.prod_vocal_rec = !wd.prod_vocal_rec })}>{wd.prod_vocal_rec?'✓':''}</button>
-                      <span class="prod-sub-label {wd.prod_vocal_rec?'done':''}">VOCAL REC</span>
-                    </div>
-                    <div class="prod-sub-row">
-                      <button class="prod-ckb {wd.prod_vocal_prep?'done':''}" onclick={() => saveWorkData(song, wd => { wd.prod_vocal_prep = !wd.prod_vocal_prep })}>{wd.prod_vocal_prep?'✓':''}</button>
-                      <span class="prod-sub-label {wd.prod_vocal_prep?'done':''}">VOCAL PREP</span>
-                    </div>
-                  </div>
                   <!-- Production audio drop + Instrumental drop — side by side -->
                   <div class="drop-send-unit">
                   {#if song._instr_flash}<div class="sent-flash" style="font-size:10px;padding:4px 8px">✉ SENT!</div>{/if}
@@ -4540,6 +4520,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .dual-drop-col { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
   .dual-send-row-inner { display: flex; flex-direction: row; align-items: center; gap: 5px; min-width: 0; }
   .dual-drop-label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: #9e9690; }
+  .dual-drop-col:first-child .dual-drop-label { color: rgba(201,168,76,.75); }
   .stage-audio-drop.dual-drop { min-height: 72px; flex-direction: column; align-items: flex-start; justify-content: center; padding: 10px 14px; box-sizing: border-box; }
   .dual-send-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
   .dual-send-col { display: flex; flex-direction: column; gap: 5px; }

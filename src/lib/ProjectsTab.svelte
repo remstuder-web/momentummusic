@@ -1185,7 +1185,14 @@
     } catch(_) {}
     // Add to reference_links immediately with 'analyzing' status
     const refId = 'r' + Date.now()
-    const newRef = { id: refId, spotify_id, artist: resolvedArtist, title: resolvedTitle, added_at: new Date().toISOString() }
+    const spotifyUrl = spotify_id ? 'https://open.spotify.com/track/' + spotify_id : ''
+    const newRef = {
+      id: refId, spotify_id,
+      artist: resolvedArtist, title: resolvedTitle,
+      url: spotifyUrl,
+      name: resolvedArtist + ' — ' + resolvedTitle,
+      added_at: new Date().toISOString()
+    }
     const refs = [...(song.reference_links || []), newRef]
     await updateSongField(song, 'reference_links', refs)
     songRefStatus[refId] = 'analyzing'

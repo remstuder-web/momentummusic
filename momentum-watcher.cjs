@@ -10405,9 +10405,30 @@ Respond ONLY in JSON:
           if (insErr) throw new Error('insert failed: ' + insErr.message)
           track = newTrack
         }
-        // Run immediately, bypassing rate limit and daily cap
+        // Tier 1: yt-dlp + Essentia → reference_tracks (BPM, key, energy, preview_url)
         await processLibraryTrackInBackground(track, true)
-        // Reload fresh data after analysis
+
+        // Tier 2: Essentia EQ on preview → vocal_eq_curves (for ANALYZER curves)
+        try {
+          const { data: refreshed } = await supabase.from('reference_tracks').select('*').eq('id', track.id).maybeSingle()
+          if (refreshed?.preview_url) await runStemAnalysis(refreshed)
+        } catch(e) { console.warn('analyze-ref-now: stem EQ skipped —', e.message) }
+
+        // Brain: add as reference_current entry
+        try {
+          const { data: refreshed } = await supabase.from('reference_tracks').select('*').eq('id', track.id).maybeSingle()
+          const t = refreshed || track
+          const bpmStr  = t.tempo ? Math.round(t.tempo) + 'bpm' : ''
+          const keyStr  = t.key   ? t.key + (t.camelot ? ' (' + t.camelot + ')' : '') : ''
+          await supabase.from('brain_knowledge').insert({
+            category: 'reference_current',
+            title: (t.artist || '') + ' — ' + (t.title || ''),
+            content: ['Reference track added.', bpmStr, keyStr, t.energy ? 'energy:' + t.energy.toFixed(2) : ''].filter(Boolean).join(' '),
+            source_type: 'reference_event', entry_type_v2: 'reference', confidence: 'high', active: true
+          })
+        } catch(e) { console.warn('analyze-ref-now: brain insert skipped —', e.message) }
+
+        // Reload fresh data after full analysis
         const { data: updated } = await supabase.from('reference_tracks').select('*').eq('id', track.id).maybeSingle()
         res.end(JSON.stringify({ ok: true, track_id: track.id, track: updated || track }))
       } catch(e) {

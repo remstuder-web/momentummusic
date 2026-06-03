@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/DailyTab.svelte — DONE
+TASK: Add tools to routine view after title generator
+WHAT: Duplicated NORMALIZER, ACAPELLA EXTRACTOR, MIDI FROM REFERENCE, ABLETON CONTROL into ROUTINE tab after TITLE GENERATOR. All four tools now appear in both ROUTINE and HELPERS tabs simultaneously.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-03] src/lib/DailyTab.svelte — DONE
 TASK: Restore user helper links in HELPERS tab
 WHAT: Fetched original helpers from Supabase (SAMPLETTE, SAMPLA, SUNO, AUDIMEE, LALALAI, FREQ, GENIUS, GENREFINDER, GITHUB, SUPABASE, VERCEL) — they were never lost, just the UI was stripped. Restored the full user helpers checklist (state.helpers with tick/reorder/delete/add) above the built-in tools in the HELPERS tab.
 RESULT: works

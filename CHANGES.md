@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/DailyTab.svelte — DONE
+TASK: Tools only in routine tab, not in helpers
+WHAT: Removed NORMALIZER, ACAPELLA EXTRACTOR, MIDI FROM REFERENCE, ABLETON CONTROL from HELPERS tab. HELPERS tab now contains only the user-saved website links (SAMPLETTE, SAMPLA, SUNO, etc). Tools remain in ROUTINE tab only.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-03] src/lib/DailyTab.svelte — DONE
 TASK: Add tools to routine view after title generator
 WHAT: Duplicated NORMALIZER, ACAPELLA EXTRACTOR, MIDI FROM REFERENCE, ABLETON CONTROL into ROUTINE tab after TITLE GENERATOR. All four tools now appear in both ROUTINE and HELPERS tabs simultaneously.
 RESULT: works

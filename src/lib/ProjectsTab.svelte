@@ -3224,12 +3224,17 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 <div class="field" style="margin-top:-8px">
                   <div class="notes-toggle-row"
                     onclick={() => { notesOpen[song.id] = !(notesOpen[song.id] ?? !!(wd.project_info?.trim() || wd.lyrics_text?.trim())); notesOpen = { ...notesOpen } }}>
-                    <span class="notes-label">NOTES / BRIEF</span>
-                    <span class="notes-toggle-arrow">{(notesOpen[song.id] ?? !!wd.project_info?.trim()) ? '▾' : '▸'}</span>
+                    <span class="notes-label">NOTES / BRIEF / LYRICS</span>
+                    <span class="notes-toggle-arrow">{(notesOpen[song.id] ?? !!(wd.project_info?.trim() || wd.lyrics_text?.trim())) ? '▾' : '▸'}</span>
                   </div>
-                  {#if (notesOpen[song.id] ?? !!wd.project_info?.trim())}
+                  {#if (notesOpen[song.id] ?? !!(wd.project_info?.trim() || wd.lyrics_text?.trim()))}
                     <div class="notes-sub-section">
+                      <div class="notes-sub-label">NOTES / BRIEF</div>
                       <textarea class="ta ta-auto" placeholder="Song-specific vision, references..." value={wd.project_info} use:autoResize oninput={e => saveProjectInfo(song, e.target.value)}></textarea>
+                    </div>
+                    <div class="notes-sub-section">
+                      <div class="notes-sub-label">LYRICS</div>
+                      <textarea class="ta ta-auto" placeholder="Paste or write lyrics here..." value={wd.lyrics_text} use:autoResize oninput={e => saveWorkData(song, wd => { wd.lyrics_text = e.target.value })}></textarea>
                     </div>
                   {/if}
                 </div>
@@ -3241,7 +3246,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   <div class="dual-drop-row">
                     <!-- Left: production audio -->
                     <div class="dual-drop-col">
-                      <div class="dual-drop-label">YOUR MIX</div>
                       <div class="stage-audio-drop dual-drop {dragOverSongId===song.id+'-prod'?'drag-over':''}"
                         ondragover={e => { e.preventDefault(); dragOverSongId = song.id+'-prod' }}
                         ondragleave={() => { dragOverSongId = null }}
@@ -4115,9 +4119,8 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   </div>
                 {/if}
 
-                <!-- Song footer: Move to Demos | Send to Artist (hidden on prod/mix) | Delete -->
+                <!-- Song footer: Send to Artist (hidden on prod/mix) | Delete -->
                 <div class="song-footer-row">
-                  <button class="sfooter-btn move" onclick={() => moveSongToDemo(song)}>← Move to Demos</button>
                   {#if wd.current_stage !== 'production' && wd.current_stage !== 'mixing' && wd.current_stage !== 'stems'}
                     <button class="sfooter-btn send {wd.versions?.length && wd.versions.find(v=>v.id===wd.active_version_id)?.sent_to_artist ? 'sent' : ''}"
                       onclick={() => { const v = wd.versions?.find(v=>v.id===wd.active_version_id) || wd.versions?.[wd.versions.length-1]; if(v) sendToArtist(song,v.id) }}>
@@ -4520,7 +4523,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .dual-drop-col { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
   .dual-send-row-inner { display: flex; flex-direction: row; align-items: center; gap: 5px; min-width: 0; }
   .dual-drop-label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: #9e9690; }
-  .dual-drop-col:first-child .dual-drop-label { color: rgba(201,168,76,.75); }
   .stage-audio-drop.dual-drop { min-height: 72px; flex-direction: column; align-items: flex-start; justify-content: center; padding: 10px 14px; box-sizing: border-box; }
   .dual-send-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
   .dual-send-col { display: flex; flex-direction: column; gap: 5px; }

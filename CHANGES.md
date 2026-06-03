@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
+TASK: Remove YOUR MIX label, restore lyrics in dropdown, remove Move to Demos button
+WHAT: (1) Removed "YOUR MIX" dual-drop-label div (and stale gold CSS override). (2) Restored NOTES/BRIEF/LYRICS collapsible: label back to "NOTES / BRIEF / LYRICS", open condition includes lyrics_text, two sub-sections (NOTES/BRIEF + LYRICS) each with sub-label and textarea. (3) Removed "← Move to Demos" button from song footer row.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
 TASK: Remove lyrics/vocal checkboxes, gold YOUR MIX title
 WHAT: (1) Removed prod-substeps block (LYRICS / VOCAL REC / VOCAL PREP checkboxes) from production stage. (2) Removed LYRICS textarea from NOTES panel; renamed label to "NOTES / BRIEF", open condition simplified to project_info only. (3) YOUR MIX label now gold: .dual-drop-col:first-child .dual-drop-label gets rgba(201,168,76,.75).
 RESULT: works

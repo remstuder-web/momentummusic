@@ -1425,9 +1425,11 @@ ${mozartContext}`
     <div class="section-block">
 
       <div class="sections">
-        <button class="sec-tab on">ROUTINE</button>
+        <button class="sec-tab {activeSection==='routine'?'on':''}" onclick={() => activeSection='routine'}>ROUTINE</button>
+        <button class="sec-tab {activeSection==='helpers'?'on':''}" onclick={() => activeSection='helpers'}>HELPERS</button>
       </div>
 
+      {#if activeSection === 'routine'}
       <div class="check-list">
         {#each state.customs as item (item.id)}
           {@const isYoutube  = /youtube\.com|youtu\.be/.test(item.url||'')}
@@ -1555,6 +1557,12 @@ ${mozartContext}`
             </div>
           {/if}
         </div>
+
+      </div><!-- /helpers-built-in routine -->
+      {/if}
+
+      {#if activeSection === 'helpers'}
+      <div class="helpers-built-in">
 
         <!-- NORMALIZER -->
         <div class="helper-block">
@@ -1769,7 +1777,8 @@ ${mozartContext}`
         {/if}
         </div><!-- /helper-block ableton -->
 
-        </div><!-- /helpers-built-in -->
+        </div><!-- /helpers-built-in helpers -->
+      {/if}
 
     </div>
 

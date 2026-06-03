@@ -2945,3 +2945,9 @@ TASK: Analyzer redesign: stems analysis, Mozart summary, reference comparison, P
 WHAT: (1) analyze_vocal_eq.py: added analyze_stem_metrics() — per-stem LUFS/energy/brightness/stereo_width/band_balance from Essentia, called for each stem before cleanup, included as stem_metrics in JSON output; (2) /analyze-vocal-eq watcher: saves stem_metrics to songs.work_data.stem_analysis, returns stem_metrics in response; (3) New /generate-analyzer-summary endpoint: loads stem_analysis + reference track data, calls Claude Haiku, returns {strategic, creative, next_step}; (4) ProjectsTab: removed VocalEqChart import; replaced 575-line analyzer tab HTML with new layout: Analyze button, STEMS ANALYSIS tabs (DRUMS/BASS/MUSIC/VOCALS) + metrics grid (LUFS/ENERGY/BRIGHT/WIDTH) + TONAL BALANCE bars + STEREO WIDTH slider, AI insights (STRATEGIC/CREATIVE/NEXT STEP), REFERENCE COMPARISON rows, PRO-Q 4 button; added stemAnalysis/activeStemTab state, runAnalyzerSummary(), modified analyzeMyVocal()/onAnalyzerTabOpen(); 20 new CSS rules
 RESULT: builds clean — watcher running
 BLOCKERS: none; Pro-Q presets button only visible when selectedRefId is set (existing behavior)
+
+## 2026-06-03 momentum-watcher.cjs + analyze_vocal_eq.py — DONE
+TASK: Switch Demucs model from htdemucs_ft to htdemucs for faster analysis
+WHAT: Replaced all 4 occurrences of htdemucs_ft with htdemucs — analyze_vocal_eq.py (--name flag + docstring), momentum-watcher.cjs /extract-acapella endpoint (-n flag + output path)
+RESULT: works — watcher running
+BLOCKERS: none

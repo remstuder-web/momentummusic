@@ -8511,19 +8511,20 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       if (!artist && !title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'artist or title required' })); return }
       await ensureSpotifyToken()
       const q = encodeURIComponent(`${artist} ${title}`.trim())
-      const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`)
+      const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=3`)
       if (!r.ok) throw new Error(`Spotify ${r.status}`)
       const d = await r.json()
-      const track = d.tracks?.items?.[0]
-      if (!track) { res.writeHead(200); res.end(JSON.stringify({ ok: false, error: 'Track not found on Spotify' })); return }
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({
-        ok: true,
-        spotify_id: track.id,
-        title: track.name,
-        artist: (track.artists || []).map(a => a.name).join(', '),
-        preview_url: track.preview_url || null
+      const items = d.tracks?.items || []
+      if (!items.length) { res.writeHead(200); res.end(JSON.stringify({ ok: false, error: 'Track not found on Spotify' })); return }
+      const results = items.map(t => ({
+        spotify_id: t.id,
+        title: t.name,
+        artist: (t.artists || []).map(a => a.name).join(', '),
+        year: t.album?.release_date?.slice(0, 4) || '',
+        preview_url: t.preview_url || null
       }))
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, results }))
     } catch(e) {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: false, error: e.message }))

@@ -1136,7 +1136,9 @@
   let songRefArtist = $state({})   // artist input per song.id
   let songRefTitle  = $state({})   // title input per song.id
   let songRefStatus = $state({})       // refId → 'analyzing'|'ready'|'error'
-  let refDownloadStatus = $state({})   // refId → 'idle'|'loading'|'done'
+  let refDownloadStatus = $state({})    // refId → 'idle'|'loading'|'done'
+  let refSearchResults  = $state({})    // song.id → [{spotify_id,title,artist,year}] picker options
+  let refSearching      = $state({})
   let songAudioBlobUrls = $state({}) // separate from version audio
 
   async function updateSongField(song, field, value) {
@@ -1174,44 +1176,50 @@
     const artist = (songRefArtist[song.id] || '').trim()
     const title  = (songRefTitle[song.id]  || '').trim()
     if (!artist && !title) return
-    // Search Spotify for the track
-    let spotify_id = '', resolvedTitle = title, resolvedArtist = artist
+    refSearching[song.id] = true
+    refSearchResults[song.id] = null
     try {
       const r = await fetch('http://localhost:4242/search-spotify-track', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ artist, title })
       })
       const d = await r.json()
-      if (d.ok) { spotify_id = d.spotify_id; resolvedTitle = d.title; resolvedArtist = d.artist }
-    } catch(_) {}
-    // Add to reference_links immediately with 'analyzing' status
+      if (!d.ok || !d.results?.length) { refSearching[song.id] = false; return }
+      if (d.results.length === 1) {
+        // Single result → add directly
+        refSearching[song.id] = false
+        await confirmAddRef(song, d.results[0])
+      } else {
+        // Multiple → show picker
+        refSearchResults[song.id] = d.results
+        refSearching[song.id] = false
+      }
+    } catch(_) { refSearching[song.id] = false }
+  }
+
+  async function confirmAddRef(song, track) {
+    refSearchResults[song.id] = null
+    songRefArtist[song.id] = ''
+    songRefTitle[song.id]  = ''
     const refId = 'r' + Date.now()
-    const spotifyUrl = spotify_id ? 'https://open.spotify.com/track/' + spotify_id : ''
+    const spotifyUrl = 'https://open.spotify.com/track/' + track.spotify_id
     const newRef = {
-      id: refId, spotify_id,
-      artist: resolvedArtist, title: resolvedTitle,
+      id: refId, spotify_id: track.spotify_id,
+      artist: track.artist, title: track.title,
       url: spotifyUrl,
-      name: resolvedArtist + ' — ' + resolvedTitle,
+      name: track.artist + ' — ' + track.title,
       added_at: new Date().toISOString()
     }
     const refs = [...(song.reference_links || []), newRef]
     await updateSongField(song, 'reference_links', refs)
     songRefStatus[refId] = 'analyzing'
-    songRefArtist[song.id] = ''
-    songRefTitle[song.id]  = ''
-    // Background: analyze via watcher (downloads, Essentia, stores curves)
-    if (spotify_id) {
-      fetch('http://localhost:4242/analyze-ref-now', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spotify_id, title: resolvedTitle, artist: resolvedArtist })
-      }).then(r => r.json()).then(d => {
-        songRefStatus[refId] = d.ok ? 'ready' : 'error'
-        // Refresh ref options so it appears in ANALYZER picker
-        if (d.ok) loadVocalEq(song.id).catch(() => {})
-      }).catch(() => { songRefStatus[refId] = 'error' })
-    } else {
-      songRefStatus[refId] = 'no-spotify'
-    }
+    fetch('http://localhost:4242/analyze-ref-now', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spotify_id: track.spotify_id, title: track.title, artist: track.artist })
+    }).then(r => r.json()).then(d => {
+      songRefStatus[refId] = d.ok ? 'ready' : 'error'
+      if (d.ok) loadVocalEq(song.id).catch(() => {})
+    }).catch(() => { songRefStatus[refId] = 'error' })
   }
 
   async function downloadRef(ref) {
@@ -3221,8 +3229,23 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                         onkeydown={e => e.key === 'Enter' && addRefBySearch(song)} />
                       <input class="inp-sm ref-search-inp" placeholder="Song Title" bind:value={songRefTitle[song.id]}
                         onkeydown={e => e.key === 'Enter' && addRefBySearch(song)} />
-                      <button class="btn-ghost-sm" onclick={() => addRefBySearch(song)}>+ Add Reference</button>
+                      <button class="btn-ghost-sm {refSearching[song.id] ? 'dim' : ''}" onclick={() => addRefBySearch(song)} disabled={refSearching[song.id]}>
+                        {refSearching[song.id] ? '...' : '+ Add Reference'}
+                      </button>
                     </div>
+                    {#if refSearchResults[song.id]?.length}
+                      <div class="ref-picker-results">
+                        <div class="ref-picker-label">Did you mean?</div>
+                        {#each refSearchResults[song.id] as result, i}
+                          <div class="ref-picker-row">
+                            <span class="ref-picker-num">{i + 1}.</span>
+                            <span class="ref-picker-name">{result.artist} — {result.title}{result.year ? ' (' + result.year + ')' : ''}</span>
+                            <button class="ref-picker-select" onclick={() => confirmAddRef(song, result)}>Select</button>
+                          </div>
+                        {/each}
+                        <button class="ref-picker-cancel" onclick={() => refSearchResults[song.id] = null}>Cancel</button>
+                      </div>
+                    {/if}
                     <div class="ref-list">
                       {#each (song.reference_links||[]) as ref}
                         {@const status = songRefStatus[ref.id] || (ref.spotify_id ? 'ready' : 'no-spotify')}
@@ -4409,6 +4432,15 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .ref-dl-btn.loading { color: #9e9690; cursor: default; }
   .ref-dl-btn.done { border-color: rgba(76,175,130,.4); color: #4caf82; }
   .ref-list-empty { font-family: 'Space Mono', monospace; font-size: 10px; color: #333; padding: 6px 0; }
+  .ref-picker-results { background: #111; border: 1px solid #252525; border-radius: 3px; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; }
+  .ref-picker-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; color: rgba(201,168,76,.6); margin-bottom: 2px; }
+  .ref-picker-row { display: flex; align-items: center; gap: 8px; }
+  .ref-picker-num { font-family: 'Space Mono', monospace; font-size: 10px; color: #444; flex-shrink: 0; }
+  .ref-picker-name { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref-picker-select { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 10px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.3); color: #c9a84c; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .ref-picker-select:hover { background: rgba(201,168,76,.14); }
+  .ref-picker-cancel { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; background: transparent; border: none; cursor: pointer; padding: 2px 0; text-align: left; margin-top: 2px; }
+  .ref-picker-cancel:hover { color: #9e9690; }
   .refs-wrap { display: flex; flex-direction: column; gap: 6px; overflow: visible; }
   .ref-row { display: flex; align-items: center; gap: 8px; }
   .ref-link { font-family: 'Space Mono', monospace; font-size: 12px; color: #4a9fd4; text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

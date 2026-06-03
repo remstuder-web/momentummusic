@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] src/lib/ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: References — top 3 Spotify results picker for typo handling
+WHAT: /search-spotify-track now returns limit=3 results with {spotify_id,title,artist,year}. UI: if 1 result → add directly (unchanged). If 2-3 results → show "Did you mean?" picker with numbered rows and [Select] buttons. Selecting confirms and triggers analyze-ref-now. [Cancel] dismisses. Button shows "..." while searching. Added refSearchResults and refSearching state, split addRefBySearch into search phase + confirmAddRef.
+RESULT: works — watcher healthy
+BLOCKERS: none
+
 ## [2026-06-03] src/lib/ProjectsTab.svelte — DONE
 TASK: References tab — download button per reference chip
 WHAT: Added ↓ download button on each reference row between ▶ play and × delete. Calls POST /download-reference with {artist, title}, reads SSE stream until done event, shows "..." while loading and "✓" (green) for 2s then resets to "↓". refDownloadStatus state tracks per ref.id.

@@ -29,6 +29,9 @@
   let normStatus = $state('')   // '' | 'working' | 'ok' | 'err'
   let normMsg = $state('')
   let titleGenInput = $state('')
+  let quickGeminiQ = $state('')
+  let quickYoutubeQ = $state('')
+  let quickSpotifyQ = $state('')
   let titleGenLoading = $state(false)
   let titleGenResults = $state([])
 
@@ -1456,36 +1459,24 @@ ${mozartContext}`
       </div>
 
       {#if activeSection === 'routine'}
+      <div class="quick-search-bar">
+        <input class="helper-search-inp" placeholder="Ask Gemini..." bind:value={quickGeminiQ}
+          onkeydown={e => e.key==='Enter' && quickGeminiQ.trim() && window.open('https://gemini.google.com/app?q='+encodeURIComponent(quickGeminiQ.trim()),'_blank')} />
+        <button class="helper-search-go" onclick={() => quickGeminiQ.trim() && window.open('https://gemini.google.com/app?q='+encodeURIComponent(quickGeminiQ.trim()),'_blank')}>→</button>
+        <input class="helper-search-inp" placeholder="Search YouTube..." bind:value={quickYoutubeQ}
+          onkeydown={e => e.key==='Enter' && quickYoutubeQ.trim() && window.open('https://youtube.com/results?search_query='+encodeURIComponent(quickYoutubeQ.trim()),'_blank')} />
+        <button class="helper-search-go" onclick={() => quickYoutubeQ.trim() && window.open('https://youtube.com/results?search_query='+encodeURIComponent(quickYoutubeQ.trim()),'_blank')}>→</button>
+        <input class="helper-search-inp" placeholder="Search Spotify..." bind:value={quickSpotifyQ}
+          onkeydown={e => e.key==='Enter' && quickSpotifyQ.trim() && window.open('https://open.spotify.com/search/'+encodeURIComponent(quickSpotifyQ.trim()),'_blank')} />
+        <button class="helper-search-go" onclick={() => quickSpotifyQ.trim() && window.open('https://open.spotify.com/search/'+encodeURIComponent(quickSpotifyQ.trim()),'_blank')}>→</button>
+      </div>
       <div class="check-list">
-        {#each state.customs as item (item.id)}
-          {@const isYoutube  = /youtube\.com|youtu\.be/.test(item.url||'')}
-          {@const isSpotify  = /spotify\.com/.test(item.url||'')}
-          {@const isGemini   = /gemini\.google\.com/.test(item.url||'')}
-          {@const isDeepseek = /deepseek\.com/.test(item.url||'')}
-          {@const hasSearch  = isYoutube || isSpotify || isGemini || isDeepseek}
-          {@const searchPlaceholder = isYoutube ? 'Search YouTube...' : isSpotify ? 'Search Spotify...' : isGemini ? 'Ask Gemini...' : 'Ask DeepSeek...'}
-          {@const buildSearchUrl = (q) => isYoutube
-            ? 'https://youtube.com/results?search_query=' + encodeURIComponent(q)
-            : isSpotify
-            ? 'https://open.spotify.com/search/' + encodeURIComponent(q)
-            : isGemini
-            ? 'https://gemini.google.com/app?q=' + encodeURIComponent(q)
-            : 'https://chat.deepseek.com/?q=' + encodeURIComponent(q)}
+        {#each state.customs.filter(item => !['google gemini','youtube','spotify'].includes((item.label||'').toLowerCase().trim())) as item (item.id)}
           <div class="check-item">
             {#if item.url}
               <a href={item.url} target="_blank" class="item-label">{item.label}</a>
             {:else}
               <span class="item-label">{item.label}</span>
-            {/if}
-            {#if hasSearch}
-              <input
-                class="helper-search-inp"
-                placeholder={searchPlaceholder}
-                value={helperSearchInputs[item.id] || ''}
-                oninput={e => helperSearchInputs = {...helperSearchInputs, [item.id]: e.target.value}}
-                onkeydown={e => { if (e.key === 'Enter') { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? buildSearchUrl(q) : item.url, '_blank') } }}
-              />
-              <button class="helper-search-go" onclick={() => { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? buildSearchUrl(q) : item.url, '_blank') }}>→</button>
             {/if}
             <div class="reorder-col"><button class="reorder-micro" onclick={() => moveCustom(item.id,-1)}>▲</button><button class="reorder-micro" onclick={() => moveCustom(item.id,1)}>▼</button></div>
             <button class="del-btn" onclick={() => delCustom(item.id)}>×</button>
@@ -1502,34 +1493,11 @@ ${mozartContext}`
           <div class="routine-divider">CHECK</div>
           <div class="check-list">
           {#each (state.checkItems||[]) as item (item.id)}
-            {@const isYoutube  = /youtube\.com|youtu\.be/.test(item.url||'')}
-            {@const isSpotify  = /spotify\.com/.test(item.url||'')}
-            {@const isGemini   = /gemini\.google\.com/.test(item.url||'')}
-            {@const isDeepseek = /deepseek\.com/.test(item.url||'')}
-            {@const hasSearch  = isYoutube || isSpotify || isGemini || isDeepseek}
-            {@const searchPlaceholder = isYoutube ? 'Search YouTube...' : isSpotify ? 'Search Spotify...' : isGemini ? 'Ask Gemini...' : 'Ask DeepSeek...'}
-            {@const buildSearchUrl = (q) => isYoutube
-              ? 'https://youtube.com/results?search_query=' + encodeURIComponent(q)
-              : isSpotify
-              ? 'https://open.spotify.com/search/' + encodeURIComponent(q)
-              : isGemini
-              ? 'https://gemini.google.com/app?q=' + encodeURIComponent(q)
-              : 'https://chat.deepseek.com/?q=' + encodeURIComponent(q)}
             <div class="check-item">
               {#if item.url}
                 <a href={item.url} target="_blank" class="item-label">{item.label}</a>
               {:else}
                 <span class="item-label">{item.label}</span>
-              {/if}
-              {#if hasSearch}
-                <input
-                  class="helper-search-inp"
-                  placeholder={searchPlaceholder}
-                  value={helperSearchInputs[item.id] || ''}
-                  oninput={e => helperSearchInputs = {...helperSearchInputs, [item.id]: e.target.value}}
-                  onkeydown={e => { if (e.key === 'Enter') { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? buildSearchUrl(q) : item.url, '_blank') } }}
-                />
-                <button class="helper-search-go" onclick={() => { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? buildSearchUrl(q) : item.url, '_blank') }}>→</button>
               {/if}
               <div class="reorder-col">
                 <button class="reorder-micro" onclick={() => moveCheck(item.id,-1)}>▲</button>
@@ -2380,6 +2348,7 @@ ${mozartContext}`
   .sec-tab { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .1em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
   .sec-tab:hover { color: #9e9690; }
   .sec-tab.on { color: #c9a84c; border-bottom-color: #c9a84c; }
+  .quick-search-bar { display: flex; gap: 4px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
   .check-list { display: flex; flex-direction: column; gap: 2px; }
   .routine-divider { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.4); padding: 10px 0 4px; border-top: 1px solid #1a1a1a; margin-top: 16px; }
   .check-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: transparent; min-height: 0; }

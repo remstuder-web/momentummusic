@@ -2963,3 +2963,9 @@ TASK: Analyzer: persist analysis data per version, only re-analyze on explicit r
 WHAT: (1) onAnalyzerTabOpen no longer auto-triggers analyzeMyVocal — loads existing data only; (2) version tracking: analyzeMyVocal now reads active version name, passes it as version_label to /analyze-vocal-eq; watcher saves stem_analysis_version to work_data; on tab open, stored version is compared to current active version → shows amber banner "Analysis from vXX — current vYY" with Re-analyze button if mismatch; (3) new analyzerVersionBanner $state; (4) header row split: existing data → az-reanalyze-btn (gold outline, confirm dialog "Takes 5–10 min"); no data → plain analyze-now-btn; re-analyze clears version banner after success; new CSS for az-reanalyze-btn and az-version-banner
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-03 src/lib/ProjectsTab.svelte — DONE
+TASK: Analyzer: always load curves from Supabase on tab open, persists across reloads
+WHAT: Root bug fixed — onAnalyzerTabOpen was reading workData(song).stem_analysis which is undefined because workData() only returns specific normalized fields and strips stem_analysis. Fixed to read song.work_data?.stem_analysis directly (raw Supabase data, survives reload). Additionally: always queries vocal_eq_curves from Supabase on tab open to detect existing analysis; calls loadVocalEq() whenever curves exist so EQ data loads too; version mismatch check now also uses rawWd for stem_analysis_version
+RESULT: builds clean
+BLOCKERS: none

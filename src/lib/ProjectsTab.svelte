@@ -2477,24 +2477,44 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
     analyzerLoading[song.id] = true
     analyzerLoading = { ...analyzerLoading }
     try {
-      const wd = workData(song)
-      const saved = wd?.stem_analysis
+      // Read stem_analysis from raw work_data — workData() helper strips it
+      const rawWd = song.work_data || {}
+      const saved = rawWd.stem_analysis
+
+      // Always query vocal_eq_curves from Supabase so data survives hard reloads
+      const { data: curves } = await supabase
+        .from('vocal_eq_curves')
+        .select('id, stem_type, source_type, created_at, version_name')
+        .eq('song_id', String(song.id))
+        .eq('source_type', 'mix')
+        .order('created_at', { ascending: false })
+        .limit(20)
+      const hasCurves = (curves || []).length > 0
+
+      // Populate stem Essentia metrics from work_data
       if (saved && Object.keys(saved).length) {
         stemAnalysis = { ...stemAnalysis, [song.id]: saved }
         if (!activeStemTab[song.id]) activeStemTab = { ...activeStemTab, [song.id]: 'mix' }
-        // Check if analyzed version differs from current active version
-        const savedVersion   = wd?.stem_analysis_version || null
-        const activeV        = wd?.versions?.find(v => v.id === wd?.active_version_id)
-        const currentVersion = activeV?.name || wd?.versions?.[wd.versions.length - 1]?.name || null
-        if (savedVersion && currentVersion && savedVersion !== currentVersion) {
-          analyzerVersionBanner = { ...analyzerVersionBanner, [song.id]: { stored: savedVersion, current: currentVersion } }
-        } else {
-          analyzerVersionBanner = { ...analyzerVersionBanner, [song.id]: null }
-        }
-        // Load AI summary if not yet done
-        if (!mozartInsight[song.id] && !mozartInsightLoading[song.id]) runAnalyzerSummary(song)
       }
-      // No auto-trigger — user must click "Analyze Stems" explicitly
+
+      // Load full EQ curves (for ref comparison) whenever any curves exist
+      if (hasCurves) loadVocalEq(song.id).catch(() => {})
+
+      // Version mismatch check
+      const wd = workData(song)
+      const savedVersion   = rawWd.stem_analysis_version || null
+      const activeV        = wd?.versions?.find(v => v.id === wd?.active_version_id)
+      const currentVersion = activeV?.name || wd?.versions?.[wd.versions.length - 1]?.name || null
+      if (savedVersion && currentVersion && savedVersion !== currentVersion) {
+        analyzerVersionBanner = { ...analyzerVersionBanner, [song.id]: { stored: savedVersion, current: currentVersion } }
+      } else {
+        analyzerVersionBanner = { ...analyzerVersionBanner, [song.id]: null }
+      }
+
+      // Auto-load summary if stem data available and not yet generated
+      if (saved && Object.keys(saved).length && !mozartInsight[song.id] && !mozartInsightLoading[song.id]) {
+        runAnalyzerSummary(song)
+      }
     } catch(e) {
       console.error('onAnalyzerTabOpen error:', e.message)
     } finally {

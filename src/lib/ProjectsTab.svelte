@@ -3082,17 +3082,18 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   </div>
                   <!-- REFERENCES tab -->
                   <button class="log-tab-btn {activeSongTab[song.id]==='references'?'on':''}" style="margin-left:12px"
-                    onclick={() => activeSongTab = {...activeSongTab, [song.id]: activeSongTab[song.id]==='references' ? null : 'references'}}>
+                    onclick={e => { e.stopPropagation(); console.log('REFERENCES clicked'); activeSongTab = {...activeSongTab, [song.id]: activeSongTab[song.id]==='references' ? null : 'references'} }}>
                     REFERENCES
                   </button>
                   <!-- ANALYZER tab -->
                   <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}" style="margin-left:4px"
-                    onclick={() => {
+                    onclick={e => {
+                      e.stopPropagation()
+                      console.log('ANALYZER clicked, song.id=', song.id, 'current=', activeSongTab[song.id])
                       const isActive = activeSongTab[song.id] === 'analyzer'
                       activeSongTab = {...activeSongTab, [song.id]: isActive ? null : 'analyzer'}
-                      if (!isActive) {
-                        onAnalyzerTabOpen(song)
-                      }
+                      console.log('ANALYZER after set:', activeSongTab[song.id])
+                      if (!isActive) onAnalyzerTabOpen(song)
                     }}>
                     ANALYZER
                   </button>

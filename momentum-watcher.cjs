@@ -8784,19 +8784,23 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
 
       const LASTFM_KEY = process.env.LASTFM_API_KEY || ''
       let results = []
+      const LIVE_RE = /\b(live|concert|tour|acoustic|remix|cover|karaoke|performance|session)\b/i
 
       // Strategy 1: Last.fm similar tracks API
       if (LASTFM_KEY) {
         try {
-          const lfUrl = `https://ws.audioscrobbler.com/2.0/?method=track.getSimilar&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(title)}&limit=5&api_key=${LASTFM_KEY}&format=json`
+          const lfUrl = `https://ws.audioscrobbler.com/2.0/?method=track.getSimilar&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(title)}&limit=10&api_key=${LASTFM_KEY}&format=json`
           const lfRes = await fetch(lfUrl)
           if (lfRes.ok) {
             const lfData = await lfRes.json()
             const tracks = lfData.similartracks?.track || []
-            results = tracks.slice(0, 3).map(t => ({
-              artist: typeof t.artist === 'object' ? t.artist.name : (t.artist || ''),
-              title:  t.name || ''
-            })).filter(t => t.artist && t.title)
+            results = tracks
+              .map(t => ({
+                artist: typeof t.artist === 'object' ? t.artist.name : (t.artist || ''),
+                title:  t.name || ''
+              }))
+              .filter(t => t.artist && t.title && !LIVE_RE.test(t.title))
+              .slice(0, 3)
             console.log(`[find-similar-tracks] Last.fm: ${results.length} results for "${artist} — ${title}"`)
           }
         } catch(e) { console.warn('[find-similar-tracks] Last.fm failed:', e.message) }
@@ -8813,7 +8817,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
               body: JSON.stringify({
                 model: 'claude-haiku-4-5-20251001',
                 max_tokens: 200,
-                messages: [{ role: 'user', content: `Name 3 current popular songs that sound similar to "${artist} - ${title}". Return a JSON array ONLY, no explanation: [{"artist":"...","title":"..."}]. Only real existing songs from the last 3 years.` }]
+                messages: [{ role: 'user', content: `Name 3 current popular songs that sound similar to "${artist} - ${title}". Return a JSON array ONLY, no explanation: [{"artist":"...","title":"..."}]. Only real existing songs from the last 3 years. Only suggest original studio versions — no live versions, remixes, acoustic versions, covers, or karaoke.` }]
               })
             })
             const aiData = await aiRes.json()
@@ -8828,8 +8832,11 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       // Strategy 3: MusicBrainz recordings with same artist as last resort
       if (!results.length && artist) {
         try {
-          const recs = await musicBrainzSearch(artist, '', 3)
-          results = recs.filter(r => r.title !== title).slice(0, 3).map(r => ({ artist: r.artist || artist, title: r.title }))
+          const recs = await musicBrainzSearch(artist, '', 5)
+          results = recs
+            .filter(r => r.title !== title && !LIVE_RE.test(r.title))
+            .slice(0, 3)
+            .map(r => ({ artist: r.artist || artist, title: r.title }))
           console.log(`[find-similar-tracks] MusicBrainz fallback: ${results.length} results`)
         } catch(e) {}
       }
@@ -8867,11 +8874,12 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       send({ type: 'progress', msg: `📥 Downloading: ${trackArtist} - ${trackTitle}${label}...` })
 
       const queries = [
-        `${trackArtist} - ${trackTitle} (Official Audio)`,
+        `${trackArtist} - ${trackTitle} official audio`,
         `${trackArtist} - ${trackTitle} - Topic`,
-        `${trackArtist} - ${trackTitle} Official`,
+        `${trackArtist} - ${trackTitle} official`,
         `${trackArtist} ${trackTitle}`
       ]
+      const REJECT_LIVE = 'live|concert|tour|acoustic|remix|cover|karaoke|performance|session'
 
       const tag = `ref_dl_${Date.now()}_${Math.random().toString(36).slice(2,6)}`
       const tmpOut = `/tmp/${tag}_%(title)s.%(ext)s`
@@ -8880,7 +8888,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         try {
           const safe = q.replace(/"/g, '').replace(/'/g, '')
           await execAsync(
-            `yt-dlp "ytsearch1:${safe}" -x --audio-format mp3 --audio-quality 0 --no-playlist --match-filter "duration > 60" -o "${tmpOut}" 2>/dev/null`,
+            `yt-dlp "ytsearch1:${safe}" -x --audio-format mp3 --audio-quality 0 --no-playlist --match-filter "duration > 60 & !is_live" --reject-title "(?i).*(${REJECT_LIVE}).*" -o "${tmpOut}" 2>/dev/null`,
             { timeout: 120000 }
           )
         } catch(_) {}

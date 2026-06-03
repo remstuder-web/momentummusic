@@ -3005,3 +3005,9 @@ TASK: References: FIND button finds 3 similar tracks + download all to !Current
 WHAT: New POST /find-similar-tracks endpoint — tries Last.fm getSimilar API (LASTFM_API_KEY env), falls back to Claude Haiku ("3 similar current songs" prompt), falls back to MusicBrainz recordings by same artist; returns [{artist,title}] top 3. DailyTab: FIND button (green outline) added between Title input and ↓ Download; similarResults $state + similarDownloadingAll $state; findSimilar(), downloadSimilarOne(idx), downloadAllChecked() functions; similar-results panel shows 3 rows — checkbox (pre-checked), artist—title, individual ↓ DL button; Download All Checked button at bottom; typing in inputs clears results. LASTFM_API_KEY= added to .env (fill in free key from last.fm/api).
 RESULT: works — tested Drake "God's Plan" → Blinding Lights, Circles, Lucid Dreams (Claude Haiku fallback)
 BLOCKERS: LASTFM_API_KEY empty — using Claude Haiku fallback. Add key to .env for direct Last.fm data.
+
+## 2026-06-03 momentum-watcher.cjs — DONE
+TASK: Find similar: exclude live/remix/cover versions, studio originals only
+WHAT: (1) downloadOneTrack queries changed — "Official Audio" suffix (lowercase), added --match-filter "duration > 60 & !is_live" and --reject-title "(?i).*(live|concert|tour|acoustic|remix|cover|karaoke|performance|session).*" to yt-dlp; (2) Claude Haiku prompt extended with "Only suggest original studio versions — no live versions, remixes, acoustic versions, covers, or karaoke"; (3) Last.fm results now fetched with limit=10 then filtered by LIVE_RE before slicing to 3; (4) MusicBrainz fallback also filters by LIVE_RE
+RESULT: works — watcher running
+BLOCKERS: none

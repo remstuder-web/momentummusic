@@ -3519,13 +3519,12 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                           <span class="drop-rehint">Drop new version · <span class="drop-alt-hint">⌥+drop to overwrite</span></span>
                         {:else}
                           <span class="drop-hint">↓ Drop production audio</span>
-                          <span class="drop-alt-hint" style="display:block;margin-top:2px">⌥+drop to overwrite current version</span>
+                          <span class="drop-hint-sub">⌥+drop to overwrite current version</span>
                         {/if}
                       </div>
                     </div>
                     <!-- Right: instrumental -->
                     <div class="dual-drop-col">
-                      <div class="dual-drop-label">INSTRUMENTAL</div>
                       <div class="stage-audio-drop dual-drop {dragOverSongId===song.id+'-instr'?'drag-over':''}"
                         ondragover={e => { e.preventDefault(); dragOverSongId = song.id+'-instr' }}
                         ondragleave={() => { dragOverSongId = null }}
@@ -4382,7 +4381,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .instr-player-row { padding: 4px 0; }
   .instr-actions-row { display: flex; gap: 8px; padding-bottom: 10px; }
   .drop-send-unit { display: flex; flex-direction: column; gap: 6px; }
-  .dual-drop-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; align-items: start; }
+  .dual-drop-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; align-items: stretch; }
   .dual-drop-col { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
   .dual-send-row-inner { display: flex; flex-direction: row; align-items: center; gap: 5px; min-width: 0; }
   .dual-drop-label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: #9e9690; }

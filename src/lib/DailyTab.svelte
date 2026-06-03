@@ -1677,7 +1677,7 @@ ${mozartContext}`
             <button class="acapella-mode-btn {acapellaMode==='vocal_clean'?'on':''}" onclick={() => acapellaMode='vocal_clean'}>VOCAL CLEAN</button>
             <button class="acapella-mode-btn {acapellaMode==='instrumental'?'on':''}" onclick={() => acapellaMode='instrumental'}>INSTRUMENTAL</button>
             <button class="acapella-applio-btn" onclick={openApplio} disabled={applioLoading}>{applioLoading ? '⏳' : '🎤'} Applio</button>
-            <button class="acapella-applio-btn" onclick={() => window.open('https://kits.ai', '_blank', '')}>KITS.AI</button>
+            <button class="acapella-applio-btn" onclick={() => window.open('https://app.kits.ai/', '_blank', '')}>KITS</button>
           </div>
           <div class="acapella-drop {acapellaDragging ? 'dragging' : ''}"
             ondragover={e => { e.preventDefault(); acapellaDragging = true }}

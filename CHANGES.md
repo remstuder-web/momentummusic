@@ -3035,3 +3035,9 @@ TASK: Acapella Extractor: add Kits.ai button after Applio
 WHAT: Added KITS.AI button (same acapella-applio-btn style) after 🎤 Applio button — opens kits.ai in a new tab
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-04 src/lib/DailyTab.svelte — DONE
+TASK: Kits button: open in same window as new tab, rename to KITS
+WHAT: Updated Kits.ai button — URL changed to app.kits.ai, third empty string param prevents popup, label shortened to KITS
+RESULT: builds clean
+BLOCKERS: none

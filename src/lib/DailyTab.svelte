@@ -1562,6 +1562,43 @@ ${mozartContext}`
       {/if}
 
       {#if activeSection === 'helpers'}
+        <div class="check-list">
+        {#each (state.helpers||[]) as item (item.id)}
+          {@const isYoutube  = /youtube\.com|youtu\.be/.test(item.url||'')}
+          {@const isSpotify  = /spotify\.com/.test(item.url||'')}
+          {@const isGemini   = /gemini\.google\.com/.test(item.url||'')}
+          {@const isDeepseek = /deepseek\.com/.test(item.url||'')}
+          {@const hasSearch  = isYoutube || isSpotify || isGemini || isDeepseek}
+          {@const searchPlaceholder = isYoutube ? 'Search YouTube...' : isSpotify ? 'Search Spotify...' : isGemini ? 'Ask Gemini...' : 'Ask DeepSeek...'}
+          {@const buildSearchUrl = (q) => isYoutube ? 'https://youtube.com/results?search_query=' + encodeURIComponent(q) : isSpotify ? 'https://open.spotify.com/search/' + encodeURIComponent(q) : isGemini ? 'https://gemini.google.com/app?q=' + encodeURIComponent(q) : 'https://chat.deepseek.com/?q=' + encodeURIComponent(q)}
+          <div class="check-item {state.helperTicks[item.id]?'done':''}">
+            <button class="ckb" onclick={() => tickHelper(item.id)}>{state.helperTicks[item.id]?'✓':''}</button>
+            {#if item.url}
+              <a href={item.url} target="_blank" class="item-label">{item.label}</a>
+            {:else}
+              <span class="item-label">{item.label}</span>
+            {/if}
+            {#if hasSearch}
+              <input
+                class="helper-search-inp"
+                placeholder={searchPlaceholder}
+                value={helperSearchInputs[item.id] || ''}
+                oninput={e => helperSearchInputs = {...helperSearchInputs, [item.id]: e.target.value}}
+                onkeydown={e => { if (e.key === 'Enter') { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? buildSearchUrl(q) : item.url, '_blank') } }}
+              />
+              <button class="helper-search-go" onclick={() => { const q = helperSearchInputs[item.id]?.trim(); window.open(q ? buildSearchUrl(q) : item.url, '_blank') }}>→</button>
+            {/if}
+            <div class="reorder-col"><button class="reorder-micro" onclick={() => moveHelper(item.id,-1)}>▲</button><button class="reorder-micro" onclick={() => moveHelper(item.id,1)}>▼</button></div>
+            <button class="del-btn" onclick={() => delHelper(item.id)}>×</button>
+          </div>
+        {/each}
+        </div>
+        <div class="add-row">
+          <input class="add-inp" bind:value={newHelper} placeholder="New helper..." onkeydown={e=>e.key==='Enter'&&addHelper()} />
+          <input class="add-inp url" bind:value={newHelperUrl} placeholder="URL (optional)..." />
+          <button class="add-btn" onclick={addHelper}>+</button>
+        </div>
+
       <div class="helpers-built-in">
 
         <!-- NORMALIZER -->

@@ -2957,3 +2957,9 @@ TASK: Analyzer: add FULL MIX tab before stem tabs
 WHAT: Added FULL MIX as first stem tab; curStem defaults to 'mix'; st const conditionally reads from latestA (work_data.versions[].analysis) when curStem==='mix' — maps loudness_lufs→lufs, energy, brightness, stereo_width_per_band avg→stereo_width, tonal_balance→bass/mid/high%; stem tab row now visible when latestA exists even without stem data; activeStemTab default changed from 'vocals' to 'mix'
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-03 src/lib/ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: Analyzer: persist analysis data per version, only re-analyze on explicit request
+WHAT: (1) onAnalyzerTabOpen no longer auto-triggers analyzeMyVocal — loads existing data only; (2) version tracking: analyzeMyVocal now reads active version name, passes it as version_label to /analyze-vocal-eq; watcher saves stem_analysis_version to work_data; on tab open, stored version is compared to current active version → shows amber banner "Analysis from vXX — current vYY" with Re-analyze button if mismatch; (3) new analyzerVersionBanner $state; (4) header row split: existing data → az-reanalyze-btn (gold outline, confirm dialog "Takes 5–10 min"); no data → plain analyze-now-btn; re-analyze clears version banner after success; new CSS for az-reanalyze-btn and az-version-banner
+RESULT: builds clean
+BLOCKERS: none

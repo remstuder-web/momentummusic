@@ -76,8 +76,9 @@
   let mozartAnalyzeOpen = $state({}) // song.id -> bool
   let mozartTrackQuery = $state({}) // song.id -> string
   // Analyzer redesign
-  let stemAnalysis   = $state({}) // song.id -> {drums,bass,other,vocals} -> {lufs,energy,brightness,...}
-  let activeStemTab  = $state({}) // song.id -> 'drums'|'bass'|'other'|'vocals'
+  let stemAnalysis        = $state({}) // song.id -> {drums,bass,other,vocals} -> {lufs,energy,brightness,...}
+  let activeStemTab       = $state({}) // song.id -> 'mix'|'drums'|'bass'|'other'|'vocals'
+  let analyzerVersionBanner = $state({}) // song.id -> {stored,current} | null
   let mozartAnalysis = $state({}) // song.id -> { loading, ok, error }
   let mozartInsight = $state({}) // song.id -> { strategic, creative, next_step }
   let mozartInsightLoading = $state({}) // song.id -> bool
@@ -2476,18 +2477,24 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
     analyzerLoading[song.id] = true
     analyzerLoading = { ...analyzerLoading }
     try {
-      // Load stem analysis from work_data (already in memory)
       const wd = workData(song)
       const saved = wd?.stem_analysis
       if (saved && Object.keys(saved).length) {
         stemAnalysis = { ...stemAnalysis, [song.id]: saved }
         if (!activeStemTab[song.id]) activeStemTab = { ...activeStemTab, [song.id]: 'mix' }
-        // Auto-generate summary if not done
+        // Check if analyzed version differs from current active version
+        const savedVersion   = wd?.stem_analysis_version || null
+        const activeV        = wd?.versions?.find(v => v.id === wd?.active_version_id)
+        const currentVersion = activeV?.name || wd?.versions?.[wd.versions.length - 1]?.name || null
+        if (savedVersion && currentVersion && savedVersion !== currentVersion) {
+          analyzerVersionBanner = { ...analyzerVersionBanner, [song.id]: { stored: savedVersion, current: currentVersion } }
+        } else {
+          analyzerVersionBanner = { ...analyzerVersionBanner, [song.id]: null }
+        }
+        // Load AI summary if not yet done
         if (!mozartInsight[song.id] && !mozartInsightLoading[song.id]) runAnalyzerSummary(song)
-      } else {
-        // No stem data — auto-trigger analysis
-        analyzeMyVocal(song)
       }
+      // No auto-trigger — user must click "Analyze Stems" explicitly
     } catch(e) {
       console.error('onAnalyzerTabOpen error:', e.message)
     } finally {
@@ -2664,19 +2671,21 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
   async function analyzeMyVocal(song) {
     const sid = String(song.id)
+    const wd2 = workData(song)
+    const activeV2    = wd2?.versions?.find(v => v.id === wd2?.active_version_id)
+    const versionLabel = activeV2?.name || wd2?.versions?.[wd2.versions.length - 1]?.name || ('MIX ' + new Date().toLocaleDateString())
     vocalEqStatus = { ...vocalEqStatus, [sid]: 'separating' }
     try {
       const r = await fetch('http://localhost:4242/analyze-vocal-eq', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'mix', song_id: sid, label: 'MIX ' + new Date().toLocaleDateString() })
+        body: JSON.stringify({ type: 'mix', song_id: sid, label: versionLabel, version_label: versionLabel })
       })
       const d = await r.json()
       if (!d.ok) throw new Error(d.error || 'failed')
-      // Save per-stem Essentia metrics from response
       if (d.stem_metrics && Object.keys(d.stem_metrics).length) {
         stemAnalysis = { ...stemAnalysis, [sid]: d.stem_metrics }
-        if (!activeStemTab[sid]) activeStemTab = { ...activeStemTab, [sid]: 'vocals' }
-        // Auto-trigger summary if api key available
+        if (!activeStemTab[sid]) activeStemTab = { ...activeStemTab, [sid]: 'mix' }
+        analyzerVersionBanner = { ...analyzerVersionBanner, [sid]: null } // analysis is now current
         runAnalyzerSummary(song)
       }
       await loadVocalEq(sid)
@@ -3758,16 +3767,28 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                       <!-- ── Header: run/re-analyze ── -->
                       <div class="az-header-row">
                         {#if vocalEqStatus[song.id] === 'separating' || analyzerLoading[song.id]}
-                          <div class="az-loading-msg">⟳ Analyzing stems...</div>
+                          <div class="az-loading-msg">⟳ Analyzing stems... (5–10 min)</div>
+                        {:else if hasStemData}
+                          <button class="az-reanalyze-btn" onclick={() => {
+                            if (confirm('Re-analyze stems with current version? This takes 5–10 min.')) analyzeMyVocal(song)
+                          }}>↺ Re-analyze</button>
                         {:else}
-                          <button class="analyze-now-btn" onclick={() => analyzeMyVocal(song)}>
-                            {hasStemData ? '↺ Re-analyze' : '▶ Analyze Stems'}
-                          </button>
+                          <button class="analyze-now-btn" onclick={() => analyzeMyVocal(song)}>▶ Analyze Stems</button>
                         {/if}
                         {#if vocalEqStatus[song.id] === 'error'}
                           <div class="az-error-msg">✗ Failed — <button onclick={() => analyzeMyVocal(song)}>Retry</button></div>
                         {/if}
                       </div>
+                      <!-- ── Version mismatch banner ── -->
+                      {#if analyzerVersionBanner[song.id]}
+                        {@const bv = analyzerVersionBanner[song.id]}
+                        <div class="az-version-banner">
+                          Analysis is from <strong>{bv.stored}</strong> — current version is <strong>{bv.current}</strong>
+                          <button onclick={() => {
+                            if (confirm('Re-analyze with ' + bv.current + '? Takes 5–10 min.')) analyzeMyVocal(song)
+                          }}>Re-analyze</button>
+                        </div>
+                      {/if}
 
                       {#if hasStemData || latestA}
                         <!-- ── STEMS ANALYSIS ── -->
@@ -4660,6 +4681,12 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .az-next-step { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #c9a84c; padding: 4px 8px; background: rgba(201,168,76,.06); border: 1px solid rgba(201,168,76,.2); border-radius: 3px; line-height: 1.5; }
   .az-refresh-btn { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid #252525; color: #444; padding: 3px 10px; border-radius: 2px; cursor: pointer; margin-top: 4px; align-self: flex-start; }
   .az-refresh-btn:hover { border-color: #555; color: #9e9690; }
+  .az-reanalyze-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid rgba(201,168,76,.4); color: #c9a84c; padding: 4px 12px; border-radius: 2px; cursor: pointer; }
+  .az-reanalyze-btn:hover { background: rgba(201,168,76,.08); border-color: rgba(201,168,76,.7); }
+  .az-version-banner { font-family: 'Space Mono', monospace; font-size: 9px; color: #e8a838; background: rgba(232,168,56,.06); border: 1px solid rgba(232,168,56,.25); border-radius: 3px; padding: 6px 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .az-version-banner strong { color: #f5c84c; }
+  .az-version-banner button { font-family: 'Space Mono', monospace; font-size: 8px; background: transparent; border: 1px solid rgba(232,168,56,.4); color: #e8a838; padding: 2px 10px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .az-version-banner button:hover { background: rgba(232,168,56,.1); }
   .ref-comp-header { font-family: 'Space Mono', monospace; font-size: 9px; color: rgba(201,168,76,.5); padding: 4px 0 2px; letter-spacing: .06em; }
   .ref-comp-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-family: 'Space Mono', monospace; font-size: 9px; }
   .rc-label { color: #555; min-width: 60px; }

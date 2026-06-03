@@ -10232,7 +10232,7 @@ Respond ONLY in JSON:
     req.on('end', async () => {
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString())
-        const { type, url, song_id, label } = body
+        const { type, url, song_id, label, version_label } = body
 
         if (type === 'reference') {
           if (!url) throw new Error('url required for reference type')
@@ -10323,6 +10323,7 @@ Respond ONLY in JSON:
               if (songRow2) {
                 const wd2 = songRow2.work_data || {}
                 wd2.stem_analysis = stemMetrics
+                wd2.stem_analysis_version = version_label || label || ''
                 const { error: wdErr } = await supabaseAdmin.from('songs').update({ work_data: wd2 }).eq('id', song_id)
                 if (wdErr) console.error('stem_analysis save error:', wdErr.message)
                 else console.log('✓ Saved stem_analysis for song', song_id, '— stems:', Object.keys(stemMetrics).join(', '))

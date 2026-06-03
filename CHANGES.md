@@ -2897,3 +2897,9 @@ TASK: New Demo form: remove audio drop field, title only
 WHAT: Removed new-demo-dropzone wrapper div (drag/drop handlers, drop hint span, CSS). Button is now standalone. Removed newDemoDragging $state. createDemoFromDrop still exists for programmatic use if needed.
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-03 src/lib/DemoTab.svelte — DONE
+TASK: DemoTab: reorder header buttons, add SONO APP button
+WHAT: Reordered demos header to [DEMOS title][+ New Demo][Filter][SONO][SONO APP]; + New Demo moved before Filter with demo-add-btn-sm modifier (10px, 4/10px padding vs 11px, 6/14px); added SONO APP button (same sono-btn style, gold outline) that opens momentummusic.vercel.app/sono in new tab
+RESULT: builds clean
+BLOCKERS: none

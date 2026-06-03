@@ -1153,6 +1153,7 @@
     <button class="vtab {view === 'patches' ? 'on' : ''}" onclick={() => view = 'patches'}>SUBMISSIONS</button>
   </div>
   {#if view === 'demos'}
+    <button class="demo-add-btn demo-add-btn-sm" onclick={addSong}>+ New Demo</button>
     <button class="filter-toggle-btn {hasActiveFilter ? 'active' : ''} {showFilterPanel ? 'open' : ''}"
       onclick={() => showFilterPanel = !showFilterPanel}>
       ⊞ Filter{hasActiveFilter ? ' ●' : ''}
@@ -1161,7 +1162,9 @@
       title="Show only SONO tracks">
       SONO{sonoMode ? ' ✕' : ''}
     </button>
-    <button class="demo-add-btn" onclick={addSong}>+ New Demo</button>
+    <button class="sono-btn" onclick={() => window.open('https://momentummusic.vercel.app/sono', '_blank')}>
+      SONO APP
+    </button>
   {:else}
     <div class="patch-sort-row">
       <button class="sort-sm {patchView==='open'?'on':''}" onclick={() => patchView='open'}>OPEN</button>
@@ -2126,6 +2129,7 @@
   .bg-opt-desc { font-family: 'Space Mono', monospace; font-size: 10px; color: #444; }
   .demo-add-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; white-space: nowrap; }
   .demo-add-btn:hover { background: #d4b660; }
+  .demo-add-btn.demo-add-btn-sm { font-size: 10px; padding: 4px 10px; }
 
   .s-btn.sel { background: #4caf82; border-color: #4caf82; color: #0a0a0a; }
   .s-btn.sel:hover { background: #3d9e72; border-color: #3d9e72; }

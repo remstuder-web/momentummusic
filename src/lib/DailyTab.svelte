@@ -1473,7 +1473,10 @@ ${mozartContext}`
       <div class="check-list">
         {#each state.customs.filter(item => !['google gemini','youtube','spotify'].includes((item.label||'').toLowerCase().trim())) as item (item.id)}
           <div class="routine-box">
-            <button class="routine-box-label" onclick={() => item.url && window.open(item.url, '_blank', 'width=1500,height=950,left=50,top=30')}>{item.label}</button>
+            <span class="routine-box-label">{item.label}</span>
+            {#if item.url}
+              <button class="helper-search-go" onclick={() => window.open(item.url, '_blank', 'width=1400,height=900')}>→</button>
+            {/if}
             <button class="del-btn" onclick={() => delCustom(item.id)}>×</button>
           </div>
         {/each}
@@ -1489,7 +1492,10 @@ ${mozartContext}`
           <div class="check-list">
           {#each (state.checkItems||[]) as item (item.id)}
             <div class="routine-box">
-              <button class="routine-box-label" onclick={() => item.url && window.open(item.url, '_blank', 'width=1500,height=950,left=50,top=30')}>{item.label}</button>
+              <span class="routine-box-label">{item.label}</span>
+              {#if item.url}
+                <button class="helper-search-go" onclick={() => window.open(item.url, '_blank', 'width=1400,height=900')}>→</button>
+              {/if}
               <button class="del-btn" onclick={() => delCheck(item.id)}>×</button>
             </div>
           {/each}
@@ -1877,7 +1883,10 @@ ${mozartContext}`
         <div class="check-list">
         {#each (state.helpers||[]) as item (item.id)}
           <div class="routine-box">
-            <button class="routine-box-label" onclick={() => item.url && window.open(item.url, '_blank', 'width=1500,height=950,left=50,top=30')}>{item.label}</button>
+            <span class="routine-box-label">{item.label}</span>
+            {#if item.url}
+              <button class="helper-search-go" onclick={() => window.open(item.url, '_blank', 'width=1400,height=900')}>→</button>
+            {/if}
             <button class="del-btn" onclick={() => delHelper(item.id)}>×</button>
           </div>
         {/each}
@@ -2318,7 +2327,7 @@ ${mozartContext}`
   .routine-divider { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.4); padding: 10px 0 4px; border-top: 1px solid #1a1a1a; margin-top: 16px; }
   .check-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: transparent; min-height: 0; }
   .check-item.done { opacity: .38; }
-  .routine-box { display: flex; align-items: center; padding: 4px 8px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; gap: 6px; }
+  .routine-box { display: flex; align-items: center; padding: 3px 8px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; gap: 6px; }
   .routine-box:hover { border-color: #444; }
   .routine-box-label { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #cec9c1; background: none; border: none; text-align: left; padding: 0; cursor: pointer; }
   .routine-box-label:hover { color: #f5f1ea; }

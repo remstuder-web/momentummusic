@@ -3065,3 +3065,9 @@ TASK: Daily: remove checkboxes, green Applio+Kits buttons, bigger popup windows
 WHAT: (1) Removed .ckb checkbox buttons from all three lists (state.customs, state.checkItems, state.helpers). (2) Applio button label changed to "APPLIO" only (no emoji/spinner). Both buttons now green: border+color #4caf50, transparent bg, subtle green hover. (3) Both window.open calls now include width=1400,height=900,left=100,top=50 to open as sized popup.
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-04 src/lib/DailyTab.svelte — DONE
+TASK: Daily: all routine items have → button to open URL, consistent layout
+WHAT: All three list loops (customs, checkItems, helpers) now use: label as plain span (flex:1) + helper-search-go "→" button (only if item.url exists) + × delete. Opens as window.open(url,'_blank','width=1400,height=900'). routine-box padding tightened to 3px 8px to match search input row height.
+RESULT: builds clean
+BLOCKERS: none

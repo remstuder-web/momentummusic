@@ -11268,6 +11268,29 @@ Give specific production direction based on stem balance, loudness levels, and r
     return
   }
 
+  // ── POST /start-applio — launch Applio if not already running ───────────────
+  if (req.method === 'POST' && req.url === '/start-applio') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Content-Type', 'application/json')
+    try {
+      const alreadyRunning = await fetch('http://localhost:6969').then(() => true).catch(() => false)
+      if (alreadyRunning) {
+        res.writeHead(200)
+        res.end(JSON.stringify({ ok: true, already_running: true }))
+        return
+      }
+      const { exec } = require('child_process')
+      exec(`osascript -e 'tell application "Terminal" to do script "cd /Users/remo/Applio && ./run-applio.sh"'`)
+      await new Promise(r => setTimeout(r, 5000))
+      res.writeHead(200)
+      res.end(JSON.stringify({ ok: true, started: true }))
+    } catch(e) {
+      res.writeHead(500)
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /generate-midi-from-reference ──────────────────────────────────────
   if (req.method === 'POST' && req.url === '/generate-midi-from-reference') {
     res.setHeader('Access-Control-Allow-Origin', '*')

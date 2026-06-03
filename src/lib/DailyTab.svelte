@@ -37,6 +37,7 @@
   let acapellaResult = $state(null)
   let acapellaDragging = $state(false)
   let acapellaMode = $state('acapella') // 'acapella' | 'vocal_clean' | 'instrumental'
+  let applioLoading = $state(false)
 
   let midiFile = $state(null)
   let midiLoading = $state(false)
@@ -1104,6 +1105,15 @@ ${mozartContext}`
     acapellaFile = null
   }
 
+  async function openApplio() {
+    applioLoading = true
+    try {
+      await fetch('http://localhost:4242/start-applio', { method: 'POST' })
+    } catch(e) {}
+    window.open('http://localhost:6969', '_blank', '')
+    applioLoading = false
+  }
+
   function handleMidiDrop(e) {
     e.preventDefault()
     midiDragging = false
@@ -1666,7 +1676,8 @@ ${mozartContext}`
             <button class="acapella-mode-btn {acapellaMode==='acapella'?'on':''}" onclick={() => acapellaMode='acapella'}>ACAPELLA</button>
             <button class="acapella-mode-btn {acapellaMode==='vocal_clean'?'on':''}" onclick={() => acapellaMode='vocal_clean'}>VOCAL CLEAN</button>
             <button class="acapella-mode-btn {acapellaMode==='instrumental'?'on':''}" onclick={() => acapellaMode='instrumental'}>INSTRUMENTAL</button>
-            <button class="acapella-applio-btn" onclick={() => window.open('http://localhost:6969', '_blank', '')}>🎤 Applio</button>
+            <button class="acapella-applio-btn" onclick={openApplio} disabled={applioLoading}>{applioLoading ? '⏳' : '🎤'} Applio</button>
+            <button class="acapella-applio-btn" onclick={() => window.open('https://kits.ai', '_blank', '')}>KITS.AI</button>
           </div>
           <div class="acapella-drop {acapellaDragging ? 'dragging' : ''}"
             ondragover={e => { e.preventDefault(); acapellaDragging = true }}

@@ -1,17 +1,16 @@
 {
-  "updated": "2026-05-18T10:18:00Z",
-  "last_task": "midi-from-reference",
+  "updated": "2026-06-04T23:08:30.000Z",
+  "last_task": "start-applio endpoint + DailyTab button",
   "status": "done",
   "working": [
-    "MIDI FROM REFERENCE helper in DailyTab HELPERS section",
-    "POST /generate-midi-from-reference SSE endpoint in watcher",
-    "analyze_audio.py --midi-prep flag (chord progression + melodic contour)",
-    "mido installed (pip3 install mido --break-system-packages)",
-    "10 MIDI files written to ~/Desktop as MIDI_{name}_{n}_{seq}.mid",
-    "6-step SSE progress stream in UI"
+    "POST /start-applio — checks if running, launches via osascript Terminal tab, waits 5s",
+    "DailyTab Applio button calls openApplio() with ⏳ loading state before opening localhost:6969",
+    "Watcher restarted and responding"
   ],
-  "broken": [],
+  "broken": [
+    "Spotify API 403 — app requires premium (pre-existing, known, MusicBrainz replaces search)"
+  ],
   "partial": [],
-  "next": "Test with a real audio file — drop WAV/MP3 into MIDI FROM REFERENCE drop zone",
-  "notes": "Claude API key must be set in Settings (mm_api_key). Uses claude-sonnet-4-20250514. mido 1.3.3 installed."
+  "next": "Test Applio button — verify it opens Terminal with run-applio.sh and then localhost:6969. Confirm /Users/remo/Applio/run-applio.sh exists.",
+  "notes": "Applio path hardcoded: /Users/remo/Applio/run-applio.sh — verify this path if button does nothing"
 }

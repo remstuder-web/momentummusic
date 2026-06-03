@@ -1,13 +1,13 @@
 {
-  "run": "2026-04-25T00:07:42.357Z",
-  "passed": 8,
+  "run": "2026-06-03T20:42:10.087Z",
+  "passed": 6,
   "total": 8,
   "results": [
     {
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: fix-brain-titles-tiktok"
+      "detail": "last_task: analyzer-redesign"
     },
     {
       "n": 2,
@@ -18,14 +18,14 @@
     {
       "n": 3,
       "label": "Spotify intl URL",
-      "ok": true,
-      "detail": "Sega Bodega, Judeline — PIKI"
+      "ok": false,
+      "detail": "API error: Spotify 403 Forbidden: Active premium subscription required for the owner of the app. When the subscription status changes, it can take a few hours before requests are allowed again."
     },
     {
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok + past briefing has real content (1635 chars)"
+      "detail": "endpoint ok — no past pulse briefings (first run, or today returned NO_UPDATES)"
     },
     {
       "n": 5,
@@ -37,19 +37,19 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Increase kick punch and presence\""
+      "detail": "3 items: \"Kick needs more punch\""
     },
     {
       "n": 7,
       "label": "No brain duplicates",
-      "ok": true,
-      "detail": "696 entries, 0 duplicates"
+      "ok": false,
+      "detail": "2 duplicate(s): \"Pricing production and mixing rates\" in [business], \"Collab rules first 5 minutes count\" in [collaboration]"
     },
     {
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "2eaf0b8 tiktok trends: synthesize into one weekly brain entry per week"
+      "detail": "69619cd Analyzer: persist analysis data per version, only re-analyze on explicit request"
     }
   ]
 }

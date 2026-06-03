@@ -3023,3 +3023,15 @@ TASK: Acapella: open Applio as normal tab not popup
 WHAT: Added empty string as third parameter to window.open call for Applio button — window.open('http://localhost:6969', '_blank', '') forces Chrome to open as a regular tab instead of a popup window
 RESULT: builds clean (no build needed — trivial change)
 BLOCKERS: none
+
+## 2026-06-04 momentum-watcher.cjs + src/lib/DailyTab.svelte — DONE
+TASK: Add POST /start-applio endpoint + update Applio button
+WHAT: New POST /start-applio endpoint — checks if localhost:6969 is already up, if not runs `osascript` to open a new Terminal tab with `cd /Users/remo/Applio && ./run-applio.sh`, waits 5s, returns {ok,started|already_running}. DailyTab Applio button now calls openApplio() — posts to /start-applio (shows ⏳ spinner, disabled during load), then opens localhost:6969 in a new tab regardless of result.
+RESULT: builds clean — watcher running
+BLOCKERS: none
+
+## 2026-06-04 src/lib/DailyTab.svelte — DONE
+TASK: Acapella Extractor: add Kits.ai button after Applio
+WHAT: Added KITS.AI button (same acapella-applio-btn style) after 🎤 Applio button — opens kits.ai in a new tab
+RESULT: builds clean
+BLOCKERS: none

@@ -1610,7 +1610,7 @@ ${mozartContext}`
             <input class="add-inp title-gen-inp" bind:value={titleGenInput}
               placeholder="Describe the vibe, genre, mood, artist style..."
               onkeydown={e => e.key === 'Enter' && generateTitles()} />
-            <button class="btn-gold-sm {titleGenLoading ? 'dim' : ''}" onclick={generateTitles} disabled={titleGenLoading}>
+            <button class="btn-ref-sm {titleGenLoading ? 'dim' : ''}" onclick={generateTitles} disabled={titleGenLoading}>
               {titleGenLoading ? '...' : 'Generate Titles'}
             </button>
           </div>
@@ -1676,7 +1676,7 @@ ${mozartContext}`
             <button class="acapella-mode-btn {acapellaMode==='acapella'?'on':''}" onclick={() => acapellaMode='acapella'}>ACAPELLA</button>
             <button class="acapella-mode-btn {acapellaMode==='vocal_clean'?'on':''}" onclick={() => acapellaMode='vocal_clean'}>VOCAL CLEAN</button>
             <button class="acapella-mode-btn {acapellaMode==='instrumental'?'on':''}" onclick={() => acapellaMode='instrumental'}>INSTRUMENTAL</button>
-            <button class="acapella-applio-btn" onclick={openApplio} disabled={applioLoading}>{applioLoading ? '⏳' : '🎤'} Applio</button>
+            <button class="acapella-applio-btn" onclick={openApplio} disabled={applioLoading}>{applioLoading ? '⏳' : '🎤'} APPLIO</button>
             <button class="acapella-applio-btn" onclick={() => window.open('https://app.kits.ai/', '_blank', '')}>KITS</button>
           </div>
           <div class="acapella-drop {acapellaDragging ? 'dragging' : ''}"
@@ -2452,7 +2452,7 @@ ${mozartContext}`
   .acapella-mode-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 10px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; letter-spacing: .06em; transition: all .12s; }
   .acapella-mode-btn:hover { border-color: #444; color: #9e9690; }
   .acapella-mode-btn.on { border-color: rgba(201,168,76,.5); color: #c9a84c; background: rgba(201,168,76,.07); }
-  .acapella-applio-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 3px 10px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; margin-left: auto; transition: all .12s; }
+  .acapella-applio-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 3px 10px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; transition: all .12s; }
   .acapella-applio-btn:hover { border-color: rgba(76,175,130,.4); color: #4caf82; }
   .acapella-drop { border: 1px dashed #252525; border-radius: 3px; padding: 20px; text-align: center; min-height: 70px; display: flex; align-items: center; justify-content: center; cursor: pointer; margin: 6px 0; transition: border-color .15s; }
   .acapella-drop.dragging { border-color: #c9a84c; background: rgba(201,168,76,.04); }

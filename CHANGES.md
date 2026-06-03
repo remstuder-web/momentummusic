@@ -3041,3 +3041,9 @@ TASK: Kits button: open in same window as new tab, rename to KITS
 WHAT: Updated Kits.ai button — URL changed to app.kits.ai, third empty string param prevents popup, label shortened to KITS
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-04 src/lib/DailyTab.svelte — DONE
+TASK: Daily: Applio+Kits buttons together, Generate Titles matches Download button style
+WHAT: (1) Removed margin-left:auto from .acapella-applio-btn so 🎤 APPLIO and KITS sit flush next to mode buttons; renamed label to APPLIO (uppercase). (2) Generate Titles button class changed from btn-gold-sm to btn-ref-sm — matches ↓ Download button style (gold border + subtle gold bg, gold text)
+RESULT: builds clean
+BLOCKERS: none

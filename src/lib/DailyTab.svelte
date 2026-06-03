@@ -1373,73 +1373,7 @@ ${mozartContext}`
       {/each}
     </div>
 
-    <!-- SECTION 2: WHATSAPP ANALYSIS (on-demand) -->
-    <div class="section-block">
-      <div class="sh">WHATSAPP</div>
-      {#if waContacts.length === 0}
-        <p class="empty-sm" style="color:#444">No monitored contacts. Add contacts in Settings ⚙.</p>
-      {:else}
-        <div class="wa-analyze-row">
-          <select class="wa-contact-sel" bind:value={waSelectedContact}>
-            <option value="">— Select contact —</option>
-            {#each waContacts as c (c.jid)}
-              <option value={c.name}>{c.name}</option>
-            {/each}
-          </select>
-          <button class="briefing-btn {waAnalyzing ? 'loading' : ''}" onclick={analyzeWaContact} disabled={!waSelectedContact || waAnalyzing}>
-            {waAnalyzing ? 'Analyzing...' : 'Analyze Conversation'}
-          </button>
-        </div>
-        {#if waError}
-          <p class="empty-sm" style="color:#e05a4a;margin-top:6px">{waError}</p>
-        {/if}
-        {#if waResult}
-          <div class="wa-result">
-            {#if waResult.urgency}
-              <div class="wa-result-row">
-                <span class="wa-result-label">URGENCY</span>
-                <span class="wa-urgency-val urgency-{waResult.urgency}">{waResult.urgency.toUpperCase()}</span>
-              </div>
-            {/if}
-            {#if waResult.summary}
-              <div class="wa-result-section">
-                <div class="wa-result-label">SUMMARY</div>
-                <div class="wa-result-text">{waResult.summary}</div>
-              </div>
-            {/if}
-            {#if waResult.real_intent}
-              <div class="wa-result-section">
-                <div class="wa-result-label">REAL INTENT</div>
-                <div class="wa-result-text">{waResult.real_intent}</div>
-              </div>
-            {/if}
-            {#if waResult.tone}
-              <div class="wa-result-section">
-                <div class="wa-result-label">TONE</div>
-                <div class="wa-result-text">{waResult.tone}</div>
-              </div>
-            {/if}
-            {#if waResult.opportunities}
-              <div class="wa-result-section">
-                <div class="wa-result-label">OPPORTUNITIES</div>
-                <div class="wa-result-text">{waResult.opportunities}</div>
-              </div>
-            {/if}
-            {#if waResult.recommended_response}
-              <div class="wa-result-section">
-                <div class="wa-result-label">RECOMMENDED RESPONSE</div>
-                <div class="wa-result-text wa-reply-wrap">
-                  <span class="wa-reply-text">{waResult.recommended_response}</span>
-                  <button class="wa-copy-btn" onclick={() => navigator.clipboard.writeText(waResult.recommended_response)}>Copy</button>
-                </div>
-              </div>
-            {/if}
-          </div>
-        {/if}
-      {/if}
-    </div>
-
-    <!-- SECTION 3: ROUTINE / HELPERS -->
+    <!-- SECTION 2: ROUTINE / HELPERS -->
     <div class="section-block">
 
       <div class="sections">
@@ -1550,15 +1484,6 @@ ${mozartContext}`
               <input type="checkbox" bind:checked={refAlbumMode} />
               Album
             </label>
-          </div>
-          <div class="ref-row2">
-            <input class="add-inp ref-url-inp" bind:value={refSpotifyUrl} placeholder="Paste Spotify URL..." />
-            <button class="btn-ref-sm {refDownloading ? 'dim' : ''}" onclick={downloadReference} disabled={refDownloading}>
-              {refDownloading ? '...' : '↓ DL'}
-            </button>
-            <button class="btn-ref-spotify-sm {refFinding ? 'dim' : ''}" onclick={findOnSpotify} disabled={refFinding}>
-              {refFinding ? '...' : '♫ Find on Spotify'}
-            </button>
           </div>
           {#if refProgress.length}
             <div class="ref-progress">
@@ -1749,7 +1674,74 @@ ${mozartContext}`
           {/if}
         </div>
 
-        <!-- ABLETON CONTROL -->
+        <!-- WHATSAPP — moved here from top-level section -->
+        <div class="helper-block">
+          <div class="normalizer-title">WHATSAPP</div>
+          {#if waContacts.length === 0}
+            <p class="empty-sm" style="color:#444">No monitored contacts. Add contacts in Settings ⚙.</p>
+          {:else}
+            <div class="wa-analyze-row">
+              <select class="wa-contact-sel" bind:value={waSelectedContact}>
+                <option value="">— Select contact —</option>
+                {#each waContacts as c (c.jid)}
+                  <option value={c.name}>{c.name}</option>
+                {/each}
+              </select>
+              <button class="briefing-btn {waAnalyzing ? 'loading' : ''}" onclick={analyzeWaContact} disabled={!waSelectedContact || waAnalyzing}>
+                {waAnalyzing ? 'Analyzing...' : 'Analyze Conversation'}
+              </button>
+            </div>
+            {#if waError}
+              <p class="empty-sm" style="color:#e05a4a;margin-top:6px">{waError}</p>
+            {/if}
+            {#if waResult}
+              <div class="wa-result">
+                {#if waResult.urgency}
+                  <div class="wa-result-row">
+                    <span class="wa-result-label">URGENCY</span>
+                    <span class="wa-urgency-val urgency-{waResult.urgency}">{waResult.urgency.toUpperCase()}</span>
+                  </div>
+                {/if}
+                {#if waResult.summary}
+                  <div class="wa-result-section">
+                    <div class="wa-result-label">SUMMARY</div>
+                    <div class="wa-result-text">{waResult.summary}</div>
+                  </div>
+                {/if}
+                {#if waResult.real_intent}
+                  <div class="wa-result-section">
+                    <div class="wa-result-label">REAL INTENT</div>
+                    <div class="wa-result-text">{waResult.real_intent}</div>
+                  </div>
+                {/if}
+                {#if waResult.tone}
+                  <div class="wa-result-section">
+                    <div class="wa-result-label">TONE</div>
+                    <div class="wa-result-text">{waResult.tone}</div>
+                  </div>
+                {/if}
+                {#if waResult.opportunities}
+                  <div class="wa-result-section">
+                    <div class="wa-result-label">OPPORTUNITIES</div>
+                    <div class="wa-result-text">{waResult.opportunities}</div>
+                  </div>
+                {/if}
+                {#if waResult.recommended_response}
+                  <div class="wa-result-section">
+                    <div class="wa-result-label">RECOMMENDED RESPONSE</div>
+                    <div class="wa-result-text wa-reply-wrap">
+                      <span class="wa-reply-text">{waResult.recommended_response}</span>
+                      <button class="wa-copy-btn" onclick={() => navigator.clipboard.writeText(waResult.recommended_response)}>Copy</button>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          {/if}
+        </div>
+
+        <!-- ABLETON CONTROL — hidden, re-enable by removing {#if false} -->
+        {#if false}
         <div class="helper-block">
         <div class="normalizer-title">ABLETON CONTROL</div>
         <div class="ableton-status-row">
@@ -1814,6 +1806,7 @@ ${mozartContext}`
           <div class="ableton-response err"><div class="ableton-response-error">✗ {abletonResponse.error}</div></div>
         {/if}
         </div><!-- /helper-block ableton -->
+        {/if}<!-- /ableton hidden -->
 
       </div><!-- /helpers-built-in routine -->
       {/if}

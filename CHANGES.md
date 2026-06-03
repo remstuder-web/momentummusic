@@ -2873,3 +2873,9 @@ TASK: Scout: add Billboard Hot 100 + Official UK Charts to daily chart grid
 WHAT: Added fetchBillboardHot100() — scrapes billboard.com/charts/hot-100/ using o-chart-results-list-row-container blocks (rank+title+artist+weeks all extracted); added fetchUKOfficialCharts() — scrapes officialcharts.com using data-item="item-ID-INDEX" pattern (position+title+artist+last_week all extracted); added decodeHtmlEntities() helper; wired both into runAgentScout() Promise.all; added to chartContext prompt text; added billboard/uk_charts keys to inbox metadata; updated DailyTab chart-grid from 2×2 to 3×2 (3-col CSS); removed tiktok special span-2 layout; updated chart array to 6 charts in row order [spotify_global, spotify_de, billboard, tiktok, youtube, uk_charts]; ▶ play button on Billboard/UK opens Spotify search; chartTrackKeys dedup includes new charts
 RESULT: works — Billboard: 100 containers, top 10 correct (Drake, Ella Langley, Olivia Rodrigo, Bruno Mars). UK: 100 items, top 10 correct (Sam Fender, Olivia Rodrigo, Michael Jackson). Both scrapers confirmed working.
 BLOCKERS: none
+
+## 2026-06-03 src/lib/DailyTab.svelte — DONE
+TASK: Daily: remove Spotify URL row, hide Ableton, move WhatsApp after MIDI
+WHAT: (1) Removed ref-row2 (Spotify URL input + ↓ DL + ♫ Find on Spotify buttons) from REFERENCES section — row 1 only remains; (2) Wrapped ABLETON CONTROL helper-block in {#if false} — hidden but code intact, one-line to re-enable; (3) Removed WHATSAPP section-block from top-level position (was SECTION 2 before ROUTINE), reinserted as helper-block after MIDI FROM REFERENCE with normalizer-title header
+RESULT: builds clean (5.09s, 0 errors)
+BLOCKERS: none

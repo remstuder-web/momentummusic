@@ -3849,12 +3849,10 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                         <!-- ── STEMS ANALYSIS ── -->
                         <div class="az-section-title">STEMS ANALYSIS</div>
                         <div class="stem-tabs">
-                          {#if latestA}
-                            <button class="stem-tab {curStem==='mix'?'active':''}"
-                              onclick={() => { activeStemTab[song.id]='mix'; activeStemTab={...activeStemTab} }}>
-                              FULL MIX
-                            </button>
-                          {/if}
+                          <button class="stem-tab {curStem==='mix'?'active':''}"
+                            onclick={() => { activeStemTab[song.id]='mix'; activeStemTab={...activeStemTab} }}>
+                            FULL MIX
+                          </button>
                           {#if hasStemData}
                             {#each [['drums','DRUMS'],['bass','BASS'],['other','MUSIC'],['vocals','VOCALS']] as [key,label]}
                               <button class="stem-tab {curStem===key?'active':''}"

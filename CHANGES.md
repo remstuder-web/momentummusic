@@ -2975,3 +2975,9 @@ TASK: Analyzer FULL MIX: reference comparison with actionable suggestions + Moza
 WHAT: New fullMixRefData $state + loadFullMixRef(song) — queries reference_tracks for first ref with Essentia metrics (loudness/energy/brightness/bass_energy/stereo_width); called in onAnalyzerTabOpen. Two helper functions: mixDiffSuggest(metric,diff) returns directional suggestion text; mixDiffColor(metric,absDiff) returns green/amber/red by threshold (LUFS >2/>4, others >0.1/>0.2). FULL MIX tab now shows: comparison block (fmc-row per metric — label, your mix vs ref, colored dot, actionable → suggestion) + MOZART SUMMARY section (strategic/creative/next_step with refresh button). Mozart summary moved to FULL MIX tab only. Stereo width uses stereo_width_per_band average when top-level value missing. Old REFERENCE COMPARISON section removed and replaced. 13 new CSS rules.
 RESULT: builds clean — watcher running
 BLOCKERS: none
+
+## 2026-06-03 src/lib/ProjectsTab.svelte — DONE
+TASK: Analyzer: FULL MIX button first before DRUMS
+WHAT: Removed {#if latestA} wrapper from FULL MIX stem tab button — now unconditionally rendered as position 1. Previously latestA=null could hide FULL MIX while DRUMS/BASS/MUSIC/VOCALS still showed. Now order is always: FULL MIX | DRUMS | BASS | MUSIC | VOCALS
+RESULT: builds clean
+BLOCKERS: none

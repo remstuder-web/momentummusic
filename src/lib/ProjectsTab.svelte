@@ -2321,6 +2321,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
 
   async function onAnalyzerTabOpen(song) {
+    console.log('[ANALYZER] onAnalyzerTabOpen called, song.id=', song.id, 'activeSongTab=', activeSongTab)
     analyzerLoading[song.id] = true
     analyzerLoading = { ...analyzerLoading }
     let hasCurves = false
@@ -3473,6 +3474,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
                 <!-- Vocal EQ section / ANALYZER tab -->
                 {#if activeSongTab[song.id] === 'analyzer'}
+                  <div style="color:#c9a84c;font-size:11px;padding:4px 0;font-family:monospace">ANALYZER ACTIVE — song {song.id}</div>
                   {@const songCurves = vocalEqCurves[song.id] || []}
                   {@const stemKey = activeStem[song.id] || 'mix'}
                   {@const selectedRef = selectedRefId[song.id] || ''}

@@ -1472,9 +1472,10 @@ ${mozartContext}`
       </div>
       <div class="routine-btns-wrap">
         {#each state.customs.filter(item => !['google gemini','youtube','spotify'].includes((item.label||'').toLowerCase().trim())) as item (item.id)}
-          <div class="routine-box">
-            <button class="routine-box-label" onclick={() => item.url && window.open(item.url, '_blank', '')}>{item.label}</button>
-            <button class="del-btn" onclick={() => delCustom(item.id)}>×</button>
+          <div class="routine-box" onclick={() => item.url && window.open(item.url, '_blank', '')}>
+            <span class="routine-box-label">{item.label}</span>
+            <span class="routine-box-arr">→</span>
+            <button class="del-btn" onclick={(e) => { e.stopPropagation(); delCustom(item.id) }}>×</button>
           </div>
         {/each}
         </div>
@@ -1482,9 +1483,10 @@ ${mozartContext}`
           <div class="routine-divider">CHECK</div>
           <div class="routine-btns-wrap">
           {#each (state.checkItems||[]) as item (item.id)}
-            <div class="routine-box">
-              <button class="routine-box-label" onclick={() => item.url && window.open(item.url, '_blank', '')}>{item.label}</button>
-              <button class="del-btn" onclick={() => delCheck(item.id)}>×</button>
+            <div class="routine-box" onclick={() => item.url && window.open(item.url, '_blank', '')}>
+              <span class="routine-box-label">{item.label}</span>
+              <span class="routine-box-arr">→</span>
+              <button class="del-btn" onclick={(e) => { e.stopPropagation(); delCheck(item.id) }}>×</button>
             </div>
           {/each}
           </div>
@@ -2315,11 +2317,12 @@ ${mozartContext}`
   .routine-divider { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.4); padding: 10px 0 4px; border-top: 1px solid #1a1a1a; margin-top: 16px; }
   .check-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: transparent; min-height: 0; }
   .check-item.done { opacity: .38; }
-  .routine-btns-wrap { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-  .routine-box { display: flex; align-items: center; padding: 3px 6px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; gap: 4px; width: 150px; overflow: hidden; }
+  .routine-btns-wrap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+  .routine-box { display: flex; align-items: center; padding: 3px 6px 3px 8px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; gap: 4px; overflow: hidden; cursor: pointer; }
   .routine-box:hover { border-color: #444; }
-  .routine-box-label { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #888; background: none; border: none; text-align: left; padding: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .routine-box-label:hover { color: #f5f1ea; }
+  .routine-box-label { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .routine-box-arr { font-family: 'Space Mono', monospace; font-size: 12px; color: #555; flex-shrink: 0; }
+  .routine-box:hover .routine-box-arr { color: #c9a84c; }
   .helper-search-inp { background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 3px 8px; border-radius: 3px; width: 150px; flex-shrink: 0; outline: none; }
   .helper-search-inp::placeholder { color: #666; }
   .helper-search-inp:focus { border-color: rgba(201,168,76,.4); }

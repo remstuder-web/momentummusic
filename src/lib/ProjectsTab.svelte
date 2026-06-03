@@ -1188,11 +1188,17 @@
         body: JSON.stringify({ artist, title })
       })
       const d = await r.json()
+      console.log('[addRefBySearch] response:', d)
       const track = d.results?.[0]
       if (!d.ok || !track) {
-        // Not found — show error for 2s then clear
-        songRefStatus['_err_' + song.id] = 'notfound'
-        setTimeout(() => { songRefStatus['_err_' + song.id] = null }, 2000)
+        if (d.fallback_url) {
+          window.open(d.fallback_url, '_blank')
+          songRefStatus['_err_' + song.id] = 'browser'
+          setTimeout(() => { songRefStatus['_err_' + song.id] = null }, 3000)
+        } else {
+          songRefStatus['_err_' + song.id] = 'notfound'
+          setTimeout(() => { songRefStatus['_err_' + song.id] = null }, 2000)
+        }
         return
       }
       // Found — add immediately and clear inputs
@@ -1218,8 +1224,10 @@
       }).catch(() => { songRefStatus[refId] = 'error' })
     } catch(e) {
       console.error('addRefBySearch error:', e.message)
-      songRefStatus['_err_' + song.id] = 'notfound'
-      setTimeout(() => { songRefStatus['_err_' + song.id] = null }, 2000)
+      const q = encodeURIComponent([artist, title].filter(Boolean).join(' '))
+      window.open(`https://open.spotify.com/search/${q}/tracks`, '_blank')
+      songRefStatus['_err_' + song.id] = 'browser'
+      setTimeout(() => { songRefStatus['_err_' + song.id] = null }, 3000)
     } finally {
       refSearching[song.id] = false  // always reset — never stuck
     }
@@ -3173,7 +3181,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   <!-- Tab buttons — inline, gap to the left -->
                   <button class="log-tab-btn {activeSongTab[song.id]==='references'?'on':''}" style="margin-left:12px"
                     onclick={() => { activeSongTab[song.id] = activeSongTab[song.id] === 'references' ? null : 'references' }}>
-                    REFS
+                    REF
                   </button>
                   <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}"
                     onclick={() => {
@@ -3244,6 +3252,8 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     </div>
                     {#if songRefStatus['_err_' + song.id] === 'notfound'}
                       <div class="ref-search-msg err">Not found on Spotify — check spelling and try again</div>
+                    {:else if songRefStatus['_err_' + song.id] === 'browser'}
+                      <div class="ref-search-msg">Opened Spotify search in browser</div>
                     {:else if songRefStatus['_err_' + song.id] === 'validation'}
                       <div class="ref-search-msg err">Enter artist or title</div>
                     {/if}

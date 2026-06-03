@@ -2855,3 +2855,9 @@ TASK: Remove system costs section
 WHAT: Removed systemCosts/systemCostsTotal, Hermes/OpenRouter state + functions + intervals + HTML + CSS (cost-*, credits-*, badge-*, total-bar/lbl/amt)
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-03 src/lib/ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: Fix reference search, rename tab to REF
+WHAT: /search-spotify-track now returns fallback_url on any Spotify failure; frontend opens Spotify search in browser instead of dead-end error; added console.log of raw Spotify response; tab button renamed from REFS → REF
+RESULT: works — Spotify 403 (app needs premium) triggers browser fallback to open.spotify.com/search; console.log confirms raw response visible
+BLOCKERS: Spotify API returning 403 "Active premium subscription required" for app credentials — search is non-functional server-side; browser fallback is the working path

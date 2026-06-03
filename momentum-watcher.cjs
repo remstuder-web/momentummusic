@@ -8506,16 +8506,26 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     let body = ''
     req.on('data', c => body += c)
     await new Promise(r => req.on('end', r))
+    let artist = '', title = ''
     try {
-      const { artist, title } = JSON.parse(body)
+      const parsed = JSON.parse(body)
+      artist = (parsed.artist || '').trim()
+      title  = (parsed.title  || '').trim()
       if (!artist && !title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'artist or title required' })); return }
+      const fallback_url = `https://open.spotify.com/search/${encodeURIComponent([artist, title].filter(Boolean).join(' '))}/tracks`
       await ensureSpotifyToken()
       const q = encodeURIComponent(`${artist} ${title}`.trim())
-      const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=3`)
+      console.log('[search-spotify-track] query:', `${artist} ${title}`)
+      const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=5`)
       if (!r.ok) throw new Error(`Spotify ${r.status}`)
       const d = await r.json()
+      console.log('[search-spotify-track] raw response:', JSON.stringify(d).slice(0, 400))
       const items = d.tracks?.items || []
-      if (!items.length) { res.writeHead(200); res.end(JSON.stringify({ ok: false, error: 'Track not found on Spotify' })); return }
+      if (!items.length) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'Track not found on Spotify', fallback_url }))
+        return
+      }
       const results = items.map(t => ({
         spotify_id: t.id,
         title: t.name,
@@ -8526,8 +8536,10 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, results }))
     } catch(e) {
+      console.error('[search-spotify-track] error:', e.message)
+      const fallback_url = `https://open.spotify.com/search/${encodeURIComponent([artist, title].filter(Boolean).join(' '))}/tracks`
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: false, error: e.message }))
+      res.end(JSON.stringify({ ok: false, error: e.message, fallback_url }))
     }
     return
   }

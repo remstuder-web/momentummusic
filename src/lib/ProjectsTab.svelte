@@ -2481,7 +2481,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
       const saved = wd?.stem_analysis
       if (saved && Object.keys(saved).length) {
         stemAnalysis = { ...stemAnalysis, [song.id]: saved }
-        if (!activeStemTab[song.id]) activeStemTab = { ...activeStemTab, [song.id]: 'vocals' }
+        if (!activeStemTab[song.id]) activeStemTab = { ...activeStemTab, [song.id]: 'mix' }
         // Auto-generate summary if not done
         if (!mozartInsight[song.id] && !mozartInsightLoading[song.id]) runAnalyzerSummary(song)
       } else {
@@ -3725,8 +3725,35 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 {#if activeSongTab[song.id] === 'analyzer'}
                   {@const latestA = (wd.versions||[]).filter(v=>v.analysis).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]?.analysis}
                   {@const hasStemData = !!(stemAnalysis[song.id] && Object.keys(stemAnalysis[song.id]).length)}
-                  {@const curStem = activeStemTab[song.id] || 'vocals'}
-                  {@const st = stemAnalysis[song.id]?.[curStem]}
+                  {@const curStem = activeStemTab[song.id] || 'mix'}
+                  {@const st = curStem === 'mix'
+                    ? (latestA ? {
+                        lufs:         latestA.loudness_lufs ?? null,
+                        energy:       latestA.energy ?? null,
+                        brightness:   latestA.brightness ?? null,
+                        stereo_width: (() => {
+                          const spb = latestA.stereo_width_per_band
+                          if (!spb) return null
+                          const vals = Object.values(spb).filter(v => v != null)
+                          return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null
+                        })(),
+                        bass_pct: (() => {
+                          const tb = latestA.tonal_balance; if (!tb) return null
+                          const b=tb.bass||0, m=(tb.low_mid||0)+(tb.high_mid||0), h=tb.air||0, t=b+m+h
+                          return t>0 ? Math.round(b/t*100) : null
+                        })(),
+                        mid_pct: (() => {
+                          const tb = latestA.tonal_balance; if (!tb) return null
+                          const b=tb.bass||0, m=(tb.low_mid||0)+(tb.high_mid||0), h=tb.air||0, t=b+m+h
+                          return t>0 ? Math.round(m/t*100) : null
+                        })(),
+                        high_pct: (() => {
+                          const tb = latestA.tonal_balance; if (!tb) return null
+                          const b=tb.bass||0, m=(tb.low_mid||0)+(tb.high_mid||0), h=tb.air||0, t=b+m+h
+                          return t>0 ? Math.round(h/t*100) : null
+                        })()
+                      } : null)
+                    : stemAnalysis[song.id]?.[curStem]}
                   <div class="analyzer-panel">
                       <!-- ── Header: run/re-analyze ── -->
                       <div class="az-header-row">
@@ -3742,16 +3769,24 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                         {/if}
                       </div>
 
-                      {#if hasStemData}
+                      {#if hasStemData || latestA}
                         <!-- ── STEMS ANALYSIS ── -->
                         <div class="az-section-title">STEMS ANALYSIS</div>
                         <div class="stem-tabs">
-                          {#each [['drums','DRUMS'],['bass','BASS'],['other','MUSIC'],['vocals','VOCALS']] as [key,label]}
-                            <button class="stem-tab {curStem===key?'active':''}"
-                              onclick={() => { activeStemTab[song.id]=key; activeStemTab={...activeStemTab} }}>
-                              {label}
+                          {#if latestA}
+                            <button class="stem-tab {curStem==='mix'?'active':''}"
+                              onclick={() => { activeStemTab[song.id]='mix'; activeStemTab={...activeStemTab} }}>
+                              FULL MIX
                             </button>
-                          {/each}
+                          {/if}
+                          {#if hasStemData}
+                            {#each [['drums','DRUMS'],['bass','BASS'],['other','MUSIC'],['vocals','VOCALS']] as [key,label]}
+                              <button class="stem-tab {curStem===key?'active':''}"
+                                onclick={() => { activeStemTab[song.id]=key; activeStemTab={...activeStemTab} }}>
+                                {label}
+                              </button>
+                            {/each}
+                          {/if}
                         </div>
                         {#if st}
                           <div class="stem-metrics-grid">

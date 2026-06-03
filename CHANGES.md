@@ -2951,3 +2951,9 @@ TASK: Switch Demucs model from htdemucs_ft to htdemucs for faster analysis
 WHAT: Replaced all 4 occurrences of htdemucs_ft with htdemucs — analyze_vocal_eq.py (--name flag + docstring), momentum-watcher.cjs /extract-acapella endpoint (-n flag + output path)
 RESULT: works — watcher running
 BLOCKERS: none
+
+## 2026-06-03 src/lib/ProjectsTab.svelte — DONE
+TASK: Analyzer: add FULL MIX tab before stem tabs
+WHAT: Added FULL MIX as first stem tab; curStem defaults to 'mix'; st const conditionally reads from latestA (work_data.versions[].analysis) when curStem==='mix' — maps loudness_lufs→lufs, energy, brightness, stereo_width_per_band avg→stereo_width, tonal_balance→bass/mid/high%; stem tab row now visible when latestA exists even without stem data; activeStemTab default changed from 'vocals' to 'mix'
+RESULT: builds clean
+BLOCKERS: none

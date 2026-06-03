@@ -846,6 +846,7 @@ ${mozartContext}`
     for (const rawLine of lines) {
       const t = rawLine.trim()
       if (!t) continue
+      if (t === '—' || t === '-' || t.toLowerCase() === 'unavailable' || t.toLowerCase() === 'n/a') continue
 
       if (t.startsWith('## ')) {
         closeNextMove()
@@ -1214,7 +1215,7 @@ ${mozartContext}`
                   <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
                 </div>
                 {#if n.type === 'briefing' || n.type === 'scout'}
-                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*?(?=\n## )/m, '').trim() : n.message}
+                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*/m, '').trim() : n.message}
                   {#if n.type === 'scout' && n.metadata?.spotify_global?.length}
                     <div class="chart-grid">
                       {#each [
@@ -1223,7 +1224,7 @@ ${mozartContext}`
                         {key:'tiktok', label:'📱 TIKTOK'},
                         {key:'youtube', label:'▶ YOUTUBE'}
                       ] as chart}
-                        {#if chart.key === 'tiktok'}
+                        {#if (n.metadata[chart.key]||[]).length === 0}{:else if chart.key === 'tiktok'}
                           <div class="tiktok-col">
                             <div class="chart-title">{chart.label}</div>
                             {#each (n.metadata.tiktok || []) as t, i}
@@ -1342,7 +1343,7 @@ ${mozartContext}`
                   <button class="inbox-del-btn" onclick={() => deleteInboxItem(n.id)}>×</button>
                 </div>
                 {#if n.type === 'briefing' || n.type === 'scout'}
-                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*?(?=\n## )/m, '').trim() : n.message}
+                  {@const scoutMsg = n.type === 'scout' ? n.message.replace(/^## CHARTS[\s\S]*/m, '').trim() : n.message}
                   <div class="agent-output">{@html parseAgentOutput(scoutMsg)}</div>
                 {:else}
                   <div class="inbox-msg">{n.message}</div>

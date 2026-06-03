@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-03] src/lib/DailyTab.svelte — DONE
+TASK: Remove greyed out unavailable items from Trends & News
+WHAT: (1) Chart grid: skip columns with no data (empty youtube/spotify/tiktok arrays no longer render a header). (2) scoutMsg regex: changed to strip ## CHARTS to end-of-string, fixing case where CHARTS was the last section and the full text leaked into agent-output. (3) parseAgentOutput: skip bare "—", "-", "Unavailable", "N/A" lines.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-03] src/lib/DailyTab.svelte — DONE
 TASK: Gold section titles for all routine helper sections
 WHAT: Updated .normalizer-title CSS — was 11px #555 dim grey, now 13px Space Mono 700 rgba(201,168,76,.75) matching all other section titles in the app.
 RESULT: works

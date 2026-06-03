@@ -3047,3 +3047,9 @@ TASK: Daily: Applio+Kits buttons together, Generate Titles matches Download butt
 WHAT: (1) Removed margin-left:auto from .acapella-applio-btn so 🎤 APPLIO and KITS sit flush next to mode buttons; renamed label to APPLIO (uppercase). (2) Generate Titles button class changed from btn-gold-sm to btn-ref-sm — matches ↓ Download button style (gold border + subtle gold bg, gold text)
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-04 src/lib/DailyTab.svelte — DONE
+TASK: Daily: equal row spacing in helpers/routine list, Applio+Kits pushed far right
+WHAT: (1) .check-item padding changed from 5px 8px to 8px 8px — uniform vertical spacing across all HELPERS/ROUTINE rows. (2) Wrapped APPLIO+KITS buttons in .acapella-launch-group div (margin-left:auto, flex, gap:5px) — pushes both buttons to far right of mode row while keeping ACAPELLA/VOCAL CLEAN/INSTRUMENTAL left-aligned.
+RESULT: builds clean
+BLOCKERS: none

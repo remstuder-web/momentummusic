@@ -2999,3 +2999,9 @@ TASK: ProjectsTab: remove INSTRUMENTAL label, align both drop zones
 WHAT: Removed <div class="dual-drop-label">INSTRUMENTAL</div> from right dual-drop-col (was causing vertical misalignment). Changed left column secondary hint from drop-alt-hint with inline style to drop-hint-sub to match right column. Changed dual-drop-row align-items from start to stretch so both columns fill to equal height.
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-03 src/lib/DailyTab.svelte + momentum-watcher.cjs + .env — DONE
+TASK: References: FIND button finds 3 similar tracks + download all to !Current
+WHAT: New POST /find-similar-tracks endpoint — tries Last.fm getSimilar API (LASTFM_API_KEY env), falls back to Claude Haiku ("3 similar current songs" prompt), falls back to MusicBrainz recordings by same artist; returns [{artist,title}] top 3. DailyTab: FIND button (green outline) added between Title input and ↓ Download; similarResults $state + similarDownloadingAll $state; findSimilar(), downloadSimilarOne(idx), downloadAllChecked() functions; similar-results panel shows 3 rows — checkbox (pre-checked), artist—title, individual ↓ DL button; Download All Checked button at bottom; typing in inputs clears results. LASTFM_API_KEY= added to .env (fill in free key from last.fm/api).
+RESULT: works — tested Drake "God's Plan" → Blinding Lights, Circles, Lucid Dreams (Claude Haiku fallback)
+BLOCKERS: LASTFM_API_KEY empty — using Claude Haiku fallback. Add key to .env for direct Last.fm data.

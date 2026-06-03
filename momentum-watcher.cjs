@@ -8769,6 +8769,81 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
+  // ── POST /find-similar-tracks — Last.fm similar tracks, Claude Haiku fallback ──
+  if (req.method === 'POST' && req.url === '/find-similar-tracks') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', c => body += c)
+    await new Promise(r => req.on('end', r))
+    let artist = '', title = ''
+    try {
+      const parsed = JSON.parse(body)
+      artist = (parsed.artist || '').trim()
+      title  = (parsed.title  || '').trim()
+      if (!artist && !title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'artist or title required' })); return }
+
+      const LASTFM_KEY = process.env.LASTFM_API_KEY || ''
+      let results = []
+
+      // Strategy 1: Last.fm similar tracks API
+      if (LASTFM_KEY) {
+        try {
+          const lfUrl = `https://ws.audioscrobbler.com/2.0/?method=track.getSimilar&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(title)}&limit=5&api_key=${LASTFM_KEY}&format=json`
+          const lfRes = await fetch(lfUrl)
+          if (lfRes.ok) {
+            const lfData = await lfRes.json()
+            const tracks = lfData.similartracks?.track || []
+            results = tracks.slice(0, 3).map(t => ({
+              artist: typeof t.artist === 'object' ? t.artist.name : (t.artist || ''),
+              title:  t.name || ''
+            })).filter(t => t.artist && t.title)
+            console.log(`[find-similar-tracks] Last.fm: ${results.length} results for "${artist} — ${title}"`)
+          }
+        } catch(e) { console.warn('[find-similar-tracks] Last.fm failed:', e.message) }
+      }
+
+      // Strategy 2: Claude Haiku fallback
+      if (!results.length) {
+        const apiKey = process.env.ANTHROPIC_API_KEY || ''
+        if (apiKey) {
+          try {
+            const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+              body: JSON.stringify({
+                model: 'claude-haiku-4-5-20251001',
+                max_tokens: 200,
+                messages: [{ role: 'user', content: `Name 3 current popular songs that sound similar to "${artist} - ${title}". Return a JSON array ONLY, no explanation: [{"artist":"...","title":"..."}]. Only real existing songs from the last 3 years.` }]
+              })
+            })
+            const aiData = await aiRes.json()
+            const raw = (aiData.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
+            const m = raw.match(/\[[\s\S]*\]/)
+            if (m) results = JSON.parse(m[0]).slice(0, 3).filter(t => t.artist && t.title)
+            console.log(`[find-similar-tracks] Claude fallback: ${results.length} results`)
+          } catch(e) { console.warn('[find-similar-tracks] Claude fallback failed:', e.message) }
+        }
+      }
+
+      // Strategy 3: MusicBrainz recordings with same artist as last resort
+      if (!results.length && artist) {
+        try {
+          const recs = await musicBrainzSearch(artist, '', 3)
+          results = recs.filter(r => r.title !== title).slice(0, 3).map(r => ({ artist: r.artist || artist, title: r.title }))
+          console.log(`[find-similar-tracks] MusicBrainz fallback: ${results.length} results`)
+        } catch(e) {}
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: results.length > 0, results }))
+    } catch(e) {
+      console.error('[find-similar-tracks] error:', e.message)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message, results: [] }))
+    }
+    return
+  }
+
   // ── POST /download-reference — smart yt-dlp download → References/!Current (SSE) ──
   if (req.method === 'POST' && req.url === '/download-reference') {
     res.writeHead(200, {

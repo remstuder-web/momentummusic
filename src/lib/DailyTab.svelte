@@ -59,6 +59,8 @@
   let refStatus = $state(null)  // { ok, msg }
   let refProgress = $state([])
   let recentRefMoves = $state([])
+  let similarResults = $state([])        // [{artist, title, checked, downloading}]
+  let similarDownloadingAll = $state(false)
 
   async function downloadReference() {
     if (!refArtist.trim() && !refTitle.trim() && !refSpotifyUrl.trim()) return
@@ -99,6 +101,64 @@
       refStatus = { ok: false, msg: e.message }
     }
     refDownloading = false
+  }
+
+  async function findSimilar() {
+    if (!refArtist.trim() && !refTitle.trim()) return
+    refFinding = true
+    similarResults = []
+    refStatus = null
+    try {
+      const r = await fetch('http://localhost:4242/find-similar-tracks', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artist: refArtist.trim(), title: refTitle.trim() })
+      })
+      const d = await r.json()
+      if (d.ok && d.results?.length) {
+        similarResults = d.results.map(t => ({ ...t, checked: true, downloading: false, done: false }))
+      } else {
+        refStatus = { ok: false, msg: 'No similar tracks found' }
+      }
+    } catch(e) {
+      refStatus = { ok: false, msg: 'Find failed: ' + e.message }
+    }
+    refFinding = false
+  }
+
+  async function downloadSimilarOne(idx) {
+    const t = similarResults[idx]
+    if (!t || t.downloading) return
+    similarResults[idx] = { ...t, downloading: true }
+    similarResults = [...similarResults]
+    try {
+      const r = await fetch('http://localhost:4242/download-reference', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artist: t.artist, title: t.title })
+      })
+      const reader = r.body.getReader()
+      const dec = new TextDecoder()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += dec.decode(value, { stream: true })
+        for (const line of buf.split('\n')) {
+          if (line.startsWith('data: ')) {
+            try { const ev = JSON.parse(line.slice(6)); if (ev.type === 'done') similarResults[idx] = { ...similarResults[idx], done: true } } catch(_) {}
+          }
+        }
+        buf = buf.slice(buf.lastIndexOf('\n') + 1)
+      }
+    } catch(e) { console.error('downloadSimilarOne error:', e.message) }
+    similarResults[idx] = { ...similarResults[idx], downloading: false }
+    similarResults = [...similarResults]
+  }
+
+  async function downloadAllChecked() {
+    similarDownloadingAll = true
+    const toDownload = similarResults.map((t, i) => ({ ...t, idx: i })).filter(t => t.checked && !t.done)
+    for (const t of toDownload) await downloadSimilarOne(t.idx)
+    similarDownloadingAll = false
   }
 
   async function findOnSpotify() {
@@ -1475,8 +1535,13 @@ ${mozartContext}`
         <div class="helper-block">
           <div class="normalizer-title">REFERENCES</div>
           <div class="ref-row1">
-            <input class="add-inp ref-field" bind:value={refArtist} placeholder="Artist" />
-            <input class="add-inp ref-field" bind:value={refTitle} placeholder="Song / Album title" />
+            <input class="add-inp ref-field" bind:value={refArtist} placeholder="Artist"
+              oninput={() => { similarResults = [] }} />
+            <input class="add-inp ref-field" bind:value={refTitle} placeholder="Song / Album title"
+              oninput={() => { similarResults = [] }} />
+            <button class="btn-ref-find {refFinding ? 'dim' : ''}" onclick={findSimilar} disabled={refFinding} title="Find similar tracks">
+              {refFinding ? '...' : 'FIND'}
+            </button>
             <button class="btn-ref-sm {refDownloading ? 'dim' : ''}" onclick={downloadReference} disabled={refDownloading}>
               {refDownloading ? '...' : '↓ Download'}
             </button>
@@ -1485,6 +1550,26 @@ ${mozartContext}`
               Album
             </label>
           </div>
+          {#if similarResults.length}
+            <div class="similar-results">
+              {#each similarResults as t, i}
+                <div class="similar-row">
+                  <label class="similar-check">
+                    <input type="checkbox" bind:checked={similarResults[i].checked} />
+                  </label>
+                  <span class="similar-name">{t.artist} — {t.title}</span>
+                  <button class="btn-ref-sm similar-dl-btn {t.downloading ? 'dim' : ''} {t.done ? 'done' : ''}"
+                    onclick={() => downloadSimilarOne(i)} disabled={t.downloading || t.done}>
+                    {t.done ? '✓' : t.downloading ? '...' : '↓ DL'}
+                  </button>
+                </div>
+              {/each}
+              <button class="btn-ref-sm similar-dl-all {similarDownloadingAll ? 'dim' : ''}"
+                onclick={downloadAllChecked} disabled={similarDownloadingAll}>
+                {similarDownloadingAll ? '⟳ Downloading...' : '↓ Download All Checked'}
+              </button>
+            </div>
+          {/if}
           {#if refProgress.length}
             <div class="ref-progress">
               {#each refProgress as p}
@@ -2306,6 +2391,16 @@ ${mozartContext}`
   .btn-ref-spotify-sm { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 4px 10px; background: rgba(30,215,96,.08); border: 1px solid rgba(30,215,96,.3); color: #1ed760; border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
   .btn-ref-spotify-sm:hover { background: rgba(30,215,96,.14); }
   .btn-ref-spotify-sm.dim { opacity: .5; cursor: not-allowed; }
+  .btn-ref-find { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 4px 10px; background: rgba(76,175,130,.08); border: 1px solid rgba(76,175,130,.35); color: #4caf82; border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .btn-ref-find:hover { background: rgba(76,175,130,.14); }
+  .btn-ref-find.dim { opacity: .5; cursor: not-allowed; }
+  .similar-results { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding: 6px 8px; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 3px; }
+  .similar-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+  .similar-check { display: flex; align-items: center; flex-shrink: 0; }
+  .similar-name { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #cec9c1; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .similar-dl-btn { font-size: 10px !important; padding: 2px 8px !important; }
+  .similar-dl-btn.done { background: rgba(76,175,130,.08) !important; border-color: rgba(76,175,130,.3) !important; color: #4caf82 !important; }
+  .similar-dl-all { margin-top: 4px; width: 100%; justify-content: center; }
   .ref-progress { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; padding: 6px 8px; background: #111; border-radius: 3px; max-height: 140px; overflow-y: auto; }
   .ref-progress-line { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; }
   .ref-status { font-family: 'Space Mono', monospace; font-size: 10px; margin-top: 5px; }

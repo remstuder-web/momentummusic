@@ -8732,6 +8732,43 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
+  // ── POST /search-reference-tracks — MusicBrainz artist+title search, top 3 results ──
+  if (req.method === 'POST' && req.url === '/search-reference-tracks') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    let body = ''
+    req.on('data', c => body += c)
+    await new Promise(r => req.on('end', r))
+    let artist = '', title = ''
+    try {
+      const parsed = JSON.parse(body)
+      artist = (parsed.artist || '').trim()
+      title  = (parsed.title  || '').trim()
+      if (!artist && !title) { res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'artist or title required' })); return }
+      console.log('[search-reference-tracks] query:', artist, '—', title)
+      const recs = await musicBrainzSearch(artist, title, 3)
+      console.log('[search-reference-tracks] raw results:', JSON.stringify(recs))
+      if (!recs.length) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'No results found' }))
+        return
+      }
+      const results = recs.map(rec => ({
+        mb_id: rec.mb_id,
+        title: rec.title,
+        artist: rec.artist,
+        duration_ms: rec.duration_ms || null,
+        year: rec.year || ''
+      }))
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, results }))
+    } catch(e) {
+      console.error('[search-reference-tracks] error:', e.message)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: e.message }))
+    }
+    return
+  }
+
   // ── POST /download-reference — smart yt-dlp download → References/!Current (SSE) ──
   if (req.method === 'POST' && req.url === '/download-reference') {
     res.writeHead(200, {

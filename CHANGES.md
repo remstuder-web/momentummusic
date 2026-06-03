@@ -2915,3 +2915,9 @@ TASK: DemoTab: New Demo button styled like Filter, ProjectsTab: REF→REFERENCES
 WHAT: (1) demo-add-btn CSS: changed from gold fill (bg #c9a84c, no border) to outline style matching filter-toggle-btn (bg #1c1c1c, border #252525, color #c9a84c gold text, hover brightens border); (2) ProjectsTab log-tab-btn label "REF" → "REFERENCES"
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-03 src/lib/ProjectsTab.svelte + momentum-watcher.cjs — DONE
+TASK: References: MusicBrainz search with 3-option dropdown picker
+WHAT: New POST /search-reference-tracks endpoint — calls musicBrainzSearch(artist,title,3), returns [{mb_id,title,artist,duration_ms,year}], logs raw results. Frontend: added refSearchResults $state (song.id→results), fmtDuration helper, addRefBySearch now calls /search-reference-tracks and stores results instead of auto-adding; new addRefFromPicker(song,track) adds selected result and queues /analyze-ref-now; UI shows ref-picker-results dropdown with up to 3 options (Artist — Title · year · duration) + ✕ cancel; typing in inputs clears picker; button renamed Search→Search
+RESULT: works — Drake "God's Plan" returns 3 results with duration (3:18, 3:18, 3:13)
+BLOCKERS: none

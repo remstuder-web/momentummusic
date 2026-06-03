@@ -2921,3 +2921,9 @@ TASK: References: MusicBrainz search with 3-option dropdown picker
 WHAT: New POST /search-reference-tracks endpoint — calls musicBrainzSearch(artist,title,3), returns [{mb_id,title,artist,duration_ms,year}], logs raw results. Frontend: added refSearchResults $state (song.id→results), fmtDuration helper, addRefBySearch now calls /search-reference-tracks and stores results instead of auto-adding; new addRefFromPicker(song,track) adds selected result and queues /analyze-ref-now; UI shows ref-picker-results dropdown with up to 3 options (Artist — Title · year · duration) + ✕ cancel; typing in inputs clears picker; button renamed Search→Search
 RESULT: works — Drake "God's Plan" returns 3 results with duration (3:18, 3:18, 3:13)
 BLOCKERS: none
+
+## 2026-06-03 momentum-watcher.cjs — DONE
+TASK: Fix: only move files downloaded by Momentum to !Current, remove Downloads watcher
+WHAT: Removed chokidar.watch(DOWNLOADS_DIR) block (was auto-moving ALL audio from ~/Downloads to !Current). /download-reference already moves files directly from /tmp/ to !Current via fs.renameSync — no ~/Downloads involvement needed. Updated recentRefMoves comment. fs.watch(WATCH_DIR) for demo CODE_v00.ext files is unchanged.
+RESULT: works — watcher running, no Downloads watcher startup log
+BLOCKERS: none

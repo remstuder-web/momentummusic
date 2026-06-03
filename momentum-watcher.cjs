@@ -6291,7 +6291,7 @@ const DISCO_TAGS = {
   type: ['Cover','Demo','Easy-clear','Focus track','Mainstream','One stop','Recognizable','Rerecord','Samples','Score','Sound design','Soundtrack','Sting']
 }
 
-// ── Module-scope state for Downloads → References watcher ────────────────
+// ── Recent reference moves — populated by /download-reference endpoint ───
 const recentRefMoves = []
 
 // ── HTTP server ───────────────────────────────────────────────────────────
@@ -16074,26 +16074,7 @@ Max 150 words. Be specific and actionable.` }]
     }
   })()
 
-  // ── Downloads watcher — auto-move audio to References/!Current ───────────
-  const REFERENCE_AUDIO_EXTS = new Set(['.mp3', '.wav', '.m4a', '.flac', '.aiff', '.aif'])
-  if (!fs.existsSync(REFERENCES_CURRENT_DIR)) fs.mkdirSync(REFERENCES_CURRENT_DIR, { recursive: true })
-  chokidar.watch(DOWNLOADS_DIR, { depth: 0, ignoreInitial: true, persistent: true })
-    .on('add', filePath => {
-      const ext = path.extname(filePath).toLowerCase()
-      if (!REFERENCE_AUDIO_EXTS.has(ext)) return
-      setTimeout(() => {
-        try {
-          if (!fs.existsSync(filePath)) return
-          const filename = path.basename(filePath)
-          const dest = path.join(REFERENCES_CURRENT_DIR, filename)
-          fs.renameSync(filePath, dest)
-          recentRefMoves.unshift(filename)
-          if (recentRefMoves.length > 5) recentRefMoves.length = 5
-          console.log('✓ Reference moved:', filename)
-        } catch(e) { console.warn('⚠ Reference move failed:', e.message) }
-      }, 3000)
-    })
-  console.log('✓ Downloads watcher active → References/!Current')
+  // Downloads watcher removed — /download-reference moves files directly from /tmp to !Current
 })
 
 // ── File watcher ──────────────────────────────────────────────────────────

@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-03] momentum-watcher.cjs — DONE
+TASK: References download — replace Spotify search with yt-dlp + MusicBrainz
+WHAT: Removed all Spotify API search calls from /download-reference (kept only direct URL → metadata). Replaced with: (1) Latest album → yt-dlp "ytmsearch1:artist year latest album" --yes-playlist with fallback. (2) Latest song → yt-dlp "ytsearch1:artist new song YEAR official audio" direct search. (3) Specific album → MusicBrainz /ws/2/release tracklist (free, no auth, 1 req/sec rate limit respected) → individual track downloads; fallback to YouTube Music playlist if MusicBrainz misses. (4) Three new helpers: getMusicBrainzTracklist(), downloadAlbumPlaylist(), processPlaylistFiles(). Two-path download loop handles pre-downloaded playlist files and individual track downloads separately.
+RESULT: works — watcher healthy
+BLOCKERS: none
+
 ## [2026-06-03] momentum-watcher.cjs + src/lib/DailyTab.svelte — DONE
 TASK: References smart download — Spotify tracklist, proper naming, latest album/song support, SSE progress
 WHAT: Full rewrite of POST /download-reference. (1) SSE streaming — sends progress events as download proceeds. (2) Smart mode detection: "latest album/new album" → Spotify album search newest release → full tracklist; "latest song/release" → Spotify track search newest; album_mode → Spotify album lookup → tracklist; single → one track. (3) Multi-query YouTube fallback: tries Official Audio → Topic → Official → bare title. (4) Proper file naming: "Artist - Track Title.mp3" using exact Spotify metadata. (5) Duplicate check before reference_tracks insert. (6) Background Essentia analysis trigger. (7) UI reads SSE stream, shows live progress log panel (max-height 140px scrollable), final status line.

@@ -2321,7 +2321,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
 
   async function onAnalyzerTabOpen(song) {
-    console.log('[ANALYZER] onAnalyzerTabOpen called, song.id=', song.id, 'activeSongTab=', activeSongTab)
     analyzerLoading[song.id] = true
     analyzerLoading = { ...analyzerLoading }
     let hasCurves = false
@@ -3066,7 +3065,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
             {#if expanded}
               <div class="song-body">
-                <!-- Stage row -->
+                <!-- Stage row — stage boxes only, no wrapping with tab buttons -->
                 <div class="stages-row">
                   {#each STAGES.filter(s => s.id !== 'demo') as stage}
                     {@const sd = wd.stages[stage.id]}
@@ -3080,25 +3079,23 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     <button class="stage-ckb" onclick={() => saveWorkData(song, wd => { wd.stems_received = !wd.stems_received })}>{wd.stems_received?'✓':''}</button>
                     <button class="stage-name-btn" onclick={() => setStage(song, 'stems')}>STEMS</button>
                   </div>
-                  <!-- REFERENCES tab -->
-                  <button class="log-tab-btn {activeSongTab[song.id]==='references'?'on':''}" style="margin-left:12px"
-                    onclick={e => { e.stopPropagation(); console.log('REFERENCES clicked'); activeSongTab = {...activeSongTab, [song.id]: activeSongTab[song.id]==='references' ? null : 'references'} }}>
+                </div>
+                <!-- Tab buttons row — own row, guaranteed visible -->
+                <div class="song-tab-row">
+                  <button class="log-tab-btn {activeSongTab[song.id]==='references'?'on':''}"
+                    onclick={() => { activeSongTab = {...activeSongTab, [song.id]: activeSongTab[song.id]==='references' ? null : 'references'} }}>
                     REFERENCES
                   </button>
-                  <!-- ANALYZER tab -->
-                  <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}" style="margin-left:4px"
-                    onclick={e => {
-                      e.stopPropagation()
-                      console.log('ANALYZER clicked, song.id=', song.id, 'current=', activeSongTab[song.id])
+                  <button class="log-tab-btn {activeSongTab[song.id]==='analyzer'?'on':''}"
+                    onclick={() => {
                       const isActive = activeSongTab[song.id] === 'analyzer'
                       activeSongTab = {...activeSongTab, [song.id]: isActive ? null : 'analyzer'}
-                      console.log('ANALYZER after set:', activeSongTab[song.id])
                       if (!isActive) onAnalyzerTabOpen(song)
                     }}>
                     ANALYZER
                   </button>
-                  <!-- LOG tab flush right -->
-                  <button class="log-tab-btn {activeSongTab[song.id]==='log'?'on':''}" style="margin-left: auto"
+                  <div style="flex:1"></div>
+                  <button class="log-tab-btn {activeSongTab[song.id]==='log'?'on':''}"
                     onclick={() => { activeSongTab = {...activeSongTab, [song.id]: activeSongTab[song.id]==='log' ? null : 'log'} }}>
                     LOG
                   </button>
@@ -3475,7 +3472,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
                 <!-- Vocal EQ section / ANALYZER tab -->
                 {#if activeSongTab[song.id] === 'analyzer'}
-                  <div style="color:#c9a84c;font-size:11px;padding:4px 0;font-family:monospace">ANALYZER ACTIVE — song {song.id}</div>
                   {@const songCurves = vocalEqCurves[song.id] || []}
                   {@const stemKey = activeStem[song.id] || 'mix'}
                   {@const selectedRef = selectedRefId[song.id] || ''}
@@ -4384,7 +4380,8 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .arr.open { transform: rotate(90deg); }
 
   .song-body { padding: 16px; border-top: 1px solid #1c1c1c; display: flex; flex-direction: column; gap: 16px; background: #0a0a0a; }
-  .stages-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #1c1c1c; padding-bottom: 12px; }
+  .stages-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .song-tab-row { display: flex; gap: 6px; align-items: center; border-bottom: 1px solid #1c1c1c; padding-bottom: 12px; }
   .stage-box { display: flex; align-items: center; gap: 5px; padding: 7px 11px; border: 1px solid #1c1c1c; border-radius: 3px; background: #111; transition: all .15s; }
   .stage-box:hover { border-color: #252525; background: #151515; }
   .stage-box.active { border-color: rgba(201,168,76,.5); background: rgba(201,168,76,.06); }

@@ -1,6 +1,7 @@
 <script>
   import { supabase } from './supabase.js'
   import { onMount } from 'svelte'
+  import { buildMozartContext } from './mozartContext.js'
 
   let releases = $state([])
   let loading = $state(true)
@@ -11,6 +12,8 @@
   let addOpen = $state(false)
   let addForm = $state({ title: '', artist: '', code: '', release_date: '', label: '', distributor: '', isrc: '', upc: '', notes: '' })
   let addSaving = $state(false)
+  let aiInput = $state(''), aiMessages = $state([]), aiLoading = $state(false)
+  let sideCollapsed = $state(true)
 
   function formatMinSec(sec) {
     const m = Math.floor(sec / 60), s = sec % 60
@@ -250,12 +253,30 @@
   }
 
   onMount(load)
+
+  async function sendAI() {
+    const msg = aiInput.trim(); if (!msg || aiLoading) return
+    aiInput = ''; aiMessages = [...aiMessages, {role:'user', content:msg}]; aiLoading = true
+    const apiKey = (typeof window !== 'undefined' ? localStorage.getItem('mm_api_key') : null) || ''
+    if (!apiKey) { aiMessages = [...aiMessages, {role:'assistant', content:'No API key — add in Settings.'}]; aiLoading = false; return }
+    const ctx = await buildMozartContext(supabase, {})
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST', headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body: JSON.stringify({model:'claude-haiku-4-5-20251001', max_tokens:400, system:ctx, messages:aiMessages.slice(-10)})
+      })
+      const data = await res.json()
+      aiMessages = [...aiMessages, {role:'assistant', content:data.content?.[0]?.text||'No response.'}]
+    } catch(e) { aiMessages = [...aiMessages, {role:'assistant', content:'Error: '+e.message}] }
+    aiLoading = false
+  }
 </script>
 
 {#if loading}
   <p class="empty">Loading releases...</p>
 {:else}
-<div class="release-layout">
+<div class="release-layout {sideCollapsed ? 'side-collapsed' : ''}">
+<div class="release-main">
 
   <div class="release-header">
     <span class="release-title">RELEASES</span>
@@ -582,11 +603,40 @@
       {/each}
     </div>
   {/if}
+</div><!-- /release-main -->
+
+<div class="release-sidebar">
+  <button class="side-toggle {sideCollapsed ? '' : 'expanded'}" onclick={() => sideCollapsed = !sideCollapsed}>{sideCollapsed ? '›' : '‹'}</button>
+  {#if !sideCollapsed}
+  <div class="mozart-block">
+    <div class="mozart-title-row">
+      <div class="mozart-title">ASK MOZART</div>
+      {#if aiMessages.length}<button class="clear-chat" onclick={() => aiMessages = []}>Clear</button>{/if}
+    </div>
+    <div class="chat-input-row">
+      <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e => e.key==='Enter' && sendAI()} />
+      <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
+    </div>
+    <div class="chat-out">
+      {#each aiMessages as msg}
+        <div class="chat-msg {msg.role}">
+          <div class="chat-who">{msg.role==='user' ? 'You' : 'Mozart'}</div>
+          <div class="chat-text">{msg.content}</div>
+        </div>
+      {/each}
+      {#if aiLoading}<div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>{/if}
+    </div>
+  </div>
+  {/if}
 </div>
+
+</div><!-- /release-layout -->
 {/if}
 
 <style>
-  .release-layout { max-width: 1100px; padding: 24px 32px; }
+  .release-layout { display: grid; grid-template-columns: 1fr 320px; gap: 32px; min-height: calc(100vh - 100px); align-items: start; transition: grid-template-columns .2s; }
+  .release-layout.side-collapsed { grid-template-columns: 1fr 20px; }
+  .release-main { max-width: 900px; }
   .release-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
   .release-title { font-family: 'Space Mono', monospace; font-size: 17px; font-weight: 700; color: #c9a84c; }
   .release-count { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; }
@@ -696,4 +746,22 @@
   .r-footer-right { margin-left: auto; }
   .r-btn-danger { font-family: 'Space Mono', monospace; font-size: 11px; padding: 4px 10px; background: transparent; border: 1px solid rgba(224,90,74,.3); color: rgba(224,90,74,.6); border-radius: 2px; cursor: pointer; }
   .r-btn-danger:hover { border-color: #e05a4a; color: #e05a4a; }
+  .release-sidebar { border-left: 1px solid #1c1c1c; padding-left: 12px; display: flex; flex-direction: column; overflow: hidden; }
+  .side-toggle { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; cursor: pointer; padding: 20px 10px; align-self: flex-start; line-height: 1; margin-bottom: 6px; }
+  .side-toggle.expanded { padding: 10px 10px; }
+  .side-toggle:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
+  .mozart-block { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .mozart-title-row { display: flex; align-items: center; justify-content: space-between; }
+  .mozart-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; }
+  .chat-input-row { display: flex; gap: 6px; }
+  .chat-inp { flex: 1; background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 10px; outline: none; border-radius: 3px; }
+  .chat-inp:focus { border-color: rgba(201,168,76,.4); }
+  .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 7px 13px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+  .chat-out { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: 1; padding-right: 2px; }
+  .chat-msg { display: flex; flex-direction: column; gap: 2px; }
+  .chat-who { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; letter-spacing: .08em; }
+  .chat-text { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; line-height: 1.6; }
+  .chat-text.dim { color: #444; }
+  .clear-chat { background: transparent; border: none; color: #555; font-size: 10px; cursor: pointer; padding: 0; font-family: 'Space Mono', monospace; }
+  .clear-chat:hover { color: #9e9690; }
 </style>

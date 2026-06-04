@@ -1169,7 +1169,7 @@
       <button class="sort-sm {patchView==='open'?'on':''}" onclick={() => patchView='open'}>OPEN</button>
       <button class="sort-sm {patchView==='archive'?'on':''}" onclick={() => patchView='archive'}>ARCHIVE</button>
     </div>
-    <button class="btn-gold" onclick={() => showPatchModal = true}>+ New Submission</button>
+    <button class="demo-add-btn demo-add-btn-sm" onclick={() => showPatchModal = true}>+ New Submission</button>
   {/if}
 </div>
 
@@ -1803,7 +1803,7 @@
   .demo-layout.side-collapsed { grid-template-columns: 1fr 20px; }
   .demo-main { display: flex; flex-direction: column; min-width: 0; }
   .demo-right { border-left: 1px solid #1c1c1c; padding-left: 12px; display: flex; flex-direction: column; overflow: hidden; }
-  .side-toggle { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; cursor: pointer; padding: 4px 10px; align-self: flex-start; line-height: 1; margin-bottom: 6px; }
+  .side-toggle { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; cursor: pointer; padding: 20px 10px; align-self: flex-start; line-height: 1; margin-bottom: 6px; }
   .side-toggle.expanded { padding: 10px 10px; }
   .side-toggle:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .mozart-block { display: flex; flex-direction: column; gap: 8px; flex: 1; }

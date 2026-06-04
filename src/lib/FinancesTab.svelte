@@ -378,7 +378,6 @@
   let aiLoading  = $state(false)
   let sideCollapsed = $state(true)
   let liveFeedOpen   = $state(false)
-  let perfPointsOpen = $state(false)
   let perfTradesOpen = $state(false)
   let perfSignalsOpen = $state(false)
 
@@ -570,8 +569,6 @@
   </div>
 
   {#if closedTrades.length > 0}
-    <button class="section-title collapse-sh" onclick={() => perfPointsOpen = !perfPointsOpen}>POINTS {perfPointsOpen ? '▲' : '▼'}</button>
-    {#if perfPointsOpen}
     <div class="stats-bar">
       <div class="stat-box">
         <div class="stat-label">TOTAL P&L</div>
@@ -590,7 +587,6 @@
         <div class="stat-val" style="color:#c9a84c">{openTrades.length}</div>
       </div>
     </div>
-    {/if}
   {:else}
     <div class="empty-sm">No trades yet — bot is scanning for signals</div>
   {/if}

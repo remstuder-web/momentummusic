@@ -345,6 +345,7 @@
 
   // Mozart
   let aiInput = $state(''), aiMessages = $state([]), aiLoading = $state(false)
+  let sideCollapsed = $state(false)
   let chatContainer = $state(null)
   $effect(() => {
     if (aiMessages.length && chatContainer) {
@@ -1271,7 +1272,7 @@ ${mozartContext}`
 {#if loading}
   <p class="empty">Loading...</p>
 {:else}
-<div class="layout">
+<div class="layout {sideCollapsed ? 'side-collapsed' : ''}">
 
   <!-- LEFT COLUMN -->
   <div class="main">
@@ -1898,7 +1899,9 @@ ${mozartContext}`
   </div>
 
   <div class="side">
+    <button class="side-toggle" onclick={() => sideCollapsed = !sideCollapsed} title={sideCollapsed ? 'Expand' : 'Collapse'}>{sideCollapsed ? '›' : '‹'}</button>
 
+    {#if !sideCollapsed}
     <!-- Mozart -->
     <div class="mozart-block">
       <div class="mozart-title-row">
@@ -1948,15 +1951,19 @@ ${mozartContext}`
         {/if}
       </div>
     </div>
+    {/if}
 
   </div>
 </div>
 {/if}
 
 <style>
-  .layout { display: grid; grid-template-columns: 1fr 380px; min-height: calc(100vh - 100px); gap: 32px; }
+  .layout { display: grid; grid-template-columns: 1fr 380px; min-height: calc(100vh - 100px); gap: 32px; transition: grid-template-columns .2s; }
+  .layout.side-collapsed { grid-template-columns: 1fr 20px; }
   .main { display: flex; flex-direction: column; gap: 20px; }
-  .side { border-left: 1px solid #1c1c1c; padding-left: 28px; display: flex; flex-direction: column; gap: 0; }
+  .side { border-left: 1px solid #1c1c1c; padding-left: 12px; display: flex; flex-direction: column; gap: 0; overflow: hidden; }
+  .side-toggle { background: transparent; border: none; color: #444; font-size: 14px; cursor: pointer; padding: 4px 0; align-self: flex-start; line-height: 1; }
+  .side-toggle:hover { color: #9e9690; }
   .empty { font-family: 'Space Mono', monospace; font-size: 13px; color: #555; padding: 32px 0; text-align: center; }
   .empty-sm { font-family: 'Space Mono', monospace; font-size: 12px; color: #333; }
 
@@ -2510,7 +2517,7 @@ ${mozartContext}`
 
   /* TODAY section */
   .today-section { border: 1px solid #1c1c1c; border-radius: 4px; overflow: hidden; margin-bottom: 8px; display: flex; flex-direction: column; gap: 0; }
-  .agent-row { display: flex; gap: 6px; justify-content: flex-end; padding: 8px 10px; border-bottom: 1px solid #141414; background: #0d0d0d; }
+  .agent-row { display: flex; gap: 6px; justify-content: flex-start; padding: 8px 10px; border-bottom: 1px solid #141414; background: #0d0d0d; }
   .today-tasks-list { border-bottom: 1px solid #141414; }
 
   /* PLAN section */

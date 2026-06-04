@@ -1460,15 +1460,21 @@ ${mozartContext}`
 
       {#if activeSection === 'routine'}
       <div class="quick-search-bar">
-        <input class="helper-search-inp" placeholder="Ask Gemini..." bind:value={quickGeminiQ}
-          onkeydown={e => e.key==='Enter' && quickGeminiQ.trim() && window.open('https://gemini.google.com/app?q='+encodeURIComponent(quickGeminiQ.trim()),'_blank')} />
-        <button class="helper-search-go" onclick={() => quickGeminiQ.trim() && window.open('https://gemini.google.com/app?q='+encodeURIComponent(quickGeminiQ.trim()),'_blank')}>→</button>
-        <input class="helper-search-inp" placeholder="Search YouTube..." bind:value={quickYoutubeQ}
-          onkeydown={e => e.key==='Enter' && quickYoutubeQ.trim() && window.open('https://youtube.com/results?search_query='+encodeURIComponent(quickYoutubeQ.trim()),'_blank')} />
-        <button class="helper-search-go" onclick={() => quickYoutubeQ.trim() && window.open('https://youtube.com/results?search_query='+encodeURIComponent(quickYoutubeQ.trim()),'_blank')}>→</button>
-        <input class="helper-search-inp" placeholder="Search Spotify..." bind:value={quickSpotifyQ}
-          onkeydown={e => e.key==='Enter' && quickSpotifyQ.trim() && window.open('https://open.spotify.com/search/'+encodeURIComponent(quickSpotifyQ.trim()),'_blank')} />
-        <button class="helper-search-go" onclick={() => quickSpotifyQ.trim() && window.open('https://open.spotify.com/search/'+encodeURIComponent(quickSpotifyQ.trim()),'_blank')}>→</button>
+        <div class="qs-cell">
+          <input class="helper-search-inp qs-inp" placeholder="Ask Gemini..." bind:value={quickGeminiQ}
+            onkeydown={e => e.key==='Enter' && quickGeminiQ.trim() && window.open('https://gemini.google.com/app?q='+encodeURIComponent(quickGeminiQ.trim()),'_blank')} />
+          <button class="helper-search-go" onclick={() => quickGeminiQ.trim() && window.open('https://gemini.google.com/app?q='+encodeURIComponent(quickGeminiQ.trim()),'_blank')}>→</button>
+        </div>
+        <div class="qs-cell">
+          <input class="helper-search-inp qs-inp" placeholder="Search YouTube..." bind:value={quickYoutubeQ}
+            onkeydown={e => e.key==='Enter' && quickYoutubeQ.trim() && window.open('https://youtube.com/results?search_query='+encodeURIComponent(quickYoutubeQ.trim()),'_blank')} />
+          <button class="helper-search-go" onclick={() => quickYoutubeQ.trim() && window.open('https://youtube.com/results?search_query='+encodeURIComponent(quickYoutubeQ.trim()),'_blank')}>→</button>
+        </div>
+        <div class="qs-cell">
+          <input class="helper-search-inp qs-inp" placeholder="Search Spotify..." bind:value={quickSpotifyQ}
+            onkeydown={e => e.key==='Enter' && quickSpotifyQ.trim() && window.open('https://open.spotify.com/search/'+encodeURIComponent(quickSpotifyQ.trim()),'_blank')} />
+          <button class="helper-search-go" onclick={() => quickSpotifyQ.trim() && window.open('https://open.spotify.com/search/'+encodeURIComponent(quickSpotifyQ.trim()),'_blank')}>→</button>
+        </div>
       </div>
       <div class="routine-btns-wrap">
         {#each state.customs.filter(item => !['google gemini','youtube','spotify'].includes((item.label||'').toLowerCase().trim())) as item (item.id)}
@@ -2312,7 +2318,9 @@ ${mozartContext}`
   .sec-tab { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .1em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
   .sec-tab:hover { color: #9e9690; }
   .sec-tab.on { color: #c9a84c; border-bottom-color: #c9a84c; }
-  .quick-search-bar { display: flex; gap: 4px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .quick-search-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 4px; }
+  .qs-cell { display: flex; gap: 4px; }
+  .qs-cell .helper-search-inp { flex: 1; width: auto; }
   .check-list { display: flex; flex-direction: column; gap: 2px; }
   .routine-divider { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.4); padding: 10px 0 4px; border-top: 1px solid #1a1a1a; margin-top: 16px; }
   .check-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: transparent; min-height: 0; }

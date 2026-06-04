@@ -666,7 +666,7 @@
   .login-btn:hover { background: #d4b660; }
 
   /* ── outer layout ── */
-  .outer       { display: grid; grid-template-columns: 1fr 320px; gap: 24px; max-width: 1400px; margin: 0 auto; padding: 40px 16px 80px; min-height: 100vh; }
+  .outer       { display: grid; grid-template-columns: 1fr 640px; gap: 24px; max-width: 1400px; margin: 0 auto; padding: 40px 16px 80px; min-height: 100vh; }
   .main-col    { min-width: 0; display: flex; flex-direction: column; }
 
   /* ── page header ── */

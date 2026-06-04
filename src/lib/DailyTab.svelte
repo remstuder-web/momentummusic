@@ -1998,7 +1998,7 @@ ${mozartContext}`
   .press-item:hover .press-title { color: #c9a84c; }
   .press-source { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; flex-shrink: 0; text-transform: uppercase; letter-spacing: .06em; min-width: 110px; }
   .press-title { font-family: 'Space Mono', monospace; font-size: 9px; color: #9e9690; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color .15s; }
-  .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); padding-bottom: 6px; border-bottom: 1px solid #303030; margin-bottom: 4px; }
+  .sh { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); padding-bottom: 6px; border-bottom: 1px solid #303030; margin-bottom: 4px; }
 
   /* Upcoming */
   .upcoming-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-bottom: 1px solid #111; }
@@ -2320,7 +2320,7 @@ ${mozartContext}`
 
   /* Routine / Health */
   .sections { display: flex; border-bottom: 1px solid #1c1c1c; margin-bottom: 8px; }
-  .sec-tab { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .1em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
+  .sec-tab { font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: .14em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
   .sec-tab:hover { color: #9e9690; }
   .sec-tab.on { color: #c9a84c; border-bottom-color: #c9a84c; }
   .quick-search-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 4px; }
@@ -2383,7 +2383,7 @@ ${mozartContext}`
   .ref-moves { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
   .ref-move-item { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; }
   .helper-block { display: flex; flex-direction: column; gap: 8px; }
-  .normalizer-title { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: rgba(201,168,76,.75); }
+  .normalizer-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); }
   .title-gen-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
   .title-gen-inp { flex: 1; }
   .title-gen-results { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }

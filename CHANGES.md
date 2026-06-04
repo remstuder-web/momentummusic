@@ -3071,3 +3071,9 @@ TASK: Daily: all routine items have → button to open URL, consistent layout
 WHAT: All three list loops (customs, checkItems, helpers) now use: label as plain span (flex:1) + helper-search-go "→" button (only if item.url exists) + × delete. Opens as window.open(url,'_blank','width=1400,height=900'). routine-box padding tightened to 3px 8px to match search input row height.
 RESULT: builds clean
 BLOCKERS: none
+
+## 2026-06-04 momentum-watcher.cjs — DONE
+TASK: Fix duplicate SENT submissions + SONO PACKS filter
+WHAT: (1) SENT patches now use artist='SENT' not 'SONO' — appear in Open list, not SONO PACKS. (2) addDir uses case-insensitive ilike dedup check before creating. (3) cleanupSentDuplicates() runs on startup — keeps patch with most files per folder, fixes artist to SENT, deletes duplicates. Removed 12 duplicate patches on first run.
+RESULT: works — watcher running, dedup confirmed in logs
+BLOCKERS: none

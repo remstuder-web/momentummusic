@@ -16138,14 +16138,19 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('✓ Demos folder watching:', DEMOS_DIR)
 
   // ── SENT_DIR watcher — /P2P/29TH AVENUE/SENT/ ────────────────────────────
-  // Folder created → patch (artist=SONO). Folder deleted → patch deleted.
+  // Folder created → patch (artist=SENT). Folder deleted → patch deleted.
   // Files added/removed → patch_songs + dropped_files synced.
+  // SENT patches show in Open list; SONO PACKS only shows artist=SONO patches.
   if (!fs.existsSync(SENT_DIR)) { try { fs.mkdirSync(SENT_DIR, { recursive: true }) } catch(e) {} }
 
   async function getSentPatch(folderName) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/patches?name=eq.${encodeURIComponent(folderName)}&artist=eq.SONO&select=id,name,dropped_files&limit=1`, { headers: sbHeaders })
-    const rows = await r.json()
-    return Array.isArray(rows) && rows.length ? rows[0] : null
+    const { data } = await supabase.from('patches')
+      .select('id,name,dropped_files')
+      .ilike('name', folderName)
+      .eq('artist', 'SENT')
+      .limit(1)
+      .maybeSingle()
+    return data || null
   }
 
   async function saveSentDropFiles(patchId, files) {
@@ -16174,8 +16179,36 @@ server.listen(PORT, '127.0.0.1', () => {
     await supabase.from('patch_songs').delete().eq('patch_id', patchId).eq('song_id', songId)
   }
 
-  // Startup sync — create missing patches for existing folders, wire up songs
+  // Dedup + fix: for each SENT folder, keep one patch (most files), delete rest, fix artist to SENT
+  async function cleanupSentDuplicates() {
+    try {
+      const dirs = fs.readdirSync(SENT_DIR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)
+      for (const folderName of dirs) {
+        const { data: all } = await supabase.from('patches')
+          .select('id,artist,dropped_files').ilike('name', folderName)
+        if (!all || all.length === 0) continue
+        if (all.length === 1) {
+          if (all[0].artist !== 'SENT')
+            await supabase.from('patches').update({ artist: 'SENT' }).eq('id', all[0].id)
+          continue
+        }
+        // Keep the one with most dropped_files
+        const sorted = [...all].sort((a,b) => (b.dropped_files?.length||0) - (a.dropped_files?.length||0))
+        const keep = sorted[0]
+        if (keep.artist !== 'SENT')
+          await supabase.from('patches').update({ artist: 'SENT' }).eq('id', keep.id)
+        for (const dup of sorted.slice(1)) {
+          await supabase.from('patch_songs').delete().eq('patch_id', dup.id)
+          await supabase.from('patches').delete().eq('id', dup.id)
+          console.log(`📁 SENT dedup: removed duplicate patch for "${folderName}" (id ${dup.id})`)
+        }
+      }
+    } catch(e) { console.error('SENT dedup error:', e.message) }
+  }
+
+  // Startup sync — dedup first, then create missing patches and wire songs
   async function syncSentDir() {
+    await cleanupSentDuplicates()
     try {
       const entries = fs.readdirSync(SENT_DIR, { withFileTypes: true }).filter(d => d.isDirectory())
       for (const entry of entries) {
@@ -16183,7 +16216,7 @@ server.listen(PORT, '127.0.0.1', () => {
         let patch = await getSentPatch(folderName)
         if (!patch) {
           const { data, error } = await supabase.from('patches')
-            .insert({ name: folderName, status: 'open', artist: 'SONO', dropped_files: [] })
+            .insert({ name: folderName, status: 'open', artist: 'SENT', dropped_files: [] })
             .select('id,name,dropped_files').single()
           if (error) { console.error('SENT sync insert error:', error.message); continue }
           patch = data
@@ -16210,10 +16243,12 @@ server.listen(PORT, '127.0.0.1', () => {
       const folderName = path.basename(folderPath)
       if (folderName === path.basename(SENT_DIR)) return
       try {
-        const existing = await getSentPatch(folderName)
-        if (existing) return
+        // Case-insensitive dedup check across all artists
+        const { data: existing } = await supabase.from('patches')
+          .select('id').ilike('name', folderName).limit(1).maybeSingle()
+        if (existing) { console.log(`⏭ SENT: submission already exists: "${folderName}"`); return }
         const { data, error: insertErr } = await supabase.from('patches')
-          .insert({ name: folderName, status: 'open', artist: 'SONO', dropped_files: [] })
+          .insert({ name: folderName, status: 'open', artist: 'SENT', dropped_files: [] })
           .select('id').single()
         if (insertErr) { console.error('📁 SENT: patch insert error:', insertErr.message); return }
         console.log(`📁 SENT: created patch "${folderName}"`)

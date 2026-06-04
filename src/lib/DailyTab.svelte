@@ -1632,10 +1632,6 @@ ${mozartContext}`
               <button class="acapella-mode-btn {acapellaMode==='acapella'?'on':''}" onclick={() => acapellaMode='acapella'}>ACAPELLA</button>
               <button class="acapella-mode-btn {acapellaMode==='vocal_clean'?'on':''}" onclick={() => acapellaMode='vocal_clean'}>VOCAL CLEAN</button>
               <button class="acapella-mode-btn {acapellaMode==='instrumental'?'on':''}" onclick={() => acapellaMode='instrumental'}>INSTRUMENTAL</button>
-            </div>
-          </div>
-          <div class="acapella-mode-row">
-            <div class="acapella-launch-group">
               <button class="acapella-applio-btn" onclick={openApplio} disabled={applioLoading}>APPLIO</button>
               <button class="acapella-applio-btn" onclick={() => window.open('https://app.kits.ai/', '_blank', 'width=1400,height=900,left=100,top=50')}>KITS</button>
             </div>

@@ -3083,3 +3083,9 @@ TASK: Fix duplicate submissions: cleanup on startup + upsert prevention
 WHAT: (1) cleanupDuplicateSubmissions() replaces per-folder dedup — scans ALL patches, groups by lowercase name, keeps row with most dropped_files, bulk deletes rest. Runs on startup. (2) addDir now uses supabase upsert onConflict:'name' ignoreDuplicates:true — DB-level prevention of duplicates even if chokidar fires multiple times.
 RESULT: works — deleted 1 remaining duplicate on first run, 7 folders synced clean
 BLOCKERS: none
+
+## 2026-06-04 ~/Desktop/Start Momentum.command — DONE
+TASK: Start Momentum: open in Chrome instead of default browser
+WHAT: Changed `open http://localhost:5173` to `open -a "Google Chrome" http://localhost:5173`
+RESULT: will open in Chrome on next launch
+BLOCKERS: none

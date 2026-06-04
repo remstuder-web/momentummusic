@@ -21,6 +21,7 @@
   let aiInput = $state('')
   let aiMessages = $state([])
   let aiLoading = $state(false)
+  let sideCollapsed = $state(true)
 
   let acapellaFile = $state(null)
   let acapellaLoading = $state(false)
@@ -346,7 +347,7 @@
 {#if loading}
   <p class="empty">Loading...</p>
 {:else}
-<div class="layout">
+<div class="layout {sideCollapsed ? 'side-collapsed' : ''}">
 
   <div class="songs-col">
     {#if !grouped.length}
@@ -571,30 +572,40 @@
       {/if}
     </div>
 
-    <div class="mozart-block">
-      <div class="mozart-title">ASK MOZART</div>
-      <div class="chat-out">
-        {#each aiMessages as msg}
-          <div class="chat-msg {msg.role}">
-            <div class="chat-who">{msg.role === 'user' ? 'You' : 'Mozart'}</div>
-            <div class="chat-text">{msg.content}</div>
-          </div>
-        {/each}
-        {#if aiLoading}
-          <div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>
-        {/if}
-      </div>
-      <div class="chat-input-row">
-        <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e => e.key === 'Enter' && sendAI()} />
-        <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
-      </div>
+  </div>
+
+<div class="work-side">
+  <button class="side-toggle" onclick={() => sideCollapsed = !sideCollapsed}>{sideCollapsed ? '›' : '‹'}</button>
+  {#if !sideCollapsed}
+  <div class="mozart-block">
+    <div class="mozart-title">ASK MOZART</div>
+    <div class="chat-out">
+      {#each aiMessages as msg}
+        <div class="chat-msg {msg.role}">
+          <div class="chat-who">{msg.role === 'user' ? 'You' : 'Mozart'}</div>
+          <div class="chat-text">{msg.content}</div>
+        </div>
+      {/each}
+      {#if aiLoading}
+        <div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>
+      {/if}
+    </div>
+    <div class="chat-input-row">
+      <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e => e.key === 'Enter' && sendAI()} />
+      <button class="btn-gold-sm" onclick={sendAI}>Ask</button>
     </div>
   </div>
+  {/if}
+</div>
 </div>
 {/if}
 
 <style>
-  .layout { display: grid; grid-template-columns: 1fr 300px; gap: 32px; min-height: calc(100vh - 100px); }
+  .layout { display: grid; grid-template-columns: 1fr 300px; gap: 32px; min-height: calc(100vh - 100px); transition: grid-template-columns .2s; }
+  .layout.side-collapsed { grid-template-columns: 1fr 20px; }
+  .work-side { display: flex; flex-direction: column; border-left: 1px solid #1c1c1c; padding-left: 12px; overflow: hidden; }
+  .side-toggle { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; cursor: pointer; padding: 4px 10px; align-self: flex-start; line-height: 1; margin-bottom: 6px; }
+  .side-toggle:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .songs-col { display: flex; flex-direction: column; gap: 10px; }
   .empty { font-family: 'Space Mono', monospace; font-size: 12px; color: #555; padding: 32px 0; text-align: center; }
   .empty-sm { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; padding: 4px 0; }

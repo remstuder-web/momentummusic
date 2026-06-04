@@ -376,6 +376,7 @@
   let aiMessages = $state([])
   let aiInput    = $state('')
   let aiLoading  = $state(false)
+  let sideCollapsed = $state(true)
 
   async function sendAI(rawMsg) {
     const msg = (typeof rawMsg==='string' && rawMsg.trim()) ? rawMsg.trim() : aiInput.trim()
@@ -442,7 +443,7 @@
   })
 </script>
 
-<div class="tab-layout">
+<div class="tab-layout {sideCollapsed ? 'side-collapsed' : ''}">
 <div class="tab-main">
 
   <!-- ══ PHANTOM (TOP) ══════════════════════════════════════════════════════ -->
@@ -907,6 +908,8 @@
 
 <!-- ══ Sidebar ════════════════════════════════════════════════════════════════ -->
 <div class="tab-sidebar">
+  <button class="side-toggle" onclick={() => sideCollapsed = !sideCollapsed}>{sideCollapsed ? '›' : '‹'}</button>
+  {#if !sideCollapsed}
   <div class="mozart-block">
     <div class="mozart-title-row">
       <div class="mozart-title">ASK MOZART</div>
@@ -934,13 +937,17 @@
       {/if}
     </div>
   </div>
+  {/if}
 </div>
 </div>
 
 <style>
-  .tab-layout{display:grid;grid-template-columns:1fr 320px;gap:32px;min-height:calc(100vh - 100px);align-items:start}
+  .tab-layout{display:grid;grid-template-columns:1fr 320px;gap:32px;min-height:calc(100vh - 100px);align-items:start;transition:grid-template-columns .2s}
+  .tab-layout.side-collapsed{grid-template-columns:1fr 20px}
   .tab-main{display:flex;flex-direction:column;min-width:0}
-  .tab-sidebar{border-left:1px solid #1c1c1c;padding-left:24px}
+  .tab-sidebar{border-left:1px solid #1c1c1c;padding-left:12px;display:flex;flex-direction:column;overflow:hidden}
+  .side-toggle { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; cursor: pointer; padding: 4px 10px; align-self: flex-start; line-height: 1; margin-bottom: 6px; }
+  .side-toggle:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
 
   .sh{font-family:'Space Mono',monospace;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#c9a84c;padding-bottom:6px;border-bottom:1px solid #303030;margin-bottom:14px}
   .empty{font-family:'Space Mono',monospace;font-size:12px;color:#9e9690;padding:32px 0;text-align:center}

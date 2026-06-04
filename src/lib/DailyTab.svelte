@@ -2317,7 +2317,7 @@ ${mozartContext}`
   .routine-divider { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.4); padding: 10px 0 4px; border-top: 1px solid #1a1a1a; margin-top: 16px; }
   .check-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: transparent; min-height: 0; }
   .check-item.done { opacity: .38; }
-  .routine-btns-wrap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+  .routine-btns-wrap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 8px; }
   .routine-box { display: flex; align-items: center; padding: 3px 6px 3px 8px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; gap: 4px; overflow: hidden; cursor: pointer; }
   .routine-box:hover { border-color: #444; }
   .routine-box-label { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1593,6 +1593,13 @@
   function setActiveVersion(song, vId) {
     saveWorkData(song, wd => { wd.active_version_id = vId })
   }
+  function deleteVersion(song, vId) {
+    saveWorkData(song, wd => {
+      wd.versions = wd.versions.filter(v => v.id !== vId)
+      if (wd.active_version_id === vId)
+        wd.active_version_id = wd.versions.length ? wd.versions[wd.versions.length - 1].id : null
+    })
+  }
   function addFeedback(song, vId, text) {
     if (!text.trim()) return
     pushUndo('Added feedback item', song.id, JSON.parse(JSON.stringify(workData(song))))
@@ -3635,6 +3642,9 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                     <div class="versions-header">
                       <label>VERSIONS — {currentStageConf.label}</label>
                       <button class="btn-ghost-sm" onclick={() => addVersion(song, wd.current_stage)}>+ New Version</button>
+                      {#if wd.active_version_id}
+                        <button class="btn-ghost-sm btn-del-ver" onclick={() => { const v = stageVers.find(v => v.id === wd.active_version_id); if (v && confirm(`Delete version "${v.name}"? File is not affected.`)) deleteVersion(song, wd.active_version_id) }}>× Delete</button>
+                      {/if}
                     </div>
                     {#if stageVers.length}
                       <div class="version-tabs">
@@ -4587,6 +4597,8 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
   .btn-ghost-sm { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 6px 12px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 2px; cursor: pointer; white-space: nowrap; }
   .btn-ghost-sm:hover { border-color: #c9a84c; color: #c9a84c; }
+  .btn-del-ver { border-color: rgba(224,90,74,.3); color: rgba(224,90,74,.6); }
+  .btn-del-ver:hover { border-color: #e05a4a; color: #e05a4a; }
   .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; padding: 7px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
 
   /* Modals */

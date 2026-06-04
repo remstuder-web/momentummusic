@@ -377,6 +377,10 @@
   let aiInput    = $state('')
   let aiLoading  = $state(false)
   let sideCollapsed = $state(true)
+  let liveFeedOpen   = $state(false)
+  let perfPointsOpen = $state(false)
+  let perfTradesOpen = $state(false)
+  let perfSignalsOpen = $state(false)
 
   async function sendAI(rawMsg) {
     const msg = (typeof rawMsg==='string' && rawMsg.trim()) ? rawMsg.trim() : aiInput.trim()
@@ -501,10 +505,11 @@
 
 
   <!-- ══ LIVE FEED ════════════════════════════════════════════════════════════ -->
-  <div class="sh" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between">
+  <button class="sh collapse-sh" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;cursor:pointer;text-align:left" onclick={() => liveFeedOpen = !liveFeedOpen}>
     <span>LIVE FEED</span>
-    <span class="feed-pulse"></span>
-  </div>
+    <span style="display:flex;align-items:center;gap:8px"><span class="feed-pulse"></span><span class="collapse-arrow">{liveFeedOpen ? '▲' : '▼'}</span></span>
+  </button>
+  {#if liveFeedOpen}
   <div class="live-feed">
     {#if liveFeed().length === 0}
       {#if inboxFallback.length > 0}
@@ -556,6 +561,7 @@
       </div>
     {/each}
   </div>
+  {/if}
 
 <!-- ══ PERFORMANCE ════════════════════════════════════════════════════════ -->
   <div class="sh" style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">
@@ -564,6 +570,8 @@
   </div>
 
   {#if closedTrades.length > 0}
+    <button class="section-title collapse-sh" onclick={() => perfPointsOpen = !perfPointsOpen}>POINTS {perfPointsOpen ? '▲' : '▼'}</button>
+    {#if perfPointsOpen}
     <div class="stats-bar">
       <div class="stat-box">
         <div class="stat-label">TOTAL P&L</div>
@@ -582,6 +590,7 @@
         <div class="stat-val" style="color:#c9a84c">{openTrades.length}</div>
       </div>
     </div>
+    {/if}
   {:else}
     <div class="empty-sm">No trades yet — bot is scanning for signals</div>
   {/if}
@@ -601,7 +610,8 @@
   {/if}
 
   {#if closedTrades.length > 0}
-    <div class="section-title" style="margin-top:12px">RECENT TRADES</div>
+    <button class="section-title collapse-sh" style="margin-top:12px" onclick={() => perfTradesOpen = !perfTradesOpen}>RECENT TRADES {perfTradesOpen ? '▲' : '▼'}</button>
+    {#if perfTradesOpen}
     {#each closedTrades.slice(0,15) as t}
       <div class="trade-row">
         <span class="trade-strategy">{t.strategy}</span>
@@ -612,10 +622,12 @@
         <span class="trade-result {t.result?.toLowerCase()}">{t.result}</span>
       </div>
     {/each}
+    {/if}
   {/if}
 
   {#if recentSignals.length > 0}
-    <div class="section-title" style="margin-top:16px">RECENT SIGNALS</div>
+    <button class="section-title collapse-sh" style="margin-top:16px" onclick={() => perfSignalsOpen = !perfSignalsOpen}>RECENT SIGNALS {perfSignalsOpen ? '▲' : '▼'}</button>
+    {#if perfSignalsOpen}
     {#each recentSignals.slice(0,10) as s}
       <div class="signal-row">
         <span class="signal-dot {s.direction}"></span>
@@ -627,6 +639,7 @@
         <span class="signal-acted {s.acted_on?'yes':'no'}">{s.acted_on ? 'TRADED' : 'SKIPPED'}</span>
       </div>
     {/each}
+    {/if}
   {/if}
 
   <!-- ══ MONDAY BRIEF ═══════════════════════════════════════════════════════ -->
@@ -954,6 +967,9 @@
   .empty{font-family:'Space Mono',monospace;font-size:12px;color:#9e9690;padding:32px 0;text-align:center}
   .empty-sm{font-family:'DM Sans',sans-serif;font-size:11px;color:#9e9690;padding:4px 0 8px}
   .section-title{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(201,168,76,.85);margin:0 0 4px}
+  .collapse-sh{background:none;border:none;padding:0;cursor:pointer;text-align:left;width:100%}
+  .collapse-sh:hover{opacity:.75}
+  .collapse-arrow{font-size:9px;color:#555;margin-left:4px}
 
   /* Bot */
   .bot-badge{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;padding:2px 7px;border-radius:2px;letter-spacing:.08em}

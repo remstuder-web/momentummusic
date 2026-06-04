@@ -16161,12 +16161,26 @@ server.listen(PORT, '127.0.0.1', () => {
   }
 
   async function matchSentSong(filename) {
+    // 1. Exact audio_path
     const { data: byPath } = await supabase.from('songs').select('id,code,title').eq('audio_path', filename).maybeSingle()
     if (byPath) return byPath
+    // 2. Code prefix (5-6 digits)
     const m = filename.match(/^(\d{5,6})/)
     if (m) {
       const { data: byCode } = await supabase.from('songs').select('id,code,title').eq('code', m[1]).maybeSingle()
       if (byCode) return byCode
+    }
+    // 3. Title extracted from filename — strip ext, split by _, find non-digit/non-bpm/non-key part
+    const base = filename.replace(/\.[^.]+$/, '')
+    const parts = base.split('_')
+    const titlePart = parts.find(p =>
+      !/^\d+$/.test(p) &&
+      !/^\d+bpm$/i.test(p) &&
+      !/^[A-G][b#]?(m|min|maj)?$/i.test(p)
+    )
+    if (titlePart) {
+      const { data: byTitle } = await supabase.from('songs').select('id,code,title').ilike('title', titlePart).maybeSingle()
+      if (byTitle) return byTitle
     }
     return null
   }
@@ -16235,7 +16249,7 @@ server.listen(PORT, '127.0.0.1', () => {
         }
         const folderPath = path.join(SENT_DIR, folderName)
         const audioFiles = fs.readdirSync(folderPath)
-          .filter(f => /^\d{5,6}/.test(f) && /\.(wav|mp3|aiff|aif|m4a|flac)$/i.test(f))
+          .filter(f => /\.(wav|mp3|aiff|aif|m4a|flac)$/i.test(f))
         for (const filename of audioFiles) {
           const song = await matchSentSong(filename)
           if (song) await addSentPatchSong(patch.id, song.id)
@@ -16254,14 +16268,17 @@ server.listen(PORT, '127.0.0.1', () => {
       const folderName = path.basename(folderPath)
       if (folderName === path.basename(SENT_DIR)) return
       try {
-        const { data, error: upsertErr } = await supabase.from('patches')
-          .upsert({ name: folderName, artist: 'SENT', status: 'open', dropped_files: [] },
-                  { onConflict: 'name', ignoreDuplicates: true })
+        const { data: existing } = await supabase.from('patches')
+          .select('id').ilike('name', folderName).eq('artist', 'SENT').maybeSingle()
+        if (existing) { console.log(`⏭ SENT: "${folderName}" already exists`); return }
+        const { data, error: insertErr } = await supabase.from('patches')
+          .insert({ name: folderName, artist: 'SENT', status: 'open', dropped_files: [] })
           .select('id').single()
-        if (upsertErr) { console.error('📁 SENT: patch upsert error:', upsertErr.message); return }
-        if (!data) { console.log(`⏭ SENT: submission already exists: "${folderName}"`); return }
-        console.log(`📁 SENT: created patch "${folderName}"`)
-        if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, `📁 New SENT folder: ${folderName}`).catch(() => {})
+        if (insertErr) { console.error('📁 SENT: patch insert error:', insertErr.message); return }
+        if (data) {
+          console.log(`📁 SENT: created patch "${folderName}"`)
+          if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, `📁 New SENT folder: ${folderName}`).catch(() => {})
+        }
       } catch(e) { console.error('SENT addDir error:', e.message) }
     })
     .on('unlinkDir', async folderPath => {
@@ -16278,7 +16295,6 @@ server.listen(PORT, '127.0.0.1', () => {
     .on('add', async filePath => {
       const filename = path.basename(filePath)
       const folderName = path.basename(path.dirname(filePath))
-      if (!(/^\d{5,6}/.test(filename))) return
       const ext = path.extname(filename).toLowerCase()
       if (!['.wav','.mp3','.aiff','.aif','.m4a','.flac'].includes(ext)) return
       try {
@@ -16297,7 +16313,7 @@ server.listen(PORT, '127.0.0.1', () => {
     .on('unlink', async filePath => {
       const filename = path.basename(filePath)
       const folderName = path.basename(path.dirname(filePath))
-      if (!(/^\d{5,6}/.test(filename))) return
+      if (!['.wav','.mp3','.aiff','.aif','.m4a','.flac'].includes(path.extname(filename).toLowerCase())) return
       try {
         const patch = await getSentPatch(folderName)
         if (!patch) return

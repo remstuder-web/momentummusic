@@ -384,6 +384,9 @@
 
   // On mount: increment audioTick so audio server URLs render for existing songs
   onMount(() => {
+    realtimeChannel = supabase.channel('demo-patches-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'patches' }, () => load())
+      .subscribe()
     keydownHandler = (e) => {
       if (e.code !== 'Space' || !hoveredSongId) return
       e.preventDefault()
@@ -398,6 +401,7 @@
       .catch(() => {})
   })
   onDestroy(() => {
+    if (realtimeChannel) { supabase.removeChannel(realtimeChannel); realtimeChannel = null }
     if (keydownHandler) { window.removeEventListener('keydown', keydownHandler); keydownHandler = null }
     if (sharedPlayer) { sharedPlayer.pause(); sharedPlayer.src = ''; sharedPlayer = null; currentSongId = null }
   })
@@ -1056,6 +1060,7 @@
   let sideCollapsed = $state(true)
   let hoveredSongId = null
   let keydownHandler = null
+  let realtimeChannel = null
 
   function getSharedPlayer() {
     if (!sharedPlayer) {

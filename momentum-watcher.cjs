@@ -16179,36 +16179,42 @@ server.listen(PORT, '127.0.0.1', () => {
     await supabase.from('patch_songs').delete().eq('patch_id', patchId).eq('song_id', songId)
   }
 
-  // Dedup + fix: for each SENT folder, keep one patch (most files), delete rest, fix artist to SENT
-  async function cleanupSentDuplicates() {
+  // Cleanup all duplicate submissions across entire patches table
+  async function cleanupDuplicateSubmissions() {
     try {
-      const dirs = fs.readdirSync(SENT_DIR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)
-      for (const folderName of dirs) {
-        const { data: all } = await supabase.from('patches')
-          .select('id,artist,dropped_files').ilike('name', folderName)
-        if (!all || all.length === 0) continue
-        if (all.length === 1) {
-          if (all[0].artist !== 'SENT')
-            await supabase.from('patches').update({ artist: 'SENT' }).eq('id', all[0].id)
-          continue
-        }
-        // Keep the one with most dropped_files
-        const sorted = [...all].sort((a,b) => (b.dropped_files?.length||0) - (a.dropped_files?.length||0))
-        const keep = sorted[0]
-        if (keep.artist !== 'SENT')
-          await supabase.from('patches').update({ artist: 'SENT' }).eq('id', keep.id)
-        for (const dup of sorted.slice(1)) {
-          await supabase.from('patch_songs').delete().eq('patch_id', dup.id)
-          await supabase.from('patches').delete().eq('id', dup.id)
-          console.log(`📁 SENT dedup: removed duplicate patch for "${folderName}" (id ${dup.id})`)
+      const { data: all } = await supabase
+        .from('patches')
+        .select('id, name, dropped_files')
+        .order('created_at', { ascending: true })
+      const seen = {}
+      const toDelete = []
+      for (const p of all || []) {
+        const key = (p.name || '').toLowerCase().trim()
+        if (seen[key]) {
+          const existing = seen[key]
+          const existingFiles = existing.dropped_files?.length || 0
+          const thisFiles = p.dropped_files?.length || 0
+          if (thisFiles > existingFiles) {
+            toDelete.push(existing.id)
+            seen[key] = p
+          } else {
+            toDelete.push(p.id)
+          }
+        } else {
+          seen[key] = p
         }
       }
-    } catch(e) { console.error('SENT dedup error:', e.message) }
+      if (toDelete.length) {
+        await supabase.from('patch_songs').delete().in('patch_id', toDelete)
+        await supabase.from('patches').delete().in('id', toDelete)
+        console.log(`🧹 Deleted ${toDelete.length} duplicate submissions`)
+      }
+    } catch(e) { console.error('cleanupDuplicateSubmissions error:', e.message) }
   }
 
   // Startup sync — dedup first, then create missing patches and wire songs
   async function syncSentDir() {
-    await cleanupSentDuplicates()
+    await cleanupDuplicateSubmissions()
     try {
       const entries = fs.readdirSync(SENT_DIR, { withFileTypes: true }).filter(d => d.isDirectory())
       for (const entry of entries) {
@@ -16243,14 +16249,12 @@ server.listen(PORT, '127.0.0.1', () => {
       const folderName = path.basename(folderPath)
       if (folderName === path.basename(SENT_DIR)) return
       try {
-        // Case-insensitive dedup check across all artists
-        const { data: existing } = await supabase.from('patches')
-          .select('id').ilike('name', folderName).limit(1).maybeSingle()
-        if (existing) { console.log(`⏭ SENT: submission already exists: "${folderName}"`); return }
-        const { data, error: insertErr } = await supabase.from('patches')
-          .insert({ name: folderName, status: 'open', artist: 'SENT', dropped_files: [] })
+        const { data, error: upsertErr } = await supabase.from('patches')
+          .upsert({ name: folderName, artist: 'SENT', status: 'open', dropped_files: [] },
+                  { onConflict: 'name', ignoreDuplicates: true })
           .select('id').single()
-        if (insertErr) { console.error('📁 SENT: patch insert error:', insertErr.message); return }
+        if (upsertErr) { console.error('📁 SENT: patch upsert error:', upsertErr.message); return }
+        if (!data) { console.log(`⏭ SENT: submission already exists: "${folderName}"`); return }
         console.log(`📁 SENT: created patch "${folderName}"`)
         if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, `📁 New SENT folder: ${folderName}`).catch(() => {})
       } catch(e) { console.error('SENT addDir error:', e.message) }

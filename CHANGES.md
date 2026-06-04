@@ -3077,3 +3077,9 @@ TASK: Fix duplicate SENT submissions + SONO PACKS filter
 WHAT: (1) SENT patches now use artist='SENT' not 'SONO' — appear in Open list, not SONO PACKS. (2) addDir uses case-insensitive ilike dedup check before creating. (3) cleanupSentDuplicates() runs on startup — keeps patch with most files per folder, fixes artist to SENT, deletes duplicates. Removed 12 duplicate patches on first run.
 RESULT: works — watcher running, dedup confirmed in logs
 BLOCKERS: none
+
+## 2026-06-04 momentum-watcher.cjs — DONE
+TASK: Fix duplicate submissions: cleanup on startup + upsert prevention
+WHAT: (1) cleanupDuplicateSubmissions() replaces per-folder dedup — scans ALL patches, groups by lowercase name, keeps row with most dropped_files, bulk deletes rest. Runs on startup. (2) addDir now uses supabase upsert onConflict:'name' ignoreDuplicates:true — DB-level prevention of duplicates even if chokidar fires multiple times.
+RESULT: works — deleted 1 remaining duplicate on first run, 7 folders synced clean
+BLOCKERS: none

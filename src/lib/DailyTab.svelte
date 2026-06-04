@@ -1626,11 +1626,15 @@ ${mozartContext}`
 
         <!-- ACAPELLA EXTRACTOR -->
         <div class="helper-block">
-          <div class="normalizer-title">ACAPELLA EXTRACTOR</div>
+          <div class="acapella-header-row">
+            <div class="normalizer-title">ACAPELLA EXTRACTOR</div>
+            <div style="display:flex;gap:5px;margin-left:auto;align-items:center">
+              <button class="acapella-mode-btn {acapellaMode==='acapella'?'on':''}" onclick={() => acapellaMode='acapella'}>ACAPELLA</button>
+              <button class="acapella-mode-btn {acapellaMode==='vocal_clean'?'on':''}" onclick={() => acapellaMode='vocal_clean'}>VOCAL CLEAN</button>
+              <button class="acapella-mode-btn {acapellaMode==='instrumental'?'on':''}" onclick={() => acapellaMode='instrumental'}>INSTRUMENTAL</button>
+            </div>
+          </div>
           <div class="acapella-mode-row">
-            <button class="acapella-mode-btn {acapellaMode==='acapella'?'on':''}" onclick={() => acapellaMode='acapella'}>ACAPELLA</button>
-            <button class="acapella-mode-btn {acapellaMode==='vocal_clean'?'on':''}" onclick={() => acapellaMode='vocal_clean'}>VOCAL CLEAN</button>
-            <button class="acapella-mode-btn {acapellaMode==='instrumental'?'on':''}" onclick={() => acapellaMode='instrumental'}>INSTRUMENTAL</button>
             <div class="acapella-launch-group">
               <button class="acapella-applio-btn" onclick={openApplio} disabled={applioLoading}>APPLIO</button>
               <button class="acapella-applio-btn" onclick={() => window.open('https://app.kits.ai/', '_blank', 'width=1400,height=900,left=100,top=50')}>KITS</button>
@@ -2101,7 +2105,7 @@ ${mozartContext}`
   .wa-copy-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 2px 7px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .wa-copy-btn:hover { color: #c9a84c; border-color: #c9a84c; }
   .wa-analyze-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .wa-contact-sel { background: #1c1c1c; border: 1px solid #303030; color: #9e9690; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; border-radius: 3px; flex: 1; min-width: 140px; color-scheme: dark; }
+  .wa-contact-sel { background: #1c1c1c; border: 1px solid #303030; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 9px; outline: none; border-radius: 3px; flex: 1; min-width: 140px; color-scheme: dark; }
   .wa-contact-sel option { background: #1c1c1c; color: #9e9690; }
   .wa-contact-sel:focus { border-color: rgba(201,168,76,.4); }
   .wa-result { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 12px; background: #111; border-radius: 4px; border: 1px solid #252525; }
@@ -2316,7 +2320,7 @@ ${mozartContext}`
 
   /* Routine / Health */
   .sections { display: flex; border-bottom: 1px solid #1c1c1c; margin-bottom: 8px; }
-  .sec-tab { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .1em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
+  .sec-tab { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .1em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
   .sec-tab:hover { color: #9e9690; }
   .sec-tab.on { color: #c9a84c; border-bottom-color: #c9a84c; }
   .quick-search-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 4px; }
@@ -2400,6 +2404,7 @@ ${mozartContext}`
   .acapella-mode-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 10px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; letter-spacing: .06em; transition: all .12s; }
   .acapella-mode-btn:hover { border-color: #444; color: #9e9690; }
   .acapella-mode-btn.on { border-color: rgba(201,168,76,.5); color: #c9a84c; background: rgba(201,168,76,.07); }
+  .acapella-header-row { display: flex; align-items: center; gap: 6px; }
   .acapella-launch-group { margin-left: auto; display: flex; gap: 5px; }
   .acapella-applio-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 3px 10px; background: rgba(76,175,130,.08); border: 1px solid rgba(76,175,130,.35); color: #4caf82; border-radius: 2px; cursor: pointer; transition: all .12s; }
   .acapella-applio-btn:hover { background: rgba(76,175,130,.14); }

@@ -2101,7 +2101,8 @@ ${mozartContext}`
   .wa-copy-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 2px 7px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .wa-copy-btn:hover { color: #c9a84c; border-color: #c9a84c; }
   .wa-analyze-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .wa-contact-sel { background: #0a0a0a; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; border-radius: 3px; flex: 1; min-width: 140px; }
+  .wa-contact-sel { background: #1c1c1c; border: 1px solid #303030; color: #9e9690; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; border-radius: 3px; flex: 1; min-width: 140px; color-scheme: dark; }
+  .wa-contact-sel option { background: #1c1c1c; color: #9e9690; }
   .wa-contact-sel:focus { border-color: rgba(201,168,76,.4); }
   .wa-result { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 12px; background: #111; border-radius: 4px; border: 1px solid #252525; }
   .wa-result-row { display: flex; align-items: center; gap: 8px; }
@@ -2353,6 +2354,7 @@ ${mozartContext}`
   .ref-field { flex: 1; min-width: 0; }
   .ref-url-inp { flex: 1; min-width: 0; }
   .ref-album-check { display: flex; align-items: center; gap: 3px; font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .ref-album-check input[type="checkbox"] { accent-color: #9e9690; width: 11px; height: 11px; }
   .btn-ref-sm { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; padding: 3px 10px; background: rgba(201,168,76,.08); border: 1px solid rgba(201,168,76,.35); color: #c9a84c; border-radius: 2px; cursor: pointer; white-space: nowrap; flex-shrink: 0; letter-spacing: .06em; }
   .btn-ref-sm:hover { background: rgba(201,168,76,.14); }
   .btn-ref-sm.dim { opacity: .5; cursor: not-allowed; }

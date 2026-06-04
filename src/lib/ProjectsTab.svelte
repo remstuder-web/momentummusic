@@ -3643,7 +3643,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                       <label>VERSIONS — {currentStageConf.label}</label>
                       <button class="btn-ghost-sm" onclick={() => addVersion(song, wd.current_stage)}>+ New Version</button>
                       {#if wd.active_version_id}
-                        <button class="btn-ghost-sm btn-del-ver" onclick={() => { const v = stageVers.find(v => v.id === wd.active_version_id); if (v && confirm(`Delete version "${v.name}"? File is not affected.`)) deleteVersion(song, wd.active_version_id) }}>× Delete</button>
+                        <button class="btn-ghost-sm" onclick={() => { const v = stageVers.find(v => v.id === wd.active_version_id); if (v && confirm(`Delete version "${v.name}"? File is not affected.`)) deleteVersion(song, wd.active_version_id) }}>× Delete</button>
                       {/if}
                     </div>
                     {#if stageVers.length}
@@ -4597,8 +4597,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
 
   .btn-ghost-sm { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 6px 12px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 2px; cursor: pointer; white-space: nowrap; }
   .btn-ghost-sm:hover { border-color: #c9a84c; color: #c9a84c; }
-  .btn-del-ver { border-color: rgba(224,90,74,.3); color: rgba(224,90,74,.6); }
-  .btn-del-ver:hover { border-color: #e05a4a; color: #e05a4a; }
   .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; padding: 7px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
 
   /* Modals */

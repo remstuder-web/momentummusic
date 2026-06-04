@@ -16227,6 +16227,11 @@ server.listen(PORT, '127.0.0.1', () => {
           if (error) { console.error('SENT sync insert error:', error.message); continue }
           patch = data
           console.log(`📁 SENT sync: created patch "${folderName}"`)
+        } else if (patch.name !== folderName) {
+          // Fix casing drift — sync stored name to exact folder name
+          await supabase.from('patches').update({ name: folderName }).eq('id', patch.id)
+          patch.name = folderName
+          console.log(`📁 SENT sync: fixed name casing "${patch.name}" → "${folderName}"`)
         }
         const folderPath = path.join(SENT_DIR, folderName)
         const audioFiles = fs.readdirSync(folderPath)

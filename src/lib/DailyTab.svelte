@@ -1899,7 +1899,7 @@ ${mozartContext}`
   </div>
 
   <div class="side">
-    <button class="side-toggle" onclick={() => sideCollapsed = !sideCollapsed} title={sideCollapsed ? 'Expand' : 'Collapse'}>{sideCollapsed ? '›' : '‹'}</button>
+    <button class="side-toggle {sideCollapsed ? '' : 'expanded'}" onclick={() => sideCollapsed = !sideCollapsed}>{sideCollapsed ? '›' : '‹'}</button>
 
     {#if !sideCollapsed}
     <!-- Mozart -->
@@ -1963,6 +1963,7 @@ ${mozartContext}`
   .main { display: flex; flex-direction: column; gap: 20px; }
   .side { border-left: 1px solid #1c1c1c; padding-left: 12px; display: flex; flex-direction: column; gap: 0; overflow: hidden; }
   .side-toggle { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; cursor: pointer; padding: 4px 10px; align-self: flex-start; line-height: 1; margin-bottom: 6px; }
+  .side-toggle.expanded { padding: 10px 10px; }
   .side-toggle:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .empty { font-family: 'Space Mono', monospace; font-size: 13px; color: #555; padding: 32px 0; text-align: center; }
   .empty-sm { font-family: 'Space Mono', monospace; font-size: 12px; color: #333; }

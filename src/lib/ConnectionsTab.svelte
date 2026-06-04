@@ -542,7 +542,7 @@
 {/if}
 </div>
 <div class="tab-sidebar">
-  <button class="side-toggle" onclick={() => sideCollapsed = !sideCollapsed}>{sideCollapsed ? '›' : '‹'}</button>
+  <button class="side-toggle {sideCollapsed ? '' : 'expanded'}" onclick={() => sideCollapsed = !sideCollapsed}>{sideCollapsed ? '›' : '‹'}</button>
   {#if !sideCollapsed}
   <div class="mozart-block">
     <div class="mozart-title-row">
@@ -577,6 +577,7 @@
   .tab-main { display: flex; flex-direction: column; min-width: 0; }
   .tab-sidebar { border-left: 1px solid #1c1c1c; padding-left: 12px; display: flex; flex-direction: column; overflow: hidden; }
   .side-toggle { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; cursor: pointer; padding: 4px 10px; align-self: flex-start; line-height: 1; margin-bottom: 6px; }
+  .side-toggle.expanded { padding: 10px 10px; }
   .side-toggle:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
   .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); padding-bottom: 6px; border-bottom: 1px solid #303030; }

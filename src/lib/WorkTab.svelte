@@ -575,7 +575,7 @@
   </div>
 
 <div class="work-side">
-  <button class="side-toggle" onclick={() => sideCollapsed = !sideCollapsed}>{sideCollapsed ? '›' : '‹'}</button>
+  <button class="side-toggle {sideCollapsed ? '' : 'expanded'}" onclick={() => sideCollapsed = !sideCollapsed}>{sideCollapsed ? '›' : '‹'}</button>
   {#if !sideCollapsed}
   <div class="mozart-block">
     <div class="mozart-title">ASK MOZART</div>
@@ -605,6 +605,7 @@
   .layout.side-collapsed { grid-template-columns: 1fr 20px; }
   .work-side { display: flex; flex-direction: column; border-left: 1px solid #1c1c1c; padding-left: 12px; overflow: hidden; }
   .side-toggle { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; cursor: pointer; padding: 4px 10px; align-self: flex-start; line-height: 1; margin-bottom: 6px; }
+  .side-toggle.expanded { padding: 10px 10px; }
   .side-toggle:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .songs-col { display: flex; flex-direction: column; gap: 10px; }
   .empty { font-family: 'Space Mono', monospace; font-size: 12px; color: #555; padding: 32px 0; text-align: center; }

@@ -1053,6 +1053,7 @@
   let aiInput = $state('')
   let aiMessages = $state([])
   let aiLoading = $state(false)
+  let sideCollapsed = $state(true)
   let hoveredSongId = null
   let keydownHandler = null
 
@@ -1141,7 +1142,7 @@
 </script>
 
 <svelte:window onclick={() => { if (Object.values(discoPickerOpen).some(Boolean)) discoPickerOpen = {} }} />
-<div class="demo-layout">
+<div class="demo-layout {sideCollapsed ? 'side-collapsed' : ''}">
 <div class="demo-main">
 
 <div class="header">
@@ -1709,6 +1710,8 @@
 
 <!-- Right panel: Mozart -->
 <div class="demo-right">
+  <button class="side-toggle {sideCollapsed ? '' : 'expanded'}" onclick={() => sideCollapsed = !sideCollapsed}>{sideCollapsed ? '›' : '‹'}</button>
+  {#if !sideCollapsed}
   <div class="mozart-block">
     <div class="mozart-title-row">
       <div class="mozart-title">ASK MOZART</div>
@@ -1732,6 +1735,7 @@
       {/if}
     </div>
   </div>
+  {/if}
 </div>
 
 </div><!-- end demo-layout -->
@@ -1795,9 +1799,13 @@
 {#if false}{/if}<!-- bg picker now inline in patch body -->
 
 <style>
-  .demo-layout { display: grid; grid-template-columns: 1fr 320px; gap: 32px; min-height: calc(100vh - 100px); }
+  .demo-layout { display: grid; grid-template-columns: 1fr 320px; gap: 32px; min-height: calc(100vh - 100px); transition: grid-template-columns .2s; }
+  .demo-layout.side-collapsed { grid-template-columns: 1fr 20px; }
   .demo-main { display: flex; flex-direction: column; min-width: 0; }
-  .demo-right { border-left: 1px solid #1c1c1c; padding-left: 24px; display: flex; flex-direction: column; }
+  .demo-right { border-left: 1px solid #1c1c1c; padding-left: 12px; display: flex; flex-direction: column; overflow: hidden; }
+  .side-toggle { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; cursor: pointer; padding: 4px 10px; align-self: flex-start; line-height: 1; margin-bottom: 6px; }
+  .side-toggle.expanded { padding: 10px 10px; }
+  .side-toggle:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .mozart-block { display: flex; flex-direction: column; gap: 8px; flex: 1; }
   .mozart-title-row { display: flex; align-items: center; justify-content: space-between; }
   .mozart-title { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; }

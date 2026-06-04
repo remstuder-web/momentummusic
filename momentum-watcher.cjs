@@ -16138,12 +16138,12 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('✓ Demos folder watching:', DEMOS_DIR)
 
   // ── SENT_DIR watcher — /P2P/29TH AVENUE/SENT/ ────────────────────────────
-  // New folder → create patches row. File add/remove → sync dropped_files.
-  // Only files whose basename starts with a 5- or 6-digit code are tracked.
+  // Folder created → patch (artist=SONO). Folder deleted → patch deleted.
+  // Files added/removed → patch_songs + dropped_files synced.
   if (!fs.existsSync(SENT_DIR)) { try { fs.mkdirSync(SENT_DIR, { recursive: true }) } catch(e) {} }
 
   async function getSentPatch(folderName) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/patches?name=eq.${encodeURIComponent(folderName)}&select=id,name,dropped_files&limit=1`, { headers: sbHeaders })
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/patches?name=eq.${encodeURIComponent(folderName)}&artist=eq.SONO&select=id,name,dropped_files&limit=1`, { headers: sbHeaders })
     const rows = await r.json()
     return Array.isArray(rows) && rows.length ? rows[0] : null
   }
@@ -16155,36 +16155,86 @@ server.listen(PORT, '127.0.0.1', () => {
     })
   }
 
+  async function matchSentSong(filename) {
+    const { data: byPath } = await supabase.from('songs').select('id,code,title').eq('audio_path', filename).maybeSingle()
+    if (byPath) return byPath
+    const m = filename.match(/^(\d{5,6})/)
+    if (m) {
+      const { data: byCode } = await supabase.from('songs').select('id,code,title').eq('code', m[1]).maybeSingle()
+      if (byCode) return byCode
+    }
+    return null
+  }
+
+  async function addSentPatchSong(patchId, songId) {
+    await supabase.from('patch_songs').upsert({ patch_id: patchId, song_id: songId }, { onConflict: 'patch_id,song_id', ignoreDuplicates: true })
+  }
+
+  async function removeSentPatchSong(patchId, songId) {
+    await supabase.from('patch_songs').delete().eq('patch_id', patchId).eq('song_id', songId)
+  }
+
+  // Startup sync — create missing patches for existing folders, wire up songs
+  async function syncSentDir() {
+    try {
+      const entries = fs.readdirSync(SENT_DIR, { withFileTypes: true }).filter(d => d.isDirectory())
+      for (const entry of entries) {
+        const folderName = entry.name
+        let patch = await getSentPatch(folderName)
+        if (!patch) {
+          const { data, error } = await supabase.from('patches')
+            .insert({ name: folderName, status: 'open', artist: 'SONO', dropped_files: [] })
+            .select('id,name,dropped_files').single()
+          if (error) { console.error('SENT sync insert error:', error.message); continue }
+          patch = data
+          console.log(`📁 SENT sync: created patch "${folderName}"`)
+        }
+        const folderPath = path.join(SENT_DIR, folderName)
+        const audioFiles = fs.readdirSync(folderPath)
+          .filter(f => /^\d{5,6}/.test(f) && /\.(wav|mp3|aiff|aif|m4a|flac)$/i.test(f))
+        for (const filename of audioFiles) {
+          const song = await matchSentSong(filename)
+          if (song) await addSentPatchSong(patch.id, song.id)
+        }
+      }
+      console.log(`✓ SENT sync: ${entries.length} folders`)
+    } catch(e) { console.error('SENT sync error:', e.message) }
+  }
+  syncSentDir()
+
   chokidar.watch(SENT_DIR, {
     ignoreInitial: true, persistent: true, depth: 1,
     awaitWriteFinish: { stabilityThreshold: 1500, pollInterval: 400 }
   })
     .on('addDir', async folderPath => {
       const folderName = path.basename(folderPath)
-      if (folderName === path.basename(SENT_DIR)) return  // root dir event
+      if (folderName === path.basename(SENT_DIR)) return
       try {
         const existing = await getSentPatch(folderName)
         if (existing) return
-        const codeMatch = folderName.match(/^(\d{5})/)
-        const code = codeMatch ? codeMatch[1] : null
         const { data, error: insertErr } = await supabase.from('patches')
-          .insert({ name: folderName, status: 'open', artist: '', contact_id: null, dropped_files: [] })
-          .select('id')
-          .single()
+          .insert({ name: folderName, status: 'open', artist: 'SONO', dropped_files: [] })
+          .select('id').single()
         if (insertErr) { console.error('📁 SENT: patch insert error:', insertErr.message); return }
-        const patchId = data.id
-        console.log(`📁 SENT: created patch id ${patchId} for "${folderName}"`)
-        if (code) {
-          const slug = folderName.replace(/[^A-Z0-9_]/gi, '_').toUpperCase()
-          const tgMsg = `📁 New SENT folder: ${folderName}`
-          if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, tgMsg).catch(() => {})
-        }
+        console.log(`📁 SENT: created patch "${folderName}"`)
+        if (TELEGRAM_TOKEN) sendTelegram(TELEGRAM_OWNER_ID, `📁 New SENT folder: ${folderName}`).catch(() => {})
       } catch(e) { console.error('SENT addDir error:', e.message) }
+    })
+    .on('unlinkDir', async folderPath => {
+      const folderName = path.basename(folderPath)
+      if (folderName === path.basename(SENT_DIR)) return
+      try {
+        const patch = await getSentPatch(folderName)
+        if (!patch) return
+        await supabase.from('patch_songs').delete().eq('patch_id', patch.id)
+        await supabase.from('patches').delete().eq('id', patch.id)
+        console.log(`📁 SENT: deleted patch "${folderName}"`)
+      } catch(e) { console.error('SENT unlinkDir error:', e.message) }
     })
     .on('add', async filePath => {
       const filename = path.basename(filePath)
       const folderName = path.basename(path.dirname(filePath))
-      if (!(/^\d{5,6}/.test(filename))) return  // only 5- or 6-digit code files
+      if (!(/^\d{5,6}/.test(filename))) return
       const ext = path.extname(filename).toLowerCase()
       if (!['.wav','.mp3','.aiff','.aif','.m4a','.flac'].includes(ext)) return
       try {
@@ -16193,17 +16243,11 @@ server.listen(PORT, '127.0.0.1', () => {
         const current = Array.isArray(patch.dropped_files) ? [...patch.dropped_files] : []
         if (current.find(f => f.filename === filename)) return
         const { code, title, bpm } = parseDemoFilename(filename)
-        const { data: matched } = await supabase.from('songs')
-          .select('id,code,title').eq('audio_path', filename).maybeSingle()
-        let prev_sent = []
-        if (matched) {
-          const { data: ps } = await supabase.from('patch_songs')
-            .select('patches(name,status)').eq('song_id', matched.id)
-          prev_sent = (ps || []).filter(r => r.patches?.status === 'sent').map(r => r.patches?.name).filter(Boolean)
-        }
-        current.push({ filename, title: title || matched?.title || filename.replace(/\.[^.]+$/,''), code: matched?.code || code || '', bpm: bpm || null, song_id: matched?.id || null, prev_sent })
+        const matched = await matchSentSong(filename)
+        current.push({ filename, title: title || matched?.title || filename.replace(/\.[^.]+$/,''), code: matched?.code || code || '', bpm: bpm || null, song_id: matched?.id || null })
         await saveSentDropFiles(patch.id, current)
-        console.log(`📁 SENT: added file "${filename}" → patch "${folderName}"`)
+        if (matched) await addSentPatchSong(patch.id, matched.id)
+        console.log(`📁 SENT: added "${filename}" → "${folderName}"${matched ? ` (song ${matched.id})` : ''}`)
       } catch(e) { console.error('SENT add error:', e.message) }
     })
     .on('unlink', async filePath => {
@@ -16213,9 +16257,11 @@ server.listen(PORT, '127.0.0.1', () => {
       try {
         const patch = await getSentPatch(folderName)
         if (!patch) return
-        const updated = (Array.isArray(patch.dropped_files) ? patch.dropped_files : []).filter(f => f.filename !== filename)
-        await saveSentDropFiles(patch.id, updated)
-        console.log(`📁 SENT: removed file "${filename}" from patch "${folderName}"`)
+        const current = Array.isArray(patch.dropped_files) ? patch.dropped_files : []
+        const entry = current.find(f => f.filename === filename)
+        await saveSentDropFiles(patch.id, current.filter(f => f.filename !== filename))
+        if (entry?.song_id) await removeSentPatchSong(patch.id, entry.song_id)
+        console.log(`📁 SENT: removed "${filename}" from "${folderName}"`)
       } catch(e) { console.error('SENT unlink error:', e.message) }
     })
   console.log('✓ SENT folder watching:', SENT_DIR)

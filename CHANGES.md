@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-06] Supabase user_settings — PARTIAL
+TASK: Restore routine items, remove CHECK section
+WHAT: Cleared user_settings.check_items (removes ohlhorst/TRUMPS COMMANDMENTS CHECK section). Confirmed 4 of 7 routine items present: SPOTIFY downloader, INSTAGRAM midas, AUDIOZ, GEARSPACE with → buttons. 3 items (SPOTIFY top german, GEARSPACE serban, GEARSPACE serban theories) not recoverable — were wiped from Supabase by earlier PATCH, not in any git commit or DB history.
+RESULT: CHECK section removed, 4 items working. 3 items need user to re-add with URLs.
+BLOCKERS: SPOTIFY top german + GEARSPACE serban + GEARSPACE serban theories URLs unknown — user must re-add via UI or provide URLs
+
 ## [2026-06-06] src/lib/ProjectsTab.svelte + src/lib/DailyTab.svelte — DONE
 TASK: FIX1 + FIX2 (New Version button right-aligned, routine → buttons restored)
 WHAT: FIX1: margin-left:auto moved from .sfooter-btn.del to .sfooter-btn.new-ver so both [+ New Version] and [Delete Song] are right-aligned together. FIX2: Routine item → changed from unconditional dim span back to conditional helper-search-go button (only shows when item.url exists, styled with visible border). All 4 visible routine items (SPOTIFY downloader, INSTAGRAM midas, AUDIOZ, GEARSPACE) have URLs stored in Supabase — their → buttons now show. GEARSPACE serban / serban theories not found in any stored data.

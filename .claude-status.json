@@ -1,21 +1,17 @@
 {
-  "updated": "2026-06-06T10:28:00.000Z",
-  "last_task": "FIX1+FIX2+FIX3 — New Version button, audio fetch, routine items",
-  "status": "done",
+  "updated": "2026-06-06T11:00:00.000Z",
+  "last_task": "Restore routine items / remove CHECK section",
+  "status": "partial",
   "working": [
-    "FIX1: + New Version button moved to song footer row before Delete Song",
-    "FIX2: playSong() resets player when src changes for same song (fixes revoked blob URL after version drop)",
-    "FIX2: prod/mix drop handlers log errors to console",
-    "FIX3: check_items now persisted to user_settings (permanent, not per-day)",
-    "FIX3: addCheck/delCheck/moveCheck call saveCheckItems() → user_settings",
-    "FIX3: load() no longer overwrites check_items from daily_state",
-    "FIX3: Restored ohlhorst 1, ohlhorst 2, TRUMPS COMMANDMENTS, REFERENCE 3 in Supabase user_settings.check_items",
-    "FIX3: Restored GEARSPACE to Supabase user_settings.customs"
+    "CHECK section removed — user_settings.check_items cleared to []",
+    "ROUTINE items confirmed with → buttons: SPOTIFY downloader, INSTAGRAM midas, AUDIOZ, GEARSPACE",
+    "GOOGLE GEMINI, SPOTIFY, YOUTUBE show as search bars (filtered from routine boxes) — correct",
+    "→ buttons conditional on item.url — working"
   ],
   "broken": [],
   "partial": [
-    "FIX3: 'serban theories' item not found in any stored data — user should re-add if they have URL"
+    "3 routine items missing: SPOTIFY top german, GEARSPACE serban, GEARSPACE serban theories — URLs were wiped by Supabase PATCH in earlier session, not in any git commit or DB history. User needs to re-add via UI or provide URLs to restore."
   ],
-  "next": "Verify check items appear in Daily ROUTINE tab. Test new version drop audio playback.",
-  "notes": "check_items migration: on first load, if user_settings has no check_items, falls back to most recent daily_state with check_items and migrates automatically. GEARSPACE was last seen in customs on April 1 — restored to user_settings.customs."
+  "next": "User to provide URLs for SPOTIFY top german, GEARSPACE serban, GEARSPACE serban theories so they can be added back to user_settings.customs",
+  "notes": "The routine items are Supabase data (user_settings.customs), NOT hardcoded in git. git show approach cannot recover them. Earlier PATCH replaced the entire customs array, destroying any items that were there before."
 }

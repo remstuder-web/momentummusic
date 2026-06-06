@@ -3653,6 +3653,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   <div class="versions-block">
                     <div class="versions-header">
                       <label>VERSIONS — {currentStageConf.label}</label>
+                      <button class="btn-ghost-sm new-ver-inline" onclick={() => addVersion(song, wd.current_stage)}>+ New Version</button>
                       {#if wd.active_version_id}
                         <button class="btn-ghost-sm" onclick={() => { const v = stageVers.find(v => v.id === wd.active_version_id); if (v && confirm(`Delete version "${v.name}"? File is not affected.`)) deleteVersion(song, wd.active_version_id) }}>× Delete</button>
                       {/if}
@@ -3980,16 +3981,13 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 {/if}
 
 
-                <!-- Song footer: Send to Artist (hidden on prod/mix) | + New Version | Delete -->
+                <!-- Song footer: Send to Artist (hidden on prod/mix) | Delete -->
                 <div class="song-footer-row">
                   {#if wd.current_stage !== 'production' && wd.current_stage !== 'mixing' && wd.current_stage !== 'stems'}
                     <button class="sfooter-btn send {wd.versions?.length && wd.versions.find(v=>v.id===wd.active_version_id)?.sent_to_artist ? 'sent' : ''}"
                       onclick={() => { const v = wd.versions?.find(v=>v.id===wd.active_version_id) || wd.versions?.[wd.versions.length-1]; if(v) sendToArtist(song,v.id) }}>
                       ✉ Send to Artist
                     </button>
-                  {/if}
-                  {#if currentStageConf?.hasVersions}
-                    <button class="sfooter-btn new-ver" onclick={() => addVersion(song, wd.current_stage)}>+ New Version</button>
                   {/if}
                   <button class="sfooter-btn del" onclick={() => deleteSong(song)}>Delete Song</button>
                 </div>
@@ -4382,8 +4380,10 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .label-hint { font-size: 10px; color: #444; letter-spacing: .05em; text-transform: none; font-weight: 300; }
 
   .versions-block { border: 1px solid #1c1c1c; border-radius: 4px; overflow: hidden; }
-  .versions-header { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; background: #111; border-bottom: 1px solid #1c1c1c; }
-  .versions-header label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.75); }
+  .versions-header { display: flex; align-items: center; gap: 8px; padding: 9px 14px; background: #111; border-bottom: 1px solid #1c1c1c; }
+  .versions-header label { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.75); flex: 1; }
+  .new-ver-inline { color: #9e9690 !important; border-color: rgba(201,168,76,.3) !important; }
+  .new-ver-inline:hover { color: #c9a84c !important; border-color: #c9a84c !important; }
   .version-tabs { display: flex; border-bottom: 1px solid #1c1c1c; }
   .vtab { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #444; cursor: pointer; margin-bottom: -1px; transition: color .15s; }
   .vtab:hover { color: #9e9690; }
@@ -4476,9 +4476,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .sfooter-btn.listen-link-btn { border: 1px solid #303030; color: #9e9690; }
   .sfooter-btn.listen-link-btn:hover { border-color: #c9a84c; color: #c9a84c; }
   .sfooter-btn.listen-link-btn.flashed { border-color: #c9a84c; color: #c9a84c; }
-  .sfooter-btn.new-ver { border: 1px solid rgba(201,168,76,.3); color: #9e9690; margin-left: auto; }
-  .sfooter-btn.new-ver:hover { border-color: #c9a84c; color: #c9a84c; }
-  .sfooter-btn.del { border: 1px solid rgba(224,90,74,.2); color: #555; }
+  .sfooter-btn.del { border: 1px solid rgba(224,90,74,.2); color: #555; margin-left: auto; }
   .sfooter-btn.del:hover { border-color: rgba(224,90,74,.5); color: #e05a4a; }
   .btn-send-artist { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 12px; background: rgba(74,159,212,.08); border: 1px solid rgba(74,159,212,.4); color: #4a9fd4; border-radius: 3px; cursor: pointer; }
   .btn-send-artist:hover { background: rgba(74,159,212,.15); }

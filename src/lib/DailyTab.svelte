@@ -425,7 +425,7 @@
   let checkOutItems = $state([])
 
   async function loadStaticData() {
-    const keys = ['customs', 'helpers', 'helper_ticks']
+    const keys = ['customs', 'helpers', 'helper_ticks', 'check_items']
     const { data } = await supabase.from('user_settings').select('key, value').in('key', keys)
     const map = {}
     for (const row of (data || [])) map[row.key] = JSON.parse(row.value)
@@ -449,6 +449,18 @@
     }
 
     if (map.helper_ticks) state.helperTicks = map.helper_ticks
+
+    if (map.check_items) {
+      state.checkItems = map.check_items
+    } else {
+      // Migrate from daily_state fallback to user_settings for persistence
+      const { data: fb } = await supabase.from('daily_state')
+        .select('check_items').not('check_items', 'eq', '[]').order('id', { ascending: false }).limit(1).maybeSingle()
+      if (fb?.check_items?.length) {
+        state.checkItems = fb.check_items
+        await saveCheckItems()
+      }
+    }
   }
 
   async function load() {
@@ -472,32 +484,15 @@
       projectSongs = songMap
       const { data } = await supabase.from('daily_state').select('*').eq('date', today).maybeSingle()
 
-      // Fallback for check_items (still per-day)
-      let fallback = null
-      if (!data?.check_items?.length) {
-        const { data: fb } = await supabase.from('daily_state')
-          .select('helper_ticks, check_items, check_ticks')
-          .neq('date', today)
-          .order('id', { ascending: false }).limit(1).maybeSingle()
-        fallback = fb
-      }
-
       if (data) {
         state = { ...state,
           ticks: data.ticks||{},
           healthChecks: data.health_checks||[], healthTicks: data.health_ticks||{},
           helperTicks: data.helper_ticks||{},
-          checkItems: data.check_items?.length ? data.check_items : (fallback?.check_items||[]),
           checkTicks: data.check_ticks||{}
-        }
-      } else if (fallback) {
-        state = { ...state,
-          helperTicks: {},
-          checkItems: fallback?.check_items||[],
-          checkTicks: {}
+          // checkItems loaded from user_settings in loadStaticData (persistent)
         }
       }
-      if (fallback) await save()
     } catch(e) { console.error('LOAD ERROR:', e) }
     loading = false
   }
@@ -507,6 +502,9 @@
   }
   async function saveHelpers() {
     await supabase.from('user_settings').upsert({ key: 'helpers', value: JSON.stringify(state.helpers) }, { onConflict: 'key' })
+  }
+  async function saveCheckItems() {
+    await supabase.from('user_settings').upsert({ key: 'check_items', value: JSON.stringify(state.checkItems) }, { onConflict: 'key' })
   }
   async function saveHelperTicks() {
     await supabase.from('user_settings').upsert({ key: 'helper_ticks', value: JSON.stringify(state.helperTicks) }, { onConflict: 'key' })
@@ -607,18 +605,18 @@
     const item = { id: 'ck'+Date.now(), label: newCheck.trim(), url: newCheckUrl.trim() }
     state.checkItems = [...(state.checkItems||[]), item]
     newCheck = ''; newCheckUrl = ''
-    await save()
+    await saveCheckItems()
   }
   async function delCheck(id) {
     state.checkItems = (state.checkItems||[]).filter(i => i.id !== id)
-    await save()
+    await saveCheckItems()
   }
   async function moveCheck(id, dir) {
     const arr = [...(state.checkItems||[])]
     const i = arr.findIndex(x => x.id === id)
     if (i + dir < 0 || i + dir >= arr.length) return
     ;[arr[i], arr[i+dir]] = [arr[i+dir], arr[i]]
-    state.checkItems = arr; await save()
+    state.checkItems = arr; await saveCheckItems()
   }
 
   let inboxItems = $state([])

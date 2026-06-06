@@ -1,16 +1,21 @@
 {
-  "updated": "2026-06-04T23:08:30.000Z",
-  "last_task": "start-applio endpoint + DailyTab button",
+  "updated": "2026-06-06T10:28:00.000Z",
+  "last_task": "FIX1+FIX2+FIX3 — New Version button, audio fetch, routine items",
   "status": "done",
   "working": [
-    "POST /start-applio — checks if running, launches via osascript Terminal tab, waits 5s",
-    "DailyTab Applio button calls openApplio() with ⏳ loading state before opening localhost:6969",
-    "Watcher restarted and responding"
+    "FIX1: + New Version button moved to song footer row before Delete Song",
+    "FIX2: playSong() resets player when src changes for same song (fixes revoked blob URL after version drop)",
+    "FIX2: prod/mix drop handlers log errors to console",
+    "FIX3: check_items now persisted to user_settings (permanent, not per-day)",
+    "FIX3: addCheck/delCheck/moveCheck call saveCheckItems() → user_settings",
+    "FIX3: load() no longer overwrites check_items from daily_state",
+    "FIX3: Restored ohlhorst 1, ohlhorst 2, TRUMPS COMMANDMENTS, REFERENCE 3 in Supabase user_settings.check_items",
+    "FIX3: Restored GEARSPACE to Supabase user_settings.customs"
   ],
-  "broken": [
-    "Spotify API 403 — app requires premium (pre-existing, known, MusicBrainz replaces search)"
+  "broken": [],
+  "partial": [
+    "FIX3: 'serban theories' item not found in any stored data — user should re-add if they have URL"
   ],
-  "partial": [],
-  "next": "Test Applio button — verify it opens Terminal with run-applio.sh and then localhost:6969. Confirm /Users/remo/Applio/run-applio.sh exists.",
-  "notes": "Applio path hardcoded: /Users/remo/Applio/run-applio.sh — verify this path if button does nothing"
+  "next": "Verify check items appear in Daily ROUTINE tab. Test new version drop audio playback.",
+  "notes": "check_items migration: on first load, if user_settings has no check_items, falls back to most recent daily_state with check_items and migrates automatically. GEARSPACE was last seen in customs on April 1 — restored to user_settings.customs."
 }

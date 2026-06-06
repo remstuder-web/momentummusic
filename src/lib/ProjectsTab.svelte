@@ -393,14 +393,15 @@
     const altKey = e.altKey
     uploadingSongs = { ...uploadingSongs, [song.id]: 'prod' }
     try {
-      await saveSongAudio(file, song, 'production', altKey)
+      const filename = await saveSongAudio(file, song, 'production', altKey)
+      console.log('[ProjectsTab] prod drop saved:', filename, 'prodBlobUrl:', prodBlobUrls[song.id])
       const wd = workData(song)
       const vLabel = wd.versions?.find(v => v.id === wd.active_version_id)?.name || 'prod'
       fetch('http://localhost:4242/analyze-vocal-eq', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'mix', song_id: song.id, label: vLabel })
       }).catch(() => {})
-    } catch(err) { alert('Error: ' + err.message) }
+    } catch(err) { console.error('[ProjectsTab] prod drop error:', err); alert('Error: ' + err.message) }
     finally {
       uploadingSongs = { ...uploadingSongs, [song.id]: null }
     }
@@ -412,14 +413,15 @@
     const altKey = e.altKey
     uploadingSongs = { ...uploadingSongs, [song.id]: 'mix' }
     try {
-      await saveSongAudio(file, song, 'mixing', altKey)
+      const filename = await saveSongAudio(file, song, 'mixing', altKey)
+      console.log('[ProjectsTab] mix drop saved:', filename, 'mixBlobUrl:', mixBlobUrls[song.id])
       const wd = workData(song)
       const vLabel = wd.versions?.find(v => v.id === wd.active_version_id)?.name || 'mix'
       fetch('http://localhost:4242/analyze-vocal-eq', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'mix', song_id: song.id, label: vLabel })
       }).catch(() => {})
-    } catch(err) { alert('Error: ' + err.message) }
+    } catch(err) { console.error('[ProjectsTab] mix drop error:', err); alert('Error: ' + err.message) }
     finally {
       uploadingSongs = { ...uploadingSongs, [song.id]: null }
     }
@@ -713,6 +715,16 @@
     const player = getSharedPlayer()
     const id = String(songId)
     if (currentSongId === id) {
+      // Same song — but src may have changed (e.g. new version dropped, old blob revoked)
+      if (player.src !== src) {
+        console.log('[ProjectsTab] src changed for same song — resetting player', player.src, '→', src)
+        player.pause()
+        player.src = src
+        player.currentTime = 0
+        player.load()
+        player.play().catch(e => console.error('[ProjectsTab] play() rejected:', e))
+        return
+      }
       if (player.paused) player.play().catch(e => console.error('[ProjectsTab] play() rejected:', e))
       else player.pause()
       return
@@ -3641,7 +3653,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   <div class="versions-block">
                     <div class="versions-header">
                       <label>VERSIONS — {currentStageConf.label}</label>
-                      <button class="btn-ghost-sm" onclick={() => addVersion(song, wd.current_stage)}>+ New Version</button>
                       {#if wd.active_version_id}
                         <button class="btn-ghost-sm" onclick={() => { const v = stageVers.find(v => v.id === wd.active_version_id); if (v && confirm(`Delete version "${v.name}"? File is not affected.`)) deleteVersion(song, wd.active_version_id) }}>× Delete</button>
                       {/if}
@@ -3969,13 +3980,16 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                 {/if}
 
 
-                <!-- Song footer: Send to Artist (hidden on prod/mix) | Delete -->
+                <!-- Song footer: Send to Artist (hidden on prod/mix) | + New Version | Delete -->
                 <div class="song-footer-row">
                   {#if wd.current_stage !== 'production' && wd.current_stage !== 'mixing' && wd.current_stage !== 'stems'}
                     <button class="sfooter-btn send {wd.versions?.length && wd.versions.find(v=>v.id===wd.active_version_id)?.sent_to_artist ? 'sent' : ''}"
                       onclick={() => { const v = wd.versions?.find(v=>v.id===wd.active_version_id) || wd.versions?.[wd.versions.length-1]; if(v) sendToArtist(song,v.id) }}>
                       ✉ Send to Artist
                     </button>
+                  {/if}
+                  {#if currentStageConf?.hasVersions}
+                    <button class="sfooter-btn new-ver" onclick={() => addVersion(song, wd.current_stage)}>+ New Version</button>
                   {/if}
                   <button class="sfooter-btn del" onclick={() => deleteSong(song)}>Delete Song</button>
                 </div>
@@ -4462,6 +4476,8 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .sfooter-btn.listen-link-btn { border: 1px solid #303030; color: #9e9690; }
   .sfooter-btn.listen-link-btn:hover { border-color: #c9a84c; color: #c9a84c; }
   .sfooter-btn.listen-link-btn.flashed { border-color: #c9a84c; color: #c9a84c; }
+  .sfooter-btn.new-ver { border: 1px solid rgba(201,168,76,.3); color: #9e9690; }
+  .sfooter-btn.new-ver:hover { border-color: #c9a84c; color: #c9a84c; }
   .sfooter-btn.del { border: 1px solid rgba(224,90,74,.2); color: #555; margin-left: auto; }
   .sfooter-btn.del:hover { border-color: rgba(224,90,74,.5); color: #e05a4a; }
   .btn-send-artist { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 12px; background: rgba(74,159,212,.08); border: 1px solid rgba(74,159,212,.4); color: #4a9fd4; border-radius: 3px; cursor: pointer; }

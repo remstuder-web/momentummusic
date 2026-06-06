@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-06] momentum-watcher.cjs — DONE
+TASK: SENT sync: orphan cleanup, name normalization, startup sync
+WHAT: FIX1: syncSentDir() now deletes SENT patches whose folder no longer exists on disk (orphan cleanup). Ran on restart — deleted Farid Bang, Jul : Morad, Lvbel C5. FIX2: normSentName() converts macOS APFS ":" back to "/" so "Jul / Morad" folder stores as "Jul / Morad" not "Jul : Morad". FIX3: orphan check runs on every startup before creating/updating patches.
+RESULT: works — 3 orphans deleted, Jul / Morad created correctly
+BLOCKERS: none
+
 ## [2026-06-06] src/lib/DailyTab.svelte + Supabase — DONE
 TASK: Routine → buttons fix + add GEARSPACE SG / SG THEORIES
 WHAT: FIX1: onclick moved from inner button to routine-box div itself (click anywhere opens URL); del-btn and → button both use e.stopPropagation(). FIX2: Added GEARSPACE SG and GEARSPACE SG THEORIES to user_settings.customs with correct GearSpace thread URLs.

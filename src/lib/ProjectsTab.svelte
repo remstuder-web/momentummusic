@@ -4476,9 +4476,9 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .sfooter-btn.listen-link-btn { border: 1px solid #303030; color: #9e9690; }
   .sfooter-btn.listen-link-btn:hover { border-color: #c9a84c; color: #c9a84c; }
   .sfooter-btn.listen-link-btn.flashed { border-color: #c9a84c; color: #c9a84c; }
-  .sfooter-btn.new-ver { border: 1px solid rgba(201,168,76,.3); color: #9e9690; }
+  .sfooter-btn.new-ver { border: 1px solid rgba(201,168,76,.3); color: #9e9690; margin-left: auto; }
   .sfooter-btn.new-ver:hover { border-color: #c9a84c; color: #c9a84c; }
-  .sfooter-btn.del { border: 1px solid rgba(224,90,74,.2); color: #555; margin-left: auto; }
+  .sfooter-btn.del { border: 1px solid rgba(224,90,74,.2); color: #555; }
   .sfooter-btn.del:hover { border-color: rgba(224,90,74,.5); color: #e05a4a; }
   .btn-send-artist { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 12px; background: rgba(74,159,212,.08); border: 1px solid rgba(74,159,212,.4); color: #4a9fd4; border-radius: 3px; cursor: pointer; }
   .btn-send-artist:hover { background: rgba(74,159,212,.15); }

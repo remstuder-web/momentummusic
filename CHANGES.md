@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-06] src/lib/ProjectsTab.svelte + src/lib/DailyTab.svelte — DONE
+TASK: FIX1 + FIX2 (New Version button right-aligned, routine → buttons restored)
+WHAT: FIX1: margin-left:auto moved from .sfooter-btn.del to .sfooter-btn.new-ver so both [+ New Version] and [Delete Song] are right-aligned together. FIX2: Routine item → changed from unconditional dim span back to conditional helper-search-go button (only shows when item.url exists, styled with visible border). All 4 visible routine items (SPOTIFY downloader, INSTAGRAM midas, AUDIOZ, GEARSPACE) have URLs stored in Supabase — their → buttons now show. GEARSPACE serban / serban theories not found in any stored data.
+RESULT: works
+BLOCKERS: GEARSPACE serban + GEARSPACE serban theories items not in any Supabase record — user must re-add with URL
+
+## [2026-06-06] src/lib/ProjectsTab.svelte + src/lib/DailyTab.svelte — DONE
 TASK: FIX1 + FIX2 + FIX3
 WHAT: FIX1: Moved "+ New Version" button from versions-header to song footer row, before Delete Song (gold-tinted style, only visible when stage has versions). FIX2: Fixed audio fetch error on version drop — playSong() now detects when src changed for same song (revoked blob URL) and resets player with new src; added console error logging to prod/mix drop handlers. FIX3: check_items now stored in user_settings (permanent, like customs) instead of per-day daily_state — addCheck/delCheck/moveCheck call saveCheckItems(); loadStaticData reads check_items from user_settings; restored 4 missing CHECK items (ohlhorst 1, ohlhorst 2, TRUMPS COMMANDMENTS, REFERENCE 3) and GEARSPACE routine item directly in Supabase.
 RESULT: works

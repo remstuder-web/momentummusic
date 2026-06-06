@@ -1477,10 +1477,12 @@ ${mozartContext}`
       </div>
       <div class="routine-btns-wrap">
         {#each state.customs.filter(item => !['google gemini','youtube','spotify'].includes((item.label||'').toLowerCase().trim())) as item (item.id)}
-          <div class="routine-box" onclick={() => item.url && window.open(item.url, '_blank', '')}>
+          <div class="routine-box">
             <span class="routine-box-label">{item.label}</span>
-            <span class="routine-box-arr">→</span>
-            <button class="del-btn" onclick={(e) => { e.stopPropagation(); delCustom(item.id) }}>×</button>
+            {#if item.url}
+              <button class="helper-search-go" onclick={() => window.open(item.url, '_blank', 'width=1400,height=900')}>→</button>
+            {/if}
+            <button class="del-btn" onclick={() => delCustom(item.id)}>×</button>
           </div>
         {/each}
         </div>

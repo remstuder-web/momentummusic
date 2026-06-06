@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-06] src/lib/DailyTab.svelte + Supabase — DONE
+TASK: Routine → buttons fix + add GEARSPACE SG / SG THEORIES
+WHAT: FIX1: onclick moved from inner button to routine-box div itself (click anywhere opens URL); del-btn and → button both use e.stopPropagation(). FIX2: Added GEARSPACE SG and GEARSPACE SG THEORIES to user_settings.customs with correct GearSpace thread URLs.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-06] Supabase user_settings — PARTIAL
 TASK: Restore routine items, remove CHECK section
 WHAT: Cleared user_settings.check_items (removes ohlhorst/TRUMPS COMMANDMENTS CHECK section). Confirmed 4 of 7 routine items present: SPOTIFY downloader, INSTAGRAM midas, AUDIOZ, GEARSPACE with → buttons. 3 items (SPOTIFY top german, GEARSPACE serban, GEARSPACE serban theories) not recoverable — were wiped from Supabase by earlier PATCH, not in any git commit or DB history.

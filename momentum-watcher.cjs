@@ -15997,9 +15997,6 @@ server.listen(PORT, '127.0.0.1', () => {
         const songId = Array.isArray(inserted) ? inserted[0]?.id : inserted?.id
         console.log(`✓ Demo inserted: ${code} "${title}"${filenameBpm ? ' ' + filenameBpm + 'bpm' : ''} (id ${songId})`)
 
-        // Sync archive — new auto-detected demos default to SONG (no archive)
-        try { syncDemoArchive(newFilename, 'SONG', '') } catch(e) {}
-
         // Record invented title so it's never reused
         if (titleWasInvented && title && title !== 'UNTITLED') {
           usedTitles.push(title)
@@ -16089,18 +16086,8 @@ server.listen(PORT, '127.0.0.1', () => {
           })
         }
 
-        // ── Step 9: Archive — clean old name, copy new name ──
-        try {
-          if (!fs.existsSync(ARCHIVE_29TH)) fs.mkdirSync(ARCHIVE_29TH, { recursive: true })
-          if (newFilename !== filename) {
-            const oldArchive = path.join(ARCHIVE_29TH, filename)
-            if (fs.existsSync(oldArchive)) fs.unlinkSync(oldArchive)
-          }
-          await fs.promises.copyFile(newPath, path.join(ARCHIVE_29TH, newFilename))
-          console.log(`  ✓ Archived: ${newFilename}`)
-        } catch(e) { console.warn('⚠ Archive failed:', e.message) }
+        // ── Step 9: Telegram ──
 
-        // ── Step 10: Telegram ──
         const tgParts = [`🎵 New demo: ${code} ${title}`]
         if (finalBpm) tgParts.push(`${finalBpm} BPM`)
         if (key) tgParts.push(key)

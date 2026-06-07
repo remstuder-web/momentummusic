@@ -1593,7 +1593,7 @@
                 <!-- File list -->
                 {#if dropCount > 0}
                   <div class="patch-songs">
-                    {#each (subDropFiles[patch.id] || []) as df}
+                    {#each (subDropFiles[patch.id] || []).slice().sort((a, b) => parseInt(b.code || '0') - parseInt(a.code || '0')) as df}
                       <div class="patch-song-row">
                         {#if df.code}<span class="song-code-in-list">{df.code}</span><span class="sep-dot">·</span>{/if}
                         <span class="sub-filename">{df.title || df.filename}</span>
@@ -1637,7 +1637,7 @@
                 </div>
                 {#if patch.songs.length}
                   <div class="patch-songs">
-                    {#each patch.songs as song}
+                    {#each patch.songs.slice().sort((a, b) => parseInt(b.code || '0') - parseInt(a.code || '0')) as song}
                       <div class="patch-song-row">
                         <span class="song-code-in-list">{song.code}</span>
                         <span class="sep-dot">·</span>

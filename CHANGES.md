@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-07] momentum-watcher.cjs + src/lib/DemoTab.svelte — DONE
+TASK: Demo auto-archive removal + submission sort
+WHAT: Removed auto-copy to !ARCHIVE and 29TH AVENUE on chokidar file detection — archive only syncs when TYPE=SAMPLE via /sync-demo-archive. Sorted dropped_files and sent songs by code descending in submission cards.
+RESULT: works — watcher restarted, ping ok
+BLOCKERS: none
+
 ## [2026-06-06] momentum-watcher.cjs — DONE
 TASK: SENT sync: orphan cleanup, name normalization, startup sync
 WHAT: FIX1: syncSentDir() now deletes SENT patches whose folder no longer exists on disk (orphan cleanup). Ran on restart — deleted Farid Bang, Jul : Morad, Lvbel C5. FIX2: normSentName() converts macOS APFS ":" back to "/" so "Jul / Morad" folder stores as "Jul / Morad" not "Jul : Morad". FIX3: orphan check runs on every startup before creating/updating patches.

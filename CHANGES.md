@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-13] src/lib/DailyTab.svelte — DONE
+TASK: Fix routine CHECK items + hardcode Gearspace links
+WHAT: Cleared ohlhorst 1/2, TRUMPS COMMANDMENTS, REFERENCE 3 from user_settings and daily_state check_items in Supabase. Added STATIC_LINKS constant with GEARSPACE SG + GEARSPACE SG THEORIES hardcoded in DailyTab.svelte — shown permanently in LINKS section below CHECK. SENT unlink handler already present in watcher (no change needed).
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-07] momentum-watcher.cjs + src/lib/DemoTab.svelte — DONE
 TASK: Demo auto-archive removal + submission sort
 WHAT: Removed auto-copy to !ARCHIVE and 29TH AVENUE on chokidar file detection — archive only syncs when TYPE=SAMPLE via /sync-demo-archive. Sorted dropped_files and sent songs by code descending in submission cards.

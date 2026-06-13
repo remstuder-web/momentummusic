@@ -6,6 +6,11 @@
   const today = new Date().toDateString()
   const todayISO = new Date().toISOString().slice(0,10)
 
+  const STATIC_LINKS = [
+    { id: 'static-gs1', label: 'GEARSPACE SG', url: 'https://gearspace.com/board/high-end/1213742-serban-ghenea-mixes-all-itb-279.html' },
+    { id: 'static-gs2', label: 'GEARSPACE SG THEORIES', url: 'https://gearspace.com/board/so-much-gear-so-little-time/1431838-serban-mixbus-theories-10.html?s=ef8b09b7ee8d9ade4fa681322122e82c' }
+  ]
+
   let state = $state({
     date: today, ticks: {}, customs: [], healthChecks: {}, healthTicks: {},
     helpers: [], helperTicks: {},
@@ -1498,6 +1503,16 @@ ${mozartContext}`
           {/each}
           </div>
         {/if}
+
+        <div class="routine-divider">LINKS</div>
+        <div class="routine-btns-wrap">
+          {#each STATIC_LINKS as link (link.id)}
+            <div class="routine-box" onclick={() => window.open(link.url, '_blank', 'width=1400,height=900')}>
+              <span class="routine-box-label">{link.label}</span>
+              <span class="routine-box-arr">→</span>
+            </div>
+          {/each}
+        </div>
 
       <div class="helpers-built-in">
 

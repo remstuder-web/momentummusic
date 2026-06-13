@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-14] momentum-watcher.cjs — DONE
+TASK: Fix SENT sync — only keep files that exist on disk
+WHAT: syncSentFolderFiles() was preserving patch_songs entries not backed by a disk file. Root cause: Reezy had 6 patch_songs but only 3 files on disk, UI showed 7. Fixed: after rebuilding dropped_files from disk, function now fetches current patch_songs and deletes any with song_id not in the valid set. Removed 4 stale patch_songs from Reezy (SOON/LATER/DESCENT/SUMMER SCARS). Also removed early-exit guard that skipped patch_songs cleanup when dropped_files was already correct.
+RESULT: works — Reezy now 3 files
+BLOCKERS: none
+
 ## [2026-06-13] momentum-watcher.cjs — DONE
 TASK: Sync SENT folder dropped_files with actual disk contents
 WHAT: Added syncSentFolderFiles() — for each SENT subfolder, reads audio files matching 5-6 digit code prefix, reconciles dropped_files in Supabase to match disk exactly (adds missing entries, removes stale ones, preserves metadata for existing files, wires patch_songs). Runs on startup and every 5 minutes. Confirmed: Reezy 2→3 files, Jul/Morad 0→3 files.

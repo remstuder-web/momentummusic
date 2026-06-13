@@ -16269,7 +16269,7 @@ server.listen(PORT, '127.0.0.1', () => {
   }
   syncSentDir()
 
-  // Reconcile dropped_files with actual disk contents for each SENT subfolder
+  // Reconcile dropped_files AND patch_songs with actual disk contents for each SENT subfolder
   async function syncSentFolderFiles() {
     try {
       const entries = fs.readdirSync(SENT_DIR, { withFileTypes: true }).filter(d => d.isDirectory())
@@ -16281,15 +16281,11 @@ server.listen(PORT, '127.0.0.1', () => {
 
         const diskFiles = fs.readdirSync(folderPath)
           .filter(f => /\.(wav|mp3|aiff|aif|m4a|flac)$/i.test(f) && /^\d{5,6}/.test(f))
-
-        const current = Array.isArray(patch.dropped_files) ? patch.dropped_files : []
-        const currentNames = new Set(current.map(f => f.filename))
         const diskNames = new Set(diskFiles)
 
-        const needsUpdate = diskFiles.some(f => !currentNames.has(f)) || current.some(f => !diskNames.has(f.filename))
-        if (!needsUpdate) continue
+        const current = Array.isArray(patch.dropped_files) ? patch.dropped_files : []
 
-        // Rebuild dropped_files from disk, preserving metadata for existing entries
+        // Rebuild dropped_files strictly from disk — no stale entries kept
         const updated = []
         for (const filename of diskFiles) {
           const existing = current.find(f => f.filename === filename)
@@ -16299,17 +16295,33 @@ server.listen(PORT, '127.0.0.1', () => {
             const { code, title, bpm } = parseDemoFilename(filename)
             const matched = await matchSentSong(filename)
             updated.push({ filename, title: title || matched?.title || filename.replace(/\.[^.]+$/, ''), code: matched?.code || code || '', bpm: bpm || null, song_id: matched?.id || null })
-            if (matched) await addSentPatchSong(patch.id, matched.id)
           }
         }
 
-        // Remove patch_songs for files no longer on disk
-        for (const removed of current.filter(f => !diskNames.has(f.filename))) {
-          if (removed.song_id) await removeSentPatchSong(patch.id, removed.song_id)
+        // Valid song_ids are only those backed by a file on disk
+        const validSongIds = new Set(updated.map(f => f.song_id).filter(Boolean))
+
+        // Purge patch_songs entries not backed by a disk file
+        const { data: patchSongs } = await supabase.from('patch_songs').select('song_id').eq('patch_id', patch.id)
+        const stale = (patchSongs || []).filter(ps => !validSongIds.has(ps.song_id))
+        if (stale.length) {
+          await supabase.from('patch_songs').delete().eq('patch_id', patch.id).in('song_id', stale.map(s => s.song_id))
+          console.log(`📁 SENT file sync "${normSentName(folderName)}": removed ${stale.length} stale patch_songs`)
+        }
+        // Ensure patch_songs has entries for all valid song_ids
+        for (const f of updated) {
+          if (f.song_id && !(patchSongs || []).find(ps => ps.song_id === f.song_id)) {
+            await addSentPatchSong(patch.id, f.song_id)
+          }
         }
 
-        await saveSentDropFiles(patch.id, updated)
-        console.log(`📁 SENT file sync "${normSentName(folderName)}": ${updated.length} files (was ${current.length})`)
+        // Update dropped_files only if different from disk
+        const currentNames = new Set(current.map(f => f.filename))
+        const filesChanged = diskFiles.some(f => !currentNames.has(f)) || current.some(f => !diskNames.has(f.filename))
+        if (filesChanged) {
+          await saveSentDropFiles(patch.id, updated)
+          console.log(`📁 SENT file sync "${normSentName(folderName)}": ${updated.length} files (was ${current.length})`)
+        }
       }
     } catch(e) { console.error('syncSentFolderFiles error:', e.message) }
   }

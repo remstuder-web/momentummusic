@@ -16269,6 +16269,53 @@ server.listen(PORT, '127.0.0.1', () => {
   }
   syncSentDir()
 
+  // Reconcile dropped_files with actual disk contents for each SENT subfolder
+  async function syncSentFolderFiles() {
+    try {
+      const entries = fs.readdirSync(SENT_DIR, { withFileTypes: true }).filter(d => d.isDirectory())
+      for (const entry of entries) {
+        const folderName = entry.name
+        const folderPath = path.join(SENT_DIR, folderName)
+        const patch = await getSentPatch(folderName)
+        if (!patch) continue
+
+        const diskFiles = fs.readdirSync(folderPath)
+          .filter(f => /\.(wav|mp3|aiff|aif|m4a|flac)$/i.test(f) && /^\d{5,6}/.test(f))
+
+        const current = Array.isArray(patch.dropped_files) ? patch.dropped_files : []
+        const currentNames = new Set(current.map(f => f.filename))
+        const diskNames = new Set(diskFiles)
+
+        const needsUpdate = diskFiles.some(f => !currentNames.has(f)) || current.some(f => !diskNames.has(f.filename))
+        if (!needsUpdate) continue
+
+        // Rebuild dropped_files from disk, preserving metadata for existing entries
+        const updated = []
+        for (const filename of diskFiles) {
+          const existing = current.find(f => f.filename === filename)
+          if (existing) {
+            updated.push(existing)
+          } else {
+            const { code, title, bpm } = parseDemoFilename(filename)
+            const matched = await matchSentSong(filename)
+            updated.push({ filename, title: title || matched?.title || filename.replace(/\.[^.]+$/, ''), code: matched?.code || code || '', bpm: bpm || null, song_id: matched?.id || null })
+            if (matched) await addSentPatchSong(patch.id, matched.id)
+          }
+        }
+
+        // Remove patch_songs for files no longer on disk
+        for (const removed of current.filter(f => !diskNames.has(f.filename))) {
+          if (removed.song_id) await removeSentPatchSong(patch.id, removed.song_id)
+        }
+
+        await saveSentDropFiles(patch.id, updated)
+        console.log(`📁 SENT file sync "${normSentName(folderName)}": ${updated.length} files (was ${current.length})`)
+      }
+    } catch(e) { console.error('syncSentFolderFiles error:', e.message) }
+  }
+  syncSentFolderFiles()
+  setInterval(syncSentFolderFiles, 5 * 60 * 1000)
+
   chokidar.watch(SENT_DIR, {
     ignoreInitial: true, persistent: true, depth: 1,
     awaitWriteFinish: { stabilityThreshold: 1500, pollInterval: 400 }

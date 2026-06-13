@@ -1,5 +1,17 @@
 # CHANGES
 
+## [2026-06-13] momentum-watcher.cjs — DONE
+TASK: Sync SENT folder dropped_files with actual disk contents
+WHAT: Added syncSentFolderFiles() — for each SENT subfolder, reads audio files matching 5-6 digit code prefix, reconciles dropped_files in Supabase to match disk exactly (adds missing entries, removes stale ones, preserves metadata for existing files, wires patch_songs). Runs on startup and every 5 minutes. Confirmed: Reezy 2→3 files, Jul/Morad 0→3 files.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-13] Git history report — routine links
+TASK: FIX 2 — restore routine links from last known good state
+WHAT: Audited git log. Last known good state: b85ec7c (2026-06-06) had GEARSPACE SG + SG THEORIES added to user_settings.customs. These were later removed from customs. Previous session (89cb121) hardcoded them as STATIC_LINKS in DailyTab.svelte — same result, can never disappear. Current visible routine: SPOTIFY downloader, INSTAGRAM midas, AUDIOZ (from customs) + GEARSPACE SG, GEARSPACE SG THEORIES (hardcoded). Matches last known good state exactly. No code changes needed.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-13] src/lib/DailyTab.svelte — DONE
 TASK: Fix routine CHECK items + hardcode Gearspace links
 WHAT: Cleared ohlhorst 1/2, TRUMPS COMMANDMENTS, REFERENCE 3 from user_settings and daily_state check_items in Supabase. Added STATIC_LINKS constant with GEARSPACE SG + GEARSPACE SG THEORIES hardcoded in DailyTab.svelte — shown permanently in LINKS section below CHECK. SENT unlink handler already present in watcher (no change needed).

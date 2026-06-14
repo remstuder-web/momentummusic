@@ -7,6 +7,8 @@
   const todayISO = new Date().toISOString().slice(0,10)
 
   const STATIC_LINKS = [
+    { id: 'static-gs0', label: 'GEARSPACE', url: 'https://www.gearspace.com' },
+    { id: 'static-sp1', label: 'SPOTIFY top german', url: 'https://open.spotify.com/playlist/37i9dQZEVXbJiZcmkrIHGU' },
     { id: 'static-gs1', label: 'GEARSPACE SG', url: 'https://gearspace.com/board/high-end/1213742-serban-ghenea-mixes-all-itb-279.html' },
     { id: 'static-gs2', label: 'GEARSPACE SG THEORIES', url: 'https://gearspace.com/board/so-much-gear-so-little-time/1431838-serban-mixbus-theories-10.html?s=ef8b09b7ee8d9ade4fa681322122e82c' }
   ]

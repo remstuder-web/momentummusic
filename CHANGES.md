@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-14] src/lib/DailyTab.svelte — DONE
+TASK: Restore GEARSPACE and SPOTIFY top german to static links
+WHAT: Added GEARSPACE (gearspace.com) and SPOTIFY top german (playlist/37i9dQZEVXbJiZcmkrIHGU) to STATIC_LINKS at top of array. Now 4 hardcoded links total.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-14] momentum-watcher.cjs — DONE
 TASK: Fix SENT sync — only keep files that exist on disk
 WHAT: syncSentFolderFiles() was preserving patch_songs entries not backed by a disk file. Root cause: Reezy had 6 patch_songs but only 3 files on disk, UI showed 7. Fixed: after rebuilding dropped_files from disk, function now fetches current patch_songs and deletes any with song_id not in the valid set. Removed 4 stale patch_songs from Reezy (SOON/LATER/DESCENT/SUMMER SCARS). Also removed early-exit guard that skipped patch_songs cleanup when dropped_files was already correct.

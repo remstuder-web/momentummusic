@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-06-14] src/lib/DailyTab.svelte — DONE
+TASK: Uniform grid layout for all routine link boxes
+WHAT: Set gap 4px→6px on routine-btns-wrap and quick-search-bar. Fixed routine-box to height:34px, padding:6px 10px, box-sizing:border-box. Made qs-cell (search bars) also height:34px with children filling 100% height so all rows — customs, static links, search inputs — are identical size.
+RESULT: works
+BLOCKERS: none
+
+## [2026-06-14] src/lib/DailyTab.svelte — DONE
 TASK: Restore GEARSPACE and SPOTIFY top german to static links
 WHAT: Added GEARSPACE (gearspace.com) and SPOTIFY top german (playlist/37i9dQZEVXbJiZcmkrIHGU) to STATIC_LINKS at top of array. Now 4 hardcoded links total.
 RESULT: works

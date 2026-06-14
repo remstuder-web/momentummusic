@@ -2340,15 +2340,16 @@ ${mozartContext}`
   .sec-tab { font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: .14em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
   .sec-tab:hover { color: #9e9690; }
   .sec-tab.on { color: #c9a84c; border-bottom-color: #c9a84c; }
-  .quick-search-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 4px; }
-  .qs-cell { display: flex; gap: 4px; }
-  .qs-cell .helper-search-inp { flex: 1; width: auto; }
+  .quick-search-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 6px; }
+  .qs-cell { display: flex; gap: 4px; height: 34px; }
+  .qs-cell .helper-search-inp { flex: 1; width: auto; height: 100%; box-sizing: border-box; padding: 0 8px; }
+  .qs-cell .helper-search-go { height: 100%; box-sizing: border-box; flex-shrink: 0; }
   .check-list { display: flex; flex-direction: column; gap: 2px; }
   .routine-divider { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .1em; color: rgba(201,168,76,.4); padding: 10px 0 4px; border-top: 1px solid #1a1a1a; margin-top: 16px; }
   .check-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: transparent; min-height: 0; }
   .check-item.done { opacity: .38; }
-  .routine-btns-wrap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 8px; }
-  .routine-box { display: flex; align-items: center; padding: 3px 6px 3px 8px; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; gap: 4px; overflow: hidden; cursor: pointer; }
+  .routine-btns-wrap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 6px; }
+  .routine-box { display: flex; align-items: center; padding: 6px 10px; height: 34px; box-sizing: border-box; background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; gap: 4px; overflow: hidden; cursor: pointer; }
   .routine-box:hover { border-color: #444; }
   .routine-box-label { flex: 1; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 300; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .routine-box-arr { font-family: 'Space Mono', monospace; font-size: 12px; color: #555; flex-shrink: 0; }

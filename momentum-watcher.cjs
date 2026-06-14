@@ -9054,6 +9054,15 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       return movedFiles
     }
 
+    function copyToDesktop(filename) {
+      try {
+        const src = path.join(REFERENCES_CURRENT_DIR, filename)
+        const dest = path.join(process.env.HOME, 'Desktop', filename)
+        fs.copyFileSync(src, dest)
+        console.log(`📋 Copied to Desktop: ${filename}`)
+      } catch(e) { console.warn('copyToDesktop error:', e.message) }
+    }
+
     try {
       let { artist, title, spotify_url, album_mode } = JSON.parse(body)
       artist = (artist || '').trim()
@@ -9148,6 +9157,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         for (const { filename, title: t } of processed) {
           movedFiles.push(filename)
           send({ type: 'progress', msg: `✓ Saved: ${filename}` })
+          copyToDesktop(filename)
           await insertRefTrack(artist, t, filename)
           fetch(`http://127.0.0.1:${PORT}/analyze-audio-features`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -9190,6 +9200,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
             recentRefMoves.unshift(filename)
             if (recentRefMoves.length > 5) recentRefMoves.length = 5
             send({ type: 'progress', msg: `✓ Saved: ${filename}` })
+            copyToDesktop(filename)
             await insertRefTrack(a, _rawQuery ? filename.replace(/\.mp3$/,'') : t, filename)
             fetch(`http://127.0.0.1:${PORT}/analyze-audio-features`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },

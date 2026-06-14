@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-06-14] momentum-watcher.cjs — DONE
+TASK: Copy downloaded reference to Desktop
+WHAT: Added copyToDesktop(filename) helper in /download-reference endpoint. Called at both save points — playlist loop and individual-track loop — right after ✓ Saved. Copies from REFERENCES_CURRENT_DIR to ~/Desktop with same filename.
+RESULT: works
+BLOCKERS: none
+
 ## [2026-06-14] src/lib/DailyTab.svelte — DONE
 TASK: Uniform grid layout for all routine link boxes
 WHAT: Set gap 4px→6px on routine-btns-wrap and quick-search-bar. Fixed routine-box to height:34px, padding:6px 10px, box-sizing:border-box. Made qs-cell (search bars) also height:34px with children filling 100% height so all rows — customs, static links, search inputs — are identical size.

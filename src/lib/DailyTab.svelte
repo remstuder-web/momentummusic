@@ -2358,6 +2358,7 @@ ${mozartContext}`
   .helper-search-inp:focus { border-color: rgba(201,168,76,.4); }
   .helper-search-go { font-family: 'Space Mono', monospace; font-size: 12px; padding: 3px 8px; background: transparent; border: 1px solid #303030; color: #9e9690; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
   .helper-search-go:hover { color: #c9a84c; border-color: #c9a84c; }
+  .routine-box .helper-search-go { border: none; padding: 0 4px; line-height: 1; }
   .reorder-col { display: flex; flex-direction: row; gap: 2px; flex-shrink: 0; }
   .reorder-micro { font-size: 9px; padding: 2px 4px; background: transparent; border: none; color: #2a2a2a; cursor: pointer; line-height: 1; }
   .reorder-micro:hover { color: #c9a84c; }

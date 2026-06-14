@@ -1492,10 +1492,16 @@ ${mozartContext}`
             <button class="del-btn" onclick={(e) => { e.stopPropagation(); delCustom(item.id) }}>×</button>
           </div>
         {/each}
-        </div>
-        {#if (state.checkItems||[]).length}
-          <div class="routine-divider">CHECK</div>
-          <div class="routine-btns-wrap">
+        {#each STATIC_LINKS as link (link.id)}
+          <div class="routine-box" onclick={() => window.open(link.url, '_blank', 'width=1400,height=900')}>
+            <span class="routine-box-label">{link.label}</span>
+            <span class="routine-box-arr">→</span>
+          </div>
+        {/each}
+      </div>
+      {#if (state.checkItems||[]).length}
+        <div class="routine-divider">CHECK</div>
+        <div class="routine-btns-wrap">
           {#each (state.checkItems||[]) as item (item.id)}
             <div class="routine-box" onclick={() => item.url && window.open(item.url, '_blank', '')}>
               <span class="routine-box-label">{item.label}</span>
@@ -1503,18 +1509,8 @@ ${mozartContext}`
               <button class="del-btn" onclick={(e) => { e.stopPropagation(); delCheck(item.id) }}>×</button>
             </div>
           {/each}
-          </div>
-        {/if}
-
-        <div class="routine-divider">LINKS</div>
-        <div class="routine-btns-wrap">
-          {#each STATIC_LINKS as link (link.id)}
-            <div class="routine-box" onclick={() => window.open(link.url, '_blank', 'width=1400,height=900')}>
-              <span class="routine-box-label">{link.label}</span>
-              <span class="routine-box-arr">→</span>
-            </div>
-          {/each}
         </div>
+      {/if}
 
       <div class="helpers-built-in">
 
@@ -2373,7 +2369,7 @@ ${mozartContext}`
   .add-row { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; align-items: center; }
   .add-inp { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 9px; outline: none; border-radius: 3px; }
   .add-inp:focus { border-color: rgba(201,168,76,.4); }
-  .helpers-built-in { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+  .helpers-built-in { display: flex; flex-direction: column; gap: 24px; margin-top: 20px; }
   .ref-row1 { display: flex; gap: 5px; align-items: center; margin-bottom: 5px; }
   .ref-row2 { display: flex; gap: 5px; align-items: center; }
   .ref-field { flex: 1; min-width: 0; }

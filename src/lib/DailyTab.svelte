@@ -489,7 +489,6 @@
 
   // Mozart
   let aiInput = $state(''), aiMessages = $state([]), aiLoading = $state(false)
-  let sideCollapsed = $state(true)
   let chatContainer = $state(null)
   $effect(() => {
     if (aiMessages.length && chatContainer) {
@@ -1006,10 +1005,10 @@ ${mozartContext}`
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, system, messages: aiMessages.slice(-10) })
+        body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 400, system, messages: aiMessages.slice(-10) })
       })
       const data = await res.json()
-      if (data.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/mozart', model: 'claude-sonnet-4-20250514', input_tokens: data.usage.input_tokens, output_tokens: data.usage.output_tokens, cost_usd: (data.usage.input_tokens * 0.000003) + (data.usage.output_tokens * 0.000015) }) }).catch(() => {})
+      if (data.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/mozart', model: 'claude-sonnet-5', input_tokens: data.usage.input_tokens, output_tokens: data.usage.output_tokens, cost_usd: (data.usage.input_tokens * 0.000003) + (data.usage.output_tokens * 0.000015) }) }).catch(() => {})
       let reply = data.content?.[0]?.text || 'No response.'
       if (reply.length > 300 && /research|found|analysis|suggests|shows|according|trend|data|insight|indicates/i.test(reply)) {
         reply += '\n\n---\n💡 Worth saving to Brain? Paste the key insight in Brain dump.'
@@ -1414,7 +1413,60 @@ ${mozartContext}`
 {#if loading}
   <p class="empty">Loading...</p>
 {:else}
-<div class="layout {sideCollapsed ? 'side-collapsed' : ''}">
+
+<!-- ASK MOZART — full-width, first thing on the page -->
+<div class="mozart-top">
+  <div class="mozart-title-row">
+    <div class="mozart-title">ASK MOZART</div>
+    {#if aiMessages.length}
+      <button class="clear-chat" onclick={() => aiMessages = []}>Clear</button>
+    {/if}
+  </div>
+  <div class="chat-input-row">
+    <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
+    <button class="btn-gold-sm" onclick={() => sendAI()}>Ask</button>
+  </div>
+  {#if aiMessages.length || aiLoading}
+    <div class="chat-out" bind:this={chatContainer}>
+      {#each aiMessages as msg, i}
+        <div class="chat-msg {msg.role}">
+          <div class="chat-who">{msg.role==='user'?'You':'Mozart'}</div>
+          <div class="chat-text">{@html msg.role === 'assistant' ? formatMozartOutput(msg.content) : msg.content}</div>
+          {#if msg.role === 'assistant'}
+            <div class="chat-correction-row">
+              <button class="btn-wrong" onclick={() => correctionInputs = {...correctionInputs, [i]: correctionInputs[i] !== undefined ? undefined : ''}}>✗ Wrong</button>
+            </div>
+            {#if correctionInputs[i] !== undefined}
+              <input
+                class="correction-inp"
+                placeholder="What was wrong about this?"
+                value={correctionInputs[i]}
+                oninput={e => correctionInputs = {...correctionInputs, [i]: e.target.value}}
+                onkeydown={async e => {
+                  if (e.key !== 'Enter') return
+                  const val = correctionInputs[i]?.trim()
+                  if (!val) return
+                  await supabase.from('brain_knowledge').insert({
+                    category: 'correction',
+                    title: msg.content.slice(0, 60),
+                    content: val,
+                    active: true
+                  })
+                  correctionInputs = {...correctionInputs, [i]: undefined}
+                }}
+              />
+            {/if}
+          {/if}
+        </div>
+      {/each}
+      {#if aiLoading}
+        <div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>
+      {/if}
+    </div>
+  {/if}
+</div>
+
+<div class="layout">
 
   <!-- LEFT COLUMN -->
   <div class="main">
@@ -2096,74 +2148,12 @@ ${mozartContext}`
     </div>
 
   </div>
-
-  <div class="side">
-    <button class="side-toggle {sideCollapsed ? '' : 'expanded'}" onclick={() => sideCollapsed = !sideCollapsed}>{sideCollapsed ? '›' : '‹'}</button>
-
-    {#if !sideCollapsed}
-    <!-- Mozart -->
-    <div class="mozart-block">
-      <div class="mozart-title-row">
-        <div class="mozart-title">ASK MOZART</div>
-        {#if aiMessages.length}
-          <button class="clear-chat" onclick={() => aiMessages = []}>Clear</button>
-        {/if}
-      </div>
-      <div class="chat-input-row">
-        <input class="chat-inp" bind:value={aiInput} placeholder="Ask anything..." onkeydown={e=>e.key==='Enter'&&sendAI()} />
-        <button class="btn-gold-sm" onclick={() => sendAI()}>Ask</button>
-      </div>
-      <div class="chat-out" bind:this={chatContainer}>
-        {#each aiMessages as msg, i}
-          <div class="chat-msg {msg.role}">
-            <div class="chat-who">{msg.role==='user'?'You':'Mozart'}</div>
-            <div class="chat-text">{@html msg.role === 'assistant' ? formatMozartOutput(msg.content) : msg.content}</div>
-            {#if msg.role === 'assistant'}
-              <div class="chat-correction-row">
-                <button class="btn-wrong" onclick={() => correctionInputs = {...correctionInputs, [i]: correctionInputs[i] !== undefined ? undefined : ''}}>✗ Wrong</button>
-              </div>
-              {#if correctionInputs[i] !== undefined}
-                <input
-                  class="correction-inp"
-                  placeholder="What was wrong about this?"
-                  value={correctionInputs[i]}
-                  oninput={e => correctionInputs = {...correctionInputs, [i]: e.target.value}}
-                  onkeydown={async e => {
-                    if (e.key !== 'Enter') return
-                    const val = correctionInputs[i]?.trim()
-                    if (!val) return
-                    await supabase.from('brain_knowledge').insert({
-                      category: 'correction',
-                      title: msg.content.slice(0, 60),
-                      content: val,
-                      active: true
-                    })
-                    correctionInputs = {...correctionInputs, [i]: undefined}
-                  }}
-                />
-              {/if}
-            {/if}
-          </div>
-        {/each}
-        {#if aiLoading}
-          <div class="chat-msg assistant"><div class="chat-who">Mozart</div><div class="chat-text dim">...</div></div>
-        {/if}
-      </div>
-    </div>
-    {/if}
-
-  </div>
 </div>
 {/if}
 
 <style>
-  .layout { display: grid; grid-template-columns: 1fr 380px; min-height: calc(100vh - 100px); gap: 32px; transition: grid-template-columns .2s; }
-  .layout.side-collapsed { grid-template-columns: 1fr 20px; }
+  .layout { display: flex; flex-direction: column; min-height: calc(100vh - 100px); gap: 32px; }
   .main { display: flex; flex-direction: column; gap: 20px; }
-  .side { border-left: 1px solid #1c1c1c; padding-left: 12px; display: flex; flex-direction: column; gap: 0; overflow: hidden; }
-  .side-toggle { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; cursor: pointer; padding: 20px 10px; align-self: flex-start; line-height: 1; margin-bottom: 6px; }
-  .side-toggle.expanded { padding: 10px 10px; }
-  .side-toggle:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .empty { font-family: 'Space Mono', monospace; font-size: 13px; color: #555; padding: 32px 0; text-align: center; }
   .empty-sm { font-family: 'Space Mono', monospace; font-size: 12px; color: #333; }
 
@@ -2735,12 +2725,12 @@ ${mozartContext}`
   .plan-section { border: 1px solid #1c1c1c; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
 
   /* Mozart */
-  .mozart-block { margin-top: 16px; border-top: 1px solid #1c1c1c; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 500px; }
+  .mozart-top { border: 1px solid #1c1c1c; border-radius: 4px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
   .mozart-title-row { display: flex; align-items: center; justify-content: space-between; }
   .mozart-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); margin-bottom: 2px; }
   .clear-chat { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 8px; background: transparent; border: 1px solid #252525; color: #444; border-radius: 2px; cursor: pointer; }
   .clear-chat:hover { border-color: #555; color: #9e9690; }
-  .chat-out { overflow-y: auto; max-height: 70vh; min-height: 300px; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; scroll-behavior: smooth; }
+  .chat-out { overflow-y: auto; max-height: 40vh; min-height: 120px; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; scroll-behavior: smooth; }
   .chat-msg { display: flex; flex-direction: column; gap: 2px; }
   .chat-who { font-family: 'Space Mono', monospace; font-size: 10px; color: #555; }
   .chat-msg.assistant .chat-who { color: #7a6230; }

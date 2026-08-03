@@ -1662,13 +1662,13 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514', max_tokens: 800,
+          model: 'claude-sonnet-5', max_tokens: 800,
           system: brainContext,
           messages: [{ role: 'user', content: `Convert the notes below into a clear list of single, actionable feedback points for a music producer. Each point max 10 words. Return ONLY a JSON array of strings, no explanation, no markdown, no code fences.\n\nNotes:\n${v.notes}` }]
         })
       })
       const d = await res.json()
-      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/notes-feedback', model: 'claude-sonnet-4-20250514', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
+      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/notes-feedback', model: 'claude-sonnet-5', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
       if (d.error) throw new Error(d.error.message || JSON.stringify(d.error))
       const raw = d.content?.[0]?.text || ''
       console.log('notes-feedback raw:', raw)
@@ -1702,7 +1702,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+          model: 'claude-sonnet-5', max_tokens: 1000,
           system: brainContext || 'You are a music production assistant. Return only JSON arrays.',
           messages: [{ role: 'user', content: [
             { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
@@ -1711,7 +1711,7 @@
         })
       })
       const d = await response.json()
-      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/pdf-feedback', model: 'claude-sonnet-4-20250514', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
+      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/pdf-feedback', model: 'claude-sonnet-5', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
       if (d.error?.type === 'overloaded_error') throw new Error('API overloaded — try again in a moment')
       if (d.error) throw new Error(d.error.message)
       const rawText = d.content?.[0]?.text || ''
@@ -3048,10 +3048,10 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: apiHeaders,
-        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 800, system, messages: convoMessages, tools: mozartTools })
+        body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 800, system, messages: convoMessages, tools: mozartTools })
       })
       const d = await res.json()
-      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/project-chat', model: 'claude-sonnet-4-20250514', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
+      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/project-chat', model: 'claude-sonnet-5', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
 
       if (d.stop_reason === 'tool_use') {
         const toolUseBlocks = (d.content || []).filter(b => b.type === 'tool_use')
@@ -3073,7 +3073,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
           method: 'POST',
           headers: apiHeaders,
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-5',
             max_tokens: 400,
             system,
             tools: mozartTools,
@@ -3081,7 +3081,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
           })
         })
         const d2 = await res2.json()
-        if (d2.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/project-chat', model: 'claude-sonnet-4-20250514', input_tokens: d2.usage.input_tokens, output_tokens: d2.usage.output_tokens, cost_usd: (d2.usage.input_tokens * 0.000003) + (d2.usage.output_tokens * 0.000015) }) }).catch(() => {})
+        if (d2.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/project-chat', model: 'claude-sonnet-5', input_tokens: d2.usage.input_tokens, output_tokens: d2.usage.output_tokens, cost_usd: (d2.usage.input_tokens * 0.000003) + (d2.usage.output_tokens * 0.000015) }) }).catch(() => {})
 
         // Show action results as system messages
         for (const tr of toolResults) aiMessages = [...aiMessages, { role: 'assistant', content: tr.content, _system: true }]

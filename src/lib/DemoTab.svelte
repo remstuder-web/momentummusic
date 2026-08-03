@@ -523,12 +523,12 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514', max_tokens: 200,
+          model: 'claude-sonnet-5', max_tokens: 200,
           messages: [{ role: 'user', content: `Generate 5-8 concise style tags for a music demo. Key: ${song.key}. Tempo: ${song.tempo} BPM. Notes: ${song.notes}. Return ONLY a JSON array of short tag strings (2-3 words max). No explanation.` }]
         })
       })
       const result = await res.json()
-      if (result.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/demo-tags', model: 'claude-sonnet-4-20250514', input_tokens: result.usage.input_tokens, output_tokens: result.usage.output_tokens, cost_usd: (result.usage.input_tokens * 0.000003) + (result.usage.output_tokens * 0.000015) }) }).catch(() => {})
+      if (result.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/demo-tags', model: 'claude-sonnet-5', input_tokens: result.usage.input_tokens, output_tokens: result.usage.output_tokens, cost_usd: (result.usage.input_tokens * 0.000003) + (result.usage.output_tokens * 0.000015) }) }).catch(() => {})
       const generated = JSON.parse(result.content?.[0]?.text.replace(/```json|```/g, '').trim() || '[]')
       await updateField(song, 'tags', [...new Set([...(song.tags || []), ...generated])])
     } catch(e) { alert('Claude error: ' + e.message) }
@@ -1118,10 +1118,10 @@
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, system: ctx, messages: aiMessages.slice(-10) })
+        body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 400, system: ctx, messages: aiMessages.slice(-10) })
       })
       const d = await res.json()
-      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/demo-chat', model: 'claude-sonnet-4-20250514', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
+      if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/demo-chat', model: 'claude-sonnet-5', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
       aiMessages = [...aiMessages, { role: 'assistant', content: d.content?.[0]?.text || 'No response.' }]
     } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
     aiLoading = false

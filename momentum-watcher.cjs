@@ -7908,7 +7908,7 @@ ${context}` }]
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514', max_tokens: 500,
+            model: 'claude-sonnet-5', max_tokens: 500,
             messages: [{ role: 'user', content: `Read this version history and feedback. List only what still needs doing, remove duplicates, sort by priority. Max 8 bullet points. FORMATTING: Never use **bold** or *italic* markdown — plain text, - for bullets only.\n\n${context}` }]
           })
         })
@@ -11022,7 +11022,7 @@ Give specific production direction based on stem balance, loudness levels, and r
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-5',
             max_tokens: 300,
             system: `You control Ableton Live via JSON commands over TCP. Convert the user instruction into a single JSON command object with { type, params }.\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- volume values must be floats between 0.0 and 1.0\n- uri from search_browser results must be passed exactly as returned\n\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nFor master track operations use track_index: -1 (the special AbletonMCP master index — never use track_count).\nFor load_browser_item the URI param key is "item_uri" (not "uri").\nTo load a third-party plugin (VST/AU/VST3): use get_browser_items_at_path with path "query:Plugins#VST3", "query:Plugins#VST", or "query:Plugins#AUv2". NEVER use search_browser or browse_path for plugins — only get_browser_items_at_path works.\nFor Ableton built-in effects use search_browser.\nIf the instruction requires multiple steps (e.g. load a plugin on master), pick the first step only and return that single command.\nReturn ONLY a valid JSON object, no explanation, no markdown.`,
             messages: [{ role: 'user', content: instruction }]
@@ -11065,7 +11065,7 @@ Give specific production direction based on stem balance, loudness levels, and r
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-5',
             max_tokens: 1500,
             system: `You are an Ableton Live producer assistant. Convert the user's instruction into a sequence of AbletonMCP commands to execute in order.\n\nReturn ONLY a JSON array of command objects:\n[\n  { "type": "set_tempo", "params": { "tempo": 140 } },\n  { "type": "create_midi_track", "params": { "index": -1 } }\n]\n\nCRITICAL: All numeric params must be actual numbers, never strings.\n- track_index must be an integer: 0, 1, 2 — never "0" or "master"\n- For master track, ALWAYS use track_index: -1. This is the special index AbletonMCP uses for the master track. Never use track_count as master index.\n- volume values must be floats between 0.0 and 1.0\n- Use the string placeholder "{{first_uri}}" for a URI from a prior get_browser_items_at_path — the executor matches the plugin name and substitutes the actual URI before sending.\n- For load_browser_item the URI param key is "item_uri" (not "uri").\n\nTo load a third-party plugin (VST/AU/VST3) on a track:\n  1. { "type": "get_browser_items_at_path", "params": { "path": "query:Plugins#VST3" } }\n     (use query:Plugins#VST for VST2, query:Plugins#AUv2 for Audio Units)\n  2. { "type": "load_browser_item", "params": { "track_index": -1, "item_uri": "{{first_uri}}" } }\nNEVER use search_browser or browse_path for plugins — only get_browser_items_at_path works.\nFor Ableton built-in effects use search_browser.\n\nThink step by step about what needs to happen first.\nAvailable commands:\n${ABLETON_CMD_LIST}\n\nReturn ONLY the JSON array, no explanation, no markdown.`,
             messages: [{ role: 'user', content: instruction }]
@@ -11438,7 +11438,7 @@ Pitch is MIDI note number (60=C4). Start and duration in beats. Chord velocities
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514', max_tokens: 8000,
+            model: 'claude-sonnet-5', max_tokens: 8000,
             messages: [{ role: 'user', content: claudePrompt }]
           })
         })
@@ -11917,7 +11917,7 @@ print(json.dumps({'files': files}))
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-5',
             max_tokens: 600,
             messages: [{
               role: 'user',
@@ -11952,7 +11952,7 @@ Format: use ALL CAPS section labels, bullet points with •` }
         await fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
           method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
           body: JSON.stringify({
-            endpoint: '/capture-screen', model: 'claude-sonnet-4-20250514',
+            endpoint: '/capture-screen', model: 'claude-sonnet-5',
             input_tokens: inputT, output_tokens: outputT,
             cost_usd: (inputT * 0.000003) + (outputT * 0.000015)
           })
@@ -12853,7 +12853,7 @@ ${formatted}`
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 endpoint: 'whatsapp-backfill',
-                model: 'claude-sonnet-4-20250514',
+                model: 'claude-sonnet-5',
                 input_tokens: usage?.input_tokens || 0,
                 output_tokens: usage?.output_tokens || 0,
                 cost_usd: ((usage?.input_tokens || 0) * 0.000003) + ((usage?.output_tokens || 0) * 0.000015)
@@ -15419,7 +15419,7 @@ async function analyzeArtistMessage(contactName, messageHistory, newMessage) {
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
       max_tokens: 800,
       system: `You are a relationship intelligence advisor for Remo, a professional music producer. Remo's main goal: make millions with music that has artistic integrity — the Daft Punk model, not Taylor Swift.
 
@@ -15579,7 +15579,7 @@ async function sendWhatsappSummary(contactName, messages) {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-5',
         max_tokens: 600,
         system: `You are a relationship intelligence advisor for Remo, a professional music producer. Be direct and practical. Format responses as structured JSON only.`,
         messages: [{
@@ -15649,7 +15649,7 @@ Return JSON:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           endpoint: 'whatsapp-summary',
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-5',
           input_tokens: d.usage.input_tokens || 0,
           output_tokens: d.usage.output_tokens || 0,
           cost_usd: ((d.usage.input_tokens || 0) * 0.000003) + ((d.usage.output_tokens || 0) * 0.000015)

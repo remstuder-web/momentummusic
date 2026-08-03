@@ -214,7 +214,7 @@ Inserts result as inbox_notification type='briefing'.
 
 ## Claude API calls from app
 Model: claude-haiku-4-5-20251001 for briefing/tagging (cheap)
-Model: claude-sonnet-4-20250514 for PDF processing, style guides (quality)
+Model: claude-sonnet-5 for PDF processing, style guides (quality)
 API key stored in localStorage key 'mm_api_key'
 Always include header: 'anthropic-dangerous-direct-browser-access': 'true'
 

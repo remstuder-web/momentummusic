@@ -1,5 +1,5 @@
 {
-  "run": "2026-08-03T16:09:32.794Z",
+  "run": "2026-08-03T16:24:09.884Z",
   "passed": 6,
   "total": 8,
   "results": [
@@ -25,7 +25,7 @@
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok + past briefing has real content (1544 chars)"
+      "detail": "endpoint ok + past briefing has real content (1366 chars)"
     },
     {
       "n": 5,
@@ -49,7 +49,7 @@
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "1f481bb YouTube Brain: copy extracted findings to clipboard on ingest"
+      "detail": "0e1a721 Fix YouTube Brain clipboard copy: use explicit button instead of auto-copy"
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "run": "2026-08-03T15:53:18.190Z",
+  "run": "2026-08-03T15:57:20.515Z",
   "passed": 6,
   "total": 8,
   "results": [
@@ -25,7 +25,7 @@
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok + past briefing has real content (1646 chars)"
+      "detail": "endpoint ok + past briefing has real content (1637 chars)"
     },
     {
       "n": 5,
@@ -37,7 +37,7 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Increase kick punch/impact\""
+      "detail": "3 items: \"Increase kick punch and impact\""
     },
     {
       "n": 7,
@@ -49,7 +49,7 @@
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "8e40ff0 YouTube Brain: let user pick the category before saving"
+      "detail": "df4d2b2 YouTube Brain: add personal note field to ingest"
     }
   ]
 }

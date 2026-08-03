@@ -10131,7 +10131,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         const standardCats = [
           'goal', 'mixing_technique', 'production_style', 'market_knowledge', 'own_production',
           'contact_profile', 'collaboration', 'observation', 'creative_process', 'sound_design',
-          'business', 'power_dynamics_principles', 'release_strategy', 'industry_insight',
+          'business', 'business_money', 'power_dynamics_principles', 'release_strategy', 'industry_insight',
           'networking', 'artist_strategy', 'reference_current', 'question',
           'genre_strategy', 'correction'
         ]
@@ -14932,7 +14932,7 @@ async function extractNowEntries(content) {
 Extract distinct knowledge items worth saving to a brain database. Each item should be self-contained and actionable or insightful on its own.
 
 For each item return JSON:
-{"title":"short label max 8 words","content":"verbatim or concise summary","category":"one of: own_production,reference_current,reference_mixing,reference_inspiration,reference_sound,market_knowledge,genre_strategy,artist_strategy,production_style,correction,question,mixing_technique,release_strategy,sound_design,industry_insight,social_media,networking,creative_process,business_finance","entry_type":"observation|pattern|rule|reference|question","confidence":"weak|medium|strong"}
+{"title":"short label max 8 words","content":"verbatim or concise summary","category":"one of: own_production,reference_current,reference_mixing,reference_inspiration,reference_sound,market_knowledge,genre_strategy,artist_strategy,production_style,correction,question,mixing_technique,release_strategy,sound_design,industry_insight,social_media,networking,creative_process,business_finance,business_money","entry_type":"observation|pattern|rule|reference|question","confidence":"weak|medium|strong"}
 
 Only extract items with clear informational value. Skip vague fragments, filler text, or incomplete thoughts.
 Return ONLY a JSON array. No explanation. No markdown. Start with [.

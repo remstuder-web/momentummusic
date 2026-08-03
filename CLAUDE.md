@@ -122,7 +122,7 @@ Categories: own_production, reference_current, reference_mixing, reference_inspi
             production_style, correction, question,
             artist_strategy, mixing_technique, release_strategy,
             sound_design, industry_insight, social_media,
-            networking, creative_process, business_finance
+            networking, creative_process, business_finance, business_money
 Fields include: surfaced_in_daily (bool), surfaced_until (date), metadata (jsonb)
 SQL to add missing columns:
   ALTER TABLE brain_knowledge ADD COLUMN IF NOT EXISTS surfaced_in_daily boolean DEFAULT false;

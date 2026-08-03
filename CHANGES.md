@@ -3203,3 +3203,9 @@ TASK: Add a personal note field to the YouTube Brain ingest
 WHAT: DailyTab's YOUTUBE → BRAIN block gets a new optional input below the URLs textarea ("Add your personal note (optional)... e.g. 'pay attention to his reverb technique'"), sent as personalNote in the POST body. youtube-ingest/+server.js passes personalNote through to ingestYoutubeVideos/ingestYoutubeVideo. extractInsights() now takes personalNote and, when present, appends an instruction to the Claude prompt to highlight anything related to it in the actionable points. The note is also prepended to the saved brain entry content as "📌 Personal note: ${personalNote}\n\n${extractedContent}" (before the category-suggestion call, so the suggestion sees it too) so it stays attached to the entry permanently.
 RESULT: works (vite build passes, test-system.cjs still 6/8 — same 2 pre-existing unrelated failures)
 BLOCKERS: none
+
+## 2026-08-03 momentum-watcher.cjs, CLAUDE.md — DONE
+TASK: Add "business_money" as a new brain_knowledge category option
+WHAT: User wanted a new category available to choose from, without touching existing entries or the existing business/business_finance categories. Added 'business_money' to the /suggest-category standardCats array (drives category suggestions for both BrainTab's dump flow and the YouTube ingest pipeline) and to the NOW-notes extraction prompt's category enum (extractNowEntries). Documented it in CLAUDE.md's brain_knowledge categories list. Restarted momentum-watcher via pm2 and confirmed via curl that 'business_money' now appears in /suggest-category's allCategories response.
+RESULT: works (verified live; test-system.cjs still 6/8, same 2 pre-existing unrelated failures)
+BLOCKERS: none

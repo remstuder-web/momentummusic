@@ -1,5 +1,5 @@
 {
-  "run": "2026-06-03T20:42:10.087Z",
+  "run": "2026-08-03T15:42:41.045Z",
   "passed": 6,
   "total": 8,
   "results": [
@@ -7,7 +7,7 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: analyzer-redesign"
+      "detail": "last_task: Restore routine items / remove CHECK section"
     },
     {
       "n": 2,
@@ -37,19 +37,19 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Kick needs more punch\""
+      "detail": "3 items: \"Increase kick punch and presence\""
     },
     {
       "n": 7,
       "label": "No brain duplicates",
       "ok": false,
-      "detail": "2 duplicate(s): \"Pricing production and mixing rates\" in [business], \"Collab rules first 5 minutes count\" in [collaboration]"
+      "detail": "4 duplicate(s): \"Pricing production and mixing rates\" in [business], \"Collab rules first 5 minutes count\" in [collaboration], \"Melody first lyrics serve melody\" in [creative_process]"
     },
     {
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "69619cd Analyzer: persist analysis data per version, only re-analyze on explicit request"
+      "detail": "fc807c5 Add YouTube → Brain ingest pipeline"
     }
   ]
 }

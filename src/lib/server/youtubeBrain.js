@@ -16,6 +16,7 @@ import { readFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { supabase } from '$lib/supabase.js';
+import { ANTHROPIC_API_KEY } from '$env/static/private';
 
 /**
  * Runs a shell command and resolves with stdout, rejects on non-zero exit.
@@ -128,7 +129,7 @@ Respond in this exact format, nothing else:
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': process.env.ANTHROPIC_API_KEY,
+            'x-api-key': ANTHROPIC_API_KEY,
             'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({

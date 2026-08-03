@@ -231,20 +231,26 @@
       })
       const d = await r.json()
       youtubeIngestResults = (d.results || []).map(res => ({ ...res, categoryOverride: '', saving: false }))
-
-      // Copy the extracted findings to clipboard for reading later — brain saving still happens separately below
-      const drafts = youtubeIngestResults.filter(res => res.status === 'draft')
-      if (drafts.length) {
-        const clip = drafts.map(res => `${res.title}\n${res.content}`).join('\n\n---\n\n')
-        navigator.clipboard.writeText(clip).then(() => {
-          youtubeCopyToast = 'Copied to clipboard'
-          setTimeout(() => youtubeCopyToast = '', 2500)
-        }).catch(() => {})
-      }
     } catch(e) {
       youtubeIngestResults = urls.map(url => ({ url, status: 'error', error: e.message }))
     }
     youtubeIngesting = false
+  }
+
+  // Triggered by a direct button click (not after an awaited fetch) so the
+  // clipboard permission's "user gesture" is still fresh — copying right
+  // after the long yt-dlp/Claude await above gets silently blocked otherwise.
+  function copyYoutubeFindings() {
+    const drafts = youtubeIngestResults.filter(res => res.status === 'draft' || res.status === 'success')
+    if (!drafts.length) return
+    const clip = drafts.map(res => `${res.title}\n${res.content}`).join('\n\n---\n\n')
+    navigator.clipboard.writeText(clip).then(() => {
+      youtubeCopyToast = 'Copied to clipboard'
+      setTimeout(() => youtubeCopyToast = '', 2500)
+    }).catch(() => {
+      youtubeCopyToast = 'Copy failed'
+      setTimeout(() => youtubeCopyToast = '', 2500)
+    })
   }
 
   async function saveYoutubeDraft(idx) {
@@ -1628,8 +1634,11 @@ ${mozartContext}`
             <button class="btn-ref-sm {youtubeIngesting ? 'dim' : ''}" onclick={runYoutubeIngest} disabled={youtubeIngesting} style="align-self:flex-start">
               {youtubeIngesting ? 'INGESTING...' : 'INGEST'}
             </button>
+            {#if youtubeIngestResults.some(r => r.status === 'draft' || r.status === 'success')}
+              <button class="btn-ref-sm" onclick={copyYoutubeFindings}>📋 COPY FINDINGS</button>
+            {/if}
             {#if youtubeCopyToast}
-              <span class="yt-copy-toast">📋 {youtubeCopyToast}</span>
+              <span class="yt-copy-toast">{youtubeCopyToast}</span>
             {/if}
           </div>
           {#if youtubeIngestResults.length}

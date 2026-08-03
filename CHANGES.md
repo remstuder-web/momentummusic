@@ -3215,3 +3215,9 @@ TASK: Copy YouTube Brain findings to clipboard on ingest
 WHAT: After INGEST returns drafts, runYoutubeIngest() now also joins each draft's title+content ("---" separated) and copies it to the clipboard via navigator.clipboard.writeText, so the extracted notes can be read/pasted elsewhere immediately without waiting on the category picker. Shows a small "📋 Copied to clipboard" toast next to the INGEST button for ~2.5s. Does not change the existing draft -> pick category -> SAVE -> brain_knowledge flow at all — purely additive.
 RESULT: works (vite build passes; test-system.cjs still 6/8, same 2 pre-existing unrelated failures)
 BLOCKERS: none
+
+## 2026-08-03 src/lib/DailyTab.svelte — DONE
+TASK: Fix YouTube Brain clipboard copy not working
+WHAT: The auto-copy added earlier fired navigator.clipboard.writeText right after an awaited fetch to /api/brain/youtube-ingest (yt-dlp transcript + Claude extraction, often 10s+) — by the time the promise resolved, the click's transient user-activation had expired, so the browser silently blocked the write (same gesture-freshness issue already noted in DemoTab.svelte/ProjectsTab.svelte comments). Replaced the automatic post-fetch copy with an explicit "📋 COPY FINDINGS" button that appears once any draft/saved results exist; clicking it is itself a fresh gesture so the clipboard write reliably succeeds. Toast now also reports "Copy failed" on error instead of failing silently.
+RESULT: works (vite build passes; test-system.cjs still 6/8, same 2 pre-existing unrelated failures)
+BLOCKERS: none

@@ -4,6 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
+		"start": "launchctl start com.momentum.phantommixer 2>/dev/null; vite dev",
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",

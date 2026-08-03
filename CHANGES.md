@@ -3167,3 +3167,9 @@ TASK: Start Momentum: open in Chrome instead of default browser
 WHAT: Changed `open http://localhost:5173` to `open -a "Google Chrome" http://localhost:5173`
 RESULT: will open in Chrome on next launch
 BLOCKERS: none
+
+## 2026-08-03 src/lib/DailyTab.svelte — DONE
+TASK: Spring cleaning — routine tab
+WHAT: Routine now keeps only Search YouTube + Search Spotify bars (removed Ask Gemini, SPOTIFY downloader, INSTAGRAM midas, AUDIOZ, GEARSPACE, SPOTIFY top german, GEARSPACE SG/THEORIES, all STATIC_LINKS + custom/CHECK boxes). Removed HELPERS tab button and its content; ROUTINE is the only tab. Search bar grid changed 3→2 cols.
+RESULT: works (vite build passes)
+BLOCKERS: none

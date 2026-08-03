@@ -62,6 +62,83 @@
   let abletonResponse = $state(null)
   let abletonSteps = $state([])
 
+  // Ableton AI Chat
+  let abletonChatMsgs = $state([])
+  let abletonChatInput = $state('')
+  let abletonChatBusy = $state(false)
+  let abletonOnline = $state(false)
+  let abletonLastStatus = $state(null) // { ok: bool, text: string } | null
+  let abletonSessionId = $state('')
+  let abletonPreferenceCount = $state(0)
+
+  async function sendAbletonFeedback(originalAction, correction) {
+    if (!abletonSessionId) return
+    try {
+      await fetch('http://localhost:9878/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: abletonSessionId,
+          original_action: originalAction,
+          correction: correction || 'wrong decision'
+        })
+      })
+      abletonChatMsgs = [...abletonChatMsgs, {
+        type: 'correction',
+        text: `Correction logged: "${correction || 'wrong'}". Will not repeat.`
+      }]
+    } catch(e) {
+      console.error('Feedback failed', e)
+    }
+  }
+
+  async function checkAbletonOnline() {
+    try {
+      const r = await fetch('http://localhost:9878/status', { signal: AbortSignal.timeout(2000) })
+      const d = await r.json()
+      abletonOnline = !!d.online
+      if (d.preference_count) abletonPreferenceCount = d.preference_count
+    } catch { abletonOnline = false }
+  }
+
+  async function sendAbletonMsg(e) {
+    if (e?.key && e.key !== 'Enter') return
+    const txt = abletonChatInput.trim()
+    if (!txt || abletonChatBusy) return
+    abletonChatInput = ''
+    abletonChatMsgs = [...abletonChatMsgs, { type: 'user', text: txt }]
+    abletonChatBusy = true
+    try {
+      const r = await fetch('http://localhost:9878/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction: txt })
+      })
+      const d = await r.json()
+      if (d.session_id) abletonSessionId = d.session_id
+      let lastTool = null
+      for (const entry of (d.log || [])) {
+        abletonChatMsgs = [...abletonChatMsgs, entry]
+        if (entry.type === 'tool') lastTool = entry.name
+      }
+      const finalEntry = [...(d.log || [])].reverse().find(e => e.type === 'result' || e.type === 'error')
+      if (finalEntry?.type === 'error') {
+        abletonLastStatus = { ok: false, text: `✗ ${finalEntry.text || 'error'}` }
+      } else {
+        abletonLastStatus = { ok: true, text: lastTool ? `✓ ${lastTool}` : '✓ done' }
+      }
+      abletonOnline = true
+    } catch(err) {
+      abletonChatMsgs = [...abletonChatMsgs, {
+        type: 'error',
+        text: 'PHANTOM MIXER offline. Run: python3 phantom_mixer.py --serve'
+      }]
+      abletonLastStatus = { ok: false, text: '✗ PHANTOM MIXER offline' }
+      abletonOnline = false
+    }
+    abletonChatBusy = false
+  }
+
   let refArtist = $state('')
   let refTitle = $state('')
   let refSpotifyUrl = $state('')
@@ -1461,16 +1538,10 @@ ${mozartContext}`
 
       <div class="sections">
         <button class="sec-tab {activeSection==='routine'?'on':''}" onclick={() => activeSection='routine'}>ROUTINE</button>
-        <button class="sec-tab {activeSection==='helpers'?'on':''}" onclick={() => activeSection='helpers'}>HELPERS</button>
       </div>
 
       {#if activeSection === 'routine'}
       <div class="quick-search-bar">
-        <div class="qs-cell">
-          <input class="helper-search-inp qs-inp" placeholder="Ask Gemini..." bind:value={quickGeminiQ}
-            onkeydown={e => e.key==='Enter' && quickGeminiQ.trim() && window.open('https://gemini.google.com/app?q='+encodeURIComponent(quickGeminiQ.trim()),'_blank')} />
-          <button class="helper-search-go" onclick={() => quickGeminiQ.trim() && window.open('https://gemini.google.com/app?q='+encodeURIComponent(quickGeminiQ.trim()),'_blank')}>→</button>
-        </div>
         <div class="qs-cell">
           <input class="helper-search-inp qs-inp" placeholder="Search YouTube..." bind:value={quickYoutubeQ}
             onkeydown={e => e.key==='Enter' && quickYoutubeQ.trim() && window.open('https://youtube.com/results?search_query='+encodeURIComponent(quickYoutubeQ.trim()),'_blank')} />
@@ -1482,35 +1553,6 @@ ${mozartContext}`
           <button class="helper-search-go" onclick={() => quickSpotifyQ.trim() && window.open('https://open.spotify.com/search/'+encodeURIComponent(quickSpotifyQ.trim()),'_blank')}>→</button>
         </div>
       </div>
-      <div class="routine-btns-wrap">
-        {#each state.customs.filter(item => !['google gemini','youtube','spotify'].includes((item.label||'').toLowerCase().trim())) as item (item.id)}
-          <div class="routine-box" onclick={() => item.url && window.open(item.url, '_blank', 'width=1400,height=900')}>
-            <span class="routine-box-label">{item.label}</span>
-            {#if item.url}
-              <button class="helper-search-go" onclick={(e) => { e.stopPropagation(); window.open(item.url, '_blank', 'width=1400,height=900') }}>→</button>
-            {/if}
-            <button class="del-btn" onclick={(e) => { e.stopPropagation(); delCustom(item.id) }}>×</button>
-          </div>
-        {/each}
-        {#each STATIC_LINKS as link (link.id)}
-          <div class="routine-box" onclick={() => window.open(link.url, '_blank', 'width=1400,height=900')}>
-            <span class="routine-box-label">{link.label}</span>
-            <span class="routine-box-arr">→</span>
-          </div>
-        {/each}
-      </div>
-      {#if (state.checkItems||[]).length}
-        <div class="routine-divider">CHECK</div>
-        <div class="routine-btns-wrap">
-          {#each (state.checkItems||[]) as item (item.id)}
-            <div class="routine-box" onclick={() => item.url && window.open(item.url, '_blank', '')}>
-              <span class="routine-box-label">{item.label}</span>
-              <span class="routine-box-arr">→</span>
-              <button class="del-btn" onclick={(e) => { e.stopPropagation(); delCheck(item.id) }}>×</button>
-            </div>
-          {/each}
-        </div>
-      {/if}
 
       <div class="helpers-built-in">
 
@@ -1752,71 +1794,6 @@ ${mozartContext}`
           {/if}
         </div>
 
-        <!-- WHATSAPP — moved here from top-level section -->
-        <div class="helper-block">
-          <div class="normalizer-title">WHATSAPP</div>
-          {#if waContacts.length === 0}
-            <p class="empty-sm" style="color:#444">No monitored contacts. Add contacts in Settings ⚙.</p>
-          {:else}
-            <div class="wa-analyze-row">
-              <select class="wa-contact-sel" bind:value={waSelectedContact}>
-                <option value="">— Select contact —</option>
-                {#each waContacts as c (c.jid)}
-                  <option value={c.name}>{c.name}</option>
-                {/each}
-              </select>
-              <button class="briefing-btn {waAnalyzing ? 'loading' : ''}" onclick={analyzeWaContact} disabled={!waSelectedContact || waAnalyzing}>
-                {waAnalyzing ? 'Analyzing...' : 'Analyze Conversation'}
-              </button>
-            </div>
-            {#if waError}
-              <p class="empty-sm" style="color:#e05a4a;margin-top:6px">{waError}</p>
-            {/if}
-            {#if waResult}
-              <div class="wa-result">
-                {#if waResult.urgency}
-                  <div class="wa-result-row">
-                    <span class="wa-result-label">URGENCY</span>
-                    <span class="wa-urgency-val urgency-{waResult.urgency}">{waResult.urgency.toUpperCase()}</span>
-                  </div>
-                {/if}
-                {#if waResult.summary}
-                  <div class="wa-result-section">
-                    <div class="wa-result-label">SUMMARY</div>
-                    <div class="wa-result-text">{waResult.summary}</div>
-                  </div>
-                {/if}
-                {#if waResult.real_intent}
-                  <div class="wa-result-section">
-                    <div class="wa-result-label">REAL INTENT</div>
-                    <div class="wa-result-text">{waResult.real_intent}</div>
-                  </div>
-                {/if}
-                {#if waResult.tone}
-                  <div class="wa-result-section">
-                    <div class="wa-result-label">TONE</div>
-                    <div class="wa-result-text">{waResult.tone}</div>
-                  </div>
-                {/if}
-                {#if waResult.opportunities}
-                  <div class="wa-result-section">
-                    <div class="wa-result-label">OPPORTUNITIES</div>
-                    <div class="wa-result-text">{waResult.opportunities}</div>
-                  </div>
-                {/if}
-                {#if waResult.recommended_response}
-                  <div class="wa-result-section">
-                    <div class="wa-result-label">RECOMMENDED RESPONSE</div>
-                    <div class="wa-result-text wa-reply-wrap">
-                      <span class="wa-reply-text">{waResult.recommended_response}</span>
-                      <button class="wa-copy-btn" onclick={() => navigator.clipboard.writeText(waResult.recommended_response)}>Copy</button>
-                    </div>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          {/if}
-        </div>
 
         <!-- ABLETON CONTROL — hidden, re-enable by removing {#if false} -->
         {#if false}
@@ -1889,26 +1866,95 @@ ${mozartContext}`
       </div><!-- /helpers-built-in routine -->
       {/if}
 
-      {#if activeSection === 'helpers'}
-        <div class="check-list">
-        {#each (state.helpers||[]) as item (item.id)}
-          <div class="routine-box">
-            <span class="routine-box-label">{item.label}</span>
-            {#if item.url}
-              <button class="helper-search-go" onclick={() => window.open(item.url, '_blank', 'width=1400,height=900')}>→</button>
-            {/if}
-            <button class="del-btn" onclick={() => delHelper(item.id)}>×</button>
-          </div>
+    </div>
+
+    <!-- ── ABLETON CHAT ─────────────────────────────────── -->
+    <div class="abl-chat-section">
+      <div class="abl-chat-header">
+        <span class="abl-chat-title">ABLETON</span>
+        <button class="abl-status-btn" onclick={checkAbletonOnline}>
+          <span class="abl-dot" class:online={abletonOnline} class:offline={!abletonOnline}></span>
+          {abletonOnline ? 'CONNECTED' : 'CHECK'}
+          {#if abletonPreferenceCount > 0}
+            <span class="abl-pref-badge">{abletonPreferenceCount} prefs</span>
+          {/if}
+        </button>
+        {#if abletonChatMsgs.length > 0}
+          <button class="abl-clear-btn" onclick={() => abletonChatMsgs = []}>CLEAR</button>
+        {/if}
+      </div>
+
+      {#if abletonChatMsgs.length > 0 || abletonChatBusy}
+      <div class="abl-chat-log">
+        {#each abletonChatMsgs as msg}
+          {#if msg.type === 'user'}
+            <div class="abl-msg abl-msg-user">
+              <span class="abl-who">YOU</span>
+              <span class="abl-text">{msg.text}</span>
+            </div>
+          {:else if msg.type === 'ai'}
+            <div class="abl-msg abl-msg-ai">
+              <span class="abl-who">AI</span>
+              <span class="abl-text">{msg.text}</span>
+              <button class="abl-wrong-btn" title="Wrong — log correction"
+                onclick={() => {
+                  const fix = prompt('What was wrong?', '')
+                  if (fix) sendAbletonFeedback(msg.text, fix)
+                }}>✕</button>
+            </div>
+          {:else if msg.type === 'correction'}
+            <div class="abl-msg abl-msg-correction">
+              <span class="abl-who">✓</span>
+              <span class="abl-text">{msg.text}</span>
+            </div>
+          {:else if msg.type === 'tool'}
+            <div class="abl-msg abl-msg-tool">
+              <span class="abl-who">FX</span>
+              <span class="abl-tool-name">{msg.name}</span>
+              <span class="abl-tool-args">{JSON.stringify(msg.input || {})}</span>
+            </div>
+          {:else if msg.type === 'result'}
+            <div class="abl-msg abl-msg-result">
+              <span class="abl-who">OK</span>
+              <span class="abl-result-text">{(msg.text || '').slice(0, 120)}{(msg.text?.length || 0) > 120 ? '…' : ''}</span>
+            </div>
+          {:else if msg.type === 'error'}
+            <div class="abl-msg abl-msg-error">
+              <span class="abl-who">ERR</span>
+              <span class="abl-text">{msg.text}</span>
+            </div>
+          {/if}
         {/each}
-        </div>
-        <div class="add-row">
-          <input class="add-inp" bind:value={newHelper} placeholder="New helper..." onkeydown={e=>e.key==='Enter'&&addHelper()} />
-          <input class="add-inp url" bind:value={newHelperUrl} placeholder="URL (optional)..." />
-          <button class="add-btn" onclick={addHelper}>+</button>
-        </div>
+        {#if abletonChatBusy}
+          <div class="abl-msg abl-msg-ai">
+            <span class="abl-who">AI</span>
+            <span class="abl-thinking"><span></span><span></span><span></span></span>
+          </div>
+        {/if}
+      </div>
       {/if}
 
+      <div class="abl-input-row">
+        <input
+          class="abl-input"
+          placeholder="mixing instruction..."
+          bind:value={abletonChatInput}
+          onkeydown={sendAbletonMsg}
+          disabled={abletonChatBusy}
+        />
+        <button class="abl-send-btn" onclick={sendAbletonMsg} disabled={abletonChatBusy || !abletonChatInput.trim()}>
+          {#if abletonChatBusy}
+            <span class="abl-spinner"></span>
+          {:else}
+            SEND
+          {/if}
+        </button>
+      </div>
+      <div class="abl-status-line" class:ok={abletonLastStatus?.ok === true} class:err={abletonLastStatus?.ok === false}>
+        {abletonLastStatus ? abletonLastStatus.text : '—'}
+      </div>
     </div>
+
   </div>
 
   <div class="side">
@@ -2340,7 +2386,7 @@ ${mozartContext}`
   .sec-tab { font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: .14em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
   .sec-tab:hover { color: #9e9690; }
   .sec-tab.on { color: #c9a84c; border-bottom-color: #c9a84c; }
-  .quick-search-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 6px; }
+  .quick-search-bar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 6px; }
   .qs-cell { display: flex; gap: 4px; }
   .qs-cell .helper-search-inp { flex: 1; width: auto; }
   .check-list { display: flex; flex-direction: column; gap: 2px; }
@@ -2570,4 +2616,57 @@ ${mozartContext}`
   .chat-inp:focus { border-color: rgba(201,168,76,.4); }
   .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 7px 12px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; }
   /* References tab */
+
+  /* ── Ableton Chat ──────────────────────────────────── */
+  .abl-chat-section { margin-top: 24px; border-top: 1px solid #1c1c1c; padding-top: 16px; }
+  .abl-chat-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .abl-chat-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); }
+  .abl-status-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; background: transparent; border: 1px solid #252525; color: #555; padding: 3px 8px; border-radius: 2px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+  .abl-status-btn:hover { border-color: #444; color: #9e9690; }
+  .abl-dot { width: 6px; height: 6px; border-radius: 50%; background: #333; flex-shrink: 0; }
+  .abl-dot.online { background: #4caf82; }
+  .abl-dot.offline { background: #444; }
+  .abl-clear-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: transparent; border: 1px solid #252525; color: #444; padding: 3px 8px; border-radius: 2px; cursor: pointer; margin-left: auto; }
+  .abl-clear-btn:hover { border-color: #555; color: #9e9690; }
+  .abl-chat-log { background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 3px; padding: 10px; max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; scroll-behavior: smooth; }
+  .abl-empty { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #333; line-height: 1.5; }
+  .abl-msg { display: flex; align-items: baseline; gap: 8px; }
+  .abl-who { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; flex-shrink: 0; width: 26px; }
+  .abl-text { font-family: 'DM Sans', sans-serif; font-size: 12px; line-height: 1.5; flex: 1; }
+  .abl-msg-user .abl-who { color: #555; }
+  .abl-msg-user .abl-text { color: #f5f1ea; }
+  .abl-msg-ai .abl-who { color: rgba(201,168,76,.6); }
+  .abl-msg-ai .abl-text { color: #cec9c1; }
+  .abl-msg-tool { background: rgba(201,168,76,.04); border-radius: 2px; padding: 2px 4px; }
+  .abl-msg-tool .abl-who { color: rgba(100,160,220,.7); }
+  .abl-tool-name { font-family: 'Space Mono', monospace; font-size: 10px; color: #c9a84c; flex-shrink: 0; }
+  .abl-tool-args { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .abl-msg-result .abl-who { color: #4caf82; }
+  .abl-result-text { font-family: 'Space Mono', monospace; font-size: 9px; color: #555; }
+  .abl-msg-error .abl-who { color: #e57373; }
+  .abl-msg-error .abl-text { color: #e57373; font-size: 11px; }
+  .abl-thinking { display: flex; gap: 3px; align-items: center; padding: 4px 0; }
+  .abl-thinking span { width: 4px; height: 4px; border-radius: 50%; background: rgba(201,168,76,.5); animation: abl-pulse 1.2s infinite; }
+  .abl-thinking span:nth-child(2) { animation-delay: .2s; }
+  .abl-thinking span:nth-child(3) { animation-delay: .4s; }
+  @keyframes abl-pulse { 0%,80%,100% { opacity:.2; transform: scale(.8); } 40% { opacity:1; transform: scale(1); } }
+  .abl-input-row { display: flex; gap: 6px; }
+  .abl-input { flex: 1; background: #1c1c1c; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; border-radius: 3px; }
+  .abl-input:focus { border-color: rgba(201,168,76,.4); }
+  .abl-input::placeholder { color: #333; }
+  .abl-input:disabled { opacity: .5; }
+  .abl-send-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: rgba(201,168,76,.1); border: 1px solid rgba(201,168,76,.35); color: #c9a84c; padding: 7px 14px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .abl-send-btn:hover:not(:disabled) { background: rgba(201,168,76,.18); }
+  .abl-send-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .abl-spinner { width: 10px; height: 10px; border: 2px solid rgba(201,168,76,.3); border-top-color: #c9a84c; border-radius: 50%; animation: spin .7s linear infinite; }
+  .abl-status-line { font-family: 'Space Mono', monospace; font-size: 9px; margin-top: 6px; color: #333; letter-spacing: .04em; }
+  .abl-status-line.ok { color: #c9a84c; }
+  .abl-status-line.err { color: #e57373; }
+  .abl-pref-badge { font-family: 'Space Mono', monospace; font-size: 8px; background: rgba(201,168,76,.12); border: 1px solid rgba(201,168,76,.25); color: rgba(201,168,76,.6); padding: 2px 5px; border-radius: 2px; }
+  .abl-wrong-btn { background: transparent; border: none; color: #333; font-size: 10px; cursor: pointer; padding: 0 4px; opacity: 0; transition: opacity .15s; flex-shrink: 0; }
+  .abl-msg-ai:hover .abl-wrong-btn { opacity: 1; }
+  .abl-wrong-btn:hover { color: #e57373; }
+  .abl-msg-correction { background: rgba(76,175,130,.06); border-radius: 2px; padding: 2px 4px; }
+  .abl-msg-correction .abl-who { color: #4caf82; }
+  .abl-msg-correction .abl-text { font-size: 11px; color: #4caf82; }
 </style>

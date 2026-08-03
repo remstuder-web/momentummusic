@@ -3173,3 +3173,9 @@ TASK: Spring cleaning — routine tab
 WHAT: Routine now keeps only Search YouTube + Search Spotify bars (removed Ask Gemini, SPOTIFY downloader, INSTAGRAM midas, AUDIOZ, GEARSPACE, SPOTIFY top german, GEARSPACE SG/THEORIES, all STATIC_LINKS + custom/CHECK boxes). Removed HELPERS tab button and its content; ROUTINE is the only tab. Search bar grid changed 3→2 cols.
 RESULT: works (vite build passes)
 BLOCKERS: none
+
+## 2026-08-03 src/lib/server/youtubeBrain.js, src/routes/api/brain/youtube-ingest/+server.js, src/lib/DailyTab.svelte — DONE
+TASK: YouTube → Brain ingest pipeline
+WHAT: New pipeline (yt-dlp transcript -> Claude Haiku extraction -> brain_knowledge insert). Verified Mozart's add_brain_entry (momentum-watcher.cjs:14323) writes to `brain_knowledge` with columns category/title/content/entry_type_v2/confidence/source_type/active — NOT `brain_entries` as originally drafted. Rewrote addToBrain() in youtubeBrain.js to match that shape exactly, plus source_url and metadata.tags (both real brain_knowledge columns used elsewhere in the watcher). No SUPABASE_SERVICE_KEY in .env (only SUPABASE_SECRET_KEY, used for admin-only ops); confirmed every brain_knowledge write in the watcher — including add_brain_entry itself — goes through the anon/publishable key, so youtubeBrain.js uses the existing $lib/supabase.js anon client instead of a service-role client. Added YOUTUBE -> BRAIN section to DailyTab.svelte ROUTINE tab: textarea for URLs (one per line), gold INGEST button, per-URL ✓ Title / ✗ Error results, loading state.
+RESULT: works (vite build passes, new endpoint compiles); yt-dlp confirmed installed at /opt/homebrew/bin/yt-dlp. Untested end-to-end (needs a live ANTHROPIC_API_KEY call + real video to confirm transcript/insert round-trip).
+BLOCKERS: none

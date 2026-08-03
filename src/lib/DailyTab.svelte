@@ -39,6 +39,9 @@
   let quickGeminiQ = $state('')
   let quickYoutubeQ = $state('')
   let quickSpotifyQ = $state('')
+  let youtubeIngestUrls = $state('')
+  let youtubeIngesting = $state(false)
+  let youtubeIngestResults = $state([])
   let titleGenLoading = $state(false)
   let titleGenResults = $state([])
 
@@ -212,6 +215,24 @@
       refStatus = { ok: false, msg: 'Find failed: ' + e.message }
     }
     refFinding = false
+  }
+
+  async function runYoutubeIngest() {
+    const urls = youtubeIngestUrls.split('\n').map(u => u.trim()).filter(Boolean)
+    if (!urls.length) return
+    youtubeIngesting = true
+    youtubeIngestResults = []
+    try {
+      const r = await fetch('/api/brain/youtube-ingest', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls })
+      })
+      const d = await r.json()
+      youtubeIngestResults = d.results || []
+    } catch(e) {
+      youtubeIngestResults = urls.map(url => ({ url, status: 'error', error: e.message }))
+    }
+    youtubeIngesting = false
   }
 
   async function downloadSimilarOne(idx) {
@@ -1555,6 +1576,31 @@ ${mozartContext}`
       </div>
 
       <div class="helpers-built-in">
+
+        <!-- YOUTUBE → BRAIN -->
+        <div class="helper-block">
+          <div class="normalizer-title">YOUTUBE → BRAIN</div>
+          <textarea
+            class="ableton-textarea"
+            rows="3"
+            placeholder="Paste YouTube URLs, one per line..."
+            bind:value={youtubeIngestUrls}
+          ></textarea>
+          <button class="btn-ref-sm {youtubeIngesting ? 'dim' : ''}" onclick={runYoutubeIngest} disabled={youtubeIngesting} style="align-self:flex-start">
+            {youtubeIngesting ? 'INGESTING...' : 'INGEST'}
+          </button>
+          {#if youtubeIngestResults.length}
+            <div class="acapella-result">
+              {#each youtubeIngestResults as r}
+                <div class="result-row">
+                  <span class="result-val" style="color:{r.status === 'success' ? '#4caf82' : '#e57373'}">
+                    {r.status === 'success' ? '✓ ' + r.title : '✗ ' + r.error}
+                  </span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
 
         <!-- REFERENCES -->
         <div class="helper-block">

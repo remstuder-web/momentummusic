@@ -40,6 +40,7 @@
   let quickYoutubeQ = $state('')
   let quickSpotifyQ = $state('')
   let youtubeIngestUrls = $state('')
+  let youtubeIngestNote = $state('')
   let youtubeIngesting = $state(false)
   let youtubeIngestResults = $state([])
   let titleGenLoading = $state(false)
@@ -225,7 +226,7 @@
     try {
       const r = await fetch('/api/brain/youtube-ingest', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls })
+        body: JSON.stringify({ urls, personalNote: youtubeIngestNote.trim() })
       })
       const d = await r.json()
       youtubeIngestResults = (d.results || []).map(res => ({ ...res, categoryOverride: '', saving: false }))
@@ -1607,6 +1608,11 @@ ${mozartContext}`
             placeholder="Paste YouTube URLs, one per line..."
             bind:value={youtubeIngestUrls}
           ></textarea>
+          <input
+            class="add-inp"
+            placeholder="Add your personal note (optional)... e.g. 'pay attention to his reverb technique'"
+            bind:value={youtubeIngestNote}
+          />
           <button class="btn-ref-sm {youtubeIngesting ? 'dim' : ''}" onclick={runYoutubeIngest} disabled={youtubeIngesting} style="align-self:flex-start">
             {youtubeIngesting ? 'INGESTING...' : 'INGEST'}
           </button>

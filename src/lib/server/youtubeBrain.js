@@ -103,7 +103,11 @@ async function extractTranscript(url) {
  * Sends the transcript to Claude and gets back a clean, structured,
  * actionable note — fluff stripped.
  */
-async function extractInsights(title, transcript) {
+async function extractInsights(title, transcript, personalNote) {
+    const noteBlock = personalNote
+        ? `\n\nThe user added this personal note about why they saved this video: '${personalNote}'\nMake sure to highlight anything related to this note in the actionable points.`
+        : '';
+
     const prompt = `You are extracting actionable knowledge from a YouTube video transcript for a music producer's permanent knowledge base.
 
 Video title: "${title}"
@@ -112,6 +116,7 @@ Transcript:
 """
 ${transcript.slice(0, 60000)}
 """
+${noteBlock}
 
 Extract ONLY the concrete, actionable techniques, steps, numbers, tool names, or settings mentioned. Ignore intros, sponsor reads, filler, and generic motivational talk.
 
@@ -204,18 +209,21 @@ async function suggestCategory(text) {
  * point — returns a result object so batch processing can continue on
  * failure.
  */
-export async function ingestYoutubeVideo(url) {
+export async function ingestYoutubeVideo(url, personalNote) {
     try {
         const { title, transcript } = await extractTranscript(url);
-        const notes = await extractInsights(title, transcript);
+        const notes = await extractInsights(title, transcript, personalNote);
 
         // crude tag pull from the "## Tags" section Claude was asked to produce
         const tagMatch = notes.match(/## Tags\s*\n(.+)/);
         const tags = tagMatch ? tagMatch[1].split(',').map((t) => t.trim()) : [];
 
+        // Prepend the note so it stays attached to the entry permanently in the Brain
+        const content = personalNote ? `📌 Personal note: ${personalNote}\n\n${notes}` : notes;
+
         let suggestion;
         try {
-            suggestion = await suggestCategory(notes);
+            suggestion = await suggestCategory(content);
         } catch (err) {
             suggestion = { category: '', action: 'new', reason: `Category suggestion failed: ${err.message}`, alternatives: [], allCategories: [] };
         }
@@ -225,7 +233,7 @@ export async function ingestYoutubeVideo(url) {
             status: 'draft',
             title,
             sourceUrl: url,
-            content: notes,
+            content,
             tags,
             category: suggestion.category || suggestion.suggestion || '',
             categoryAction: suggestion.action || 'new',
@@ -253,10 +261,10 @@ export async function saveYoutubeEntry({ title, sourceUrl, content, tags, catego
  * (yt-dlp + API calls don't need to hammer in parallel; sequential
  * is safer for rate limits and easier to debug).
  */
-export async function ingestYoutubeVideos(urls) {
+export async function ingestYoutubeVideos(urls, personalNote) {
     const results = [];
     for (const url of urls) {
-        results.push(await ingestYoutubeVideo(url.trim()));
+        results.push(await ingestYoutubeVideo(url.trim(), personalNote));
     }
     return results;
 }

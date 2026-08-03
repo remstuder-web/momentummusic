@@ -43,6 +43,7 @@
   let youtubeIngestNote = $state('')
   let youtubeIngesting = $state(false)
   let youtubeIngestResults = $state([])
+  let youtubeCopyToast = $state('')
   let titleGenLoading = $state(false)
   let titleGenResults = $state([])
 
@@ -230,6 +231,16 @@
       })
       const d = await r.json()
       youtubeIngestResults = (d.results || []).map(res => ({ ...res, categoryOverride: '', saving: false }))
+
+      // Copy the extracted findings to clipboard for reading later — brain saving still happens separately below
+      const drafts = youtubeIngestResults.filter(res => res.status === 'draft')
+      if (drafts.length) {
+        const clip = drafts.map(res => `${res.title}\n${res.content}`).join('\n\n---\n\n')
+        navigator.clipboard.writeText(clip).then(() => {
+          youtubeCopyToast = 'Copied to clipboard'
+          setTimeout(() => youtubeCopyToast = '', 2500)
+        }).catch(() => {})
+      }
     } catch(e) {
       youtubeIngestResults = urls.map(url => ({ url, status: 'error', error: e.message }))
     }
@@ -1613,9 +1624,14 @@ ${mozartContext}`
             placeholder="Add your personal note (optional)... e.g. 'pay attention to his reverb technique'"
             bind:value={youtubeIngestNote}
           />
-          <button class="btn-ref-sm {youtubeIngesting ? 'dim' : ''}" onclick={runYoutubeIngest} disabled={youtubeIngesting} style="align-self:flex-start">
-            {youtubeIngesting ? 'INGESTING...' : 'INGEST'}
-          </button>
+          <div style="display:flex; align-items:center; gap:8px">
+            <button class="btn-ref-sm {youtubeIngesting ? 'dim' : ''}" onclick={runYoutubeIngest} disabled={youtubeIngesting} style="align-self:flex-start">
+              {youtubeIngesting ? 'INGESTING...' : 'INGEST'}
+            </button>
+            {#if youtubeCopyToast}
+              <span class="yt-copy-toast">📋 {youtubeCopyToast}</span>
+            {/if}
+          </div>
           {#if youtubeIngestResults.length}
             <div class="acapella-result">
               {#each youtubeIngestResults as r, i}
@@ -2562,6 +2578,7 @@ ${mozartContext}`
   .ref-moves { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
   .ref-move-item { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; }
   .helper-block { display: flex; flex-direction: column; gap: 8px; }
+  .yt-copy-toast { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; }
   .yt-draft { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; border-bottom: 1px solid #252525; }
   .yt-draft:last-child { border-bottom: none; }
   .yt-draft-cat-row { display: flex; gap: 6px; align-items: center; }

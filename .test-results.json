@@ -1,5 +1,5 @@
 {
-  "run": "2026-08-03T15:57:20.515Z",
+  "run": "2026-08-03T16:00:50.751Z",
   "passed": 6,
   "total": 8,
   "results": [
@@ -49,7 +49,7 @@
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "df4d2b2 YouTube Brain: add personal note field to ingest"
+      "detail": "288e4f3 Add business_money as a new brain_knowledge category option"
     }
   ]
 }

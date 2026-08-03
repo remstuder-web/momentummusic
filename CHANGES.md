@@ -3209,3 +3209,9 @@ TASK: Add "business_money" as a new brain_knowledge category option
 WHAT: User wanted a new category available to choose from, without touching existing entries or the existing business/business_finance categories. Added 'business_money' to the /suggest-category standardCats array (drives category suggestions for both BrainTab's dump flow and the YouTube ingest pipeline) and to the NOW-notes extraction prompt's category enum (extractNowEntries). Documented it in CLAUDE.md's brain_knowledge categories list. Restarted momentum-watcher via pm2 and confirmed via curl that 'business_money' now appears in /suggest-category's allCategories response.
 RESULT: works (verified live; test-system.cjs still 6/8, same 2 pre-existing unrelated failures)
 BLOCKERS: none
+
+## 2026-08-03 src/lib/DailyTab.svelte — DONE
+TASK: Copy YouTube Brain findings to clipboard on ingest
+WHAT: After INGEST returns drafts, runYoutubeIngest() now also joins each draft's title+content ("---" separated) and copies it to the clipboard via navigator.clipboard.writeText, so the extracted notes can be read/pasted elsewhere immediately without waiting on the category picker. Shows a small "📋 Copied to clipboard" toast next to the INGEST button for ~2.5s. Does not change the existing draft -> pick category -> SAVE -> brain_knowledge flow at all — purely additive.
+RESULT: works (vite build passes; test-system.cjs still 6/8, same 2 pre-existing unrelated failures)
+BLOCKERS: none

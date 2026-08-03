@@ -1,5 +1,5 @@
 {
-  "run": "2026-08-03T15:42:41.045Z",
+  "run": "2026-08-03T15:49:58.671Z",
   "passed": 6,
   "total": 8,
   "results": [
@@ -25,7 +25,7 @@
       "n": 4,
       "label": "Pulse check real data",
       "ok": true,
-      "detail": "endpoint ok — no past pulse briefings (first run, or today returned NO_UPDATES)"
+      "detail": "endpoint ok + past briefing has real content (1646 chars)"
     },
     {
       "n": 5,
@@ -49,7 +49,7 @@
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "fc807c5 Add YouTube → Brain ingest pipeline"
+      "detail": "359048b Fix YouTube Brain: use SvelteKit env vars for API key"
     }
   ]
 }

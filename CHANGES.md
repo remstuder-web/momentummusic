@@ -3185,3 +3185,15 @@ TASK: Fix YouTube Brain API key lookup
 WHAT: SvelteKit server files can't read process.env directly for static env vars — replaced `process.env.ANTHROPIC_API_KEY` with `import { ANTHROPIC_API_KEY } from '$env/static/private'`. Confirmed via `grep -i anthropic .env` the key is actually named ANTHROPIC_API_KEY (matches, no rename needed). Restarted momentum-watcher via pm2 (was stopped) and re-ran test-system.cjs: 6/8 pass, up from 3/8 — remaining 2 failures (Spotify 403 subscription requirement, 4 pre-existing brain_knowledge duplicates) are unrelated to this fix.
 RESULT: works
 BLOCKERS: none
+
+## 2026-08-03 brain_knowledge (Supabase data) — DONE
+TASK: Recategorize first live YouTube ingest test entry
+WHAT: "$10M Founder: The Formula She Used to Grow a Viral Brand TWICE" (id 867f61ad) landed as category=production_style (the pipeline's old hardcoded default) despite being a marketing/social-media video. Updated the row to category=social_media via Supabase REST PATCH.
+RESULT: works
+BLOCKERS: none
+
+## 2026-08-03 src/lib/server/youtubeBrain.js, src/routes/api/brain/youtube-confirm/+server.js, src/lib/DailyTab.svelte — DONE
+TASK: Let user pick the Brain topic/category for YouTube ingests instead of hardcoding one
+WHAT: youtubeBrain.js addToBrain() no longer hardcodes category:'production_style' — category is now a required param. Added suggestCategory(text), which calls the watcher's existing POST /suggest-category (same endpoint BrainTab's dump flow uses) with the server-side ANTHROPIC_API_KEY (from $env/static/private) instead of a browser-supplied key. ingestYoutubeVideo(url) no longer auto-inserts — it now extracts + gets a category suggestion (+ alternatives + full category list) and returns a 'draft' result without writing to brain_knowledge. New saveYoutubeEntry() + new endpoint POST /api/brain/youtube-confirm write the entry once a category is confirmed. DailyTab.svelte's YOUTUBE → BRAIN block now renders each draft with the suggested category (editable input w/ datalist of allCategories), alternative-category chips, the AI's reasoning, and a SAVE button that POSTs to youtube-confirm; only then does the row flip to a normal ✓ Saved to <category> result. Verified end-to-end: curl'd /suggest-category directly with the .env ANTHROPIC_API_KEY and got a valid categorized response with alternatives.
+RESULT: works (vite build passes, both endpoints compile; suggest-category call verified live against running watcher)
+BLOCKERS: none

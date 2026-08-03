@@ -228,11 +228,32 @@
         body: JSON.stringify({ urls })
       })
       const d = await r.json()
-      youtubeIngestResults = d.results || []
+      youtubeIngestResults = (d.results || []).map(res => ({ ...res, categoryOverride: '', saving: false }))
     } catch(e) {
       youtubeIngestResults = urls.map(url => ({ url, status: 'error', error: e.message }))
     }
     youtubeIngesting = false
+  }
+
+  async function saveYoutubeDraft(idx) {
+    const draft = youtubeIngestResults[idx]
+    if (!draft || draft.saving) return
+    const category = (draft.categoryOverride || draft.category || '').trim()
+    if (!category) return
+    youtubeIngestResults[idx] = { ...draft, saving: true }
+    youtubeIngestResults = [...youtubeIngestResults]
+    try {
+      const r = await fetch('/api/brain/youtube-confirm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: draft.title, sourceUrl: draft.sourceUrl, content: draft.content, tags: draft.tags, category })
+      })
+      const d = await r.json()
+      if (!d.ok) throw new Error(d.error)
+      youtubeIngestResults[idx] = { ...draft, status: 'success', category, saving: false }
+    } catch(e) {
+      youtubeIngestResults[idx] = { ...draft, saving: false, saveError: e.message }
+    }
+    youtubeIngestResults = [...youtubeIngestResults]
   }
 
   async function downloadSimilarOne(idx) {
@@ -1591,12 +1612,54 @@ ${mozartContext}`
           </button>
           {#if youtubeIngestResults.length}
             <div class="acapella-result">
-              {#each youtubeIngestResults as r}
-                <div class="result-row">
-                  <span class="result-val" style="color:{r.status === 'success' ? '#4caf82' : '#e57373'}">
-                    {r.status === 'success' ? '✓ ' + r.title : '✗ ' + r.error}
-                  </span>
-                </div>
+              {#each youtubeIngestResults as r, i}
+                {#if r.status === 'draft'}
+                  <div class="yt-draft">
+                    <div class="result-row">
+                      <span class="result-val" style="color:#c9a84c">◔ {r.title}</span>
+                    </div>
+                    <div class="yt-draft-cat-row">
+                      <span class="yt-draft-cat-label">{r.categoryAction === 'new' ? 'NEW' : 'TOPIC'}</span>
+                      <input
+                        class="add-inp"
+                        list="yt-cats-dl-{i}"
+                        placeholder="category…"
+                        value={r.categoryOverride || r.category}
+                        oninput={e => { youtubeIngestResults[i] = { ...r, categoryOverride: e.target.value }; youtubeIngestResults = [...youtubeIngestResults] }}
+                      />
+                      <datalist id="yt-cats-dl-{i}">
+                        {#each r.allCategories || [] as c}<option value={c}></option>{/each}
+                      </datalist>
+                      <button class="btn-ref-sm {r.saving ? 'dim' : ''}" disabled={r.saving} onclick={() => saveYoutubeDraft(i)}>
+                        {r.saving ? 'SAVING...' : '✓ SAVE'}
+                      </button>
+                    </div>
+                    {#if r.categoryReason}
+                      <div class="yt-draft-reason">{r.categoryReason}</div>
+                    {/if}
+                    {#if r.alternatives?.length}
+                      <div class="yt-draft-alts">
+                        {#each r.alternatives as alt}
+                          {@const altCat = typeof alt === 'string' ? alt : alt.category}
+                          {@const altReason = typeof alt === 'string' ? '' : alt.reason}
+                          <button class="yt-alt-chip" title={altReason}
+                            onclick={() => { youtubeIngestResults[i] = { ...r, categoryOverride: altCat }; youtubeIngestResults = [...youtubeIngestResults] }}>
+                            {altCat}
+                          </button>
+                        {/each}
+                      </div>
+                    {/if}
+                    {#if r.saveError}
+                      <div class="yt-draft-reason" style="color:#e57373">{r.saveError}</div>
+                    {/if}
+                  </div>
+                {:else}
+                  <div class="result-row">
+                    <span class="result-val" style="color:{r.status === 'success' ? '#4caf82' : '#e57373'}">
+                      {r.status === 'success' ? '✓ Saved to ' + r.category + ' — ' + r.title : '✗ ' + r.error}
+                    </span>
+                  </div>
+                {/if}
               {/each}
             </div>
           {/if}
@@ -2493,6 +2556,15 @@ ${mozartContext}`
   .ref-moves { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
   .ref-move-item { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; }
   .helper-block { display: flex; flex-direction: column; gap: 8px; }
+  .yt-draft { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; border-bottom: 1px solid #252525; }
+  .yt-draft:last-child { border-bottom: none; }
+  .yt-draft-cat-row { display: flex; gap: 6px; align-items: center; }
+  .yt-draft-cat-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .08em; color: rgba(201,168,76,.75); flex-shrink: 0; }
+  .yt-draft-cat-row .add-inp { flex: 1; }
+  .yt-draft-reason { font-family: 'DM Sans', sans-serif; font-size: 11px; color: #9e9690; }
+  .yt-draft-alts { display: flex; gap: 5px; flex-wrap: wrap; }
+  .yt-alt-chip { font-family: 'Space Mono', monospace; font-size: 9px; padding: 2px 8px; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; border-radius: 10px; cursor: pointer; }
+  .yt-alt-chip:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .normalizer-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); }
   .title-gen-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
   .title-gen-inp { flex: 1; }

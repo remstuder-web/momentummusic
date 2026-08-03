@@ -1,6 +1,7 @@
 // src/lib/server/youtubeBrain.js
 //
-// Pipeline: YouTube URL -> transcript (yt-dlp) -> Claude extraction -> Brain entry
+// Pipeline: YouTube URL -> transcript (yt-dlp) -> Claude extraction -> category
+// suggestion -> (user picks topic) -> Brain entry
 //
 // Assumes yt-dlp is installed on the server/VPS (already used in the audio reference pipeline).
 // Assumes ANTHROPIC_API_KEY is set as an env var.
@@ -158,11 +159,11 @@ Respond in this exact format, nothing else:
  * brain_knowledge inserts (source_url e.g. in the chart-analysis agent;
  * metadata is part of the documented brain_knowledge schema in CLAUDE.md).
  */
-async function addToBrain({ title, sourceUrl, content, tags }) {
+async function addToBrain({ title, sourceUrl, content, tags, category }) {
     const { data, error } = await supabase
         .from('brain_knowledge')
         .insert({
-            category: 'production_style',
+            category,
             title: (title || '').slice(0, 80),
             content,
             entry_type_v2: 'reference',
@@ -180,8 +181,28 @@ async function addToBrain({ title, sourceUrl, content, tags }) {
 }
 
 /**
- * Full pipeline for a single URL. Never throws past this point —
- * returns a result object so batch processing can continue on failure.
+ * Asks the watcher's existing /suggest-category endpoint (same one BrainTab's
+ * dump flow uses) to classify the extracted notes against real brain_knowledge
+ * categories/content. Runs server-side using the env ANTHROPIC_API_KEY rather
+ * than a browser-supplied key.
+ */
+async function suggestCategory(text) {
+    const res = await fetch('http://localhost:4242/suggest-category', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, apiKey: ANTHROPIC_API_KEY })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'suggest-category failed');
+    return data;
+}
+
+/**
+ * Extracts + drafts a single URL — does NOT write to the Brain yet.
+ * Returns the note plus a suggested category (and alternatives) so the
+ * user can pick the topic before it's saved. Never throws past this
+ * point — returns a result object so batch processing can continue on
+ * failure.
  */
 export async function ingestYoutubeVideo(url) {
     try {
@@ -192,11 +213,39 @@ export async function ingestYoutubeVideo(url) {
         const tagMatch = notes.match(/## Tags\s*\n(.+)/);
         const tags = tagMatch ? tagMatch[1].split(',').map((t) => t.trim()) : [];
 
-        const entry = await addToBrain({ title, sourceUrl: url, content: notes, tags });
-        return { url, status: 'success', title, entry };
+        let suggestion;
+        try {
+            suggestion = await suggestCategory(notes);
+        } catch (err) {
+            suggestion = { category: '', action: 'new', reason: `Category suggestion failed: ${err.message}`, alternatives: [], allCategories: [] };
+        }
+
+        return {
+            url,
+            status: 'draft',
+            title,
+            sourceUrl: url,
+            content: notes,
+            tags,
+            category: suggestion.category || suggestion.suggestion || '',
+            categoryAction: suggestion.action || 'new',
+            categoryReason: suggestion.reason || '',
+            alternatives: suggestion.alternatives || [],
+            allCategories: suggestion.allCategories || []
+        };
     } catch (err) {
         return { url, status: 'error', error: err.message };
     }
+}
+
+/**
+ * Confirm step — writes a drafted entry (with the user's chosen category)
+ * into the Brain. Called once the user has picked a topic from the
+ * suggestions returned by ingestYoutubeVideo.
+ */
+export async function saveYoutubeEntry({ title, sourceUrl, content, tags, category }) {
+    if (!category) throw new Error('category is required');
+    return addToBrain({ title, sourceUrl, content, tags, category });
 }
 
 /**

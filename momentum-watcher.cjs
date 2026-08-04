@@ -10278,14 +10278,15 @@ Respond ONLY in JSON:
     req.on('end', async () => {
       try {
         const { system, messages, apiKey } = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-        if (!apiKey || !Array.isArray(messages) || !messages.length) {
+        const key = apiKey || process.env.ANTHROPIC_API_KEY
+        if (!key || !Array.isArray(messages) || !messages.length) {
           res.writeHead(400, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'missing apiKey or messages' }))
+          res.end(JSON.stringify({ error: 'missing messages' }))
           return
         }
         const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 400, system, messages })
         })
         const aiData = await aiRes.json()

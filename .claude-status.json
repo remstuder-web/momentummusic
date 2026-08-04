@@ -1,22 +1,20 @@
 {
-  "updated": "2026-08-04T11:19:00.000Z",
-  "last_task": "Fix mozart-ask apiKey validation to fall back to env key",
+  "updated": "2026-08-04T11:23:00.000Z",
+  "last_task": "Remove localStorage mm_api_key guard blocking Mozart chat",
   "status": "done",
   "working": [
-    "POST /mozart-ask now falls back to process.env.ANTHROPIC_API_KEY when no apiKey is in the request body — verified via curl with no apiKey field, watcher used the .env key and returned a real completion",
-    "Mozart chat fully verified end-to-end in live Chrome browser (prior session): typed 'test', clicked Ask, got a real formatted reply",
+    "Mozart chat fully functional end-to-end even with no localStorage key: verified live in Chrome by clearing mm_api_key, reloading, asking a question, and getting a real formatted reply instead of the blocked 'No API key set' error",
+    "DailyTab.svelte sendAI() early-return guard removed — apiKey is still read from localStorage and sent when present, but an empty value no longer aborts the call",
+    "POST /mozart-ask falls back to process.env.ANTHROPIC_API_KEY when no apiKey is in the request body — verified via curl with no apiKey field at all",
     "Root cause #1 (CORS): Mozart routes through POST localhost:4242/mozart-ask instead of calling api.anthropic.com directly from the browser",
     "Root cause #2 (parsing): claude-sonnet-5 returns a 'thinking' content block before the 'text' block; all 58 content?.[0]?.text call sites replaced with content?.find(b => b.type === 'text')?.text app-wide",
-    "pm2 restart momentum-watcher + /ping healthcheck confirmed watcher healthy after all three fixes",
     "test-system.cjs: 6/8 passing (same 2 pre-existing failures, unrelated)"
   ],
   "broken": [
     "TEST 3 Spotify intl URL — pre-existing, Spotify API 403 (needs active premium subscription on app owner's account)",
     "TEST 7 No brain duplicates — pre-existing, 4 duplicate brain_knowledge entries need dedup"
   ],
-  "partial": [
-    "DailyTab.svelte sendAI() (Mozart chat UI) still has its own client-side guard: if localStorage 'mm_api_key' is empty it blocks the call entirely and shows 'No API key set — add it in Settings' before ever reaching the watcher. The new server-side env-key fallback is effectively unreachable from Mozart's chat UI until that guard is relaxed — not changed since it wasn't requested."
-  ],
-  "next": "If the intent of the mozart-ask fallback was to let Mozart work without a per-user localStorage key, the DailyTab.svelte client-side guard (around line 988) needs to be relaxed too — currently blocks the request before it's ever sent. Otherwise: optionally run cleanup-brain-dupes endpoint to fix TEST 7 duplicates; Spotify 403 (TEST 3) needs manual account-level fix, not code.",
-  "notes": "Three-part Mozart fix history: (1) CORS — browser->Anthropic direct call was silently blocked, fixed by proxying through /mozart-ask. (2) Response parsing — claude-sonnet-5 puts a thinking block at content[0], so content?.[0]?.text grabbed the wrong block everywhere in the app; fixed with content?.find(b => b.type === 'text')?.text uniformly (58 call sites). (3) apiKey validation — /mozart-ask now falls back to process.env.ANTHROPIC_API_KEY, but this is currently moot for the Mozart chat UI specifically due to the client-side guard in DailyTab.svelte. momentum-watcher.js (stale duplicate, 168KB, May 10) and FinancesTab.svelte.bak still contain old patterns — intentionally untouched, not live code."
+  "partial": [],
+  "next": "Optionally run cleanup-brain-dupes endpoint to fix TEST 7 duplicates. Spotify 403 (TEST 3) needs manual account-level fix, not code. Worth noting: +page.svelte:156 auto-syncs mm_api_key into localStorage from the watcher's env key on every page load — this is a separate, pre-existing mechanism that already masks most 'no local key' scenarios in normal usage.",
+  "notes": "Four-part Mozart fix history, all done 2026-08-04: (1) CORS — browser->Anthropic direct call was silently blocked, fixed by proxying through /mozart-ask. (2) Response parsing — claude-sonnet-5 puts a thinking block at content[0], so content?.[0]?.text grabbed the wrong block everywhere in the app; fixed with content?.find(b => b.type === 'text')?.text uniformly (58 call sites). (3) apiKey validation — /mozart-ask falls back to process.env.ANTHROPIC_API_KEY server-side. (4) Client-side guard — DailyTab.svelte sendAI() no longer hard-blocks on empty localStorage key, so it can actually reach the server-side fallback from (3). momentum-watcher.js (stale duplicate, 168KB, May 10) and FinancesTab.svelte.bak still contain old content?.[0]?.text patterns — intentionally untouched, not live code."
 }

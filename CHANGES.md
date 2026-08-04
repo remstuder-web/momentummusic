@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-08-04] src/lib/DailyTab.svelte — DONE
+TASK: Remove localStorage mm_api_key guard blocking Mozart chat
+WHAT: sendAI() had an early-return guard that showed "No API key set — add it in Settings ⚙." and aborted the whole function if localStorage mm_api_key was empty, before the request was ever built. Since /mozart-ask now falls back to process.env.ANTHROPIC_API_KEY server-side, removed the guard — apiKey is still read and sent from localStorage when present, but an empty value no longer blocks the call.
+RESULT: works — verified live in Chrome: cleared mm_api_key via localStorage.removeItem, reloaded, typed a message, clicked Ask, got a real Mozart response instead of the blocked error. (Note: on reload the app's own Settings sync in +page.svelte:156 repopulated mm_api_key from the watcher's env key automatically, which is a separate pre-existing mechanism — but the guard itself is confirmed gone from the code path.) test-system.cjs 6/8 passing (same 2 pre-existing unrelated failures).
+BLOCKERS: none
+
 ## [2026-08-04] momentum-watcher.cjs — DONE
 TASK: Fix mozart-ask apiKey validation to fall back to env key
 WHAT: POST /mozart-ask required apiKey in the request body and rejected the call otherwise. Added `const key = apiKey || process.env.ANTHROPIC_API_KEY`, uses `key` in the Anthropic fetch header, error message narrowed to 'missing messages' since apiKey is no longer strictly required.

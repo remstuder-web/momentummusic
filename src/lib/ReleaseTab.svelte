@@ -266,7 +266,7 @@
         body: JSON.stringify({model:'claude-haiku-4-5-20251001', max_tokens:400, system:ctx, messages:aiMessages.slice(-10)})
       })
       const data = await res.json()
-      aiMessages = [...aiMessages, {role:'assistant', content:data.content?.[0]?.text||'No response.'}]
+      aiMessages = [...aiMessages, {role:'assistant', content:data.content?.find(b => b.type === "text")?.text||'No response.'}]
     } catch(e) { aiMessages = [...aiMessages, {role:'assistant', content:'Error: '+e.message}] }
     aiLoading = false
   }

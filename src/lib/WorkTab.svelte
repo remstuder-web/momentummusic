@@ -301,7 +301,7 @@
         })
       })
       const data = await res.json()
-      aiMessages = [...aiMessages, { role: 'assistant', content: data.content?.[0]?.text || 'No response.' }]
+      aiMessages = [...aiMessages, { role: 'assistant', content: data.content?.find(b => b.type === "text")?.text || 'No response.' }]
     } catch(e) {
       aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: ' + e.message }]
     }

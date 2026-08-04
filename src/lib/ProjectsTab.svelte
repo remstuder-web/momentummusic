@@ -1670,7 +1670,7 @@
       const d = await res.json()
       if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/notes-feedback', model: 'claude-sonnet-5', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
       if (d.error) throw new Error(d.error.message || JSON.stringify(d.error))
-      const raw = d.content?.[0]?.text || ''
+      const raw = d.content?.find(b => b.type === "text")?.text || ''
       console.log('notes-feedback raw:', raw)
       const match = raw.match(/\[[\s\S]*\]/)
       const points = match ? JSON.parse(match[0]) : []
@@ -1714,7 +1714,7 @@
       if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/pdf-feedback', model: 'claude-sonnet-5', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
       if (d.error?.type === 'overloaded_error') throw new Error('API overloaded — try again in a moment')
       if (d.error) throw new Error(d.error.message)
-      const rawText = d.content?.[0]?.text || ''
+      const rawText = d.content?.find(b => b.type === "text")?.text || ''
       const match = (rawText).match(/\[[\s\S]*\]/)
       const points = match ? JSON.parse(match[0]) : []
       if (!points.length) throw new Error('No feedback points extracted')
@@ -2441,9 +2441,9 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
       })
       const d = await r.json()
       if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/mozart-insight', model: 'claude-haiku-4-5-20251001', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.0000008) + (d.usage.output_tokens * 0.000004) }) }).catch(() => {})
-      const text = (d.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
+      const text = (d.content?.find(b => b.type === "text")?.text || '{}').replace(/```json|```/g, '').trim()
       try { mozartInsight = { ...mozartInsight, [songId]: JSON.parse(text) } }
-      catch(e) { mozartInsight = { ...mozartInsight, [songId]: { next_step: d.content?.[0]?.text || '' } } }
+      catch(e) { mozartInsight = { ...mozartInsight, [songId]: { next_step: d.content?.find(b => b.type === "text")?.text || '' } } }
     } catch(e) { mozartInsight = { ...mozartInsight, [songId]: { next_step: 'Error: ' + e.message } } }
     mozartInsightLoading = { ...mozartInsightLoading, [songId]: false }
   }
@@ -2897,7 +2897,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
         })
       })
       const json = await resp.json()
-      const spotifyUrl = (json.content?.[0]?.text || '').trim()
+      const spotifyUrl = (json.content?.find(b => b.type === "text")?.text || '').trim()
       if (!spotifyUrl.includes('spotify.com/track/')) {
         mozartAnalysis[sid] = { loading: false, error: 'Could not identify track — paste a Spotify URL directly' }
         mozartAnalysis = { ...mozartAnalysis }

@@ -529,7 +529,7 @@
       })
       const result = await res.json()
       if (result.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/demo-tags', model: 'claude-sonnet-5', input_tokens: result.usage.input_tokens, output_tokens: result.usage.output_tokens, cost_usd: (result.usage.input_tokens * 0.000003) + (result.usage.output_tokens * 0.000015) }) }).catch(() => {})
-      const generated = JSON.parse(result.content?.[0]?.text.replace(/```json|```/g, '').trim() || '[]')
+      const generated = JSON.parse(result.content?.find(b => b.type === "text")?.text.replace(/```json|```/g, '').trim() || '[]')
       await updateField(song, 'tags', [...new Set([...(song.tags || []), ...generated])])
     } catch(e) { alert('Claude error: ' + e.message) }
     song._generating = false
@@ -1122,7 +1122,7 @@
       })
       const d = await res.json()
       if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/demo-chat', model: 'claude-sonnet-5', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
-      aiMessages = [...aiMessages, { role: 'assistant', content: d.content?.[0]?.text || 'No response.' }]
+      aiMessages = [...aiMessages, { role: 'assistant', content: d.content?.find(b => b.type === "text")?.text || 'No response.' }]
     } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
     aiLoading = false
   }

@@ -1012,7 +1012,7 @@ ${mozartContext}`
       const data = await res.json()
       console.log('Mozart response:', JSON.stringify(data))
       if (data.error) throw new Error(data.error)
-      let reply = data.content?.[0]?.text || 'No response.'
+      let reply = data.content?.find(b => b.type === 'text')?.text || 'No response.'
       if (reply.length > 300 && /research|found|analysis|suggests|shows|according|trend|data|insight|indicates/i.test(reply)) {
         reply += '\n\n---\n💡 Worth saving to Brain? Paste the key insight in Brain dump.'
       }

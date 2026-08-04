@@ -272,7 +272,7 @@
             ]}]})
           })
           const exData = await exRes.json()
-          extractedText = exData.content?.[0]?.text || ''
+          extractedText = exData.content?.find(b => b.type === "text")?.text || ''
         } catch(e) {}
       }
 
@@ -411,7 +411,7 @@ Return ONLY JSON:
       if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/brain-vision', model: 'claude-sonnet-5', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000003) + (d.usage.output_tokens * 0.000015) }) }).catch(() => {})
       if (d.error) throw new Error(d.error.message)
 
-      const raw = d.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '[]'
+      const raw = d.content?.find(b => b.type === "text")?.text?.replace(/```json|```/g, '').trim() || '[]'
       const match = raw.match(/\[[\s\S]*\]/)
       const items = match ? JSON.parse(match[0]) : []
 
@@ -456,7 +456,7 @@ Return ONLY JSON:
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint: 'browser/image-extract', model: 'claude-haiku-4-5-20251001', input_tokens: extractData.usage.input_tokens, output_tokens: extractData.usage.output_tokens, cost_usd: (extractData.usage.input_tokens * 0.000001) + (extractData.usage.output_tokens * 0.000005) })
       }).catch(() => {})
-      const extractedText = extractData.content?.[0]?.text || ''
+      const extractedText = extractData.content?.find(b => b.type === "text")?.text || ''
       if (extractedText) dumpText = extractedText
     } catch(e) { alert('Image text extraction failed: ' + e.message) }
     imageExtracting = false
@@ -807,7 +807,7 @@ Return ONLY JSON (single item array):
       const d = await res.json()
       if (d.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/brain-dump', model: 'claude-haiku-4-5-20251001', input_tokens: d.usage.input_tokens, output_tokens: d.usage.output_tokens, cost_usd: (d.usage.input_tokens * 0.000001) + (d.usage.output_tokens * 0.000005) }) }).catch(() => {})
       if (d.error) throw new Error(d.error.message)
-      const raw = d.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '[]'
+      const raw = d.content?.find(b => b.type === "text")?.text?.replace(/```json|```/g, '').trim() || '[]'
       const match = raw.match(/\[[\s\S]*\]/)
       const items = match ? JSON.parse(match[0]) : []
 
@@ -1178,7 +1178,7 @@ Return ONLY JSON (single item array):
       })
       const data = await res.json()
       if (data.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/mozart', model: 'claude-sonnet-5', input_tokens: data.usage.input_tokens, output_tokens: data.usage.output_tokens, cost_usd: (data.usage.input_tokens * 0.000003) + (data.usage.output_tokens * 0.000015) }) }).catch(() => {})
-      const reply = data.content?.[0]?.text || 'No response.'
+      const reply = data.content?.find(b => b.type === "text")?.text || 'No response.'
       const actions = parseActions(reply)
       const cleanReply = reply.replace(/\[ACTION:[^\]]+\]/g, '').trim()
       aiMessages = [...aiMessages, { role: 'assistant', content: cleanReply }]

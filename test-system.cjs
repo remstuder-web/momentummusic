@@ -184,7 +184,7 @@ async function test6() {
     })
     const d = await r.json()
     if (d.error) { fail(6, 'Notes-to-feedback JSON', `API error: ${d.error.message}`); return }
-    const raw = d.content?.[0]?.text || ''
+    const raw = d.content?.find(b => b.type === "text")?.text || ''
     const match = raw.match(/\[[\s\S]*\]/)
     if (!match) { fail(6, 'Notes-to-feedback JSON', `no JSON array in response: ${raw.slice(0, 120)}`); return }
     const arr = JSON.parse(match[0])

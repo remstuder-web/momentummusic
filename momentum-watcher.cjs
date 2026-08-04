@@ -544,7 +544,7 @@ async function extractInsight(text, apiKey) {
       })
     })
     const d = await r.json()
-    return ((d.content?.[0]?.text || '').trim() || text.slice(0, 200)).slice(0, 200)
+    return ((d.content?.find(b => b.type === "text")?.text || '').trim() || text.slice(0, 200)).slice(0, 200)
   } catch(e) { return text.slice(0, 200) }
 }
 
@@ -652,7 +652,7 @@ ${brainSummary}` }]
     })
   })
   const cd = await claudeRes.json()
-  const pulse = cd.content?.[0]?.text || ''
+  const pulse = cd.content?.find(b => b.type === "text")?.text || ''
 
   if (returnOnly) {
     return (!pulse.includes('NO_UPDATES') && pulse.trim()) ? { summary: pulse } : null
@@ -882,7 +882,7 @@ async function runAgentChartAnalysis(apiKey) {
         })
       })
       const aiData = await aiRes.json()
-      assessment = aiData.content?.[0]?.text || ''
+      assessment = aiData.content?.find(b => b.type === "text")?.text || ''
       if (aiData.usage) fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
         method: 'POST', headers: { ...sbHeaders },
         body: JSON.stringify({ endpoint: 'agent-chart-analysis', model: 'claude-haiku-4-5-20251001', input_tokens: aiData.usage.input_tokens, output_tokens: aiData.usage.output_tokens, cost_usd: (aiData.usage.input_tokens * 0.000001) + (aiData.usage.output_tokens * 0.000005) })
@@ -1279,7 +1279,7 @@ async function extractTracksFromText(text, apiKey) {
       })
     })
     const d = await res.json()
-    const raw = (d.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
+    const raw = (d.content?.find(b => b.type === "text")?.text || '').replace(/```json|```/g, '').trim()
     if (!raw || raw === '[]') return []
     // Extract JSON array even if surrounded by extra text
     const match = raw.match(/\[[\s\S]*\]/)
@@ -1681,7 +1681,7 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 700, messages: [{ role: 'user', content: prompt }] })
   })
   const claudeData = await claudeRes.json()
-  const scoutText = claudeData.content?.[0]?.text || 'No suggestions generated.'
+  const scoutText = claudeData.content?.find(b => b.type === "text")?.text || 'No suggestions generated.'
 
   const model = 'claude-haiku-4-5-20251001'
   const usage = claudeData.usage || {}
@@ -1916,7 +1916,7 @@ Genres: ${SUB_GENRE_LABELS}
 ${context}` }] })
   })
   const claudeData = await claudeRes.json()
-  const matchText = claudeData.content?.[0]?.text || 'No matches generated.'
+  const matchText = claudeData.content?.find(b => b.type === "text")?.text || 'No matches generated.'
 
   const model = 'claude-haiku-4-5-20251001'
   const usage = claudeData.usage || {}
@@ -2163,7 +2163,7 @@ async function inventDemoTitle() {
       })
     })
     const d = await r.json()
-    const raw = d.content?.[0]?.text?.trim() || ''
+    const raw = d.content?.find(b => b.type === "text")?.text?.trim() || ''
     return raw.replace(/[^A-Z0-9\s]/gi, '').trim().toUpperCase() || null
   } catch(e) { return null }
 }
@@ -2569,7 +2569,7 @@ Rules:
       })
     })
     const d = await r.json()
-    const synthesized = d.content?.[0]?.text || ''
+    const synthesized = d.content?.find(b => b.type === "text")?.text || ''
     if (!synthesized) { console.warn('rebuildMusicTips: no AI response', d.error?.message); return }
 
     const header = [
@@ -2644,7 +2644,7 @@ Max 15 questions total. Short, actionable. Return valid JSON only — no text be
     })
     const d = await r.json()
     let checklist = []
-    const rawText = d.content?.[0]?.text || ''
+    const rawText = d.content?.find(b => b.type === "text")?.text || ''
     if (!rawText) { console.warn('rebuildFinishingChecklist: no AI response', d.error?.message); return [] }
     try {
       const cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
@@ -2947,7 +2947,7 @@ async function runAgentTikTokTrends(apiKey, sharedBrainRows) {
         })
       })
       const synthData = await synthRes.json()
-      const trendSummary = (synthData.content?.[0]?.text || '').trim().slice(0, 150)
+      const trendSummary = (synthData.content?.find(b => b.type === "text")?.text || '').trim().slice(0, 150)
       if (trendSummary) {
         const { error: ttErr } = await supabase.from('brain_knowledge').upsert({
           category: 'market_knowledge',
@@ -3003,7 +3003,7 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
     body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: prompt }] })
   })
   const claudeData = await claudeRes.json()
-  const trendsText = claudeData.content?.[0]?.text || 'No trends generated.'
+  const trendsText = claudeData.content?.find(b => b.type === "text")?.text || 'No trends generated.'
 
   const model = 'claude-haiku-4-5-20251001'
   const usage = claudeData.usage || {}
@@ -3706,7 +3706,7 @@ ${chatText.slice(0, 4000)}`
     })
   })
   const cd = await cr.json()
-  const raw = cd.content?.[0]?.text || '[]'
+  const raw = cd.content?.find(b => b.type === "text")?.text || '[]'
   const jsonStart = raw.indexOf('[')
   return JSON.parse(jsonStart >= 0 ? raw.slice(jsonStart) : raw)
 }
@@ -3828,7 +3828,7 @@ DESCRIPTION: [brief description of what it is]` }
     })
 
     const vd = await visionRes.json()
-    const visionText = vd.content?.[0]?.text || ''
+    const visionText = vd.content?.find(b => b.type === "text")?.text || ''
 
     if (visionText.includes('IS_WHATSAPP: true')) {
       const nameMatch = visionText.match(/CHAT_NAME:\s*(.+)/)
@@ -3972,7 +3972,7 @@ async function handleOwnerCommand(chatId, text) {
         })
       })
       const d = await r.json()
-      await sendTelegram(chatId, '🎹 ' + (d.content?.[0]?.text || 'No response'))
+      await sendTelegram(chatId, '🎹 ' + (d.content?.find(b => b.type === "text")?.text || 'No response'))
     } catch(e) { await sendTelegram(chatId, '❌ Ask error: ' + e.message) }
   }
   else if (text.startsWith('/obsidian ')) {
@@ -4887,7 +4887,7 @@ async function generateVersionNarrative(song, versions) {
     })
   })
   const d = await res.json()
-  return d.content?.[0]?.text || null
+  return d.content?.find(b => b.type === "text")?.text || null
 }
 
 // ── Crypto signal data fetchers ───────────────────────────────────────────
@@ -5998,7 +5998,7 @@ Each suggestion max 2 sentences. Be concrete not general.` }]
       })
     })
     const d = await cr.json()
-    const review = d.content?.[0]?.text || ''
+    const review = d.content?.find(b => b.type === "text")?.text || ''
 
     if (TELEGRAM_TOKEN) {
       await sendTelegram(TELEGRAM_OWNER_ID,
@@ -7628,7 +7628,7 @@ ${context}` }]
           })
         })
         const claudeData = await claudeRes.json()
-        let briefingText = claudeData.content?.[0]?.text || 'No briefing generated.'
+        let briefingText = claudeData.content?.find(b => b.type === "text")?.text || 'No briefing generated.'
 
         // Append brain health snapshot
         const brainHealth = await getBrainHealth()
@@ -7913,7 +7913,7 @@ ${context}` }]
           })
         })
         const claudeData = await claudeRes.json()
-        const actionsText = claudeData.content?.[0]?.text || 'No actions generated.'
+        const actionsText = claudeData.content?.find(b => b.type === "text")?.text || 'No actions generated.'
 
         // Save to inbox_notifications
         await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
@@ -8650,7 +8650,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
           })
         })
         const claudeData = await claudeRes.json()
-        const rawText = claudeData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '[]'
+        const rawText = claudeData.content?.find(b => b.type === "text")?.text?.replace(/```json|```/g, '').trim() || '[]'
 
         // 9. Track API usage
         {
@@ -8892,7 +8892,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
               })
             })
             const aiData = await aiRes.json()
-            const raw = (aiData.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
+            const raw = (aiData.content?.find(b => b.type === "text")?.text || '').replace(/```json|```/g, '').trim()
             const m = raw.match(/\[[\s\S]*\]/)
             if (m) results = JSON.parse(m[0]).slice(0, 3).filter(t => t.artist && t.title)
             console.log(`[find-similar-tracks] Claude fallback: ${results.length} results`)
@@ -9371,7 +9371,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         })
         const extractData = await extractRes.json()
         let requirements = {}
-        try { requirements = JSON.parse(extractData.content?.[0]?.text?.replace(/```json|```/g,'').trim() || '{}') } catch(_) {}
+        try { requirements = JSON.parse(extractData.content?.find(b => b.type === "text")?.text?.replace(/```json|```/g,'').trim() || '{}') } catch(_) {}
 
         // Step 2: fetch reference tracks + score against brief
         let refQuery = supabaseAdmin.from('reference_tracks').select('*').in('source', ['user', 'agent'])
@@ -9427,7 +9427,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
           })
         })
         const mozData = await mozRes.json()
-        const analysis = mozData.content?.[0]?.text || ''
+        const analysis = mozData.content?.find(b => b.type === "text")?.text || ''
 
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: true, requirements, reference_tracks: scoredRefs, matching_demos: matchingDemos.slice(0, 8), analysis }))
@@ -9662,7 +9662,7 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
           body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] })
         })
         const d = await r.json()
-        res.end(JSON.stringify({ ok: true, chart_avg: chartAvg, gaps: validGaps, insight: d.content?.[0]?.text || '', sample_count: chartTracks.length }))
+        res.end(JSON.stringify({ ok: true, chart_avg: chartAvg, gaps: validGaps, insight: d.content?.find(b => b.type === "text")?.text || '', sample_count: chartTracks.length }))
       } catch(e) {
         console.error('analyze-trend-fit error:', e.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })
@@ -10246,7 +10246,7 @@ Respond ONLY in JSON:
           }).catch(() => {})
         }
         if (aiData.error) throw new Error(aiData.error.message)
-        const raw = aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}'
+        const raw = aiData.content?.find(b => b.type === "text")?.text?.replace(/```json|```/g, '').trim() || '{}'
         const jsonMatch = raw.match(/\{[\s\S]*\}/)
         let result
         try {
@@ -10691,7 +10691,7 @@ Give specific production direction based on stem balance, loudness levels, and r
         if (aiData.usage) {
           supabase.from('api_usage').insert({ endpoint: '/generate-analyzer-summary', model: 'claude-haiku-4-5-20251001', input_tokens: aiData.usage.input_tokens || 0, output_tokens: aiData.usage.output_tokens || 0, cost_usd: ((aiData.usage.input_tokens||0)*0.0000008)+((aiData.usage.output_tokens||0)*0.000004) }).then(() => {})
         }
-        const raw = (aiData.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
+        const raw = (aiData.content?.find(b => b.type === "text")?.text || '{}').replace(/```json|```/g, '').trim()
         let result
         try { result = JSON.parse(raw) } catch(e) { result = { next_step: raw } }
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -11073,7 +11073,7 @@ Give specific production direction based on stem balance, loudness levels, and r
 
         const cd = await claudeRes.json()
         if (!claudeRes.ok) throw new Error(cd.error?.message || 'Claude API error')
-        const rawText = (cd.content?.[0]?.text || '').trim()
+        const rawText = (cd.content?.find(b => b.type === "text")?.text || '').trim()
         let command
         try { command = JSON.parse(rawText) }
         catch(e) { throw new Error('Claude returned invalid JSON: ' + rawText.slice(0, 200)) }
@@ -11116,7 +11116,7 @@ Give specific production direction based on stem balance, loudness levels, and r
 
         const cd = await claudeRes.json()
         if (!claudeRes.ok) throw new Error(cd.error?.message || 'Claude API error')
-        const rawText = (cd.content?.[0]?.text || '').trim()
+        const rawText = (cd.content?.find(b => b.type === "text")?.text || '').trim()
         let commands
         try { commands = JSON.parse(rawText) }
         catch(e) { throw new Error('Claude returned invalid JSON: ' + rawText.slice(0, 300)) }
@@ -11485,7 +11485,7 @@ Pitch is MIDI note number (60=C4). Start and duration in beats. Chord velocities
           })
         })
         const claudeData = await claudeRes.json()
-        const claudeText = claudeData.content?.[0]?.text || ''
+        const claudeText = claudeData.content?.find(b => b.type === "text")?.text || ''
         if (!claudeText) throw new Error('Empty response from Claude: ' + JSON.stringify(claudeData).slice(0, 200))
 
         let sequences
@@ -11638,7 +11638,7 @@ print(json.dumps({'files': files}))
         })
         const d = await r.json()
         if (d.usage) fetch(`http://127.0.0.1:${PORT}/track-cost`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: '/generate-titles', model: 'claude-haiku-4-5-20251001', input_tokens: d.usage.input_tokens || 0, output_tokens: d.usage.output_tokens || 0, cost_usd: ((d.usage.input_tokens || 0) * 0.0000008) + ((d.usage.output_tokens || 0) * 0.000001) }) }).catch(() => {})
-        const raw = (d.content?.[0]?.text || '[]').replace(/```json|```/g, '').trim()
+        const raw = (d.content?.find(b => b.type === "text")?.text || '[]').replace(/```json|```/g, '').trim()
         const titles = JSON.parse(raw)
         res.end(JSON.stringify({ ok: true, titles }))
       } catch(e) {
@@ -11987,7 +11987,7 @@ Format: use ALL CAPS section labels, bullet points with •` }
         })
 
         const cd = await claudeRes.json()
-        const analysis = cd.content?.[0]?.text || ''
+        const analysis = cd.content?.find(b => b.type === "text")?.text || ''
         const inputT = cd.usage?.input_tokens || 0
         const outputT = cd.usage?.output_tokens || 0
 
@@ -12018,7 +12018,7 @@ Format: use ALL CAPS section labels, bullet points with •` }
               })
             })
             const mixData = await mixRes.json()
-            const mixText = mixData.content?.[0]?.text || '[]'
+            const mixText = mixData.content?.find(b => b.type === "text")?.text || '[]'
             try {
               mixing_suggestions = JSON.parse(mixText.trim())
               if (!Array.isArray(mixing_suggestions)) mixing_suggestions = []
@@ -12121,7 +12121,7 @@ ${chatText.slice(0, 4000)}`
         })
 
         const cd = await claudeRes.json()
-        const raw = cd.content?.[0]?.text || '[]'
+        const raw = cd.content?.find(b => b.type === "text")?.text || '[]'
         const inputT = cd.usage?.input_tokens || 0
         const outputT = cd.usage?.output_tokens || 0
 
@@ -12749,7 +12749,7 @@ ${formatted}`
           })
         })
         const claudeData = await claudeRes.json()
-        const raw = claudeData.content?.[0]?.text || ''
+        const raw = claudeData.content?.find(b => b.type === "text")?.text || ''
         let analysis
         try {
           const jsonMatch = raw.match(/\{[\s\S]*\}/)
@@ -14654,7 +14654,7 @@ Return ONLY valid JSON:
               body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
             })
             const aiData = await aiRes.json()
-            const raw = aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}'
+            const raw = aiData.content?.find(b => b.type === "text")?.text?.replace(/```json|```/g, '').trim() || '{}'
             let disco_tags
             try { disco_tags = JSON.parse(raw) } catch(e) { skipped++; continue }
 
@@ -14743,7 +14743,7 @@ Return ONLY valid JSON:
           body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
         })
         const aiData = await aiRes.json()
-        const raw = aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}'
+        const raw = aiData.content?.find(b => b.type === "text")?.text?.replace(/```json|```/g, '').trim() || '{}'
         let disco_tags
         try { disco_tags = JSON.parse(raw) } catch(e) { throw new Error('JSON parse failed: ' + raw.slice(0, 100)) }
 
@@ -14990,7 +14990,7 @@ ${content.slice(0, 5000)}`
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
     })
     const cd = await cr.json()
-    const raw = cd.content?.[0]?.text || '[]'
+    const raw = cd.content?.find(b => b.type === "text")?.text || '[]'
     const jsonStart = raw.indexOf('[')
     items = JSON.parse(jsonStart >= 0 ? raw.slice(jsonStart) : raw)
   } catch(e) {
@@ -15497,7 +15497,7 @@ Analyze and return JSON:
 
   if (!res.ok) throw new Error(`Claude API ${res.status}`)
   const d = await res.json()
-  const raw = (d.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
+  const raw = (d.content?.find(b => b.type === "text")?.text || '{}').replace(/```json|```/g, '').trim()
   const jsonMatch = raw.match(/\{[\s\S]*\}/)
   const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
   return { analysis, usage: d.usage }
@@ -15645,7 +15645,7 @@ Return JSON:
 
     if (!res.ok) throw new Error(`Claude API ${res.status}`)
     const d = await res.json()
-    const raw = (d.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim()
+    const raw = (d.content?.find(b => b.type === "text")?.text || '{}').replace(/```json|```/g, '').trim()
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
 
@@ -15776,7 +15776,7 @@ Return 5-15 connections. No markdown, no prose.`,
     })
 
     const d = await res.json()
-    let raw = (d.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
+    let raw = (d.content?.find(b => b.type === "text")?.text || '').replace(/```json|```/g, '').trim()
     // Extract array from response even if wrapped in prose
     const arrMatch = raw.match(/\[[\s\S]*\]/)
     if (arrMatch) raw = arrMatch[0]
@@ -16110,7 +16110,7 @@ server.listen(PORT, '127.0.0.1', () => {
               body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 80, messages: [{ role: 'user', content: tagPrompt }] })
             })
             const td = await tr.json()
-            const raw = (td.content?.[0]?.text || '').replace(/```json|```/g, '').trim()
+            const raw = (td.content?.find(b => b.type === "text")?.text || '').replace(/```json|```/g, '').trim()
             const cleaned = raw.replace(/'/g, '"').replace(/`/g, '"')
             autoTags = JSON.parse(cleaned)
             if (!Array.isArray(autoTags)) autoTags = []
@@ -16483,7 +16483,7 @@ Max 150 words. Be specific and actionable.` }]
         })
       })
       const d = await cr.json()
-      const review = d.content?.[0]?.text || ''
+      const review = d.content?.find(b => b.type === "text")?.text || ''
       if (TELEGRAM_TOKEN) {
         await sendTelegram(TELEGRAM_OWNER_ID, '🧠 Weekly Brain Review\n\n' + review + '\n\n→ Review in Brain tab')
       }

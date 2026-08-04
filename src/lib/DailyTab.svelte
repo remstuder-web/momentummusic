@@ -1651,7 +1651,7 @@ ${mozartContext}`
     </div>
 
     <!-- SECTION 2: ROUTINE / HELPERS -->
-    <div class="section-block" style="border-top:none">
+    <div class="section-block" style="border-top:none;padding-top:0;gap:0">
 
       <div class="sections">
         <button class="sec-tab {activeSection==='routine'?'on':''}" onclick={() => activeSection='routine'}>ROUTINE</button>
@@ -2158,7 +2158,7 @@ ${mozartContext}`
 
 <style>
   .layout { display: flex; flex-direction: column; min-height: calc(100vh - 100px); gap: 32px; }
-  .main { display: flex; flex-direction: column; gap: 20px; }
+  .main { display: flex; flex-direction: column; gap: 24px; }
   .empty { font-family: 'Space Mono', monospace; font-size: 13px; color: #555; padding: 32px 0; text-align: center; }
   .empty-sm { font-family: 'Space Mono', monospace; font-size: 12px; color: #333; }
 
@@ -2518,10 +2518,10 @@ ${mozartContext}`
 
   /* Routine / Health */
   .sections { display: flex; margin-bottom: 0; }
-  .sec-tab { font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: .14em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
+  .sec-tab { font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: .14em; padding: 0; background: transparent; border: none; color: #555; cursor: pointer; transition: all .15s; }
   .sec-tab:hover { color: #9e9690; }
   .sec-tab.on { color: #c9a84c; }
-  .quick-search-bar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 6px; }
+  .quick-search-bar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 8px; }
   .qs-cell { display: flex; gap: 4px; }
   .qs-cell .helper-search-inp { flex: 1; width: auto; }
   .check-list { display: flex; flex-direction: column; gap: 2px; }
@@ -2551,7 +2551,7 @@ ${mozartContext}`
   .add-row { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; align-items: center; }
   .add-inp { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 9px; outline: none; border-radius: 3px; }
   .add-inp:focus { border-color: rgba(201,168,76,.4); }
-  .helpers-built-in { display: flex; flex-direction: column; margin-top: 20px; }
+  .helpers-built-in { display: flex; flex-direction: column; margin-top: 24px; }
   .ref-row1 { display: flex; gap: 5px; align-items: center; margin-bottom: 5px; }
   .ref-row2 { display: flex; gap: 5px; align-items: center; }
   .ref-field { flex: 1; min-width: 0; }
@@ -2764,7 +2764,7 @@ ${mozartContext}`
   /* References tab */
 
   /* ── Ableton Chat ──────────────────────────────────── */
-  .abl-chat-section { margin-top: 24px; }
+  .abl-chat-section { }
   .abl-chat-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .abl-chat-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); }
   .abl-status-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; background: transparent; border: 1px solid #252525; color: #555; padding: 3px 8px; border-radius: 2px; cursor: pointer; display: flex; align-items: center; gap: 5px; }

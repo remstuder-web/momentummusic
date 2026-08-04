@@ -1266,6 +1266,89 @@ async function fetchUKOfficialCharts() {
   }
 }
 
+async function fetchOneStopWatch() {
+  const rssUrls = [
+    'https://www.onestowatch.com/feed',
+    'https://www.onestowatch.com/rss',
+    'https://www.onestowatch.com/feed.xml'
+  ]
+  for (const url of rssUrls) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' },
+        signal: AbortSignal.timeout(8000)
+      })
+      if (!res.ok) continue
+      const text = await res.text()
+      if (!/<rss|<feed|<\?xml/i.test(text.slice(0, 300))) continue
+      const itemBlocks = [...text.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/gi)]
+      const items = itemBlocks.map(m => {
+        const block = m[1]
+        const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/s)
+        const linkMatch = block.match(/<link>([^<]+)<\/link>/s)
+        return {
+          title: titleMatch ? decodeHtmlEntities(titleMatch[1].trim()) : '',
+          url: linkMatch ? linkMatch[1].trim() : ''
+        }
+      }).filter(i => i.title && i.url).slice(0, 5)
+      if (items.length) {
+        console.log(`One Stop Watch: ${items.length} items via RSS (${url})`)
+        return { source: 'One Stop Watch', items }
+      }
+    } catch(e) {
+      console.warn('One Stop Watch RSS failed:', url, e.message)
+    }
+  }
+
+  // All RSS attempts failed — fall back to HTML scrape of the homepage
+  try {
+    const res = await fetch('https://www.onestowatch.com/en', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MomentumBot/1.0)' },
+      signal: AbortSignal.timeout(8000)
+    })
+    if (res.ok) {
+      const html = await res.text()
+      const items = []
+      const seen = new Set()
+
+      // Primary pattern: <a class="post-summary__link" href="..."><h3 class="post-summary__title">Title</h3></a>
+      const headingAnchor = [...html.matchAll(/<a\s+class="[^"]*"\s+href="([^"]+)"[^>]*>\s*<h[23][^>]*class="[^"]*"[^>]*>([\s\S]*?)<\/h[23]>/gi)]
+      for (const m of headingAnchor) {
+        if (items.length >= 5) break
+        const href = m[1]
+        const title = decodeHtmlEntities(m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+        if (!title || title.length < 8 || title.length > 160 || seen.has(title)) continue
+        seen.add(title)
+        items.push({ title, url: href.startsWith('http') ? href : `https://www.onestowatch.com${href.startsWith('/') ? '' : '/'}${href}` })
+      }
+
+      // Secondary pattern: any h2/h3 with visible text, in case the site markup shifted
+      if (items.length < 5) {
+        const headings = [...html.matchAll(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/gi)]
+        for (const m of headings) {
+          if (items.length >= 5) break
+          const title = decodeHtmlEntities(m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+          if (!title || title.length < 8 || title.length > 160 || seen.has(title)) continue
+          seen.add(title)
+          items.push({ title, url: 'https://www.onestowatch.com/en' })
+        }
+      }
+
+      if (items.length) {
+        console.log(`One Stop Watch: ${items.length} items via HTML fallback`)
+        return { source: 'One Stop Watch', items: items.slice(0, 5) }
+      }
+    } else {
+      console.warn('One Stop Watch HTML fallback: HTTP', res.status)
+    }
+  } catch(e) {
+    console.warn('One Stop Watch HTML fallback failed:', e.message)
+  }
+
+  console.warn('One Stop Watch: all fetch attempts failed')
+  return { source: 'One Stop Watch', items: [] }
+}
+
 async function extractTracksFromText(text, apiKey) {
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1469,7 +1552,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
   const today = new Date().toISOString().slice(0, 10)
 
   // Fetch all data sources in parallel
-  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, kworbDE, billboardTop, ukChartsTop, pressItems, gearThreads, waInboxRes] = await Promise.all([
+  const [connectionsRes, refTracksRes, watchedRes, spToken, pitchfork, factmag, hypebot, kworbYT, kworbSP, kworbDE, billboardTop, ukChartsTop, pressItems, gearThreads, oneToWatch, waInboxRes] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/connections?select=name`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/reference_tracks?order=tempo.desc&limit=5&select=title,artist,genre_tags,tempo,key`, { headers: sbHeaders }),
     fetch(`${SUPABASE_URL}/rest/v1/watched_artists?active=eq.true&select=*`, { headers: sbHeaders }),
@@ -1484,6 +1567,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     fetchUKOfficialCharts(),
     fetchMusicPressItems(),
     fetchGearNewsItems(),
+    fetchOneStopWatch().catch(() => ({ source: 'One Stop Watch', items: [] })),
     fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.message&or=(read.is.null,read.eq.false)&order=created_at.desc&limit=10&select=song_title,message,patch_name,created_at`, { headers: sbHeaders }),
   ])
 
@@ -1596,7 +1680,7 @@ async function runAgentScout(apiKey, sharedBrainRows) {
     .map(([src, items]) => `${src.toUpperCase()}:\n` + items.map(i => `- ${i.title}${i.body ? `: ${i.body.slice(0, 300)}` : ''} (source: ${src})`).join('\n'))
     .join('\n\n') || 'No press fetched'
 
-  const sourcesUsed = ['spotify_new_releases', 'pitchfork', 'factmag', 'hypebot', 'kworb_youtube', 'kworb_spotify', 'watched_artists', 'gear_news', 'billboard_hot100', 'uk_official_charts', ...MUSIC_SOURCES.map(s => s.name)]
+  const sourcesUsed = ['spotify_new_releases', 'pitchfork', 'factmag', 'hypebot', 'kworb_youtube', 'kworb_spotify', 'watched_artists', 'gear_news', 'billboard_hot100', 'uk_official_charts', 'one_stop_watch', ...MUSIC_SOURCES.map(s => s.name)]
 
   const gearBlock = gearThreads.length
     ? gearThreads.map((t, i) => `${i+1}. ${t.title}`).join('\n')
@@ -1831,6 +1915,7 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
         uk_charts: ukChartsTop.slice(0, 10),
         tiktok: tiktokTop,
         youtube: ytEnriched,
+        one_to_watch: (oneToWatch?.items || []).slice(0, 5),
         suggested_tracks: suggestedTracks.slice(0, 15)
       }
     })

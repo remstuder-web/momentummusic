@@ -1601,6 +1601,14 @@ ${mozartContext}`
                       {/each}
                     </div>
                   {/if}
+                  {#if n.type === 'scout' && n.metadata?.one_to_watch?.length}
+                    <div class="one-to-watch-block">
+                      <div class="chart-title" style="margin-bottom:6px">👀 ONE TO WATCH</div>
+                      {#each n.metadata.one_to_watch.slice(0, 5) as item}
+                        <a class="otw-item" href={item.url} target="_blank" rel="noopener noreferrer">{item.title}</a>
+                      {/each}
+                    </div>
+                  {/if}
                   {#if n.type === 'scout' && n.metadata?.suggested_tracks?.length}
                     {@const chartTrackKeys = new Set([...(n.metadata.spotify_global||[]),...(n.metadata.spotify_de||[]),...(n.metadata.billboard||[]),...(n.metadata.uk_charts||[]),...(n.metadata.tiktok||[]),...(n.metadata.youtube||[])].map(t => typeof t === 'string' ? t.toLowerCase().replace(/\W/g,'') : ((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
                     {@const uniqueScoutTracks = (n.metadata.suggested_tracks||[]).filter(t => !chartTrackKeys.has(((t.artist||'')+(t.title||'')).toLowerCase().replace(/\W/g,'')))}
@@ -2455,6 +2463,9 @@ ${mozartContext}`
   .chart-play-btn:hover, .chart-lib-btn:hover { background: #252525; }
   .in-library-badge { font-family: 'Space Mono', monospace; font-size: 7px; color: #2a4a2a; padding: 2px 5px; }
   .suggested-tracks { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #1a1a1a; }
+  .one-to-watch-block { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #1a1a1a; }
+  .otw-item { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #cec9c1; text-decoration: none; line-height: 1.4; }
+  .otw-item:hover { color: #c9a84c; text-decoration: underline; }
   .articles-block { padding: 4px 0; }
   .articles-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 6px 0; border-top: 1px solid #1a1a1a; }
   .articles-count { font-family: 'Space Mono', monospace; font-size: 10px; color: rgba(201,168,76,.6); letter-spacing: .05em; }

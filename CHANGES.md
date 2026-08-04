@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-08-04] momentum-watcher.cjs — DONE
+TASK: Fix mozart-ask apiKey validation to fall back to env key
+WHAT: POST /mozart-ask required apiKey in the request body and rejected the call otherwise. Added `const key = apiKey || process.env.ANTHROPIC_API_KEY`, uses `key` in the Anthropic fetch header, error message narrowed to 'missing messages' since apiKey is no longer strictly required.
+RESULT: works — verified via curl with no apiKey in the payload, watcher fell back to ANTHROPIC_API_KEY from .env and returned a real completion ("pong2"). test-system.cjs 6/8 passing (same 2 pre-existing unrelated failures).
+BLOCKERS: DailyTab.svelte sendAI() (Mozart chat UI) still has its own client-side guard that blocks the call entirely and shows "No API key set" if localStorage mm_api_key is empty — so this server-side fallback doesn't currently reach Mozart's chat UI unless that guard is also relaxed. Not changed since it wasn't requested.
+
 ## [2026-08-04] momentum-watcher.cjs + 7 src/lib/*.svelte + test-system.cjs — DONE
 TASK: Fix all claude-sonnet-5 response parsing (systemic follow-up to Mozart fix)
 WHAT: claude-sonnet-5 returns a thinking block before the text block in the content[] array, so every call site using content?.[0]?.text was grabbing the thinking block (no .text field → undefined) instead of the answer, silently degrading to fallback text ("No response.", "[]", "{}", etc.) even when the API call succeeded. Replaced all 58 occurrences of content?.[0]?.text with content?.find(b => b.type === 'text')?.text across momentum-watcher.cjs, test-system.cjs, DailyTab.svelte, WorkTab.svelte, DemoTab.svelte, ProjectsTab.svelte, ConnectionsTab.svelte, BrainTab.svelte, FinancesTab.svelte, ReleaseTab.svelte. Chained calls (.replace(), ?.trim()) preserved as-is. Deliberately skipped FinancesTab.svelte.bak (unused backup) and momentum-watcher.js (stale 168KB duplicate from May 10 — the live process runs momentum-watcher.cjs per pm2/CLAUDE.md).

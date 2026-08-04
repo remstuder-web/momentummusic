@@ -2517,7 +2517,7 @@ ${mozartContext}`
   .up-row.tomorrow .up-date { color: #4a9fd4; }
 
   /* Routine / Health */
-  .sections { display: flex; border-bottom: 1px solid #1c1c1c; margin-bottom: 8px; }
+  .sections { display: flex; margin-bottom: 0; }
   .sec-tab { font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: .14em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
   .sec-tab:hover { color: #9e9690; }
   .sec-tab.on { color: #c9a84c; }
@@ -2764,7 +2764,7 @@ ${mozartContext}`
   /* References tab */
 
   /* ── Ableton Chat ──────────────────────────────────── */
-  .abl-chat-section { margin-top: 24px; padding-top: 16px; }
+  .abl-chat-section { margin-top: 24px; }
   .abl-chat-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .abl-chat-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); }
   .abl-status-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; background: transparent; border: 1px solid #252525; color: #555; padding: 3px 8px; border-radius: 2px; cursor: pointer; display: flex; align-items: center; gap: 5px; }

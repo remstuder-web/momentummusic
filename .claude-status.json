@@ -1,17 +1,19 @@
 {
-  "updated": "2026-06-06T11:00:00.000Z",
-  "last_task": "Restore routine items / remove CHECK section",
-  "status": "partial",
+  "updated": "2026-08-04T10:37:00.000Z",
+  "last_task": "Fix Mozart returning 'No response' (CORS)",
+  "status": "done",
   "working": [
-    "CHECK section removed — user_settings.check_items cleared to []",
-    "ROUTINE items confirmed with → buttons: SPOTIFY downloader, INSTAGRAM midas, AUDIOZ, GEARSPACE",
-    "GOOGLE GEMINI, SPOTIFY, YOUTUBE show as search bars (filtered from routine boxes) — correct",
-    "→ buttons conditional on item.url — working"
+    "Mozart chat (DailyTab.svelte sendAI) now routes through POST localhost:4242/mozart-ask instead of calling api.anthropic.com directly from the browser",
+    "New watcher endpoint /mozart-ask verified via curl — proxies to Anthropic server-side, returns real completion, logs cost to api_usage",
+    "console.log added for Mozart request/response/error for future debugging",
+    "pm2 restart momentum-watcher + /ping healthcheck confirmed watcher is healthy",
+    "test-system.cjs: 6/8 passing (same 2 pre-existing failures as before this change, unrelated to Mozart)"
   ],
-  "broken": [],
-  "partial": [
-    "3 routine items missing: SPOTIFY top german, GEARSPACE serban, GEARSPACE serban theories — URLs were wiped by Supabase PATCH in earlier session, not in any git commit or DB history. User needs to re-add via UI or provide URLs to restore."
+  "broken": [
+    "TEST 3 Spotify intl URL — pre-existing, Spotify API 403 (needs active premium subscription on app owner's account)",
+    "TEST 7 No brain duplicates — pre-existing, 4 duplicate brain_knowledge entries need dedup"
   ],
-  "next": "User to provide URLs for SPOTIFY top german, GEARSPACE serban, GEARSPACE serban theories so they can be added back to user_settings.customs",
-  "notes": "The routine items are Supabase data (user_settings.customs), NOT hardcoded in git. git show approach cannot recover them. Earlier PATCH replaced the entire customs array, destroying any items that were there before."
+  "partial": [],
+  "next": "Optionally run cleanup-brain-dupes endpoint to fix TEST 7 duplicates. Spotify 403 (TEST 3) needs manual account-level fix, not code.",
+  "notes": "Root cause of Mozart bug: browser fetch to api.anthropic.com with 'anthropic-dangerous-direct-browser-access' header was silently CORS-blocked (fetch resolved without throwing but data.content was missing), producing the generic 'No response.' fallback text. Fix follows the same server-side-proxy pattern already used by every other Anthropic call in momentum-watcher.cjs (e.g. /suggest-category)."
 }

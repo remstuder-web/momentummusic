@@ -10271,6 +10271,48 @@ Respond ONLY in JSON:
     return
   }
 
+  // ── POST /mozart-ask — proxy Mozart chat through the watcher (avoids browser CORS) ──
+  if (req.method === 'POST' && req.url === '/mozart-ask') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      try {
+        const { system, messages, apiKey } = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+        if (!apiKey || !Array.isArray(messages) || !messages.length) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'missing apiKey or messages' }))
+          return
+        }
+        const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 400, system, messages })
+        })
+        const aiData = await aiRes.json()
+        if (aiData.error) {
+          console.log('[mozart-ask] anthropic error:', JSON.stringify(aiData.error))
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: aiData.error.message }))
+          return
+        }
+        if (aiData.usage) {
+          const cost = (aiData.usage.input_tokens * 0.000003) + (aiData.usage.output_tokens * 0.000015)
+          fetch(`${SUPABASE_URL}/rest/v1/api_usage`, {
+            method: 'POST', headers: { ...sbHeaders, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ endpoint: 'browser/mozart', model: 'claude-sonnet-5', input_tokens: aiData.usage.input_tokens, output_tokens: aiData.usage.output_tokens, cost_usd: cost })
+          }).catch(() => {})
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, content: aiData.content, usage: aiData.usage }))
+      } catch(err) {
+        logError('mozart-ask', err.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: err.message }))
+      }
+    })
+    return
+  }
+
   // ── GET /daily-snapshot — pipeline counts for goals progress ─────────────
   if (req.method === 'GET' && req.url === '/daily-snapshot') {
     try {

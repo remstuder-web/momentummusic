@@ -1001,14 +1001,17 @@ CHARACTER:
 - When corrected, acknowledge it and update your reasoning
 
 ${mozartContext}`
+    const payload = { system, messages: aiMessages.slice(-10).map(m => ({ role: m.role, content: m.content })), apiKey }
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      console.log('Mozart request:', JSON.stringify(payload))
+      const res = await fetch('http://localhost:4242/mozart-ask', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 400, system, messages: aiMessages.slice(-10) })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       })
       const data = await res.json()
-      if (data.usage) fetch('http://localhost:4242/track-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'browser/mozart', model: 'claude-sonnet-5', input_tokens: data.usage.input_tokens, output_tokens: data.usage.output_tokens, cost_usd: (data.usage.input_tokens * 0.000003) + (data.usage.output_tokens * 0.000015) }) }).catch(() => {})
+      console.log('Mozart response:', JSON.stringify(data))
+      if (data.error) throw new Error(data.error)
       let reply = data.content?.[0]?.text || 'No response.'
       if (reply.length > 300 && /research|found|analysis|suggests|shows|according|trend|data|insight|indicates/i.test(reply)) {
         reply += '\n\n---\n💡 Worth saving to Brain? Paste the key insight in Brain dump.'
@@ -1020,7 +1023,10 @@ ${mozartContext}`
         const result = await executeAction(action, supabase, null)
         if (result) aiMessages = [...aiMessages, { role: 'assistant', content: result, _system: true }]
       }
-    } catch(e) { aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }] }
+    } catch(e) {
+      console.log('Mozart error:', e)
+      aiMessages = [...aiMessages, { role: 'assistant', content: 'Error: '+e.message }]
+    }
     aiLoading = false
   }
 

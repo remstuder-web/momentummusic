@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-08-04] momentum-watcher.cjs, src/lib/DailyTab.svelte — DONE
+TASK: Fix Mozart returning "No response"
+WHAT: Mozart's sendAI() was calling api.anthropic.com directly from the browser, which CORS silently blocks despite a valid key (fetch resolves but content is missing). Added POST /mozart-ask to momentum-watcher.cjs — takes {system, messages, apiKey}, calls Anthropic server-side, logs cost to api_usage, returns {ok, content, usage}. Updated sendAI() in DailyTab.svelte to POST to localhost:4242/mozart-ask instead of api.anthropic.com directly, with console.log of request/response/error for future debugging.
+RESULT: works — verified via curl (proxy returns real Claude reply "pong" for a test prompt) and pm2 restart + /ping healthcheck
+BLOCKERS: none
+
 ## [2026-06-14] momentum-watcher.cjs — DONE
 TASK: Copy downloaded reference to Desktop
 WHAT: Added copyToDesktop(filename) helper in /download-reference endpoint. Called at both save points — playlist loop and individual-track loop — right after ✓ Saved. Copies from REFERENCES_CURRENT_DIR to ~/Desktop with same filename.

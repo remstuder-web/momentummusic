@@ -1,5 +1,5 @@
 {
-  "run": "2026-08-04T11:22:28.681Z",
+  "run": "2026-08-04T14:14:31.171Z",
   "passed": 6,
   "total": 8,
   "results": [
@@ -7,7 +7,7 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: Fix mozart-ask apiKey validation to fall back to env key"
+      "detail": "last_task: Fix Mozart returning 'No response.' — thinking tokens starving output tokens on claude-sonnet-5"
     },
     {
       "n": 2,
@@ -19,7 +19,7 @@
       "n": 3,
       "label": "Spotify intl URL",
       "ok": false,
-      "detail": "API error: Spotify 403 Forbidden: Active premium subscription required for the owner of the app. When the subscription status changes, it can take a few hours before requests are allowed again."
+      "detail": "API error: Spotify track error: 401"
     },
     {
       "n": 4,
@@ -37,7 +37,7 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Increase the kick drum's attack and presence for more punch\""
+      "detail": "3 items: \"Increase kick punch and impact\""
     },
     {
       "n": 7,
@@ -49,7 +49,7 @@
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "7188dae Log mozart-ask env-key fallback fix to CHANGES.md and status file"
+      "detail": "60d9686 Remove Mozart debug logs"
     }
   ]
 }

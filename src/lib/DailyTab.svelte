@@ -1651,7 +1651,7 @@ ${mozartContext}`
     </div>
 
     <!-- SECTION 2: ROUTINE / HELPERS -->
-    <div class="section-block">
+    <div class="section-block" style="border-top:none">
 
       <div class="sections">
         <button class="sec-tab {activeSection==='routine'?'on':''}" onclick={() => activeSection='routine'}>ROUTINE</button>
@@ -2520,7 +2520,7 @@ ${mozartContext}`
   .sections { display: flex; border-bottom: 1px solid #1c1c1c; margin-bottom: 8px; }
   .sec-tab { font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: .14em; padding: 8px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; cursor: pointer; transition: all .15s; margin-bottom: -1px; }
   .sec-tab:hover { color: #9e9690; }
-  .sec-tab.on { color: #c9a84c; border-bottom-color: #c9a84c; }
+  .sec-tab.on { color: #c9a84c; }
   .quick-search-bar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 6px; }
   .qs-cell { display: flex; gap: 4px; }
   .qs-cell .helper-search-inp { flex: 1; width: auto; }
@@ -2551,7 +2551,7 @@ ${mozartContext}`
   .add-row { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; align-items: center; }
   .add-inp { background: #1c1c1c; border: 1px solid #252525; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 9px; outline: none; border-radius: 3px; }
   .add-inp:focus { border-color: rgba(201,168,76,.4); }
-  .helpers-built-in { display: flex; flex-direction: column; gap: 24px; margin-top: 20px; }
+  .helpers-built-in { display: flex; flex-direction: column; margin-top: 20px; }
   .ref-row1 { display: flex; gap: 5px; align-items: center; margin-bottom: 5px; }
   .ref-row2 { display: flex; gap: 5px; align-items: center; }
   .ref-field { flex: 1; min-width: 0; }
@@ -2581,7 +2581,8 @@ ${mozartContext}`
   .ref-status.err { color: #e05a4a; }
   .ref-moves { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
   .ref-move-item { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; }
-  .helper-block { display: flex; flex-direction: column; gap: 8px; }
+  .helper-block { display: flex; flex-direction: column; gap: 8px; margin-top: 24px; }
+  .helper-block:first-child { margin-top: 0; }
   .yt-copy-toast { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; }
   .yt-draft { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; border-bottom: 1px solid #252525; }
   .yt-draft:last-child { border-bottom: none; }
@@ -2763,7 +2764,7 @@ ${mozartContext}`
   /* References tab */
 
   /* ── Ableton Chat ──────────────────────────────────── */
-  .abl-chat-section { margin-top: 24px; border-top: 1px solid #1c1c1c; padding-top: 16px; }
+  .abl-chat-section { margin-top: 24px; padding-top: 16px; }
   .abl-chat-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .abl-chat-title { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.75); }
   .abl-status-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; background: transparent; border: 1px solid #252525; color: #555; padding: 3px 8px; border-radius: 2px; cursor: pointer; display: flex; align-items: center; gap: 5px; }

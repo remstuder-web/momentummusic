@@ -1,6 +1,12 @@
 # CHANGES
 
 ## [2026-08-04] src/lib/DailyTab.svelte — DONE
+TASK: Daily tab CSS — remove dividers above ROUTINE/ABLETON, remove gold tab underline, uniform 24px section spacing
+WHAT: (1) Removed the border-top divider above ROUTINE by adding style="border-top:none" inline on that specific .section-block instance — scoped so the sibling TRENDS & NEWS .section-block (same class) keeps its own border untouched. (2) Removed .sec-tab.on's border-bottom-color: #c9a84c so the active ROUTINE tab no longer shows a gold underline. (3) Removed border-top: 1px solid #1c1c1c from .abl-chat-section (the visible ABLETON chat section), keeping its existing margin-top:24px/padding-top:16px. (4) Switched the six ROUTINE helper sections (YOUTUBE → BRAIN, REFERENCES, TITLE GENERATOR, NORMALIZER, ACAPELLA EXTRACTOR, MIDI FROM REFERENCE) from flex gap:24px on .helpers-built-in to explicit margin-top:24px on .helper-block, with :first-child zeroed to avoid doubling with the container's own margin-top:20px — ABLETON's chat section already had margin-top:24px so it now matches without further change.
+RESULT: works — verified live in Chrome: no divider lines above ROUTINE or ABLETON, no gold underline on the ROUTINE tab, consistent visual spacing across all seven sections. test-system.cjs 6/8 passing (same 2 pre-existing unrelated failures).
+BLOCKERS: none
+
+## [2026-08-04] src/lib/DailyTab.svelte — DONE
 TASK: Remove Mozart debug console.log lines added during the thinking-tokens fix session
 WHAT: Removed 6 debug logs from sendAI(): 'MOZART CALLED', 'MOZART FETCHING:', 'MOZART RESPONSE:', 'CLEAN REPLY:', 'AI MESSAGES BEFORE:', 'AI MESSAGES AFTER:'. Kept the pre-existing 'Mozart request:', 'Mozart response:', and 'Mozart error:' logs that predate this debug session.
 RESULT: works — no logic changed, pure log removal; verified visually that the surrounding sendAI() flow is untouched

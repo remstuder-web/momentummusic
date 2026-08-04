@@ -985,7 +985,6 @@
     aiMessages = [...aiMessages, { role: 'user', content: msg }]
     aiLoading = true
     const apiKey = localStorage.getItem('mm_api_key') || ''
-    if (!apiKey) { aiMessages = [...aiMessages, { role: 'assistant', content: 'No API key set — add it in Settings ⚙.' }]; aiLoading = false; return }
 
     const mozartContext = await buildMozartContext(supabase, {})
 

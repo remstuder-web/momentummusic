@@ -1889,13 +1889,25 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   // Run pulse check and merge into scout message
   let pulseAppend = ''
   try {
-    const pulseResult = await runPulseCheck(apiKey, brainRows, true)
+    const pulseResult = await runPulseCheck(apiKey, sharedBrainRows, true)
     if (pulseResult?.summary) {
       pulseAppend = '\n\n---\n\n## YOUR WORK PULSE\n' + pulseResult.summary
     }
   } catch(e) {
     console.warn('pulse check in scout failed:', e.message)
   }
+
+  const metadata = {
+    spotify_global: kworbSP.slice(0, 10),
+    spotify_de: kworbDE.slice(0, 10),
+    billboard: billboardTop.slice(0, 10),
+    uk_charts: ukChartsTop.slice(0, 10),
+    tiktok: tiktokTop,
+    youtube: ytEnriched,
+    one_to_watch: (oneToWatch?.items || []).slice(0, 5),
+    suggested_tracks: suggestedTracks.slice(0, 15)
+  }
+  console.log('ONE TO WATCH:', JSON.stringify(metadata.one_to_watch))
 
   await deleteInboxToday('Artist Scout')
   await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications`, {
@@ -1908,16 +1920,7 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
       message: mainScoutText + pulseAppend + tracksJson,
       patch_name: `Scout ${today}`,
       read: false,
-      metadata: {
-        spotify_global: kworbSP.slice(0, 10),
-        spotify_de: kworbDE.slice(0, 10),
-        billboard: billboardTop.slice(0, 10),
-        uk_charts: ukChartsTop.slice(0, 10),
-        tiktok: tiktokTop,
-        youtube: ytEnriched,
-        one_to_watch: (oneToWatch?.items || []).slice(0, 5),
-        suggested_tracks: suggestedTracks.slice(0, 15)
-      }
+      metadata
     })
   })
 

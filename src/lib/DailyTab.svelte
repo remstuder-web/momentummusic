@@ -979,6 +979,7 @@
 
   // Mozart
   async function sendAI(rawMsg) {
+    console.log('MOZART CALLED')
     const msg = (typeof rawMsg === 'string' && rawMsg.trim()) ? rawMsg.trim() : aiInput.trim()
     if (!msg || aiLoading) return
     aiInput = ''
@@ -1003,6 +1004,7 @@ ${mozartContext}`
     const payload = { system, messages: aiMessages.slice(-10).map(m => ({ role: m.role, content: m.content })), apiKey }
     try {
       console.log('Mozart request:', JSON.stringify(payload))
+      console.log('MOZART FETCHING:', 'http://localhost:4242/mozart-ask', JSON.stringify(payload))
       const res = await fetch('http://localhost:4242/mozart-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1010,6 +1012,7 @@ ${mozartContext}`
       })
       const data = await res.json()
       console.log('Mozart response:', JSON.stringify(data))
+      console.log('MOZART RESPONSE:', JSON.stringify(data))
       if (data.error) throw new Error(data.error)
       let reply = data.content?.find(b => b.type === 'text')?.text || 'No response.'
       if (reply.length > 300 && /research|found|analysis|suggests|shows|according|trend|data|insight|indicates/i.test(reply)) {
@@ -1017,7 +1020,10 @@ ${mozartContext}`
       }
       const actions = parseActions(reply)
       const cleanReply = reply.replace(/\[ACTION:[^\]]+\]/g, '').trim()
+      console.log('CLEAN REPLY:', cleanReply)
+      console.log('AI MESSAGES BEFORE:', JSON.stringify(aiMessages))
       aiMessages = [...aiMessages, { role: 'assistant', content: cleanReply }]
+      console.log('AI MESSAGES AFTER:', JSON.stringify(aiMessages))
       for (const action of actions) {
         const result = await executeAction(action, supabase, null)
         if (result) aiMessages = [...aiMessages, { role: 'assistant', content: result, _system: true }]

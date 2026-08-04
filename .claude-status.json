@@ -1,13 +1,12 @@
 {
-  "updated": "2026-08-04T11:23:00.000Z",
-  "last_task": "Remove localStorage mm_api_key guard blocking Mozart chat",
+  "updated": "2026-08-04T14:00:00.000Z",
+  "last_task": "Fix Mozart returning 'No response.' — thinking tokens starving output tokens on claude-sonnet-5",
   "status": "done",
   "working": [
-    "Mozart chat fully functional end-to-end even with no localStorage key: verified live in Chrome by clearing mm_api_key, reloading, asking a question, and getting a real formatted reply instead of the blocked 'No API key set' error",
-    "DailyTab.svelte sendAI() early-return guard removed — apiKey is still read from localStorage and sent when present, but an empty value no longer aborts the call",
-    "POST /mozart-ask falls back to process.env.ANTHROPIC_API_KEY when no apiKey is in the request body — verified via curl with no apiKey field at all",
-    "Root cause #1 (CORS): Mozart routes through POST localhost:4242/mozart-ask instead of calling api.anthropic.com directly from the browser",
-    "Root cause #2 (parsing): claude-sonnet-5 returns a 'thinking' content block before the 'text' block; all 58 content?.[0]?.text call sites replaced with content?.find(b => b.type === 'text')?.text app-wide",
+    "Mozart chat returns full formatted replies again — verified live in Chrome via console log inspection of the actual Anthropic API response",
+    "POST /mozart-ask now sends thinking: {type:'adaptive'} + output_config: {effort:'medium'} + max_tokens: 4000, matching claude-sonnet-5's actual adaptive-thinking API (the old {type:'enabled', budget_tokens:N} shape 400s on this model)",
+    "Confirmed via response usage: output_tokens:510 with only thinking_tokens:112 spent on reasoning, leaving ample room for response text (previously all 400 output tokens were consumed by an empty-text thinking block, tripping the 'No response.' fallback at DailyTab.svelte:1017)",
+    "Added temporary debug logs at DailyTab.svelte:1023-1026 (CLEAN REPLY / AI MESSAGES BEFORE / AI MESSAGES AFTER) at user request to trace the aiMessages state push — left in place, not yet removed",
     "test-system.cjs: 6/8 passing (same 2 pre-existing failures, unrelated)"
   ],
   "broken": [
@@ -15,6 +14,6 @@
     "TEST 7 No brain duplicates — pre-existing, 4 duplicate brain_knowledge entries need dedup"
   ],
   "partial": [],
-  "next": "Optionally run cleanup-brain-dupes endpoint to fix TEST 7 duplicates. Spotify 403 (TEST 3) needs manual account-level fix, not code. Worth noting: +page.svelte:156 auto-syncs mm_api_key into localStorage from the watcher's env key on every page load — this is a separate, pre-existing mechanism that already masks most 'no local key' scenarios in normal usage.",
-  "notes": "Four-part Mozart fix history, all done 2026-08-04: (1) CORS — browser->Anthropic direct call was silently blocked, fixed by proxying through /mozart-ask. (2) Response parsing — claude-sonnet-5 puts a thinking block at content[0], so content?.[0]?.text grabbed the wrong block everywhere in the app; fixed with content?.find(b => b.type === 'text')?.text uniformly (58 call sites). (3) apiKey validation — /mozart-ask falls back to process.env.ANTHROPIC_API_KEY server-side. (4) Client-side guard — DailyTab.svelte sendAI() no longer hard-blocks on empty localStorage key, so it can actually reach the server-side fallback from (3). momentum-watcher.js (stale duplicate, 168KB, May 10) and FinancesTab.svelte.bak still contain old content?.[0]?.text patterns — intentionally untouched, not live code."
+  "next": "Consider removing the temporary CLEAN REPLY / AI MESSAGES BEFORE/AFTER console.log debug lines in DailyTab.svelte (added this session for troubleshooting, no longer needed now the bug is fixed) if the user doesn't want them kept. Optionally run cleanup-brain-dupes endpoint to fix TEST 7 duplicates. Spotify 403 (TEST 3) needs manual account-level fix, not code.",
+  "notes": "Root cause: claude-sonnet-5 runs adaptive thinking by default (even with no thinking param set), and the model's thinking API is entirely different from the deprecated budget_tokens shape used by older Sonnet models — it only accepts thinking:{type:'adaptive'} (or omitted), with depth controlled via output_config.effort, not a token budget. The original /mozart-ask request had max_tokens:400 and no thinking config at all, so adaptive thinking silently ate the entire budget. First fix attempt tried the old budget_tokens shape and was rejected by the live API with a 400 — corrected using the claude-api skill's authoritative Sonnet 5 reference. See CHANGES.md 2026-08-04 for the full before/after."
 }

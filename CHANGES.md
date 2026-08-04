@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-08-04] momentum-watcher.cjs — DONE
+TASK: Fix Mozart returning "No response." — thinking tokens starving output tokens
+WHAT: /mozart-ask sent max_tokens: 400 with no thinking config. Root cause traced live: claude-sonnet-5 runs adaptive thinking by default even when the thinking param is omitted, so all 400 output tokens were consumed by an empty-text thinking block and none were left for the actual reply, tripping the 'No response.' fallback in DailyTab.svelte:1017. First fix attempt (max_tokens: 8000 + thinking: {type:'enabled', budget_tokens:2000}, the old extended-thinking shape) was rejected by the API with a 400 — claude-sonnet-5 doesn't support thinking.type.enabled/budget_tokens at all. Corrected to the model's actual API: thinking: {type:'adaptive'} + output_config: {effort:'medium'} to bound thinking depth, with max_tokens raised to 4000 to give the response room regardless.
+RESULT: works — verified live in Chrome via console log inspection: response now returns output_tokens:510 with only thinking_tokens:112 (vs previously 400/400 all-thinking), and a full formatted Mozart reply renders in the chat UI instead of "No response." pm2 restarted, /ping healthy.
+BLOCKERS: none
+
 ## [2026-08-04] src/lib/DailyTab.svelte — DONE
 TASK: Remove localStorage mm_api_key guard blocking Mozart chat
 WHAT: sendAI() had an early-return guard that showed "No API key set — add it in Settings ⚙." and aborted the whole function if localStorage mm_api_key was empty, before the request was ever built. Since /mozart-ask now falls back to process.env.ANTHROPIC_API_KEY server-side, removed the guard — apiKey is still read and sent from localStorage when present, but an empty value no longer blocks the call.

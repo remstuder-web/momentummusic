@@ -1,5 +1,11 @@
 # CHANGES
 
+## [2026-08-04] momentum-watcher.cjs + 7 src/lib/*.svelte + test-system.cjs — DONE
+TASK: Fix all claude-sonnet-5 response parsing (systemic follow-up to Mozart fix)
+WHAT: claude-sonnet-5 returns a thinking block before the text block in the content[] array, so every call site using content?.[0]?.text was grabbing the thinking block (no .text field → undefined) instead of the answer, silently degrading to fallback text ("No response.", "[]", "{}", etc.) even when the API call succeeded. Replaced all 58 occurrences of content?.[0]?.text with content?.find(b => b.type === 'text')?.text across momentum-watcher.cjs, test-system.cjs, DailyTab.svelte, WorkTab.svelte, DemoTab.svelte, ProjectsTab.svelte, ConnectionsTab.svelte, BrainTab.svelte, FinancesTab.svelte, ReleaseTab.svelte. Chained calls (.replace(), ?.trim()) preserved as-is. Deliberately skipped FinancesTab.svelte.bak (unused backup) and momentum-watcher.js (stale 168KB duplicate from May 10 — the live process runs momentum-watcher.cjs per pm2/CLAUDE.md).
+RESULT: works — node -c syntax check clean on both .cjs files, pm2 restart + /ping healthy, test-system.cjs 6/8 passing (same 2 pre-existing unrelated failures: Spotify 403 quota, brain_knowledge duplicates)
+BLOCKERS: none
+
 ## [2026-08-04] momentum-watcher.cjs, src/lib/DailyTab.svelte — DONE
 TASK: Fix Mozart returning "No response"
 WHAT: Mozart's sendAI() was calling api.anthropic.com directly from the browser, which CORS silently blocks despite a valid key (fetch resolves but content is missing). Added POST /mozart-ask to momentum-watcher.cjs — takes {system, messages, apiKey}, calls Anthropic server-side, logs cost to api_usage, returns {ok, content, usage}. Updated sendAI() in DailyTab.svelte to POST to localhost:4242/mozart-ask instead of api.anthropic.com directly, with console.log of request/response/error for future debugging.

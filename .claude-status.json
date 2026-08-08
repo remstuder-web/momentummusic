@@ -1,22 +1,20 @@
 {
-  "updated": "2026-08-08T06:30:00.000Z",
-  "last_task": "Add LYRICS EXTRACTOR helper section (Whisper transcription) to ROUTINE",
+  "updated": "2026-08-08T06:38:00.000Z",
+  "last_task": "Fix Lyrics Extractor: use correct Python path for Whisper",
   "status": "done",
   "working": [
-    "New LYRICS EXTRACTOR helper-block in DailyTab.svelte, placed after MIDI FROM REFERENCE — drop zone (WAV/MP3/M4A), Transcribing... progress state, scrollable readonly result textarea, gold Copy to Clipboard button, Save to Brain button (brain_knowledge category:'own_production')",
-    "New POST /extract-lyrics in momentum-watcher.cjs — base64 JSON body (matches /extract-acapella convention, not multipart), checks whisper install via `python3.11 -m whisper --help`, runs `python3.11 -m whisper <file> --model medium --output_format txt --output_dir /tmp --language en`, reads/returns the .txt, cleans up temp files",
-    "Route registered in /system-status endpoint list",
+    "LYRICS EXTRACTOR helper section in DailyTab.svelte (ROUTINE, after MIDI FROM REFERENCE) — drop WAV/MP3/M4A, transcribes via POST /extract-lyrics, Copy to Clipboard + Save to Brain buttons",
+    "POST /extract-lyrics in momentum-watcher.cjs now uses PYTHON=/opt/homebrew/bin/python3 (whisper is installed there, not under python3.11) with KMP_DUPLICATE_LIB_OK=TRUE in the exec env, working around an OpenMP libomp.dylib double-init crash (exit 134) that otherwise makes the whisper --help install-check silently report 'not installed' on this machine regardless of python path",
+    "--model changed medium → small (~500MB vs ~1.5GB first-run download, still good accuracy for lyrics)",
     "watcher restarted via pm2, /ping healthy",
-    "Verified /extract-lyrics returns the correct 'Whisper not installed' error path with a stub POST (whisper package not yet installed in this env)",
+    "Verified end-to-end with a live POST using a real (silent) WAV file: returns {\"ok\":true,\"lyrics\":\"\",\"filename\":\"test.wav\"} — whisper install detected correctly, small model loads, transcription runs and returns cleanly",
     "test-system.cjs: 6/8 passing (same 2 pre-existing failures, unrelated)"
   ],
   "broken": [
     "TEST 3 Spotify intl URL — pre-existing, Spotify API 403 (needs active premium subscription on app owner's account)",
     "TEST 7 No brain duplicates — pre-existing, 4 duplicate brain_knowledge entries need dedup"
   ],
-  "partial": [
-    "Lyrics transcription path (Whisper actually running) not exercised end-to-end — openai-whisper isn't installed locally yet. Run `/opt/homebrew/bin/python3.11 -m pip install openai-whisper` then drop a real audio file in the UI to fully verify."
-  ],
-  "next": "Install openai-whisper (pip3 install openai-whisper via python3.11) and do a live drop-file test of LYRICS EXTRACTOR in the browser to confirm the full transcription round-trip. Optionally run cleanup-brain-dupes endpoint to fix TEST 7 duplicates. Spotify 403 (TEST 3) needs manual account-level fix, not code.",
-  "notes": "Followed the codebase's existing base64-JSON-body convention for audio-upload endpoints (as used by /extract-acapella, /extract-vocal-clean, /extract-instrumental, /generate-midi-from-reference) rather than the literal 'multipart' wording in the task spec, since multipart/formidable is only used elsewhere for the unrelated /brain-file-upload endpoint — base64 JSON keeps this consistent with every other audio-drop helper in DailyTab.svelte."
+  "partial": [],
+  "next": "Lyrics Extractor is fully working end-to-end now — next real-world test should be dropping an actual song/vocal file in the browser UI to sanity-check transcription quality with --model small. Optionally run cleanup-brain-dupes endpoint to fix TEST 7 duplicates. Spotify 403 (TEST 3) needs manual account-level fix, not code.",
+  "notes": "Root cause of the original 'Whisper not installed' false negative was two-fold: (1) whisper was installed under /opt/homebrew/bin/python3 (3.14), not python3.11 as originally assumed, and (2) even with the right interpreter, `python3 -m whisper --help` crashes with an OpenMP double-init error (exit 134) on this machine unless KMP_DUPLICATE_LIB_OK=TRUE is set in the process env — discovered this by testing the exact check command via node's child_process.exec and seeing it fail even with the corrected path, before finding the env var fix."
 }

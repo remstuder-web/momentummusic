@@ -11357,10 +11357,13 @@ Give specific production direction based on stem balance, loudness levels, and r
         if (!file_data) throw new Error('file_data required')
 
         const execAsync = require('util').promisify(exec)
-        const PYTHON = '/opt/homebrew/bin/python3.11'
+        const PYTHON = '/opt/homebrew/bin/python3'
+        // KMP_DUPLICATE_LIB_OK works around an OpenMP libomp.dylib double-init crash (exit 134)
+        // that otherwise kills whisper on this machine regardless of which python3 is used
+        const whisperEnv = { ...process.env, KMP_DUPLICATE_LIB_OK: 'TRUE' }
 
         try {
-          await execAsync(`"${PYTHON}" -m whisper --help`)
+          await execAsync(`"${PYTHON}" -m whisper --help`, { env: whisperEnv })
         } catch(e) {
           throw new Error('Whisper not installed. Run: pip3 install openai-whisper')
         }
@@ -11372,8 +11375,8 @@ Give specific production direction based on stem balance, loudness levels, and r
 
         console.log('⏳ Transcribing lyrics from:', filename || path.basename(tmpInput))
         await execAsync(
-          `"${PYTHON}" -m whisper ${shellEscape(tmpInput)} --model medium --output_format txt --output_dir /tmp --language en`,
-          { maxBuffer: 20 * 1024 * 1024, timeout: 10 * 60 * 1000 }
+          `"${PYTHON}" -m whisper ${shellEscape(tmpInput)} --model small --output_format txt --output_dir /tmp --language en`,
+          { maxBuffer: 20 * 1024 * 1024, timeout: 10 * 60 * 1000, env: whisperEnv }
         )
 
         if (!fs.existsSync(tmpOutput)) throw new Error('Whisper did not produce output file')

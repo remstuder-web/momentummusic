@@ -1,19 +1,22 @@
 {
-  "updated": "2026-08-04T14:00:00.000Z",
-  "last_task": "Fix Mozart returning 'No response.' — thinking tokens starving output tokens on claude-sonnet-5",
+  "updated": "2026-08-08T06:30:00.000Z",
+  "last_task": "Add LYRICS EXTRACTOR helper section (Whisper transcription) to ROUTINE",
   "status": "done",
   "working": [
-    "Mozart chat returns full formatted replies again — verified live in Chrome via console log inspection of the actual Anthropic API response",
-    "POST /mozart-ask now sends thinking: {type:'adaptive'} + output_config: {effort:'medium'} + max_tokens: 4000, matching claude-sonnet-5's actual adaptive-thinking API (the old {type:'enabled', budget_tokens:N} shape 400s on this model)",
-    "Confirmed via response usage: output_tokens:510 with only thinking_tokens:112 spent on reasoning, leaving ample room for response text (previously all 400 output tokens were consumed by an empty-text thinking block, tripping the 'No response.' fallback at DailyTab.svelte:1017)",
-    "Added temporary debug logs at DailyTab.svelte:1023-1026 (CLEAN REPLY / AI MESSAGES BEFORE / AI MESSAGES AFTER) at user request to trace the aiMessages state push — left in place, not yet removed",
+    "New LYRICS EXTRACTOR helper-block in DailyTab.svelte, placed after MIDI FROM REFERENCE — drop zone (WAV/MP3/M4A), Transcribing... progress state, scrollable readonly result textarea, gold Copy to Clipboard button, Save to Brain button (brain_knowledge category:'own_production')",
+    "New POST /extract-lyrics in momentum-watcher.cjs — base64 JSON body (matches /extract-acapella convention, not multipart), checks whisper install via `python3.11 -m whisper --help`, runs `python3.11 -m whisper <file> --model medium --output_format txt --output_dir /tmp --language en`, reads/returns the .txt, cleans up temp files",
+    "Route registered in /system-status endpoint list",
+    "watcher restarted via pm2, /ping healthy",
+    "Verified /extract-lyrics returns the correct 'Whisper not installed' error path with a stub POST (whisper package not yet installed in this env)",
     "test-system.cjs: 6/8 passing (same 2 pre-existing failures, unrelated)"
   ],
   "broken": [
     "TEST 3 Spotify intl URL — pre-existing, Spotify API 403 (needs active premium subscription on app owner's account)",
     "TEST 7 No brain duplicates — pre-existing, 4 duplicate brain_knowledge entries need dedup"
   ],
-  "partial": [],
-  "next": "Consider removing the temporary CLEAN REPLY / AI MESSAGES BEFORE/AFTER console.log debug lines in DailyTab.svelte (added this session for troubleshooting, no longer needed now the bug is fixed) if the user doesn't want them kept. Optionally run cleanup-brain-dupes endpoint to fix TEST 7 duplicates. Spotify 403 (TEST 3) needs manual account-level fix, not code.",
-  "notes": "Root cause: claude-sonnet-5 runs adaptive thinking by default (even with no thinking param set), and the model's thinking API is entirely different from the deprecated budget_tokens shape used by older Sonnet models — it only accepts thinking:{type:'adaptive'} (or omitted), with depth controlled via output_config.effort, not a token budget. The original /mozart-ask request had max_tokens:400 and no thinking config at all, so adaptive thinking silently ate the entire budget. First fix attempt tried the old budget_tokens shape and was rejected by the live API with a 400 — corrected using the claude-api skill's authoritative Sonnet 5 reference. See CHANGES.md 2026-08-04 for the full before/after."
+  "partial": [
+    "Lyrics transcription path (Whisper actually running) not exercised end-to-end — openai-whisper isn't installed locally yet. Run `/opt/homebrew/bin/python3.11 -m pip install openai-whisper` then drop a real audio file in the UI to fully verify."
+  ],
+  "next": "Install openai-whisper (pip3 install openai-whisper via python3.11) and do a live drop-file test of LYRICS EXTRACTOR in the browser to confirm the full transcription round-trip. Optionally run cleanup-brain-dupes endpoint to fix TEST 7 duplicates. Spotify 403 (TEST 3) needs manual account-level fix, not code.",
+  "notes": "Followed the codebase's existing base64-JSON-body convention for audio-upload endpoints (as used by /extract-acapella, /extract-vocal-clean, /extract-instrumental, /generate-midi-from-reference) rather than the literal 'multipart' wording in the task spec, since multipart/formidable is only used elsewhere for the unrelated /brain-file-upload endpoint — base64 JSON keeps this consistent with every other audio-drop helper in DailyTab.svelte."
 }

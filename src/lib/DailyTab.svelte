@@ -60,6 +60,13 @@
   let midiDragging = $state(false)
   let midiSteps = $state([])
 
+  let lyricsFile = $state(null)
+  let lyricsLoading = $state(false)
+  let lyricsResult = $state(null)
+  let lyricsDragging = $state(false)
+  let lyricsCopied = $state(false)
+  let lyricsSaved = $state(false)
+
   let abletonConnected = $state(false)
   let abletonInstruction = $state('')
   let abletonMode = $state('single')  // 'single' | 'sequence'
@@ -1316,6 +1323,60 @@ ${mozartContext}`
     midiFile = null
   }
 
+  function handleLyricsDrop(e) {
+    e.preventDefault()
+    lyricsDragging = false
+    const file = e.dataTransfer.files[0]
+    if (file && /\.(wav|mp3|m4a)$/i.test(file.name)) { lyricsFile = file; lyricsResult = null; lyricsCopied = false; lyricsSaved = false }
+  }
+
+  async function runLyricsExtract() {
+    if (!lyricsFile || lyricsLoading) return
+    lyricsLoading = true
+    lyricsResult = null
+    lyricsCopied = false
+    lyricsSaved = false
+    const base64 = await new Promise(res => {
+      const reader = new FileReader()
+      reader.onload = () => res(reader.result.split(',')[1])
+      reader.readAsDataURL(lyricsFile)
+    })
+    const ext = lyricsFile.name.split('.').pop().toLowerCase()
+    const filename = lyricsFile.name
+    try {
+      const r = await fetch('http://localhost:4242/extract-lyrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_data: base64, ext, filename })
+      })
+      lyricsResult = await r.json()
+    } catch(e) {
+      lyricsResult = { ok: false, error: e.message }
+    }
+    lyricsLoading = false
+    lyricsFile = null
+  }
+
+  function copyLyrics() {
+    if (!lyricsResult?.lyrics) return
+    navigator.clipboard.writeText(lyricsResult.lyrics).then(() => {
+      lyricsCopied = true
+      setTimeout(() => lyricsCopied = false, 2000)
+    })
+  }
+
+  async function saveLyricsToBrain() {
+    if (!lyricsResult?.lyrics || lyricsSaved) return
+    const { error } = await supabase.from('brain_knowledge').insert({
+      category: 'own_production',
+      title: `Lyrics — ${lyricsResult.filename || 'extracted'}`,
+      content: lyricsResult.lyrics,
+      active: true
+    })
+    if (!error) lyricsSaved = true
+    else alert('Error: ' + error.message)
+  }
+
   async function checkAbletonStatus() {
     try {
       const r = await fetch('http://localhost:4242/ableton-status')
@@ -1999,6 +2060,43 @@ ${mozartContext}`
           {/if}
         </div>
 
+        <!-- LYRICS EXTRACTOR -->
+        <div class="helper-block">
+          <div class="normalizer-title">LYRICS EXTRACTOR</div>
+          <div class="helper-sub">Drop audio to transcribe lyrics via Whisper</div>
+          <div class="acapella-drop {lyricsDragging ? 'dragging' : ''}"
+            ondragover={e => { e.preventDefault(); lyricsDragging = true }}
+            ondragleave={() => lyricsDragging = false}
+            ondrop={handleLyricsDrop}>
+            {#if lyricsLoading}
+              <div class="acapella-loading">● Transcribing... 1-3 min</div>
+            {:else if lyricsFile}
+              <div class="acapella-ready">
+                📁 {lyricsFile.name}
+                <button class="extract-btn" onclick={runLyricsExtract}>Extract Lyrics</button>
+              </div>
+            {:else}
+              <div class="acapella-placeholder">
+                📝 Drop audio file (WAV, MP3, M4A)
+                <span style="font-size:9px;color:#444">transcribed via Whisper</span>
+              </div>
+            {/if}
+          </div>
+          {#if lyricsResult}
+            <div class="acapella-result">
+              {#if lyricsResult.ok}
+                <textarea class="lyrics-textarea" readonly rows="8">{lyricsResult.lyrics}</textarea>
+                <div class="lyrics-btn-row">
+                  <button class="extract-btn" onclick={copyLyrics}>{lyricsCopied ? '✓ Copied' : 'Copy to Clipboard'}</button>
+                  <button class="acapella-applio-btn" onclick={saveLyricsToBrain} disabled={lyricsSaved}>{lyricsSaved ? '✓ Saved' : 'Save to Brain'}</button>
+                </div>
+              {:else}
+                <div style="color:#e57373;font-size:11px">{lyricsResult.error}</div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
 
         <!-- ABLETON CONTROL — hidden, re-enable by removing {#if false} -->
         {#if false}
@@ -2643,6 +2741,8 @@ ${mozartContext}`
   .midi-progress { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
   .midi-step { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; }
   .midi-step.pending { color: #444; }
+  .lyrics-textarea { width: 100%; background: #111; border: 1px solid #252525; border-radius: 3px; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 8px 10px; resize: vertical; outline: none; box-sizing: border-box; }
+  .lyrics-btn-row { display: flex; gap: 8px; margin-top: 6px; }
   .ableton-status-row { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; }
   .ableton-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
   .ableton-dot.on { background: #4caf82; box-shadow: 0 0 4px rgba(76,175,130,.6); }

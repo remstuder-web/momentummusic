@@ -3444,7 +3444,7 @@ async function buildStatusResponse() {
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
     'GET /instrumentals/:filename', 'GET /stems/:filename',
     'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /speak',
-    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-ref-now', 'POST /analyze-stems', 'POST /extract-acapella', 'POST /generate-midi-from-reference', 'POST /analyze-youtube-track',
+    'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-ref-now', 'POST /analyze-stems', 'POST /extract-acapella', 'POST /generate-midi-from-reference', 'POST /extract-lyrics', 'POST /analyze-youtube-track',
     'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
     'POST /launch-claude-code', 'POST /launch-claude-overnight',
     'GET /logs', 'GET /get-changes', 'GET /get-tasks', 'POST /track-cost',
@@ -11339,6 +11339,56 @@ Give specific production direction based on stem balance, loudness levels, and r
         console.error('extract-acapella error:', e.message)
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+    })
+    return
+  }
+
+  // ── POST /extract-lyrics — Whisper transcription → clipboard-ready text ──
+  if (req.method === 'POST' && req.url === '/extract-lyrics') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const chunks = []; req.on('data', c => chunks.push(c))
+    req.on('end', async () => {
+      let tmpInput = null
+      let tmpOutput = null
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString())
+        const { file_data, ext, filename } = body
+        if (!file_data) throw new Error('file_data required')
+
+        const execAsync = require('util').promisify(exec)
+        const PYTHON = '/opt/homebrew/bin/python3.11'
+
+        try {
+          await execAsync(`"${PYTHON}" -m whisper --help`)
+        } catch(e) {
+          throw new Error('Whisper not installed. Run: pip3 install openai-whisper')
+        }
+
+        const cleanExt = (ext || 'wav').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'wav'
+        tmpInput = `/tmp/lyrics_input_${Date.now()}.${cleanExt}`
+        fs.writeFileSync(tmpInput, Buffer.from(file_data, 'base64'))
+        tmpOutput = tmpInput.replace(new RegExp(`\\.${cleanExt}$`), '.txt')
+
+        console.log('⏳ Transcribing lyrics from:', filename || path.basename(tmpInput))
+        await execAsync(
+          `"${PYTHON}" -m whisper ${shellEscape(tmpInput)} --model medium --output_format txt --output_dir /tmp --language en`,
+          { maxBuffer: 20 * 1024 * 1024, timeout: 10 * 60 * 1000 }
+        )
+
+        if (!fs.existsSync(tmpOutput)) throw new Error('Whisper did not produce output file')
+        const lyrics = fs.readFileSync(tmpOutput, 'utf8').trim()
+
+        console.log(`✓ Lyrics extracted: ${lyrics.length} chars`)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, lyrics, filename: filename || path.basename(tmpInput) }))
+      } catch(e) {
+        console.error('extract-lyrics error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      } finally {
+        try { if (tmpInput && fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput) } catch {}
+        try { if (tmpOutput && fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput) } catch {}
       }
     })
     return

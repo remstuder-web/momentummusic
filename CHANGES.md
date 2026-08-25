@@ -3305,3 +3305,9 @@ TASK: Fix app-wide 404s from the retired claude-sonnet-4-20250514 model ID
 WHAT: The Mozart chat test earlier revealed api.anthropic.com/v1/messages returning 404 for claude-sonnet-4-20250514 — confirmed it was retired 2026-06-15 (we're now past that date) with claude-sonnet-5 as the recommended replacement. Grepped every live file (excluded the stale, pm2-unused momentum-watcher.js) and found 32 occurrences across 8 files, all of them "quality" Claude calls (PDF processing, style guides, Mozart chat, image analysis, etc. per CLAUDE.md's Claude API calls section). Replaced claude-sonnet-4-20250514 -> claude-sonnet-5 everywhere via sed (exact string match, no other code changes), plus updated CLAUDE.md's documented model config line. Did not touch CHANGES.md's historical entries (that would falsify the record) or the dead momentum-watcher.js duplicate.
 RESULT: works — verified with a live curl to api.anthropic.com using claude-sonnet-5 (200, clean response) after being 404 on the old ID; vite build passes; watcher restarted via pm2 and confirmed alive; test-system.cjs still 6/8, same 2 pre-existing unrelated failures
 BLOCKERS: none
+
+## 2026-08-25 src/routes/+page.svelte — DONE
+TASK: Remove FINANCES tab from navigation
+WHAT: Removed the FinancesTab import, the { id: 'finances', label: 'FINANCES' } entry from the tabs array, and the {:else if activeTab === 'finances'} render block from +page.svelte. FinancesTab.svelte itself was left untouched on disk, unreferenced.
+RESULT: untested (no dev server run this session; edit is a straightforward removal of 3 matching blocks)
+BLOCKERS: none

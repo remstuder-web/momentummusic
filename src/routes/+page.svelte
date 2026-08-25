@@ -5,7 +5,6 @@
   import DemoTab from '$lib/DemoTab.svelte'
   import ProjectsTab from '$lib/ProjectsTab.svelte'
   import ConnectionsTab from '$lib/ConnectionsTab.svelte'
-  import FinancesTab from '$lib/FinancesTab.svelte'
   import ReleaseTab from '$lib/ReleaseTab.svelte'
   import BrainTab from '$lib/BrainTab.svelte'
   import ListenPage from '$lib/ListenPage.svelte'
@@ -142,7 +141,6 @@
     { id: 'projects',    label: 'PROJECTS' },
     { id: 'connections', label: 'CONNECTIONS' },
     { id: 'releases',    label: 'RELEASES' },
-    { id: 'finances',    label: 'FINANCES' },
     { id: 'brain',       label: 'BRAIN' },
   ]
 
@@ -616,8 +614,6 @@
       <ConnectionsTab />
     {:else if activeTab === 'releases'}
       <ReleaseTab />
-    {:else if activeTab === 'finances'}
-      <FinancesTab />
     {:else if activeTab === 'brain'}
       <BrainTab />
     {/if}

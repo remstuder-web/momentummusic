@@ -11487,6 +11487,11 @@ Give specific production direction based on stem balance, loudness levels, and r
   }
 
   // ── POST /generate-midi-from-reference ──────────────────────────────────────
+  // music21 rewrite: Claude never writes raw MIDI note numbers (that was the
+  // source of bad output + JSON truncation). Claude makes musical DECISIONS
+  // (a spec per idea: progression, chord rhythm, melody contour/density/register),
+  // music21 renders those specs into harmonically valid notes via
+  // roman.RomanNumeral + Key.pitches, which are scale/chord-correct by construction.
   if (req.method === 'POST' && req.url === '/generate-midi-from-reference') {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Content-Type', 'text/event-stream')
@@ -11497,226 +11502,354 @@ Give specific production direction based on stem balance, loudness levels, and r
     const chunks = []; req.on('data', c => chunks.push(c))
     req.on('end', async () => {
       let tmpFile = null
+      const MIDI21_PYTHON = '/opt/homebrew/bin/python3'
+      const analyzeScriptPath = '/tmp/analyze_midi.py'
+      const renderScriptPath = '/tmp/render_midi.py'
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString())
         const { file_data, filename, apiKey } = body
         if (!file_data) throw new Error('file_data required')
         if (!apiKey) throw new Error('apiKey required — set it in Settings')
 
+        const execAsync = require('util').promisify(exec)
+
+        try {
+          await execAsync(`"${MIDI21_PYTHON}" -c "import music21"`)
+        } catch(e) {
+          throw new Error('music21 not installed. Run: pip3 install music21')
+        }
+
         tmpFile = `/tmp/midi_ref_${Date.now()}.mid`
         fs.writeFileSync(tmpFile, Buffer.from(file_data, 'base64'))
         const baseName = (filename || 'track').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 24)
 
-        sendEvt({ step: 'Parsing MIDI file...' })
+        sendEvt({ step: 'Analyzing MIDI with music21...' })
 
-        const PYTHON = '/opt/homebrew/bin/python3.11'
-        const execAsync = require('util').promisify(exec)
+        // STEP 1 — analyze the reference MIDI: key, chord progression (roman
+        // numerals via chordify + romanNumeralFromChord), tempo, register, density.
+        const analyzeScript = `import sys, json
+from music21 import converter, roman
 
-        const parseScript = `
-import sys, json
-import mido
+s = converter.parse(sys.argv[1])
+k = s.analyze('key')
+chords = s.chordify()
 
-mid = mido.MidiFile(sys.argv[1])
-ticks = mid.ticks_per_beat
-tempo = 500000
-key_sig = None
-for track in mid.tracks:
-    for msg in track:
-        if msg.type == 'set_tempo':
-            tempo = msg.tempo
-        elif msg.type == 'key_signature':
-            key_sig = msg.key
+progression = []
+for c in chords.recurse().getElementsByClass('Chord'):
+    try:
+        rn = roman.romanNumeralFromChord(c, k)
+        progression.append(rn.figure)
+    except Exception:
+        pass
 
-bpm = round(60_000_000 / tempo, 1)
-notes = []
-for track in mid.tracks:
-    abs_tick = 0
-    active = {}
-    for msg in track:
-        abs_tick += msg.time
-        beat = abs_tick / ticks
-        if msg.type == 'note_on' and msg.velocity > 0:
-            active[msg.note] = (beat, msg.velocity)
-        elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
-            if msg.note in active:
-                s, v = active.pop(msg.note)
-                notes.append({'pitch': msg.note, 'start': round(s, 3), 'duration': round(max(0.0625, beat - s), 3), 'velocity': v})
+# dedupe consecutive repeats
+dedup = [p for i, p in enumerate(progression) if i == 0 or p != progression[i-1]]
 
-notes.sort(key=lambda n: n['start'])
+notes = list(s.recurse().notes)
+pitches = [n.pitch.midi for n in notes if n.isNote]
 
-def to_note(p):
-    return ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][p % 12] + str(p // 12 - 1)
+mmb = s.metronomeMarkBoundaries()
+tempo_val = float(mmb[0][2].number) if mmb and mmb[0][2].number else 120.0
 
-if notes:
-    pitches = [n['pitch'] for n in notes]
-    vels = [n['velocity'] for n in notes]
-    mn, mx = min(pitches), max(pitches)
-    mnv, mxv = min(vels), max(vels)
-else:
-    mn, mx, mnv, mxv = 60, 72, 64, 100
-
-chords, used = [], set()
-for i, n in enumerate(notes):
-    if i in used: continue
-    cl = [n]
-    for j in range(i+1, len(notes)):
-        if j not in used and abs(notes[j]['start'] - n['start']) <= 0.05:
-            cl.append(notes[j]); used.add(j)
-    used.add(i)
-    if len(cl) >= 2:
-        chords.append({'pitches': [c['pitch'] for c in cl], 'start': round(n['start'], 3)})
-
-chord_beats = {round(c['start'], 3) for c in chords}
-melody = [n for n in notes if round(n['start'], 3) not in chord_beats][:20]
-onsets = sorted(set(round(n['start'] % 4.0, 2) for n in notes))[:16]
-
-print(json.dumps({'bpm': bpm, 'key': key_sig, 'note_count': len(notes),
-    'min_pitch': mn, 'max_pitch': mx, 'min_note': to_note(mn), 'max_note': to_note(mx),
-    'min_vel': mnv, 'max_vel': mxv, 'chords': chords[:12], 'melody': melody, 'onsets': onsets}))
+out = {
+  "key": str(k),
+  "mode": k.mode,
+  "tonic": k.tonic.name,
+  "tempo": tempo_val,
+  "progression": dedup[:16] if dedup else ["i"],
+  "note_count": len(notes),
+  "pitch_min": min(pitches) if pitches else 60,
+  "pitch_max": max(pitches) if pitches else 72,
+  "duration_quarters": float(s.duration.quarterLength)
+}
+print(json.dumps(out))
 `
-        const parseScriptPath = `/tmp/parse_midi_${Date.now()}.py`
-        fs.writeFileSync(parseScriptPath, parseScript)
+        fs.writeFileSync(analyzeScriptPath, analyzeScript)
         let analysis
         try {
           const { stdout, stderr } = await execAsync(
-            `"${PYTHON}" "${parseScriptPath}" ${shellEscape(tmpFile)}`,
-            { maxBuffer: 10 * 1024 * 1024 }
+            `"${MIDI21_PYTHON}" "${analyzeScriptPath}" ${shellEscape(tmpFile)}`,
+            { maxBuffer: 10 * 1024 * 1024, timeout: 60000 }
           )
-          if (stderr) console.log('MIDI parse stderr:', stderr)
+          if (stderr) console.log('MIDI analyze stderr:', stderr)
           analysis = JSON.parse(stdout.trim())
         } catch(e) {
-          throw new Error('MIDI parsing failed: ' + e.message.slice(0, 200))
-        } finally {
-          try { fs.unlinkSync(parseScriptPath) } catch {}
+          throw new Error('MIDI analysis failed: ' + e.message.slice(0, 200))
         }
 
-        sendEvt({ step: 'Extracting patterns...' })
+        const { key: keyStr, mode, tonic, tempo, progression, note_count, pitch_min, pitch_max, duration_quarters } = analysis
 
-        const { bpm, key: keySig, note_count, min_pitch, max_pitch, min_note, max_note, min_vel, max_vel, chords, melody, onsets } = analysis
-        const chordsStr = (chords || []).slice(0, 8).map(c => `[${c.pitches.join(',')}] at beat ${c.start}`).join(', ') || 'none detected'
-        const melodyStr = (melody || []).slice(0, 12).map(n => `pitch ${n.pitch} beat ${n.start} dur ${n.duration}`).join(', ') || 'none detected'
-        const rhythmStr = (onsets || []).join(', ') || 'N/A'
+        sendEvt({ step: 'Designing 5 ideas...' })
 
-        sendEvt({ step: 'Generating 5 MIDI sequences...' })
+        // STEP 2 — Claude returns a SPEC per idea (roman numerals + shape
+        // descriptors), not notes.
+        const claudePrompt = `You are a producer analyzing a MIDI reference.
 
-        const claudePrompt = `Here is a MIDI file analysis:
-BPM: ${bpm}
-Total notes: ${note_count}
-Pitch range: ${min_pitch} - ${max_pitch} (${min_note} - ${max_note})
-Velocity range: ${min_vel} - ${max_vel}${keySig ? `\nKey signature: ${keySig}` : ''}
-Chord clusters found: ${chordsStr}
-Melodic phrases: ${melodyStr}
-Rhythmic pattern (beat onsets within bar): ${rhythmStr}
+Key: ${keyStr} | Tempo: ${tempo} | Chord progression: ${(progression || []).join(' - ')}
+Register: MIDI ${pitch_min}-${pitch_max} | Density: ${note_count} notes over ${duration_quarters} quarter notes
 
-Generate 5 new MIDI sequences inspired by this.
-Same style, same emotional world, original ideas.
-Each must have chords + melody combined, minimum 24 notes.
-Stay in same key and BPM feel.
+Design 5 NEW 8-bar ideas in this style. Do NOT write notes — describe each idea as a spec.
 
-Return ONLY JSON array:
-[{"name": "descriptive_name", "notes": [{"pitch": 60, "start": 0.0, "duration": 0.5, "velocity": 80}]}]
-Maximum 20 notes per sequence to fit in context.
-Pitch is MIDI note number (60=C4). Start and duration in beats. Chord velocities 55-75, melody velocities 80-100.`
+Return ONLY a JSON array of 5 objects:
+[{
+  "name": "short_descriptive_name",
+  "progression": ["i","VI","III","VII"],
+  "chord_rhythm": "whole|half|quarter|syncopated",
+  "melody_contour": "ascending|descending|arch|valley|static|wandering",
+  "melody_density": "sparse|medium|busy",
+  "melody_register": "low|mid|high",
+  "chord_register": "low|mid"
+}]
+
+Rules:
+- Use roman numerals valid in ${keyStr} ${mode}
+- 4 or 8 chords per progression
+- Make the 5 ideas genuinely different from each other
+- Stay in the emotional world of the reference
+- No explanation, no markdown, JSON array only`
 
         const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: 'claude-sonnet-5', max_tokens: 8000,
+            model: 'claude-sonnet-5', max_tokens: 4000,
+            thinking: { type: 'adaptive' }, output_config: { effort: 'medium' },
             messages: [{ role: 'user', content: claudePrompt }]
           })
         })
         const claudeData = await claudeRes.json()
+        if (claudeData.error) throw new Error('Claude error: ' + claudeData.error.message)
         const claudeText = claudeData.content?.find(b => b.type === "text")?.text || ''
         if (!claudeText) throw new Error('Empty response from Claude: ' + JSON.stringify(claudeData).slice(0, 200))
 
-        let sequences
+        let specs
         try {
           const raw = claudeText.replace(/```json|```/g, '').trim()
           const start = raw.indexOf('[')
           const end = raw.lastIndexOf(']')
           if (start === -1 || end === -1) throw new Error('No JSON array found')
-          sequences = JSON.parse(raw.slice(start, end + 1))
-          if (!Array.isArray(sequences) || sequences.length === 0) throw new Error('Invalid sequences array')
+          specs = JSON.parse(raw.slice(start, end + 1))
+          if (!Array.isArray(specs) || specs.length === 0) throw new Error('Invalid specs array')
         } catch(e) {
           throw new Error('Failed to parse Claude response: ' + e.message)
         }
 
-        const midiScript = `
-import sys, json, os
-import mido
-from mido import MidiFile, MidiTrack, Message, MetaMessage
+        if (claudeData.usage) {
+          const cost = ((claudeData.usage.input_tokens || 0) * 0.000003) + ((claudeData.usage.output_tokens || 0) * 0.000015)
+          fetch(`http://127.0.0.1:${PORT}/track-cost`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: '/generate-midi-from-reference', model: 'claude-sonnet-5', input_tokens: claudeData.usage.input_tokens || 0, output_tokens: claudeData.usage.output_tokens || 0, cost_usd: cost }) }).catch(() => {})
+        }
+
+        sendEvt({ step: 'Rendering 1/5...' })
+
+        // STEP 3 — music21 renders each spec: roman.RomanNumeral(fig, k) gives
+        // correctly voiced, scale-correct chords; melody notes are drawn from
+        // k.pitches (scale tones) and chord tones on strong beats, shaped by
+        // melody_contour. No random/raw pitch numbers anywhere.
+        const renderScript = `import sys, json, os, random
+from music21 import stream, note, chord, roman, key as m21key, tempo as m21tempo, pitch
 
 data = json.loads(sys.argv[1])
-sequences = data['sequences']
-bpm = float(data['bpm'])
-desktop = os.path.expanduser('~/Desktop')
+specs = data['specs']
+tonic = data['tonic']
+mode = data['mode']
+tempo_bpm = float(data['tempo'])
 base = data['base']
-ticks = 480
-tempo = int(round(60_000_000 / bpm))
+out_dir = data['out_dir']
+
+k = m21key.Key(tonic, mode)
+DEFAULT_FIG = 'i' if mode == 'minor' else 'I'
+
+CHORD_RHYTHM_DUR = {
+    'whole': [4.0],
+    'half': [2.0, 2.0],
+    'quarter': [1.0, 1.0, 1.0, 1.0],
+    'syncopated': [1.5, 0.5, 1.5, 0.5],
+}
+CHORD_REG_OCTAVE = {'low': 3, 'mid': 4}
+MELODY_REG_OCTAVE = {'low': 4, 'mid': 5, 'high': 6}
+MELODY_DENSITY_COUNT = {'sparse': 2, 'medium': 4, 'busy': 8}
+
+BAR_LEN = 4.0
+TOTAL_BARS = 8
+TOTAL_QUARTERS = BAR_LEN * TOTAL_BARS
+
+def roman_numeral(fig):
+    try:
+        return roman.RomanNumeral(fig, k)
+    except Exception:
+        return roman.RomanNumeral(DEFAULT_FIG, k)
+
+def chord_pitches_at_octave(rn, target_octave):
+    pitches = []
+    for p in rn.pitches:
+        np_ = pitch.Pitch(p.name)
+        np_.octave = target_octave
+        pitches.append(np_)
+    return pitches
+
 files = []
 
-for i, seq in enumerate(sequences[:5]):
-    mid = MidiFile(ticks_per_beat=ticks)
-    track = MidiTrack()
-    mid.tracks.append(track)
-    track.append(MetaMessage('set_tempo', tempo=tempo, time=0))
-    name = str(seq.get('name', f'seq{i+1}'))
-    track.append(MetaMessage('track_name', name=name[:30], time=0))
-    notes = sorted(seq.get('notes', []), key=lambda n: n.get('start', 0))
-    events = []
-    for n in notes:
-        pitch = max(0, min(127, int(n.get('pitch', 60))))
-        st = int(n.get('start', 0) * ticks)
-        dur = max(1, int(n.get('duration', 0.5) * ticks))
-        vel = max(1, min(127, int(n.get('velocity', 80))))
-        events.append((st, 'note_on', pitch, vel))
-        events.append((st + dur, 'note_off', pitch, 0))
-    events.sort(key=lambda e: e[0])
-    cur = 0
-    for ev in events:
-        t, msg_type, p, v = ev
-        track.append(Message(msg_type, note=p, velocity=v, time=t - cur))
-        cur = t
-    safe = ''.join(c if c.isalnum() or c in '-_' else '_' for c in name)[:20]
-    fname = f'MIDI_{base}_{i+1:02d}_{safe}.mid'
-    mid.save(os.path.join(desktop, fname))
-    files.append(fname)
+for i, spec in enumerate(specs[:5]):
+    name = str(spec.get('name') or f'idea{i + 1}')
+    progression = spec.get('progression') or [DEFAULT_FIG]
+    if not isinstance(progression, list) or not progression:
+        progression = [DEFAULT_FIG]
+    chord_rhythm = spec.get('chord_rhythm', 'whole')
+    contour = spec.get('melody_contour', 'static')
+    density = spec.get('melody_density', 'medium')
+    melody_register = spec.get('melody_register', 'mid')
+    chord_register = spec.get('chord_register', 'low')
+
+    chord_octave = CHORD_REG_OCTAVE.get(chord_register, 3)
+    melody_octave = MELODY_REG_OCTAVE.get(melody_register, 5)
+    notes_per_bar = MELODY_DENSITY_COUNT.get(density, 4)
+    bar_pattern = CHORD_RHYTHM_DUR.get(chord_rhythm, CHORD_RHYTHM_DUR['whole'])
+
+    rnd = random.Random(name + str(i))
+
+    # chord timeline: cycle the progression's roman numerals through
+    # bar_pattern durations until 8 bars (32 quarters) are filled
+    chord_events = []  # (start, duration, roman_numeral)
+    elapsed = 0.0
+    chord_idx = 0
+    pattern_idx = 0
+    while elapsed < TOTAL_QUARTERS - 1e-6:
+        fig = progression[chord_idx % len(progression)]
+        dur = bar_pattern[pattern_idx % len(bar_pattern)]
+        dur = min(dur, TOTAL_QUARTERS - elapsed)
+        rn = roman_numeral(fig)
+        chord_events.append((elapsed, dur, rn))
+        elapsed += dur
+        pattern_idx += 1
+        if pattern_idx % len(bar_pattern) == 0:
+            chord_idx += 1
+
+    chord_part = stream.Part()
+    chord_part.insert(0, m21tempo.MetronomeMark(number=tempo_bpm))
+    for start, dur, rn in chord_events:
+        pitches = chord_pitches_at_octave(rn, chord_octave)
+        c = chord.Chord(pitches, quarterLength=dur)
+        c.volume.velocity = rnd.randint(60, 75)
+        chord_part.insert(start, c)
+
+    # melody: notes_per_bar notes per bar, shaped by contour, chord tones on
+    # strong beats (start of each bar), scale passing tones in between
+    base_pitch = pitch.Pitch(tonic)
+    base_pitch.octave = melody_octave
+    base_midi = base_pitch.midi
+
+    scale7 = [pitch.Pitch(p.name) for p in list(k.pitches)[:7]]
+
+    def pitches_in_range(names, center_octave, span=1):
+        pool = []
+        for octv in range(center_octave - span, center_octave + span + 1):
+            for pn in names:
+                p = pitch.Pitch(pn.name)
+                p.octave = octv
+                pool.append(p.midi)
+        return sorted(set(pool))
+
+    scale_pool = pitches_in_range(scale7, melody_octave)
+
+    total_notes = notes_per_bar * TOTAL_BARS
+    contour_range = 9  # semitones of drift around the register center
+
+    def curve_offset(idx):
+        t = idx / max(1, total_notes - 1)
+        if contour == 'ascending':
+            return -contour_range + 2 * contour_range * t
+        if contour == 'descending':
+            return contour_range - 2 * contour_range * t
+        if contour == 'arch':
+            return contour_range * (1 - abs(2 * t - 1)) * 2 - contour_range
+        if contour == 'valley':
+            return -(contour_range * (1 - abs(2 * t - 1)) * 2 - contour_range)
+        if contour == 'wandering':
+            return rnd.uniform(-contour_range, contour_range)
+        return rnd.uniform(-2, 2)  # static
+
+    def chord_tone_pool(rn, center_octave, span=1):
+        return pitches_in_range(list(rn.pitches), center_octave, span)
+
+    melody_part = stream.Part()
+    prev_midi = base_midi
+    note_i = 0
+    for bar in range(TOTAL_BARS):
+        bar_start = bar * BAR_LEN
+        step = BAR_LEN / notes_per_bar
+        for j in range(notes_per_bar):
+            onset = bar_start + j * step
+            active_rn = chord_events[0][2]
+            for start, dur, rn in chord_events:
+                if start <= onset + 1e-6:
+                    active_rn = rn
+                else:
+                    break
+            target = base_midi + curve_offset(note_i)
+            strong_beat = (j == 0)
+            pool = chord_tone_pool(active_rn, melody_octave) if strong_beat else scale_pool
+            if not pool:
+                pool = scale_pool
+            pick = min(pool, key=lambda m: abs(m - target) + 0.35 * abs(m - prev_midi))
+            n = note.Note()
+            n.pitch.midi = pick
+            n.quarterLength = step
+            n.volume.velocity = rnd.randint(85, 100)
+            melody_part.insert(onset, n)
+            prev_midi = pick
+            note_i += 1
+
+    score = stream.Score()
+    score.insert(0, chord_part)
+    score.insert(0, melody_part)
+
+    safe = ''.join(c if c.isalnum() or c in '-_' else '_' for c in name)[:24]
+    fname = f'MIDI_{base}_{i + 1}_{safe}.mid'
+    out_path = os.path.join(out_dir, fname)
+    score.write('midi', fp=out_path)
+    files.append({
+        'filename': fname,
+        'chord_count': len(chord_events),
+        'note_count': len(chord_events) + total_notes,
+    })
 
 print(json.dumps({'files': files}))
 `
-        const midiScriptPath = `/tmp/gen_midi_${Date.now()}.py`
-        fs.writeFileSync(midiScriptPath, midiScript)
-        const midiArg = JSON.stringify({ sequences, bpm, base: baseName })
-        let midiOut
+        fs.writeFileSync(renderScriptPath, renderScript)
+        const desktop = path.join(os.homedir(), 'Desktop')
+        const renderArg = JSON.stringify({ specs, tonic, mode, tempo, base: baseName, out_dir: desktop })
+        let renderOut
         try {
           const { stdout, stderr } = await execAsync(
-            `"${PYTHON}" "${midiScriptPath}" ${shellEscape(midiArg)}`,
-            { maxBuffer: 10 * 1024 * 1024 }
+            `"${MIDI21_PYTHON}" "${renderScriptPath}" ${shellEscape(renderArg)}`,
+            { maxBuffer: 10 * 1024 * 1024, timeout: 60000 }
           )
-          if (stderr) console.log('MIDI gen stderr:', stderr)
-          midiOut = stdout.trim()
+          if (stderr) console.log('MIDI render stderr:', stderr)
+          renderOut = stdout.trim()
         } catch(e) {
-          console.error('MIDI gen error:', e.message)
-          if (e.stderr) console.error('MIDI gen stderr:', e.stderr)
-          throw new Error('MIDI generation failed: ' + e.message.slice(0, 200))
-        } finally {
-          try { fs.unlinkSync(midiScriptPath) } catch {}
+          console.error('MIDI render error:', e.message)
+          if (e.stderr) console.error('MIDI render stderr:', e.stderr)
+          throw new Error('MIDI rendering failed: ' + e.message.slice(0, 200))
         }
 
-        let files = []
-        try { files = JSON.parse(midiOut).files } catch { throw new Error('MIDI script error: ' + midiOut.slice(0, 300)) }
+        let rendered
+        try { rendered = JSON.parse(renderOut) } catch { throw new Error('Render script error: ' + renderOut.slice(0, 300)) }
+        const files = (rendered.files || []).map(f => f.filename)
 
+        // STEP 4 — cleanup: never write to Supabase, this stays temporary.
         try { fs.unlinkSync(tmpFile); tmpFile = null } catch {}
 
         sendEvt({ step: 'Saved to Desktop' })
-        sendEvt({ done: true, ok: true, files, analysis: { bpm, key: keySig, noteCount: note_count } })
-        console.log(`✓ MIDI from MIDI reference: ${files.length} files → Desktop (${baseName})`)
+        sendEvt({ done: true, ok: true, files, analysis: { key: keyStr, mode, tempo, progression, noteCount: note_count } })
+        console.log(`✓ MIDI from MIDI reference (music21): ${files.length} files → Desktop (${baseName})`)
 
       } catch(e) {
         console.error('generate-midi-from-reference error:', e.message)
         sendEvt({ error: e.message })
-        if (tmpFile) try { fs.unlinkSync(tmpFile) } catch {}
+      } finally {
+        try { if (tmpFile && fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile) } catch {}
+        try { if (fs.existsSync(analyzeScriptPath)) fs.unlinkSync(analyzeScriptPath) } catch {}
+        try { if (fs.existsSync(renderScriptPath)) fs.unlinkSync(renderScriptPath) } catch {}
       }
       res.end()
     })

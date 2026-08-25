@@ -2711,7 +2711,7 @@ ${mozartContext}`
   .title-copy-btn { font-family: 'Space Mono', monospace; font-size: 10px; padding: 3px 8px; background: transparent; border: 1px solid #252525; color: #555; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .title-copy-btn:hover { border-color: rgba(201,168,76,.4); color: #c9a84c; }
   .btn-gold-sm.dim { opacity: .5; cursor: not-allowed; }
-  .normalizer-drop { border: 1px dashed #252525; border-radius: 3px; padding: 10px 14px; cursor: copy; transition: all .15s; }
+  .normalizer-drop { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; padding: 10px 14px; cursor: copy; transition: all .15s; }
   .normalizer-drop.dragging { border-color: #c9a84c; background: rgba(201,168,76,.04); }
   .normalizer-drop.ok { border-color: rgba(76,175,130,.4); background: rgba(76,175,130,.04); }
   .normalizer-drop.err { border-color: rgba(224,90,74,.4); background: rgba(224,90,74,.04); }
@@ -2727,7 +2727,7 @@ ${mozartContext}`
   .acapella-launch-group { margin-left: auto; display: flex; gap: 5px; }
   .acapella-applio-btn { font-family: 'Space Mono', monospace; font-size: 9px; padding: 3px 10px; background: rgba(76,175,130,.08); border: 1px solid rgba(76,175,130,.35); color: #4caf82; border-radius: 2px; cursor: pointer; transition: all .12s; }
   .acapella-applio-btn:hover { background: rgba(76,175,130,.14); }
-  .acapella-drop { border: 1px dashed #252525; border-radius: 3px; padding: 10px 14px; cursor: pointer; transition: border-color .15s; }
+  .acapella-drop { background: #1c1c1c; border: 1px solid #303030; border-radius: 3px; padding: 10px 14px; cursor: pointer; transition: border-color .15s; }
   .acapella-drop.dragging { border-color: #c9a84c; background: rgba(201,168,76,.04); }
   .acapella-placeholder { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #333; display: flex; flex-direction: column; gap: 4px; align-items: center; }
   .acapella-loading { font-family: 'Space Mono', monospace; font-size: 10px; color: #c9a84c; }

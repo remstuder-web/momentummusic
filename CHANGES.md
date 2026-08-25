@@ -3311,3 +3311,9 @@ TASK: Remove FINANCES tab from navigation
 WHAT: Removed the FinancesTab import, the { id: 'finances', label: 'FINANCES' } entry from the tabs array, and the {:else if activeTab === 'finances'} render block from +page.svelte. FinancesTab.svelte itself was left untouched on disk, unreferenced.
 RESULT: untested (no dev server run this session; edit is a straightforward removal of 3 matching blocks)
 BLOCKERS: none
+
+## 2026-08-25 src/lib/DailyTab.svelte — DONE
+TASK: Uniform dark background on all drop zones and input areas
+WHAT: .normalizer-drop (NORMALIZER) and .acapella-drop (shared by ACAPELLA EXTRACTOR, MIDI FROM REFERENCE, and LYRICS EXTRACTOR — all three reuse this one class) previously had no background color and a dashed #252525 border, making them look visually distinct from other inputs. Changed both to background: #1c1c1c with a solid 1px #303030 border, matching the existing helper-search-inp (YouTube/Spotify search) and abl-input (ABLETON mixing instruction) fields, which already used that background/border combo. State-change overrides (.dragging/.ok/.err border-color) left untouched.
+RESULT: works (verified live in browser at localhost:5173 — DAILY tab now shows uniform dark surface backgrounds across all 5 drop zones/inputs)
+BLOCKERS: none

@@ -1947,6 +1947,197 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   return { ok: true, suggestions: scoutText, tracks: allTracks }
 }
 
+// ── Daily 8am chart download → References/CHARTS_YYYY-MM-DD ────────────────
+const CHART_REFS_DIR = '/Users/remo/Dropbox/!MOMENTUM MUSIC/References'
+const CHART_INDEX    = path.join(__dirname, 'chart_download_index.json')
+
+const chartKey       = (artist, title) => `${artist || ''} - ${title || ''}`.toLowerCase().replace(/\s+/g, ' ').trim()
+const chartSafeName  = s => (s || '').replace(/[/\\:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim()
+const loadChartIndex = () => { try { return JSON.parse(fs.readFileSync(CHART_INDEX, 'utf8')) } catch(_) { return {} } }
+const saveChartIndex = idx => { try { fs.writeFileSync(CHART_INDEX, JSON.stringify(idx, null, 2)) } catch(e) { console.warn('chart index save failed:', e.message) } }
+
+async function fetchLatestInboxMessage(type, songTitle) {
+  try {
+    const titleFilter = songTitle ? `&song_title=eq.${encodeURIComponent(songTitle)}` : ''
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.${type}${titleFilter}&order=created_at.desc&limit=1&select=message,created_at`, { headers: sbHeaders })
+    const rows = await r.json()
+    if (!Array.isArray(rows) || !rows[0]?.message) return ''
+    const ageH = (Date.now() - new Date(rows[0].created_at).getTime()) / 3600000
+    return ageH > 48 ? `(stale — last generated ${Math.round(ageH / 24)}d ago)\n\n${rows[0].message}` : rows[0].message
+  } catch(_) { return '' }
+}
+
+async function runDailyChartDownload() {
+  const execAsync = require('util').promisify(exec)
+  const today  = new Date().toISOString().slice(0, 10)
+  const runDir = path.join(CHART_REFS_DIR, `CHARTS_${today}`)
+  console.log(`📊 Chart download starting → ${runDir}`)
+
+  // 0. Refresh scout + morning briefing first so findings.txt carries today's
+  //    text. Neither has any other daily schedule — this is their daily run.
+  //    Both do their own delete-then-insert, so the inbox can't accumulate.
+  //    Failures here must never abort the downloads; the staleness prefix and
+  //    the "(no … available)" fallback cover those cases.
+  const chartApiKey = process.env.ANTHROPIC_API_KEY || ''
+  if (chartApiKey) {
+    try {
+      await runAgentScout(chartApiKey, null)
+      console.log('✓ chart job: scout analysis refreshed')
+    } catch(e) {
+      console.warn('chart job: scout refresh failed —', (e.message || '').slice(0, 120))
+    }
+    try {
+      const br = await fetch(`http://127.0.0.1:${PORT}/morning-briefing`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: chartApiKey })
+      })
+      console.log(br.ok ? '✓ chart job: morning briefing refreshed' : `chart job: briefing HTTP ${br.status}`)
+    } catch(e) {
+      console.warn('chart job: briefing refresh failed —', (e.message || '').slice(0, 120))
+    }
+  } else {
+    console.warn('chart job: ANTHROPIC_API_KEY not set — skipping scout + briefing refresh')
+  }
+
+  // 1. Reuse the scout's chart fetchers (read-only — no inbox/brain writes)
+  const [spGlobal, spDE, ytTop, billboard, ukTop, tiktok, oneToWatch] = await Promise.all([
+    fetchKworbSpotify().catch(e => (console.warn('chart spGlobal:', e.message), [])),
+    fetchKworbGermany().catch(e => (console.warn('chart spDE:', e.message), [])),
+    fetchKworbTrending().catch(e => (console.warn('chart youtube:', e.message), [])),
+    fetchBillboardHot100().catch(e => (console.warn('chart billboard:', e.message), [])),
+    fetchUKOfficialCharts().catch(e => (console.warn('chart uk:', e.message), [])),
+    fetchTikTokRealData().catch(e => (console.warn('chart tiktok:', e.message), [])),
+    fetchOneStopWatch().catch(() => ({ source: 'One Stop Watch', items: [] })),
+  ])
+
+  const mapRanked = arr => (arr || []).slice(0, 10).map((t, i) => ({ rank: t.position || i + 1, artist: (t.artist || '').trim(), title: (t.title || '').trim() }))
+  const sources = [
+    { folder: 'SPOTIFY_GLOBAL',   label: 'SPOTIFY GLOBAL',   entries: mapRanked(spGlobal) },
+    { folder: 'SPOTIFY_DE',       label: 'SPOTIFY DE',       entries: mapRanked(spDE) },
+    { folder: 'TIKTOK',           label: 'TIKTOK',           entries: mapRanked(tiktok) },
+    { folder: 'YOUTUBE',          label: 'YOUTUBE',          entries: mapRanked(ytTop) },
+    { folder: 'BILLBOARD_HOT100', label: 'BILLBOARD HOT 100', entries: mapRanked(billboard) },
+    { folder: 'UK_OFFICIAL',      label: 'UK OFFICIAL',      entries: mapRanked(ukTop) },
+    { folder: 'ONE_TO_WATCH',     label: 'ONE TO WATCH',     entries: (oneToWatch?.items || []).slice(0, 10).map((t, i) => ({ rank: i + 1, artist: '', title: (t.title || '').trim() })) },
+  ]
+
+  fs.mkdirSync(runDir, { recursive: true })
+  for (const s of sources) fs.mkdirSync(path.join(runDir, s.folder), { recursive: true })
+
+  const index = loadChartIndex()
+  let downloaded = 0, linked = 0
+  const failed = []
+  const REJECT_TITLE = '.*(live|concert|acoustic|remix|cover|karaoke).*'
+
+  for (const s of sources) {
+    for (const entry of s.entries) {
+      const { rank, artist, title } = entry
+      if (!title) continue
+      const nn       = String(rank).padStart(2, '0')
+      const display  = artist ? `${chartSafeName(artist)} - ${chartSafeName(title)}` : chartSafeName(title)
+      const destName = `${nn}_${display}.mp3`
+      const destPath = path.join(runDir, s.folder, destName)
+      const key      = chartKey(artist, title)
+
+      // DEDUPE — hardlink an existing copy from a prior run instead of re-downloading
+      const prevRel = index[key]
+      const prevAbs = prevRel ? path.join(CHART_REFS_DIR, prevRel) : null
+      if (prevAbs && fs.existsSync(prevAbs) && !fs.existsSync(destPath)) {
+        try {
+          fs.linkSync(prevAbs, destPath)
+          linked++
+          console.log(`🔗 Linked (already have): ${display}`)
+          continue
+        } catch(_) {
+          try { fs.copyFileSync(prevAbs, destPath); linked++; console.log(`🔗 Linked (already have): ${display}`); continue } catch(_) {}
+        }
+      }
+
+      // DOWNLOAD — same yt-dlp approach as /download-reference
+      const query = (artist ? `${artist} ${title} official audio` : `${title} official audio`).replace(/["'`$\\]/g, ' ').replace(/\s+/g, ' ').trim()
+      const tag    = `chart_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      const tmpOut = `/tmp/${tag}_%(id)s.%(ext)s`
+      const baseFlags = `--extract-audio --audio-format mp3 --audio-quality 0 --no-playlist --match-filter "!is_live" --reject-title "${REJECT_TITLE}"`
+      try {
+        // Try a plain download first; only fall back to a forced player client if
+        // nothing lands (older yt-dlp builds get 403'd on YouTube's default client).
+        // yt-dlp can also exit non-zero after a *successful* download (post-processing
+        // warnings, filtered extras) — so judge by what's in /tmp, not the exit code.
+        let found = []
+        for (const extra of ['', ' --extractor-args "youtube:player_client=web_safari,mweb"']) {
+          try { await execAsync(`yt-dlp "ytsearch1:${query}"${extra} ${baseFlags} -o "${tmpOut}" 2>/dev/null`, { timeout: 120000 }) } catch(_) {}
+          found = fs.readdirSync('/tmp').filter(f => f.startsWith(tag) && f.endsWith('.mp3'))
+          if (found.length) break
+        }
+        if (!found.length) throw new Error('no result')
+        fs.renameSync(path.join('/tmp', found[0]), destPath)
+        for (const extra of found.slice(1)) { try { fs.unlinkSync(path.join('/tmp', extra)) } catch(_) {} }
+        downloaded++
+        index[key] = path.join(`CHARTS_${today}`, s.folder, destName)
+        console.log(`⬇️  Downloaded: ${display}`)
+      } catch(e) {
+        for (const f of fs.readdirSync('/tmp').filter(f => f.startsWith(tag))) { try { fs.unlinkSync(path.join('/tmp', f)) } catch(_) {} }
+        failed.push({ artist, title, reason: (e.message || 'download failed').slice(0, 80) })
+        console.warn(`⚠ Chart download failed: ${display} — ${(e.message || '').slice(0, 80)}`)
+      }
+      await new Promise(r => setTimeout(r, 3000))
+    }
+  }
+
+  saveChartIndex(index)
+
+  // 3. findings.txt
+  const [scoutText, briefingText] = await Promise.all([
+    fetchLatestInboxMessage('scout', 'Artist Scout'),
+    fetchLatestInboxMessage('briefing', 'Morning Briefing'),
+  ])
+  const bar = '═══════════════════════════════'
+  const out = [`MOMENTUM CHART REPORT — ${today}`, `Generated ${new Date().toTimeString().slice(0, 5)}`, '']
+  for (const s of sources) {
+    out.push(bar, s.label, bar)
+    if (s.entries.length) {
+      for (const e of s.entries) out.push(`${String(e.rank).padStart(2, '0')}. ${e.artist ? e.artist + ' — ' : ''}${e.title}`)
+    } else {
+      out.push('(no data)')
+    }
+    out.push('')
+  }
+  out.push(bar, 'SCOUT ANALYSIS', bar, scoutText || '(no scout analysis available)', '')
+  out.push(bar, 'MORNING BRIEFING', bar, briefingText || '(no briefing available)', '')
+  out.push(bar, 'DOWNLOAD SUMMARY', bar)
+  out.push(`Downloaded: ${downloaded} new`)
+  out.push(`Linked (already had): ${linked}`)
+  out.push(`Failed: ${failed.length}`)
+  for (const f of failed) out.push(`  - ${f.artist ? f.artist + ' — ' : ''}${f.title} (${f.reason})`)
+  fs.writeFileSync(path.join(runDir, 'findings.txt'), out.join('\n'))
+
+  // 4. Retention — drop CHARTS_* folders older than 14 days
+  try {
+    const cutoff = Date.now() - 14 * 86400000
+    for (const d of fs.readdirSync(CHART_REFS_DIR)) {
+      const m = d.match(/^CHARTS_(\d{4}-\d{2}-\d{2})$/)
+      if (m && new Date(m[1]).getTime() < cutoff) {
+        fs.rmSync(path.join(CHART_REFS_DIR, d), { recursive: true, force: true })
+        console.log(`🗑  Pruned old chart folder: ${d}`)
+      }
+    }
+  } catch(e) { console.warn('chart retention error:', e.message) }
+
+  // Prune index entries whose files no longer exist
+  try {
+    const idx2 = loadChartIndex()
+    let pruned = 0
+    for (const k of Object.keys(idx2)) {
+      if (!fs.existsSync(path.join(CHART_REFS_DIR, idx2[k]))) { delete idx2[k]; pruned++ }
+    }
+    if (pruned) { saveChartIndex(idx2); console.log(`🧹 Pruned ${pruned} stale index entries`) }
+  } catch(e) { console.warn('chart index prune error:', e.message) }
+
+  const perSource = sources.map(s => `${s.label}: ${s.entries.length}`).join(' | ')
+  console.log(`📊 Chart download complete — ${downloaded} new, ${linked} linked, ${failed.length} failed`)
+  return { ok: true, runDir, folder: `References/CHARTS_${today}`, downloaded, linked, failed: failed.length, failures: failed, perSource }
+}
+
 // ── Agent: Demo Match — match demos to artists ────────────────────────────
 async function runAgentDemoMatch(apiKey, sharedBrainRows) {
   const ago30 = new Date(Date.now() - 30 * 86400000).toISOString()
@@ -3443,7 +3634,7 @@ async function buildStatusResponse() {
     'POST /save-instrumental', 'POST /get-instrumental-link', 'POST /analyze-audio',
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
     'GET /instrumentals/:filename', 'GET /stems/:filename',
-    'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /speak',
+    'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /run-chart-download', 'POST /speak',
     'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-ref-now', 'POST /analyze-stems', 'POST /extract-acapella', 'POST /generate-midi-from-reference', 'POST /extract-lyrics', 'POST /analyze-youtube-track',
     'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
     'POST /launch-claude-code', 'POST /launch-claude-overnight',
@@ -9044,13 +9235,18 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       const tmpOut = `/tmp/${tag}_%(title)s.%(ext)s`
 
       for (const q of queries) {
-        try {
-          const safe = q.replace(/"/g, '').replace(/'/g, '')
-          await execAsync(
-            `yt-dlp "ytsearch1:${safe}" -x --audio-format mp3 --audio-quality 0 --no-playlist --match-filter "duration > 60 & !is_live" --reject-title "(?i).*(${REJECT_LIVE}).*" -o "${tmpOut}" 2>/dev/null`,
-            { timeout: 120000 }
-          )
-        } catch(_) {}
+        const safe = q.replace(/"/g, '').replace(/'/g, '')
+        // Plain download first; force an alternate player client only if nothing
+        // lands (older yt-dlp builds get 403'd on YouTube's default client).
+        for (const extra of ['', ' --extractor-args "youtube:player_client=web_safari,mweb"']) {
+          try {
+            await execAsync(
+              `yt-dlp "ytsearch1:${safe}"${extra} -x --audio-format mp3 --audio-quality 0 --no-playlist --match-filter "duration > 60 & !is_live" --reject-title "(?i).*(${REJECT_LIVE}).*" -o "${tmpOut}" 2>/dev/null`,
+              { timeout: 120000 }
+            )
+          } catch(_) {}
+          if (fs.readdirSync('/tmp').some(f => f.startsWith(tag) && f.endsWith('.mp3'))) break
+        }
 
         const found = fs.readdirSync('/tmp').filter(f => f.startsWith(tag) && f.endsWith('.mp3'))
         if (found.length) {
@@ -9112,12 +9308,15 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
       const tag = `ref_dl_${Date.now()}_${Math.random().toString(36).slice(2,6)}`
       const tmpOut = `/tmp/${tag}_%(track_number)02d_%(title)s.%(ext)s`
       const safe = albumQuery.replace(/"/g, '').replace(/'/g, '')
-      try {
-        await execAsync(
-          `yt-dlp "ytmsearch1:${safe}" --yes-playlist -x --audio-format mp3 --audio-quality 0 -o "${tmpOut}" 2>/dev/null`,
-          { timeout: 600000 }
-        )
-      } catch(_) {}
+      for (const extra of ['', ' --extractor-args "youtube:player_client=web_safari,mweb"']) {
+        try {
+          await execAsync(
+            `yt-dlp "ytmsearch1:${safe}"${extra} --yes-playlist -x --audio-format mp3 --audio-quality 0 -o "${tmpOut}" 2>/dev/null`,
+            { timeout: 600000 }
+          )
+        } catch(_) {}
+        if (fs.readdirSync('/tmp').some(f => f.startsWith(tag) && f.endsWith('.mp3'))) break
+      }
       return fs.readdirSync('/tmp').filter(f => f.startsWith(tag) && f.endsWith('.mp3'))
     }
 
@@ -10148,6 +10347,22 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
         res.end(JSON.stringify({ ok: false, error: err.message }))
       }
     })
+    return
+  }
+
+  // ── POST /run-chart-download — manual trigger for the daily 8am chart download ──
+  if (req.method === 'POST' && req.url === '/run-chart-download') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    try {
+      const result = await runDailyChartDownload()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(result))
+    } catch(err) {
+      logError('run-chart-download', err.message)
+      console.error('✗ Chart download error:', err.message)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: err.message }))
+    }
     return
   }
 
@@ -16174,18 +16389,31 @@ server.listen(PORT, '127.0.0.1', () => {
     console.log('⚠ Obsidian vault not found:', OBSIDIAN_VAULT_PATH, '— create vault to enable sync')
   }
 
-  // yt-dlp auto-update on startup (non-blocking)
+  // yt-dlp auto-update on startup (non-blocking).
+  // `yt-dlp --update-to` only works on the standalone binary — a Homebrew/pip
+  // install silently fails it forever, which is how it drifted months stale and
+  // started getting 403'd by YouTube. Detect the real install method and use it.
   ;(async function checkYtDlpUpdate() {
     const execAsync = require('util').promisify(exec)
     try {
-      const { stdout } = await execAsync('yt-dlp --update-to stable 2>&1')
-      if (stdout.includes('Updated') || stdout.includes('update')) {
-        console.log('✓ yt-dlp updated:', stdout.trim().split('\n')[0])
+      const binPath = (await execAsync('command -v yt-dlp').catch(() => ({ stdout: '' }))).stdout.trim()
+      let cmd
+      if (!binPath) {
+        console.log('⚠ yt-dlp not on PATH — skipping update check')
+        return
+      } else if (binPath.includes('/Cellar/') || binPath.includes('/homebrew/') || binPath.includes('/opt/homebrew/')) {
+        cmd = 'HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade yt-dlp 2>&1 || true'
+      } else if (/\/(site-packages|dist-packages|\.local)\//.test(binPath) || binPath.includes('/Python')) {
+        cmd = 'pip3 install --upgrade --break-system-packages yt-dlp 2>&1 || pip3 install --upgrade yt-dlp 2>&1 || true'
       } else {
-        console.log('✓ yt-dlp up to date')
+        cmd = 'yt-dlp --update-to stable 2>&1 || true'
       }
+      const before = (await execAsync('yt-dlp --version 2>/dev/null').catch(() => ({ stdout: '' }))).stdout.trim()
+      await execAsync(cmd, { timeout: 300000 })
+      const after = (await execAsync('yt-dlp --version 2>/dev/null').catch(() => ({ stdout: '' }))).stdout.trim()
+      console.log(before === after ? `✓ yt-dlp up to date (${after})` : `✓ yt-dlp updated: ${before} → ${after}`)
     } catch(e) {
-      console.log('⚠ yt-dlp update check failed:', e.message)
+      console.log('⚠ yt-dlp update check failed:', (e.message || '').split('\n')[0].slice(0, 160))
     }
   })().catch(() => {})
 
@@ -16795,6 +17023,18 @@ Max 150 words. Be specific and actionable.` }]
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: process.env.ANTHROPIC_API_KEY })
       }).catch(e => console.error('tiktok-trends schedule error:', e.message))
+    }
+    // 8am daily — chart download to References/CHARTS_YYYY-MM-DD
+    if (now.getHours() === 8 && now.getMinutes() === 0) {
+      runDailyChartDownload()
+        .then(r => {
+          if (!TELEGRAM_TOKEN) return
+          return sendTelegram(TELEGRAM_OWNER_ID,
+            `📊 Chart download complete — ${r.downloaded} new tracks\n` +
+            `${r.perSource}\n→ ${r.folder}`
+          ).catch(() => {})
+        })
+        .catch(e => console.error('chart download schedule error:', e.message))
     }
   }, 60000)
   setInterval(() => {

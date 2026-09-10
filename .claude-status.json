@@ -1,24 +1,25 @@
 {
-  "updated": "2026-09-10T11:42:00.000Z",
-  "last_task": "Chart download cleanup — drop duplicate briefing gen, fix UK Official 403 note + YouTube column parsing",
+  "updated": "2026-09-10T12:20:00.000Z",
+  "last_task": "Chart download — in-app DailyTab banner + macOS notification, drop Telegram summary",
   "status": "done",
   "working": [
-    "runDailyChartDownload() step 0: scout refreshed unconditionally; morning briefing only generated as fallback if no type=briefing/song_title='Morning Briefing' row exists from today (probe on created_at=gte.<date>). Verified: re-run logged 'today's morning briefing already present — reusing', no regen",
-    "UK OFFICIAL: fetchUKOfficialCharts still 403s (CloudFront IP block, not UA). Chart job now probes status when empty and findings.txt prints 'unavailable (HTTP 403)' for that section + logs it, instead of silent '(no data)'",
-    "fetchKworbTrending column parsing fixed: kworb YouTube table is [rank][movement][Artist - Title][days][highlights]; now splits cell[2] on first ' - ' and strips trailing (Official Video)/[OFFICIAL VIDEO]/(Lyrics)/(Letra) cruft. Verified vs live page: LISA/SaWaDiKa, Slipknot/Arsenal, Romeo Santos/Eres Mia, Katy Perry/The One That Got Away, Romeo Santos/La Diabla. Shared with runAgentScout — scout output improves, no breakage",
-    "chart_download_index.json added to .gitignore (was untracked runtime state; git check-ignore confirms)",
-    "Full feature from prior task still working: 8am cron, POST /run-chart-download, dedupe hardlinks, 14-day retention, findings.txt (per-source lists + SCOUT ANALYSIS + MORNING BRIEFING + DOWNLOAD SUMMARY), Telegram summary",
-    "yt-dlp 2026.08.19 (upgraded from 2026.03.17); bare downloads work with no extractor-args; checkYtDlpUpdate() uses correct per-install-method command",
-    "/download-reference downloadOneTrack + downloadAlbumPlaylist patched with plain-first / forced-client fallback",
-    "Re-run: 51 downloaded, 1 linked, 3 failed (same 3 genuinely-unfindable). pm2 restarted, /ping healthy, node -c clean",
+    "8am cron branch no longer calls sendTelegram() — just runDailyChartDownload().catch()",
+    "runDailyChartDownload() fires a macOS notification at the end: osascript 'display notification ... with title Momentum subtitle \"Chart download complete\" sound name \"Glass\"', interpolated string escaped (backslash/quote/newline)",
+    "chart_download_status.json (module-scope CHART_STATUS_FILE, read/writeChartStatus helpers): {running:true,current,total,date,started_at} at start + per-track current updates; final {date,finished_at,downloaded,linked,failed,folder,folder_path,per_source,seen:false}",
+    "New endpoints: GET /chart-download-status, POST /chart-download-seen (sets seen:true). Open folder reuses the pre-existing POST /open-folder {path} (removed a duplicate handler I'd added). All 3 in /system-status list",
+    "DailyTab.svelte: polls GET /chart-download-status every 30s (cleaned up in onMount return). Above TRENDS & NEWS: dim mono line while running ('⬇ Downloading charts… N / M'); gold dark banner when finished & seen===false ('📊 Chart download complete — N new, N linked, N failed' + '→ CHARTS_<date>' + [Open folder] + [✕]); nothing when seen===true",
+    "Verified live: run 6 = 50 downloaded/2 linked/3 failed; progress endpoint showed current 1->2 mid-run; final status file exact shape; osascript exit 0; browser DAILY tab shows the gold banner full-width above TRENDS & NEWS; [Open folder] opened Finder on CHARTS_2026-09-10; [✕] hid the banner and set seen:true",
+    "npx vite build passes; node -c clean; pm2 restarted; /ping healthy",
+    "chart_download_status.json added to .gitignore (alongside chart_download_index.json)",
+    "Earlier cleanups still intact: read-first briefing (fallback-generates only if no row today), UK OFFICIAL findings note 'unavailable (HTTP 403)', fixed YouTube column parsing (LISA/SaWaDiKa etc), yt-dlp 2026.08.19, /download-reference fallback client",
     "test-system.cjs: 6/8 (same 2 pre-existing unrelated failures: Spotify 403 subscription, brain dupes)"
   ],
   "broken": [
-    "UK OFFICIAL chart source: officialcharts.com CloudFront-blocks this host with 403 regardless of headers. Empty every run — now explained in findings.txt as 'unavailable (HTTP 403)'. Needs a proxy or alternate data source to restore",
+    "UK OFFICIAL chart source: officialcharts.com CloudFront-blocks this host with 403 regardless of headers. Empty every run — explained in findings.txt as 'unavailable (HTTP 403)'. Needs a proxy or alternate source",
     "TEST 3 Spotify intl URL — pre-existing, Spotify API 403 (needs active premium subscription on app owner's account)",
-    "TEST 7 No brain duplicates — pre-existing, 6 duplicate brain_knowledge entries"
+    "TEST 7 No brain duplicates — pre-existing, ~6 duplicate brain_knowledge entries"
   ],
   "partial": [],
-  "next": "Chart download feature complete and live; first unattended 8am run is tomorrow. Optional: (1) no automated 7am Morning Briefing generator exists anywhere — if you want the 8am job to reuse a briefing instead of always fallback-generating one, add a morning cron that POSTs /morning-briefing; (2) restore UK Official via a proxy or switch to another UK singles chart source; (3) YouTube kworb entries 8-10 sometimes have no ' - ' separator (single-name tracks) — acceptable, search runs on title alone.",
-  "notes": "UK Official 403 body is an Amazon CloudFront 'The request could not be satisfied' page — confirmed by direct curl with a full Chrome UA + Accept/Referer headers, still 403. Not fixable client-side from this IP. No 7am briefing trigger found in watcher setInterval cron, crontab -l, ~/Library/LaunchAgents, or n8n (~/.n8n only workflow 'My workflow' is active=0)."
+  "next": "Chart download feature complete: 8am cron, in-app banner + macOS notification, dedupe, retention, findings.txt with scout+briefing. First unattended run tomorrow 08:00. Optional: (1) add a real 7am /morning-briefing cron so the 8am job reuses instead of fallback-generating; (2) restore UK Official via proxy/alt source; (3) DailyTab banner is full-width above the two-column layout — if a different placement is wanted it's one block to move.",
+  "notes": "The 'Open folder' button posts {path: folder_path} to the pre-existing POST /open-folder endpoint (unrestricted exec 'open \"<path>\"', shared with release-folder features — did NOT add a path guard there to avoid breaking other callers). chart_download_status.json currently has seen:false (reset after the dismiss test) so the user sees the banner working on next app open."
 }

@@ -74,6 +74,28 @@
   let abletonResponse = $state(null)
   let abletonSteps = $state([])
 
+  let chartStatus = $state(null)   // { running, current, total } | { date, downloaded, linked, failed, folder, folder_path, per_source, seen } | null
+
+  async function pollChartStatus() {
+    try {
+      const r = await fetch('http://localhost:4242/chart-download-status', { signal: AbortSignal.timeout(2000) })
+      chartStatus = await r.json()
+    } catch(_) { /* watcher down — leave last known state */ }
+  }
+  async function dismissChartBanner() {
+    chartStatus = { ...chartStatus, seen: true }
+    try { await fetch('http://localhost:4242/chart-download-seen', { method: 'POST' }) } catch(_) {}
+  }
+  async function openChartFolder() {
+    if (!chartStatus?.folder_path) return
+    try {
+      await fetch('http://localhost:4242/open-folder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: chartStatus.folder_path })
+      })
+    } catch(_) {}
+  }
+
   // Ableton AI Chat
   let abletonChatMsgs = $state([])
   let abletonChatInput = $state('')
@@ -1467,11 +1489,15 @@ ${mozartContext}`
     checkAbletonStatus()
     const abletonPoll = setInterval(checkAbletonStatus, 30000)
 
+    pollChartStatus()
+    const chartPoll = setInterval(pollChartStatus, 30000)
+
     return () => {
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisible)
       document.removeEventListener('click', onInlineClick)
       clearInterval(abletonPoll)
+      clearInterval(chartPoll)
     }
   })
 </script>
@@ -1531,6 +1557,21 @@ ${mozartContext}`
     </div>
   {/if}
 </div>
+
+{#if chartStatus?.running}
+  <div class="chart-dl-line">⬇ Downloading charts… {chartStatus.current} / {chartStatus.total}</div>
+{:else if chartStatus && chartStatus.finished_at && !chartStatus.seen}
+  <div class="chart-dl-banner">
+    <div class="chart-dl-main">
+      <span>📊 Chart download complete — {chartStatus.downloaded} new, {chartStatus.linked} linked, {chartStatus.failed} failed</span>
+      <div class="chart-dl-actions">
+        <button class="chart-dl-btn" onclick={openChartFolder}>Open folder</button>
+        <button class="chart-dl-x" onclick={dismissChartBanner} title="Dismiss">✕</button>
+      </div>
+    </div>
+    <div class="chart-dl-folder">→ {chartStatus.folder}</div>
+  </div>
+{/if}
 
 <div class="layout">
 
@@ -2840,6 +2881,33 @@ ${mozartContext}`
 
   /* PLAN section */
   .plan-section { border: 1px solid #1c1c1c; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+
+  /* Chart download status / banner */
+  .chart-dl-line {
+    font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .06em;
+    color: #9e9690; padding: 6px 12px; margin-bottom: 8px;
+    background: #1c1c1c; border: 1px solid #303030; border-radius: 4px;
+  }
+  .chart-dl-banner {
+    background: #1c1c1c; border: 1px solid #c9a84c; border-radius: 4px;
+    padding: 10px 14px; margin-bottom: 10px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .chart-dl-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .chart-dl-main > span { font-size: 13px; color: #f5f1ea; }
+  .chart-dl-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .chart-dl-btn {
+    font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .08em;
+    padding: 3px 10px; background: transparent; border: 1px solid #c9a84c;
+    color: #c9a84c; border-radius: 2px; cursor: pointer;
+  }
+  .chart-dl-btn:hover { background: rgba(201,168,76,.12); }
+  .chart-dl-x {
+    font-size: 12px; line-height: 1; padding: 3px 6px; background: transparent;
+    border: 1px solid #303030; color: #9e9690; border-radius: 2px; cursor: pointer;
+  }
+  .chart-dl-x:hover { border-color: #c9a84c; color: #c9a84c; }
+  .chart-dl-folder { font-family: 'Space Mono', monospace; font-size: 11px; color: rgba(201,168,76,.75); }
 
   /* Mozart */
   .mozart-top { border: 1px solid #1c1c1c; border-radius: 4px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }

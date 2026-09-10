@@ -1954,13 +1954,16 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
 }
 
 // ── Daily 8am chart download → References/CHARTS_YYYY-MM-DD ────────────────
-const CHART_REFS_DIR = '/Users/remo/Dropbox/!MOMENTUM MUSIC/References'
-const CHART_INDEX    = path.join(__dirname, 'chart_download_index.json')
+const CHART_REFS_DIR    = '/Users/remo/Dropbox/!MOMENTUM MUSIC/References'
+const CHART_INDEX       = path.join(__dirname, 'chart_download_index.json')
+const CHART_STATUS_FILE = path.join(__dirname, 'chart_download_status.json')
 
 const chartKey       = (artist, title) => `${artist || ''} - ${title || ''}`.toLowerCase().replace(/\s+/g, ' ').trim()
 const chartSafeName  = s => (s || '').replace(/[/\\:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim()
 const loadChartIndex = () => { try { return JSON.parse(fs.readFileSync(CHART_INDEX, 'utf8')) } catch(_) { return {} } }
 const saveChartIndex = idx => { try { fs.writeFileSync(CHART_INDEX, JSON.stringify(idx, null, 2)) } catch(e) { console.warn('chart index save failed:', e.message) } }
+const readChartStatus  = () => { try { return JSON.parse(fs.readFileSync(CHART_STATUS_FILE, 'utf8')) } catch(_) { return null } }
+const writeChartStatus = obj => { try { fs.writeFileSync(CHART_STATUS_FILE, JSON.stringify(obj, null, 2)) } catch(e) { console.warn('chart status write failed:', e.message) } }
 
 async function fetchLatestInboxMessage(type, songTitle) {
   try {
@@ -1978,6 +1981,7 @@ async function runDailyChartDownload() {
   const today  = new Date().toISOString().slice(0, 10)
   const runDir = path.join(CHART_REFS_DIR, `CHARTS_${today}`)
   console.log(`📊 Chart download starting → ${runDir}`)
+  writeChartStatus({ running: true, current: 0, total: 0, date: today, started_at: new Date().toISOString() })
 
   // 0. Make sure findings.txt can carry today's analysis text.
   //    Scout has no other daily schedule, so always refresh it here (its own
@@ -2054,14 +2058,18 @@ async function runDailyChartDownload() {
   for (const s of sources) fs.mkdirSync(path.join(runDir, s.folder), { recursive: true })
 
   const index = loadChartIndex()
-  let downloaded = 0, linked = 0
+  let downloaded = 0, linked = 0, processed = 0
   const failed = []
   const REJECT_TITLE = '.*(live|concert|acoustic|remix|cover|karaoke).*'
+  const totalTracks = sources.reduce((n, s) => n + s.entries.filter(e => e.title).length, 0)
+  writeChartStatus({ running: true, current: 0, total: totalTracks, date: today, started_at: new Date().toISOString() })
 
   for (const s of sources) {
     for (const entry of s.entries) {
       const { rank, artist, title } = entry
       if (!title) continue
+      processed++
+      writeChartStatus({ running: true, current: processed, total: totalTracks, date: today })
       const nn       = String(rank).padStart(2, '0')
       const display  = artist ? `${chartSafeName(artist)} - ${chartSafeName(title)}` : chartSafeName(title)
       const destName = `${nn}_${display}.mp3`
@@ -2163,7 +2171,29 @@ async function runDailyChartDownload() {
   } catch(e) { console.warn('chart index prune error:', e.message) }
 
   const perSource = sources.map(s => `${s.label}: ${s.entries.length}`).join(' | ')
+  const perSourceObj = {}
+  for (const s of sources) perSourceObj[s.folder] = s.entries.filter(e => e.title).length
   console.log(`📊 Chart download complete — ${downloaded} new, ${linked} linked, ${failed.length} failed`)
+
+  // Persistent status the app polls (seen:false = show the banner)
+  writeChartStatus({
+    date: today,
+    finished_at: new Date().toISOString(),
+    downloaded, linked, failed: failed.length,
+    folder: `CHARTS_${today}`,
+    folder_path: runDir,
+    per_source: perSourceObj,
+    seen: false
+  })
+
+  // macOS native notification. Body is numeric, but escape defensively so a
+  // stray quote in any interpolated string can't break the osascript command.
+  try {
+    const esc = v => String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, "'\\''").replace(/[\r\n]+/g, ' ')
+    const body = esc(`${downloaded} new, ${linked} linked, ${failed.length} failed`)
+    exec(`osascript -e 'display notification "${body}" with title "Momentum" subtitle "Chart download complete" sound name "Glass"'`, () => {})
+  } catch(_) {}
+
   return { ok: true, runDir, folder: `References/CHARTS_${today}`, downloaded, linked, failed: failed.length, failures: failed, perSource }
 }
 
@@ -3663,7 +3693,7 @@ async function buildStatusResponse() {
     'POST /save-instrumental', 'POST /get-instrumental-link', 'POST /analyze-audio',
     'GET /audio/:filename', 'GET /mixing/:filename', 'GET /production/:filename',
     'GET /instrumentals/:filename', 'GET /stems/:filename',
-    'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /run-chart-download', 'POST /speak',
+    'POST /agent-pulse-check', 'POST /agent-chart-analysis', 'POST /run-morning-agents', 'POST /run-chart-download', 'GET /chart-download-status', 'POST /chart-download-seen', 'POST /open-folder', 'POST /speak',
     'POST /suggest-category', 'GET /daily-snapshot', 'POST /analyze-audio-features', 'POST /analyze-ref-now', 'POST /analyze-stems', 'POST /extract-acapella', 'POST /generate-midi-from-reference', 'POST /extract-lyrics', 'POST /analyze-youtube-track',
     'POST /sync-all-refs', 'POST /capture-screen', 'POST /analyze-chat',
     'POST /launch-claude-code', 'POST /launch-claude-overnight',
@@ -10395,6 +10425,26 @@ Note: popularity is a Spotify 0-100 score, not actual stream counts.` }]
     return
   }
 
+  // ── GET /chart-download-status — current run progress / last result for DailyTab ──
+  if (req.method === 'GET' && req.url === '/chart-download-status') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(readChartStatus() || {}))
+    return
+  }
+
+  // ── POST /chart-download-seen — dismiss the DailyTab banner ──
+  if (req.method === 'POST' && req.url === '/chart-download-seen') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    const st = readChartStatus() || {}
+    st.seen = true
+    writeChartStatus(st)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ ok: true }))
+    return
+  }
+  // ("Open folder" uses the pre-existing POST /open-folder { path } endpoint above)
+
   // ── POST /speak — OpenAI TTS, streams audio/mpeg directly ───────────────
   if (req.method === 'POST' && req.url === '/speak') {
     const chunks = []; req.on('data', c => chunks.push(c))
@@ -17054,16 +17104,10 @@ Max 150 words. Be specific and actionable.` }]
       }).catch(e => console.error('tiktok-trends schedule error:', e.message))
     }
     // 8am daily — chart download to References/CHARTS_YYYY-MM-DD
+    // (completion surfaces via macOS notification + the in-app DailyTab banner,
+    //  both driven from inside runDailyChartDownload — no Telegram summary)
     if (now.getHours() === 8 && now.getMinutes() === 0) {
-      runDailyChartDownload()
-        .then(r => {
-          if (!TELEGRAM_TOKEN) return
-          return sendTelegram(TELEGRAM_OWNER_ID,
-            `📊 Chart download complete — ${r.downloaded} new tracks\n` +
-            `${r.perSource}\n→ ${r.folder}`
-          ).catch(() => {})
-        })
-        .catch(e => console.error('chart download schedule error:', e.message))
+      runDailyChartDownload().catch(e => console.error('chart download schedule error:', e.message))
     }
   }, 60000)
   setInterval(() => {

@@ -7,4 +7,5 @@ dist/
 .DS_Store
 used_demo_titles.json
 chart_download_index.json
+chart_download_status.json
 MOMENTUM_HANDOFF.md

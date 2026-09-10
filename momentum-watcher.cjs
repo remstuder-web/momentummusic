@@ -1078,9 +1078,15 @@ async function fetchKworbTrending() {
       }
       const pos = parseInt(text[0])
       if (isNaN(pos)) continue
-      const title = text[1] || text[2] || ''
-      const artist = text[2] || text[3] || ''
-      if (!title) continue
+      // kworb YouTube columns: [0]=rank [1]=movement(=/NEW/+30/-2) [2]="Artist - Title"
+      // [3]=days-on-chart [4]=country highlights. The combined name is in text[2].
+      const combined = (text[2] || '').trim()
+      if (!combined) continue
+      const dashIdx = combined.indexOf(' - ')
+      const artist = dashIdx >= 0 ? combined.slice(0, dashIdx).trim() : ''
+      let title = dashIdx >= 0 ? combined.slice(dashIdx + 3).trim() : combined
+      // strip trailing YouTube-video cruft so downloads search on a clean title
+      title = title.replace(/\s*[([][^)\]]*\b(official|video|lyrics?|letra|audio|visuali[sz]er|m\/?v|hd|4k)\b[^)\]]*[)\]]\s*$/i, '').trim() || title
       items.push({ position: pos, title, artist, source: 'youtube_trending' })
       if (items.length >= 10) break
     }
@@ -1973,11 +1979,12 @@ async function runDailyChartDownload() {
   const runDir = path.join(CHART_REFS_DIR, `CHARTS_${today}`)
   console.log(`📊 Chart download starting → ${runDir}`)
 
-  // 0. Refresh scout + morning briefing first so findings.txt carries today's
-  //    text. Neither has any other daily schedule — this is their daily run.
-  //    Both do their own delete-then-insert, so the inbox can't accumulate.
-  //    Failures here must never abort the downloads; the staleness prefix and
-  //    the "(no … available)" fallback cover those cases.
+  // 0. Make sure findings.txt can carry today's analysis text.
+  //    Scout has no other daily schedule, so always refresh it here (its own
+  //    delete-then-insert keeps the inbox from accumulating). The morning
+  //    briefing runs on its own earlier schedule — only generate it here as a
+  //    fallback if no row from today exists yet, so we don't burn a call or
+  //    clobber the existing briefing card. Failures never abort the downloads.
   const chartApiKey = process.env.ANTHROPIC_API_KEY || ''
   if (chartApiKey) {
     try {
@@ -1987,13 +1994,20 @@ async function runDailyChartDownload() {
       console.warn('chart job: scout refresh failed —', (e.message || '').slice(0, 120))
     }
     try {
-      const br = await fetch(`http://127.0.0.1:${PORT}/morning-briefing`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: chartApiKey })
-      })
-      console.log(br.ok ? '✓ chart job: morning briefing refreshed' : `chart job: briefing HTTP ${br.status}`)
+      const since = new Date().toISOString().slice(0, 10)
+      const probe = await fetch(`${SUPABASE_URL}/rest/v1/inbox_notifications?type=eq.briefing&song_title=eq.Morning%20Briefing&created_at=gte.${since}&select=id&limit=1`, { headers: sbHeaders })
+      const hasToday = probe.ok && (await probe.json().catch(() => [])).length > 0
+      if (hasToday) {
+        console.log("✓ chart job: today's morning briefing already present — reusing")
+      } else {
+        const br = await fetch(`http://127.0.0.1:${PORT}/morning-briefing`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey: chartApiKey })
+        })
+        console.log(br.ok ? '✓ chart job: morning briefing generated (fallback — no row today)' : `chart job: briefing HTTP ${br.status}`)
+      }
     } catch(e) {
-      console.warn('chart job: briefing refresh failed —', (e.message || '').slice(0, 120))
+      console.warn('chart job: briefing check/refresh failed —', (e.message || '').slice(0, 120))
     }
   } else {
     console.warn('chart job: ANTHROPIC_API_KEY not set — skipping scout + briefing refresh')
@@ -2010,6 +2024,21 @@ async function runDailyChartDownload() {
     fetchOneStopWatch().catch(() => ({ source: 'One Stop Watch', items: [] })),
   ])
 
+  // UK Official silently returns [] on failure — probe the status so an empty
+  // folder is explained in findings.txt rather than looking like "no chart today".
+  let ukNote = ''
+  if (!Array.isArray(ukTop) || ukTop.length === 0) {
+    try {
+      const probe = await fetch('https://www.officialcharts.com/charts/singles-chart/', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+      })
+      ukNote = probe.ok ? 'unavailable (page loaded but no rows parsed)' : `unavailable (HTTP ${probe.status})`
+    } catch(e) {
+      ukNote = 'unavailable (fetch failed)'
+    }
+    console.warn(`chart job: UK OFFICIAL ${ukNote}`)
+  }
+
   const mapRanked = arr => (arr || []).slice(0, 10).map((t, i) => ({ rank: t.position || i + 1, artist: (t.artist || '').trim(), title: (t.title || '').trim() }))
   const sources = [
     { folder: 'SPOTIFY_GLOBAL',   label: 'SPOTIFY GLOBAL',   entries: mapRanked(spGlobal) },
@@ -2017,7 +2046,7 @@ async function runDailyChartDownload() {
     { folder: 'TIKTOK',           label: 'TIKTOK',           entries: mapRanked(tiktok) },
     { folder: 'YOUTUBE',          label: 'YOUTUBE',          entries: mapRanked(ytTop) },
     { folder: 'BILLBOARD_HOT100', label: 'BILLBOARD HOT 100', entries: mapRanked(billboard) },
-    { folder: 'UK_OFFICIAL',      label: 'UK OFFICIAL',      entries: mapRanked(ukTop) },
+    { folder: 'UK_OFFICIAL',      label: 'UK OFFICIAL',      entries: mapRanked(ukTop), note: ukNote },
     { folder: 'ONE_TO_WATCH',     label: 'ONE TO WATCH',     entries: (oneToWatch?.items || []).slice(0, 10).map((t, i) => ({ rank: i + 1, artist: '', title: (t.title || '').trim() })) },
   ]
 
@@ -2098,7 +2127,7 @@ async function runDailyChartDownload() {
     if (s.entries.length) {
       for (const e of s.entries) out.push(`${String(e.rank).padStart(2, '0')}. ${e.artist ? e.artist + ' — ' : ''}${e.title}`)
     } else {
-      out.push('(no data)')
+      out.push(s.note || '(no data)')
     }
     out.push('')
   }

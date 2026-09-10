@@ -1,20 +1,24 @@
 {
-  "updated": "2026-08-08T06:38:00.000Z",
-  "last_task": "Fix Lyrics Extractor: use correct Python path for Whisper",
+  "updated": "2026-09-10T11:42:00.000Z",
+  "last_task": "Chart download cleanup — drop duplicate briefing gen, fix UK Official 403 note + YouTube column parsing",
   "status": "done",
   "working": [
-    "LYRICS EXTRACTOR helper section in DailyTab.svelte (ROUTINE, after MIDI FROM REFERENCE) — drop WAV/MP3/M4A, transcribes via POST /extract-lyrics, Copy to Clipboard + Save to Brain buttons",
-    "POST /extract-lyrics in momentum-watcher.cjs now uses PYTHON=/opt/homebrew/bin/python3 (whisper is installed there, not under python3.11) with KMP_DUPLICATE_LIB_OK=TRUE in the exec env, working around an OpenMP libomp.dylib double-init crash (exit 134) that otherwise makes the whisper --help install-check silently report 'not installed' on this machine regardless of python path",
-    "--model changed medium → small (~500MB vs ~1.5GB first-run download, still good accuracy for lyrics)",
-    "watcher restarted via pm2, /ping healthy",
-    "Verified end-to-end with a live POST using a real (silent) WAV file: returns {\"ok\":true,\"lyrics\":\"\",\"filename\":\"test.wav\"} — whisper install detected correctly, small model loads, transcription runs and returns cleanly",
-    "test-system.cjs: 6/8 passing (same 2 pre-existing failures, unrelated)"
+    "runDailyChartDownload() step 0: scout refreshed unconditionally; morning briefing only generated as fallback if no type=briefing/song_title='Morning Briefing' row exists from today (probe on created_at=gte.<date>). Verified: re-run logged 'today's morning briefing already present — reusing', no regen",
+    "UK OFFICIAL: fetchUKOfficialCharts still 403s (CloudFront IP block, not UA). Chart job now probes status when empty and findings.txt prints 'unavailable (HTTP 403)' for that section + logs it, instead of silent '(no data)'",
+    "fetchKworbTrending column parsing fixed: kworb YouTube table is [rank][movement][Artist - Title][days][highlights]; now splits cell[2] on first ' - ' and strips trailing (Official Video)/[OFFICIAL VIDEO]/(Lyrics)/(Letra) cruft. Verified vs live page: LISA/SaWaDiKa, Slipknot/Arsenal, Romeo Santos/Eres Mia, Katy Perry/The One That Got Away, Romeo Santos/La Diabla. Shared with runAgentScout — scout output improves, no breakage",
+    "chart_download_index.json added to .gitignore (was untracked runtime state; git check-ignore confirms)",
+    "Full feature from prior task still working: 8am cron, POST /run-chart-download, dedupe hardlinks, 14-day retention, findings.txt (per-source lists + SCOUT ANALYSIS + MORNING BRIEFING + DOWNLOAD SUMMARY), Telegram summary",
+    "yt-dlp 2026.08.19 (upgraded from 2026.03.17); bare downloads work with no extractor-args; checkYtDlpUpdate() uses correct per-install-method command",
+    "/download-reference downloadOneTrack + downloadAlbumPlaylist patched with plain-first / forced-client fallback",
+    "Re-run: 51 downloaded, 1 linked, 3 failed (same 3 genuinely-unfindable). pm2 restarted, /ping healthy, node -c clean",
+    "test-system.cjs: 6/8 (same 2 pre-existing unrelated failures: Spotify 403 subscription, brain dupes)"
   ],
   "broken": [
+    "UK OFFICIAL chart source: officialcharts.com CloudFront-blocks this host with 403 regardless of headers. Empty every run — now explained in findings.txt as 'unavailable (HTTP 403)'. Needs a proxy or alternate data source to restore",
     "TEST 3 Spotify intl URL — pre-existing, Spotify API 403 (needs active premium subscription on app owner's account)",
-    "TEST 7 No brain duplicates — pre-existing, 4 duplicate brain_knowledge entries need dedup"
+    "TEST 7 No brain duplicates — pre-existing, 6 duplicate brain_knowledge entries"
   ],
   "partial": [],
-  "next": "Lyrics Extractor is fully working end-to-end now — next real-world test should be dropping an actual song/vocal file in the browser UI to sanity-check transcription quality with --model small. Optionally run cleanup-brain-dupes endpoint to fix TEST 7 duplicates. Spotify 403 (TEST 3) needs manual account-level fix, not code.",
-  "notes": "Root cause of the original 'Whisper not installed' false negative was two-fold: (1) whisper was installed under /opt/homebrew/bin/python3 (3.14), not python3.11 as originally assumed, and (2) even with the right interpreter, `python3 -m whisper --help` crashes with an OpenMP double-init error (exit 134) on this machine unless KMP_DUPLICATE_LIB_OK=TRUE is set in the process env — discovered this by testing the exact check command via node's child_process.exec and seeing it fail even with the corrected path, before finding the env var fix."
+  "next": "Chart download feature complete and live; first unattended 8am run is tomorrow. Optional: (1) no automated 7am Morning Briefing generator exists anywhere — if you want the 8am job to reuse a briefing instead of always fallback-generating one, add a morning cron that POSTs /morning-briefing; (2) restore UK Official via a proxy or switch to another UK singles chart source; (3) YouTube kworb entries 8-10 sometimes have no ' - ' separator (single-name tracks) — acceptable, search runs on title alone.",
+  "notes": "UK Official 403 body is an Amazon CloudFront 'The request could not be satisfied' page — confirmed by direct curl with a full Chrome UA + Accept/Referer headers, still 403. Not fixable client-side from this IP. No 7am briefing trigger found in watcher setInterval cron, crontab -l, ~/Library/LaunchAgents, or n8n (~/.n8n only workflow 'My workflow' is active=0)."
 }

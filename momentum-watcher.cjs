@@ -2084,6 +2084,61 @@ async function fetchLatestInboxMessage(type, songTitle) {
   } catch(_) { return '' }
 }
 
+// ── Curated low-churn sources (Spotify playlists via public embed + DE hip-hop chart) ──
+// The Spotify Web API is 403'd for this account, so playlists are read from the public
+// embed page's __NEXT_DATA__ JSON (undocumented — Spotify can change it any time).
+// The embed shows at most 100 tracks; all of them are tracked so a newly added track
+// registers whichever end Spotify appends it to.
+const CHART_PLAYLISTS = [
+  { id: 'mixed by serban',     playlist: '4e1fsjagt4XRInCbL2dnEl' },
+  { id: 'mixed by manny',      playlist: '5WxBUoWR3DyWAQVCi0K8L0' },
+  { id: 'mixed by rob',        playlist: '1P3p0rdRwM0tlOexpId5Yc' },
+  { id: 'jumpa',               playlist: '37i9dQZF1EFOLCI83mQo2b' },
+  { id: 'julian bunetta',      playlist: '37i9dQZF1EFKDE82IhbdrZ' },
+  { id: 'DEUTSCHRAP BRANDNEU', playlist: '37i9dQZF1DWSTqUqJcxFk6' },
+]
+const CHART_PLAYLIST_CAP = 100
+const CHART_BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
+
+// Per-source memory: seeded_at (first successful fetch is recorded, not downloaded)
+// and last_count (so "0 tracks" after a run of 100 is flagged as a broken parser).
+const CHART_SOURCE_STATE = path.join(__dirname, 'chart_source_state.json')
+const loadChartSourceState = () => { try { return JSON.parse(fs.readFileSync(CHART_SOURCE_STATE, 'utf8')) } catch(_) { return {} } }
+const saveChartSourceState = st => { try { fs.writeFileSync(CHART_SOURCE_STATE, JSON.stringify(st, null, 2)) } catch(e) { console.warn('chart source state save failed:', e.message) } }
+
+// → { tracks: [{ artist, keyArtist, title }] } or { error } — `error` is the exact text for the report
+async function fetchSpotifyEmbedPlaylist(playlistId) {
+  let res
+  try {
+    res = await fetch(`https://open.spotify.com/embed/playlist/${playlistId}`, { headers: { 'User-Agent': CHART_BROWSER_UA, 'Accept-Language': 'en' }, signal: AbortSignal.timeout(15000) })
+  } catch(e) { return { error: `unavailable (embed fetch failed: ${(e.message || '').slice(0, 60)})` } }
+  if (!res.ok) return { error: `unavailable (embed returned ${res.status})` }
+  const html = await res.text()
+  const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/)
+  if (!m) return { error: 'parse failed (structure changed?) — no __NEXT_DATA__' }
+  let list
+  try { list = JSON.parse(m[1])?.props?.pageProps?.state?.data?.entity?.trackList } catch(_) { return { error: 'parse failed (structure changed?) — __NEXT_DATA__ is not valid JSON' } }
+  if (!Array.isArray(list) || !list.length) return { error: 'parse failed (structure changed?) — tracklist empty or missing' }
+  const tracks = list.slice(0, CHART_PLAYLIST_CAP)
+    .map(t => ({ artist: (t.subtitle || '').trim(), keyArtist: (t.subtitle || '').split(',')[0].trim(), title: (t.title || '').trim() }))
+    .filter(t => t.title)
+  if (!tracks.length) return { error: 'parse failed (structure changed?) — tracks have no titles' }
+  return { tracks }
+}
+
+// offiziellecharts.de hip-hop chart (plain HTML, weekly, 20 entries) → { tracks: [{ rank, artist, title }] } or { error }
+async function fetchOffizielleChartsHipHop() {
+  let res
+  try {
+    res = await fetch('https://www.offiziellecharts.de/charts/hiphop', { headers: { 'User-Agent': CHART_BROWSER_UA, 'Accept-Language': 'de' }, signal: AbortSignal.timeout(15000) })
+  } catch(e) { return { error: `unavailable (fetch failed: ${(e.message || '').slice(0, 60)})` } }
+  if (!res.ok) return { error: `unavailable (HTTP ${res.status})` }
+  const html = await res.text()
+  const rows = [...html.matchAll(/class="this-week">\s*(\d+)\s*<\/span>[\s\S]*?class="info-artist">([^<]*)<\/span>\s*<span class="info-title">([^<]*)</g)]
+  if (!rows.length) return { error: 'parse failed (structure changed?) — no chart rows found' }
+  return { tracks: rows.map(m => ({ rank: Number(m[1]), artist: decodeHtmlEntities(m[2].trim()), title: decodeHtmlEntities(m[3].trim()) })) }
+}
+
 // One run at a time (scheduler + manual /run-chart-download share this). A run that
 // throws clears running:true and leaves last_successful_date alone, so it's retried.
 async function runDailyChartDownload() {
@@ -2151,6 +2206,10 @@ async function runDailyChartDownloadOnce() {
     fetchTikTokRealData().catch(e => (console.warn('chart tiktok:', e.message), [])),
     fetchOneStopWatch().catch(() => ({ source: 'One Stop Watch', items: [] })),
   ])
+  const [hiphopDE, ...playlists] = await Promise.all([
+    fetchOffizielleChartsHipHop().catch(e => ({ error: `unavailable (${(e.message || '').slice(0, 60)})` })),
+    ...CHART_PLAYLISTS.map(p => fetchSpotifyEmbedPlaylist(p.playlist).catch(e => ({ error: `unavailable (${(e.message || '').slice(0, 60)})` }))),
+  ])
 
   // UK Official silently returns [] on failure — probe the status so an empty
   // section is explained in the report rather than looking like "no chart today".
@@ -2179,6 +2238,28 @@ async function runDailyChartDownloadOnce() {
       filtered: oneToWatch?.filtered || 0, fetched: oneToWatch?.fetched || 0 },
   ]
 
+  // Curated sources: `seedable` = first successful fetch is written to the ledger as
+  // SEEDED with no downloads (only tracks added afterwards are fetched). Playlists aren't
+  // charts, so no rank in the filename and only new tracks are listed in the report.
+  const sourceState = loadChartSourceState()
+  const curated = [
+    { id: 'CHARTS DE HIPHOP', label: 'CHARTS DE HIPHOP', result: hiphopDE, chart: true },
+    ...CHART_PLAYLISTS.map((p, i) => ({ id: p.id, label: p.id, result: playlists[i], chart: false })),
+  ]
+  for (const c of curated) {
+    const st = sourceState[c.id] || {}
+    const tracks = c.result?.tracks || []
+    let error = c.result?.error || (tracks.length ? '' : 'parse failed (structure changed?) — 0 tracks')
+    if (error && st.last_count) error += ` (last good run: ${st.last_count} tracks)`
+    if (error) console.error(`⚠⚠ chart source "${c.id}" — ${error}`)
+    sources.push({
+      id: c.id, label: c.label, note: error, error: !!error,
+      seedable: true, seedRun: !error && !st.seeded_at,
+      rankPrefix: c.chart, listOnlyNew: !c.chart,
+      entries: tracks.map((t, i) => ({ rank: t.rank || i + 1, artist: t.artist, keyArtist: t.keyArtist, title: t.title })),
+    })
+  }
+
   // 2. Download — the ledger is the single source of truth for "already have it".
   //    A key added during this run also covers the same track on a later source today.
   const ledgerAtStart = loadChartLedgerKeys()
@@ -2200,12 +2281,32 @@ async function runDailyChartDownloadOnce() {
   writeChartStatus({ running: true, current: 0, total: totalTracks, date: today, started_at: new Date().toISOString() })
 
   for (const s of sources) {
+    // First successful fetch of a curated source: record its whole tracklist as already
+    // known, download nothing. ("#" a SEEDED line in _downloaded.txt to pull one later.)
+    if (s.seedRun) {
+      let seeded = 0
+      for (const entry of s.entries) {
+        if (!entry.title) continue
+        processed++
+        const text = chartLedgerText(entry.keyArtist ?? entry.artist, entry.title)
+        const key  = chartKeyFromText(text)
+        if (ledger.has(key)) continue
+        appendChartLedger(today, text, `${s.id} SEEDED`)
+        ledger.add(key)
+        seeded++
+      }
+      s.seeded = seeded
+      sourceState[s.id] = { ...(sourceState[s.id] || {}), seeded_at: today }
+      console.log(`🌱 Seeded "${s.id}": ${seeded} ledger entries (of ${s.entries.length}), nothing downloaded`)
+      continue
+    }
     for (const entry of s.entries) {
       const { artist, title } = entry
       if (!title) continue
       processed++
       writeChartStatus({ running: true, current: processed, total: totalTracks, date: today })
-      const text = chartLedgerText(artist, title)
+      // Spotify lists every artist ("Post Malone, 2 Chainz"); key on the primary one like the charts do
+      const text = chartLedgerText(entry.keyArtist ?? artist, title)
       const key  = chartKeyFromText(text)
 
       // ★ NEW = not in the ledger before this run (so a track new today is marked
@@ -2223,8 +2324,9 @@ async function runDailyChartDownloadOnce() {
       // Source folders are created on first download so no empty folders are left behind.
       const display = artist ? `${chartSafeName(artist)} - ${chartSafeName(title)}` : chartSafeName(title)
       const srcDir  = path.join(dayDir, s.id)
-      let destPath = path.join(srcDir, `${display}.mp3`)
-      for (let n = 2; fs.existsSync(destPath); n++) destPath = path.join(srcDir, `${display} (${n}).mp3`)
+      const base    = s.rankPrefix ? `${String(entry.rank).padStart(2, '0')}_${display}` : display
+      let destPath = path.join(srcDir, `${base}.mp3`)
+      for (let n = 2; fs.existsSync(destPath); n++) destPath = path.join(srcDir, `${base} (${n}).mp3`)
 
       const query = (artist ? `${artist} ${title} official audio` : `${title} official audio`).replace(/["'`$\\]/g, ' ').replace(/\s+/g, ' ').trim()
       const tag    = `chart_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
@@ -2261,6 +2363,9 @@ async function runDailyChartDownloadOnce() {
     }
   }
 
+  for (const s of sources) if (s.seedable && !s.error) sourceState[s.id] = { ...(sourceState[s.id] || {}), last_count: s.entries.length, last_ok: today }
+  saveChartSourceState(sourceState)
+
   // 3. Report — full ranked chart per source, ★ NEW marks tracks not in the ledger before today
   const [scoutText, briefingText] = await Promise.all([
     fetchLatestInboxMessage('scout', 'Artist Scout'),
@@ -2270,6 +2375,17 @@ async function runDailyChartDownloadOnce() {
   const out = [`MOMENTUM CHART REPORT — ${today}`, `Generated ${new Date().toTimeString().slice(0, 5)}`, '']
   for (const s of sources) {
     const withTitle = s.entries.filter(e => e.title)
+    // Curated sources: a dead/broken source must say so, never just show 0 new
+    if (s.error)   { out.push(bar, `${s.label} — ${s.note}`, bar, ''); continue }
+    if (s.seedRun) { out.push(bar, `${s.label} — seeded ${s.seeded} of ${withTitle.length} into _downloaded.txt (first run, nothing downloaded)`, bar, ''); continue }
+    if (s.listOnlyNew) {
+      out.push(bar, `${s.label} — ${newBySource[s.id] || 0} new of ${withTitle.length}`, bar)
+      const fresh = withTitle.filter(e => e.isNew)
+      for (const e of fresh) out.push(`${e.artist ? e.artist + ' — ' : ''}${e.title}${e.failed ? '          ★ NEW (download failed)' : '          ★ NEW'}`)
+      if (!fresh.length) out.push('(no new tracks)')
+      out.push('')
+      continue
+    }
     // e.g. "ONE TO WATCH — 1 new of 2 · 2 of 5 (3 filtered: not songs)"
     const filteredNote = s.filtered ? `${withTitle.length ? ' ·' : ''} ${withTitle.length} of ${s.fetched} (${s.filtered} filtered: not songs)` : ''
     out.push(bar, `${s.label} —${withTitle.length ? ` ${newBySource[s.id] || 0} new of ${withTitle.length}` : ''}${filteredNote}`.replace(/ —$/, ''), bar)

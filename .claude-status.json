@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-09T10:05:40Z",
-  "last_task": "Chart download: catch-up scheduling (Zurich date, 08:30+, startup+15min, network check)",
+  "updated": "2026-10-09T10:28:11Z",
+  "last_task": "Chart download: 7 curated sources (6 Spotify embed playlists + offiziellecharts hiphop), seeded",
   "status": "done",
   "working": [
     "POST /run-chart-download \u2192 !Current/YYYY-MM-DD/<SOURCE>/Artist - Title.mp3",
@@ -10,13 +10,14 @@
     "Per-track yt-dlp reject filter ((Live) chart entries download)",
     "One To Watch headline filter",
     "Banner shows \"already had\"",
-    "Chart download catch-up: runs on startup/15-min if today (Zurich) not yet done after 08:30"
+    "Chart download catch-up: runs on startup/15-min if today (Zurich) not yet done after 08:30",
+    "7 curated sources seeded 2026-10-09; only newly added tracks download from now on"
   ],
   "broken": [
     "test-system TEST 3: Spotify 403 premium required (pre-existing)",
     "test-system TEST 7: 6 brain_knowledge duplicates (pre-existing)"
   ],
   "partial": [],
-  "next": "One To Watch often yields 0 songs after filtering \u2014 consider a different source for emerging artists",
+  "next": "After a few days, check _report_*.txt for where new playlist tracks appear; Spotify embed __NEXT_DATA__ is undocumented \u2014 watch for \"parse failed\"",
   "notes": "Migration was one-off (scratchpad script), not in watcher. Genre subfolders in !Current are never scanned."
 }

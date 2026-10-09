@@ -1983,7 +1983,46 @@ const CHART_LEDGER_HEADER = [
 
 const chartSafeName    = s => (s || '').replace(/[/\\:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim()
 const readChartStatus  = () => { try { return JSON.parse(fs.readFileSync(CHART_STATUS_FILE, 'utf8')) } catch(_) { return null } }
-const writeChartStatus = obj => { try { fs.writeFileSync(CHART_STATUS_FILE, JSON.stringify(obj, null, 2)) } catch(e) { console.warn('chart status write failed:', e.message) } }
+// Every status write replaces the file, so carry last_successful_date forward
+// unless the caller sets it — it must survive progress/aborted writes.
+const writeChartStatus = obj => {
+  const prevOk = readChartStatus()?.last_successful_date
+  if (prevOk && !('last_successful_date' in obj)) obj = { ...obj, last_successful_date: prevOk }
+  try { fs.writeFileSync(CHART_STATUS_FILE, JSON.stringify(obj, null, 2)) } catch(e) { console.warn('chart status write failed:', e.message) }
+}
+
+// ── Catch-up scheduling ──
+// Not "fire at 08:30": the Mac may be asleep/offline then. Instead, checked at
+// startup and every 15 min — runs once per Zurich calendar day, any time after
+// 08:30, until a run succeeds. Dates are Europe/Zurich, never UTC, so 00:30 local
+// already counts as the new day.
+const CHART_TZ = 'Europe/Zurich'
+const CHART_RUN_AFTER_MIN = 8 * 60 + 30
+function chartLocalNow(now = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: CHART_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(now).map(x => [x.type, x.value]))
+  return { date: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) }
+}
+function shouldRunChartDownload(now = new Date(), status = readChartStatus()) {
+  const local = chartLocalNow(now)
+  if (status?.last_successful_date === local.date) return false
+  if (local.minutes < CHART_RUN_AFTER_MIN) return false
+  return true
+}
+let chartRunInProgress = false
+async function maybeRunChartDownload(trigger) {
+  if (!shouldRunChartDownload()) return
+  if (chartRunInProgress || readChartStatus()?.running) { console.log(`⏭  chart download (${trigger}) — run already in progress`); return }
+  try {
+    await fetch('https://kworb.net', { method: 'HEAD', signal: AbortSignal.timeout(5000) })
+  } catch(_) {
+    console.log('⏸ chart download deferred — no network')
+    return
+  }
+  console.log(`📊 chart download catch-up triggered (${trigger})`)
+  runDailyChartDownload().catch(e => console.error('chart download schedule error:', e.message))
+}
 
 // Normalized "artist - title" key, so a re-upload with a different YouTube description
 // doesn't look like a new track. Real version distinctions ("(Remix)", "(Acoustic)",
@@ -2045,9 +2084,25 @@ async function fetchLatestInboxMessage(type, songTitle) {
   } catch(_) { return '' }
 }
 
+// One run at a time (scheduler + manual /run-chart-download share this). A run that
+// throws clears running:true and leaves last_successful_date alone, so it's retried.
 async function runDailyChartDownload() {
+  if (chartRunInProgress) return { ok: false, error: 'chart download already running' }
+  chartRunInProgress = true
+  try {
+    return await runDailyChartDownloadOnce()
+  } catch(e) {
+    const st = readChartStatus() || {}
+    if (st.running) writeChartStatus({ ...st, running: false, aborted_at: new Date().toISOString(), error: (e.message || '').slice(0, 200) })
+    throw e
+  } finally {
+    chartRunInProgress = false
+  }
+}
+
+async function runDailyChartDownloadOnce() {
   const execAsync = require('util').promisify(exec)
-  const today  = new Date().toISOString().slice(0, 10)
+  const today  = chartLocalNow().date
   const dayDir = path.join(CHART_CURRENT_DIR, today)
   console.log(`📊 Chart download starting → ${dayDir}`)
   writeChartStatus({ running: true, current: 0, total: 0, date: today, started_at: new Date().toISOString() })
@@ -2243,8 +2298,14 @@ async function runDailyChartDownload() {
   for (const s of sources) perSourceObj[s.id] = s.entries.filter(e => e.title).length
   console.log(`📊 Chart download complete — ${downloaded} new, ${skipped} skipped, ${failed.length} failed`)
 
+  // Only a run that actually got chart data counts as the day's download —
+  // if every source came back empty (e.g. network dropped mid-run) it retries later.
+  const gotCharts = sources.some(s => s.entries.length > 0)
+  if (!gotCharts) console.warn('chart job: every source empty — not marking today as done')
+
   // Persistent status the app polls (seen:false = show the banner)
   writeChartStatus({
+    ...(gotCharts ? { last_successful_date: today } : {}),
     date: today,
     finished_at: new Date().toISOString(),
     downloaded, already_had: skipped, failed: failed.length,
@@ -17173,13 +17234,20 @@ Max 150 words. Be specific and actionable.` }]
         body: JSON.stringify({ apiKey: process.env.ANTHROPIC_API_KEY })
       }).catch(e => console.error('tiktok-trends schedule error:', e.message))
     }
-    // 8am daily — chart download to References/!Current/YYYY-MM-DD/<SOURCE> (_downloaded.txt dedupe)
-    // (completion surfaces via macOS notification + the in-app DailyTab banner,
-    //  both driven from inside runDailyChartDownload — no Telegram summary)
-    if (now.getHours() === 8 && now.getMinutes() === 0) {
-      runDailyChartDownload().catch(e => console.error('chart download schedule error:', e.message))
-    }
   }, 60000)
+  // Chart download — catch-up scheduling (see shouldRunChartDownload), replaces the old
+  // fixed 8am tick. Downloads to References/!Current/YYYY-MM-DD/<SOURCE>; completion
+  // surfaces via macOS notification + the DailyTab banner.
+  {
+    // A watcher that died mid-run leaves running:true behind, which would block every future run.
+    const st = readChartStatus()
+    if (st?.running) {
+      writeChartStatus({ ...st, running: false, aborted_at: new Date().toISOString(), error: 'watcher restarted mid-run' })
+      console.log('🧹 cleared stale chart download running flag')
+    }
+    setTimeout(() => maybeRunChartDownload('startup'), 20000)
+    setInterval(() => maybeRunChartDownload('15-min check'), 15 * 60000)
+  }
   setInterval(() => {
     brainToObsidian().catch(e => console.error('auto obsidian sync error:', e.message))
   }, 3600000)

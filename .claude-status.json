@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-09T09:58:37Z",
-  "last_task": "Chart download: conditional reject filter, One To Watch non-song filter, linked\u2192already_had",
+  "updated": "2026-10-09T10:05:40Z",
+  "last_task": "Chart download: catch-up scheduling (Zurich date, 08:30+, startup+15min, network check)",
   "status": "done",
   "working": [
     "POST /run-chart-download \u2192 !Current/YYYY-MM-DD/<SOURCE>/Artist - Title.mp3",
@@ -9,7 +9,8 @@
     "Daily banner Open folder \u2192 dated folder",
     "Per-track yt-dlp reject filter ((Live) chart entries download)",
     "One To Watch headline filter",
-    "Banner shows \"already had\""
+    "Banner shows \"already had\"",
+    "Chart download catch-up: runs on startup/15-min if today (Zurich) not yet done after 08:30"
   ],
   "broken": [
     "test-system TEST 3: Spotify 403 premium required (pre-existing)",

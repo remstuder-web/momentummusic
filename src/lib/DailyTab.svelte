@@ -74,7 +74,14 @@
   let abletonResponse = $state(null)
   let abletonSteps = $state([])
 
-  let chartStatus = $state(null)   // { running, current, total } | { date, downloaded, already_had, failed, folder, folder_path, per_source, seen } | null
+  let chartStatus = $state(null)   // { running, current, total } | { date, downloaded, already_had, failed, folder, folder_path, per_source, seen } | null  (+ last_successful_date)
+  // Days since the last successful chart download, in Zurich dates (same as the watcher)
+  let chartDaysBehind = $derived.by(() => {
+    const last = chartStatus?.last_successful_date
+    if (!last) return 0
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(new Date())
+    return Math.round((Date.parse(today) - Date.parse(last)) / 86400000)
+  })
 
   async function pollChartStatus() {
     try {
@@ -1558,6 +1565,9 @@ ${mozartContext}`
   {/if}
 </div>
 
+{#if chartDaysBehind > 1}
+  <div class="chart-dl-miss">⚠ Last chart download: {chartStatus.last_successful_date} ({chartDaysBehind} days ago)</div>
+{/if}
 {#if chartStatus?.running}
   <div class="chart-dl-line">⬇ Downloading charts… {chartStatus.current} / {chartStatus.total}</div>
 {:else if chartStatus && chartStatus.finished_at && !chartStatus.seen}
@@ -2907,6 +2917,7 @@ ${mozartContext}`
     border: 1px solid #303030; color: #9e9690; border-radius: 2px; cursor: pointer;
   }
   .chart-dl-x:hover { border-color: #c9a84c; color: #c9a84c; }
+  .chart-dl-miss { font-size: 12px; color: #9e9690; margin-bottom: 6px; }
   .chart-dl-folder { font-family: 'Space Mono', monospace; font-size: 11px; color: rgba(201,168,76,.75); }
 
   /* Mozart */

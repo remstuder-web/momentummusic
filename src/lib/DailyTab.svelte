@@ -74,7 +74,7 @@
   let abletonResponse = $state(null)
   let abletonSteps = $state([])
 
-  let chartStatus = $state(null)   // { running, current, total } | { date, downloaded, linked, failed, folder, folder_path, per_source, seen } | null
+  let chartStatus = $state(null)   // { running, current, total } | { date, downloaded, already_had, failed, folder, folder_path, per_source, seen } | null
 
   async function pollChartStatus() {
     try {
@@ -1563,7 +1563,7 @@ ${mozartContext}`
 {:else if chartStatus && chartStatus.finished_at && !chartStatus.seen}
   <div class="chart-dl-banner">
     <div class="chart-dl-main">
-      <span>📊 Chart download complete — {chartStatus.downloaded} new, {chartStatus.linked} linked, {chartStatus.failed} failed</span>
+      <span>📊 Chart download complete — {chartStatus.downloaded} new, {chartStatus.already_had ?? chartStatus.linked ?? 0} already had, {chartStatus.failed} failed</span>
       <div class="chart-dl-actions">
         <button class="chart-dl-btn" onclick={openChartFolder}>Open folder</button>
         <button class="chart-dl-x" onclick={dismissChartBanner} title="Dismiss">✕</button>

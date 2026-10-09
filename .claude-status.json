@@ -1,18 +1,21 @@
 {
-  "updated": "2026-10-09T09:53:49Z",
-  "last_task": "Chart download: !Current/YYYY-MM-DD/<SOURCE>/ folders, _report_YYYY-MM-DD.txt next to _downloaded.txt",
+  "updated": "2026-10-09T09:58:37Z",
+  "last_task": "Chart download: conditional reject filter, One To Watch non-song filter, linked\u2192already_had",
   "status": "done",
   "working": [
     "POST /run-chart-download \u2192 !Current/YYYY-MM-DD/<SOURCE>/Artist - Title.mp3",
     "_downloaded.txt ledger dedupe + # escape hatch (verified)",
     "!Current/_report_YYYY-MM-DD.txt daily report (no auto-delete)",
-    "Daily banner Open folder \u2192 dated folder"
+    "Daily banner Open folder \u2192 dated folder",
+    "Per-track yt-dlp reject filter ((Live) chart entries download)",
+    "One To Watch headline filter",
+    "Banner shows \"already had\""
   ],
   "broken": [
     "test-system TEST 3: Spotify 403 premium required (pre-existing)",
     "test-system TEST 7: 6 brain_knowledge duplicates (pre-existing)"
   ],
   "partial": [],
-  "next": "Consider dropping remix/live/acoustic from REJECT_TITLE when the chart title itself contains that word; One-To-Watch feeds article titles, not tracks",
+  "next": "One To Watch often yields 0 songs after filtering \u2014 consider a different source for emerging artists",
   "notes": "Migration was one-off (scratchpad script), not in watcher. Genre subfolders in !Current are never scanned."
 }

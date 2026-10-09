@@ -1272,6 +1272,17 @@ async function fetchUKOfficialCharts() {
   }
 }
 
+// One Stop Watch is a blog — its feed mixes song posts with article headlines
+// (Q&As, interviews, announcements). Best-effort filter so chart download doesn't
+// burn yt-dlp attempts on headlines; `filtered` is reported in the chart report.
+const OTW_TAG_RE  = /\[(q&a|interview|premiere|review|playlist|feature)\]/i
+const OTW_WORD_RE = /\b(q&a|interview|track[- ]by[- ]track|announces|reveals|talks)\b/i
+function oneStopWatchSongsOnly(items) {
+  const songs = items.filter(i => !OTW_TAG_RE.test(i.title) && !OTW_WORD_RE.test(i.title) && i.title.length <= 80)
+  if (songs.length < items.length) console.log(`One Stop Watch: filtered ${items.length - songs.length} of ${items.length} (not songs)`)
+  return { source: 'One Stop Watch', items: songs, fetched: items.length, filtered: items.length - songs.length }
+}
+
 async function fetchOneStopWatch() {
   const rssUrls = [
     'https://www.onestowatch.com/feed',
@@ -1299,7 +1310,7 @@ async function fetchOneStopWatch() {
       }).filter(i => i.title && i.url).slice(0, 5)
       if (items.length) {
         console.log(`One Stop Watch: ${items.length} items via RSS (${url})`)
-        return { source: 'One Stop Watch', items }
+        return oneStopWatchSongsOnly(items)
       }
     } catch(e) {
       console.warn('One Stop Watch RSS failed:', url, e.message)
@@ -1342,7 +1353,7 @@ async function fetchOneStopWatch() {
 
       if (items.length) {
         console.log(`One Stop Watch: ${items.length} items via HTML fallback`)
-        return { source: 'One Stop Watch', items: items.slice(0, 5) }
+        return oneStopWatchSongsOnly(items.slice(0, 5))
       }
     } else {
       console.warn('One Stop Watch HTML fallback: HTTP', res.status)
@@ -2109,7 +2120,8 @@ async function runDailyChartDownload() {
     { id: 'YOUTUBE',          label: 'YOUTUBE',           entries: mapRanked(ytTop) },
     { id: 'BILLBOARD_HOT100', label: 'BILLBOARD HOT 100', entries: mapRanked(billboard) },
     { id: 'UK_OFFICIAL',      label: 'UK OFFICIAL',       entries: mapRanked(ukTop), note: ukNote },
-    { id: 'ONE_TO_WATCH',     label: 'ONE TO WATCH',      entries: (oneToWatch?.items || []).slice(0, 10).map((t, i) => ({ rank: i + 1, artist: '', title: (t.title || '').trim() })) },
+    { id: 'ONE_TO_WATCH',     label: 'ONE TO WATCH',      entries: (oneToWatch?.items || []).slice(0, 10).map((t, i) => ({ rank: i + 1, artist: '', title: (t.title || '').trim() })),
+      filtered: oneToWatch?.filtered || 0, fetched: oneToWatch?.fetched || 0 },
   ]
 
   // 2. Download — the ledger is the single source of truth for "already have it".
@@ -2119,7 +2131,16 @@ async function runDailyChartDownload() {
   let downloaded = 0, skipped = 0, processed = 0
   const failed = []
   const newBySource = {}
-  const REJECT_TITLE = '.*(live|concert|acoustic|remix|cover|karaoke).*'
+  // Reject alternate versions — unless the chart entry itself IS that version,
+  // e.g. "Beads & Booty (Live)" must still be allowed to match a live upload.
+  // "concert" rides along with "live". Returns '' when nothing is left to reject.
+  const REJECT_WORDS = ['live', 'remix', 'acoustic', 'cover', 'karaoke']
+  const rejectTitleFor = chartTitle => {
+    const t = (chartTitle || '').toLowerCase()
+    const words = REJECT_WORDS.filter(w => !new RegExp(`\\b${w}\\b`).test(t))
+    if (words.includes('live')) words.splice(1, 0, 'concert')
+    return words.length ? `.*(${words.join('|')}).*` : ''
+  }
   const totalTracks = sources.reduce((n, s) => n + s.entries.filter(e => e.title).length, 0)
   writeChartStatus({ running: true, current: 0, total: totalTracks, date: today, started_at: new Date().toISOString() })
 
@@ -2153,7 +2174,8 @@ async function runDailyChartDownload() {
       const query = (artist ? `${artist} ${title} official audio` : `${title} official audio`).replace(/["'`$\\]/g, ' ').replace(/\s+/g, ' ').trim()
       const tag    = `chart_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
       const tmpOut = `/tmp/${tag}_%(id)s.%(ext)s`
-      const baseFlags = `--extract-audio --audio-format mp3 --audio-quality 0 --no-playlist --match-filter "!is_live" --reject-title "${REJECT_TITLE}"`
+      const rejectRe  = rejectTitleFor(title)
+      const baseFlags = `--extract-audio --audio-format mp3 --audio-quality 0 --no-playlist --match-filter "!is_live"${rejectRe ? ` --reject-title "${rejectRe}"` : ''}`
       try {
         // Try a plain download first; only fall back to a forced player client if
         // nothing lands (older yt-dlp builds get 403'd on YouTube's default client).
@@ -2193,14 +2215,16 @@ async function runDailyChartDownload() {
   const out = [`MOMENTUM CHART REPORT — ${today}`, `Generated ${new Date().toTimeString().slice(0, 5)}`, '']
   for (const s of sources) {
     const withTitle = s.entries.filter(e => e.title)
-    out.push(bar, withTitle.length ? `${s.label} — ${newBySource[s.id] || 0} new of ${withTitle.length}` : s.label, bar)
+    // e.g. "ONE TO WATCH — 1 new of 2 · 2 of 5 (3 filtered: not songs)"
+    const filteredNote = s.filtered ? `${withTitle.length ? ' ·' : ''} ${withTitle.length} of ${s.fetched} (${s.filtered} filtered: not songs)` : ''
+    out.push(bar, `${s.label} —${withTitle.length ? ` ${newBySource[s.id] || 0} new of ${withTitle.length}` : ''}${filteredNote}`.replace(/ —$/, ''), bar)
     if (s.entries.length) {
       for (const e of s.entries) {
         const mark = e.isNew ? (e.failed ? '          ★ NEW (download failed)' : '          ★ NEW') : ''
         out.push(`${String(e.rank).padStart(2, '0')}. ${e.artist ? e.artist + ' — ' : ''}${e.title}${mark}`)
       }
     } else {
-      out.push(s.note || '(no data)')
+      out.push(s.note || (s.filtered ? '(all entries filtered: not songs)' : '(no data)'))
     }
     out.push('')
   }
@@ -2219,12 +2243,11 @@ async function runDailyChartDownload() {
   for (const s of sources) perSourceObj[s.id] = s.entries.filter(e => e.title).length
   console.log(`📊 Chart download complete — ${downloaded} new, ${skipped} skipped, ${failed.length} failed`)
 
-  // Persistent status the app polls (seen:false = show the banner).
-  // `linked` is kept as the banner's field name for "already had it".
+  // Persistent status the app polls (seen:false = show the banner)
   writeChartStatus({
     date: today,
     finished_at: new Date().toISOString(),
-    downloaded, linked: skipped, skipped, failed: failed.length,
+    downloaded, already_had: skipped, failed: failed.length,
     folder: downloaded ? `References/!Current/${today}` : 'References/!Current',
     folder_path: downloaded ? dayDir : CHART_CURRENT_DIR,
     report_path: reportPath,

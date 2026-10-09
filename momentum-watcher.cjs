@@ -1953,14 +1953,14 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   return { ok: true, suggestions: scoutText, tracks: allTracks }
 }
 
-// ── Daily 8am chart download → References/!Current (flat) ───────────────────
-// New tracks land flat in !Current as "Artist - Title.mp3". Remo hand-sorts them
-// into genre subfolders, so only the top level is ever scanned. Dedupe lives in
-// !Current/_downloaded.txt — independent of where the mp3 ends up afterwards.
+// ── Daily 8am chart download → References/!Current/YYYY-MM-DD/<SOURCE>/ ──────
+// New tracks land in a dated folder, split by chart source, as "Artist - Title.mp3".
+// Remo hand-sorts them into genre subfolders. Dedupe lives in !Current/_downloaded.txt
+// — independent of where the mp3 ends up afterwards — and the daily report sits next
+// to it as _report_YYYY-MM-DD.txt (Remo deletes those himself once read).
 const CHART_REFS_DIR    = '/Users/remo/Dropbox/!MOMENTUM MUSIC/References'
 const CHART_CURRENT_DIR = path.join(CHART_REFS_DIR, '!Current')
 const CHART_LEDGER      = path.join(CHART_CURRENT_DIR, '_downloaded.txt')
-const CHART_REPORTS_DIR = path.join(CHART_CURRENT_DIR, '_REPORTS')
 const CHART_STATUS_FILE = path.join(__dirname, 'chart_download_status.json')
 const CHART_LEDGER_HEADER = [
   '# Momentum chart download ledger — one line per downloaded track:',
@@ -2036,8 +2036,9 @@ async function fetchLatestInboxMessage(type, songTitle) {
 
 async function runDailyChartDownload() {
   const execAsync = require('util').promisify(exec)
-  const today = new Date().toISOString().slice(0, 10)
-  console.log(`📊 Chart download starting → ${CHART_CURRENT_DIR}`)
+  const today  = new Date().toISOString().slice(0, 10)
+  const dayDir = path.join(CHART_CURRENT_DIR, today)
+  console.log(`📊 Chart download starting → ${dayDir}`)
   writeChartStatus({ running: true, current: 0, total: 0, date: today, started_at: new Date().toISOString() })
 
   // 0. Make sure the report can carry today's analysis text.
@@ -2111,8 +2112,6 @@ async function runDailyChartDownload() {
     { id: 'ONE_TO_WATCH',     label: 'ONE TO WATCH',      entries: (oneToWatch?.items || []).slice(0, 10).map((t, i) => ({ rank: i + 1, artist: '', title: (t.title || '').trim() })) },
   ]
 
-  fs.mkdirSync(CHART_REPORTS_DIR, { recursive: true })
-
   // 2. Download — the ledger is the single source of truth for "already have it".
   //    A key added during this run also covers the same track on a later source today.
   const ledgerAtStart = loadChartLedgerKeys()
@@ -2144,10 +2143,12 @@ async function runDailyChartDownload() {
         continue
       }
 
-      // Flat "Artist - Title.mp3" at the top level of !Current; never overwrite.
+      // "Artist - Title.mp3" in today's folder under the source it charted on; never overwrite.
+      // Source folders are created on first download so no empty folders are left behind.
       const display = artist ? `${chartSafeName(artist)} - ${chartSafeName(title)}` : chartSafeName(title)
-      let destPath = path.join(CHART_CURRENT_DIR, `${display}.mp3`)
-      for (let n = 2; fs.existsSync(destPath); n++) destPath = path.join(CHART_CURRENT_DIR, `${display} (${n}).mp3`)
+      const srcDir  = path.join(dayDir, s.id)
+      let destPath = path.join(srcDir, `${display}.mp3`)
+      for (let n = 2; fs.existsSync(destPath); n++) destPath = path.join(srcDir, `${display} (${n}).mp3`)
 
       const query = (artist ? `${artist} ${title} official audio` : `${title} official audio`).replace(/["'`$\\]/g, ' ').replace(/\s+/g, ' ').trim()
       const tag    = `chart_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
@@ -2165,13 +2166,14 @@ async function runDailyChartDownload() {
           if (found.length) break
         }
         if (!found.length) throw new Error('no result')
+        fs.mkdirSync(srcDir, { recursive: true })
         // copy+unlink rather than rename: /tmp and Dropbox can be on different volumes
         fs.copyFileSync(path.join('/tmp', found[0]), destPath)
         for (const f of found) { try { fs.unlinkSync(path.join('/tmp', f)) } catch(_) {} }
         appendChartLedger(today, text, s.id)
         ledger.add(key)
         downloaded++
-        console.log(`⬇️  Downloaded: ${path.basename(destPath)}`)
+        console.log(`⬇️  Downloaded: ${s.id}/${path.basename(destPath)}`)
       } catch(e) {
         for (const f of fs.readdirSync('/tmp').filter(f => f.startsWith(tag))) { try { fs.unlinkSync(path.join('/tmp', f)) } catch(_) {} }
         entry.failed = true
@@ -2209,20 +2211,8 @@ async function runDailyChartDownload() {
   out.push(`Skipped (already in _downloaded.txt): ${skipped}`)
   out.push(`Failed: ${failed.length}`)
   for (const f of failed) out.push(`  - ${f.artist ? f.artist + ' — ' : ''}${f.title} (${f.reason})`)
-  const reportPath = path.join(CHART_REPORTS_DIR, `findings_${today}.txt`)
+  const reportPath = path.join(CHART_CURRENT_DIR, `_report_${today}.txt`)
   fs.writeFileSync(reportPath, out.join('\n'))
-
-  // 4. Retention — keep 60 days of reports. Downloaded mp3s are never pruned.
-  try {
-    const cutoff = Date.now() - 60 * 86400000
-    for (const f of fs.readdirSync(CHART_REPORTS_DIR)) {
-      const m = f.match(/^findings_(\d{4}-\d{2}-\d{2})/)
-      if (m && new Date(m[1]).getTime() < cutoff) {
-        fs.unlinkSync(path.join(CHART_REPORTS_DIR, f))
-        console.log(`🗑  Pruned old chart report: ${f}`)
-      }
-    }
-  } catch(e) { console.warn('chart report retention error:', e.message) }
 
   const perSource = sources.map(s => `${s.label}: ${newBySource[s.id] || 0} new of ${s.entries.filter(e => e.title).length}`).join(' | ')
   const perSourceObj = {}
@@ -2235,8 +2225,8 @@ async function runDailyChartDownload() {
     date: today,
     finished_at: new Date().toISOString(),
     downloaded, linked: skipped, skipped, failed: failed.length,
-    folder: 'References/!Current',
-    folder_path: CHART_CURRENT_DIR,
+    folder: downloaded ? `References/!Current/${today}` : 'References/!Current',
+    folder_path: downloaded ? dayDir : CHART_CURRENT_DIR,
     report_path: reportPath,
     per_source: perSourceObj,
     new_by_source: newBySource,
@@ -2251,7 +2241,7 @@ async function runDailyChartDownload() {
     exec(`osascript -e 'display notification "${body}" with title "Momentum" subtitle "Chart download complete" sound name "Glass"'`, () => {})
   } catch(_) {}
 
-  return { ok: true, folder: 'References/!Current', report: reportPath, downloaded, skipped, failed: failed.length, failures: failed, perSource }
+  return { ok: true, folder: downloaded ? `References/!Current/${today}` : 'References/!Current', report: reportPath, downloaded, skipped, failed: failed.length, failures: failed, perSource }
 }
 
 // ── Agent: Demo Match — match demos to artists ────────────────────────────
@@ -17160,7 +17150,7 @@ Max 150 words. Be specific and actionable.` }]
         body: JSON.stringify({ apiKey: process.env.ANTHROPIC_API_KEY })
       }).catch(e => console.error('tiktok-trends schedule error:', e.message))
     }
-    // 8am daily — chart download to References/!Current (flat, _downloaded.txt dedupe)
+    // 8am daily — chart download to References/!Current/YYYY-MM-DD/<SOURCE> (_downloaded.txt dedupe)
     // (completion surfaces via macOS notification + the in-app DailyTab banner,
     //  both driven from inside runDailyChartDownload — no Telegram summary)
     if (now.getHours() === 8 && now.getMinutes() === 0) {

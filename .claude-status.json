@@ -1,9 +1,17 @@
 {
-  "updated": "2026-10-09T09:41:59Z",
-  "last_task": "Chart download: flat into References/!Current, _downloaded.txt dedupe ledger, drop library+hardlinks",
+  "updated": "2026-10-09T09:53:49Z",
+  "last_task": "Chart download: !Current/YYYY-MM-DD/<SOURCE>/ folders, _report_YYYY-MM-DD.txt next to _downloaded.txt",
   "status": "done",
-  "working": ["POST /run-chart-download writes flat mp3s to References/!Current", "_downloaded.txt ledger dedupe (48 skipped on test run)", "_REPORTS/findings_YYYY-MM-DD.txt with N new of M + ★ NEW", "chart_download_status.json banner + Open folder → !Current"],
-  "broken": ["test-system TEST 3: Spotify 403 premium required (pre-existing)", "test-system TEST 7: 6 brain_knowledge duplicates (pre-existing)"],
+  "working": [
+    "POST /run-chart-download \u2192 !Current/YYYY-MM-DD/<SOURCE>/Artist - Title.mp3",
+    "_downloaded.txt ledger dedupe + # escape hatch (verified)",
+    "!Current/_report_YYYY-MM-DD.txt daily report (no auto-delete)",
+    "Daily banner Open folder \u2192 dated folder"
+  ],
+  "broken": [
+    "test-system TEST 3: Spotify 403 premium required (pre-existing)",
+    "test-system TEST 7: 6 brain_knowledge duplicates (pre-existing)"
+  ],
   "partial": [],
   "next": "Consider dropping remix/live/acoustic from REJECT_TITLE when the chart title itself contains that word; One-To-Watch feeds article titles, not tracks",
   "notes": "Migration was one-off (scratchpad script), not in watcher. Genre subfolders in !Current are never scanned."

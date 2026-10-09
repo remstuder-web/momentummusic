@@ -1,25 +1,10 @@
 {
-  "updated": "2026-09-10T12:20:00.000Z",
-  "last_task": "Chart download — in-app DailyTab banner + macOS notification, drop Telegram summary",
+  "updated": "2026-10-09T09:41:59Z",
+  "last_task": "Chart download: flat into References/!Current, _downloaded.txt dedupe ledger, drop library+hardlinks",
   "status": "done",
-  "working": [
-    "8am cron branch no longer calls sendTelegram() — just runDailyChartDownload().catch()",
-    "runDailyChartDownload() fires a macOS notification at the end: osascript 'display notification ... with title Momentum subtitle \"Chart download complete\" sound name \"Glass\"', interpolated string escaped (backslash/quote/newline)",
-    "chart_download_status.json (module-scope CHART_STATUS_FILE, read/writeChartStatus helpers): {running:true,current,total,date,started_at} at start + per-track current updates; final {date,finished_at,downloaded,linked,failed,folder,folder_path,per_source,seen:false}",
-    "New endpoints: GET /chart-download-status, POST /chart-download-seen (sets seen:true). Open folder reuses the pre-existing POST /open-folder {path} (removed a duplicate handler I'd added). All 3 in /system-status list",
-    "DailyTab.svelte: polls GET /chart-download-status every 30s (cleaned up in onMount return). Above TRENDS & NEWS: dim mono line while running ('⬇ Downloading charts… N / M'); gold dark banner when finished & seen===false ('📊 Chart download complete — N new, N linked, N failed' + '→ CHARTS_<date>' + [Open folder] + [✕]); nothing when seen===true",
-    "Verified live: run 6 = 50 downloaded/2 linked/3 failed; progress endpoint showed current 1->2 mid-run; final status file exact shape; osascript exit 0; browser DAILY tab shows the gold banner full-width above TRENDS & NEWS; [Open folder] opened Finder on CHARTS_2026-09-10; [✕] hid the banner and set seen:true",
-    "npx vite build passes; node -c clean; pm2 restarted; /ping healthy",
-    "chart_download_status.json added to .gitignore (alongside chart_download_index.json)",
-    "Earlier cleanups still intact: read-first briefing (fallback-generates only if no row today), UK OFFICIAL findings note 'unavailable (HTTP 403)', fixed YouTube column parsing (LISA/SaWaDiKa etc), yt-dlp 2026.08.19, /download-reference fallback client",
-    "test-system.cjs: 6/8 (same 2 pre-existing unrelated failures: Spotify 403 subscription, brain dupes)"
-  ],
-  "broken": [
-    "UK OFFICIAL chart source: officialcharts.com CloudFront-blocks this host with 403 regardless of headers. Empty every run — explained in findings.txt as 'unavailable (HTTP 403)'. Needs a proxy or alternate source",
-    "TEST 3 Spotify intl URL — pre-existing, Spotify API 403 (needs active premium subscription on app owner's account)",
-    "TEST 7 No brain duplicates — pre-existing, ~6 duplicate brain_knowledge entries"
-  ],
+  "working": ["POST /run-chart-download writes flat mp3s to References/!Current", "_downloaded.txt ledger dedupe (48 skipped on test run)", "_REPORTS/findings_YYYY-MM-DD.txt with N new of M + ★ NEW", "chart_download_status.json banner + Open folder → !Current"],
+  "broken": ["test-system TEST 3: Spotify 403 premium required (pre-existing)", "test-system TEST 7: 6 brain_knowledge duplicates (pre-existing)"],
   "partial": [],
-  "next": "Chart download feature complete: 8am cron, in-app banner + macOS notification, dedupe, retention, findings.txt with scout+briefing. First unattended run tomorrow 08:00. Optional: (1) add a real 7am /morning-briefing cron so the 8am job reuses instead of fallback-generating; (2) restore UK Official via proxy/alt source; (3) DailyTab banner is full-width above the two-column layout — if a different placement is wanted it's one block to move.",
-  "notes": "The 'Open folder' button posts {path: folder_path} to the pre-existing POST /open-folder endpoint (unrestricted exec 'open \"<path>\"', shared with release-folder features — did NOT add a path guard there to avoid breaking other callers). chart_download_status.json currently has seen:false (reset after the dismiss test) so the user sees the banner working on next app open."
+  "next": "Consider dropping remix/live/acoustic from REJECT_TITLE when the chart title itself contains that word; One-To-Watch feeds article titles, not tracks",
+  "notes": "Migration was one-off (scratchpad script), not in watcher. Genre subfolders in !Current are never scanned."
 }

@@ -1953,17 +1953,75 @@ FORMATTING: Never use **bold** or *italic* markdown. Use ## for headers, - for b
   return { ok: true, suggestions: scoutText, tracks: allTracks }
 }
 
-// ── Daily 8am chart download → References/CHARTS_YYYY-MM-DD ────────────────
+// ── Daily 8am chart download → References/!Current (flat) ───────────────────
+// New tracks land flat in !Current as "Artist - Title.mp3". Remo hand-sorts them
+// into genre subfolders, so only the top level is ever scanned. Dedupe lives in
+// !Current/_downloaded.txt — independent of where the mp3 ends up afterwards.
 const CHART_REFS_DIR    = '/Users/remo/Dropbox/!MOMENTUM MUSIC/References'
-const CHART_INDEX       = path.join(__dirname, 'chart_download_index.json')
+const CHART_CURRENT_DIR = path.join(CHART_REFS_DIR, '!Current')
+const CHART_LEDGER      = path.join(CHART_CURRENT_DIR, '_downloaded.txt')
+const CHART_REPORTS_DIR = path.join(CHART_CURRENT_DIR, '_REPORTS')
 const CHART_STATUS_FILE = path.join(__dirname, 'chart_download_status.json')
+const CHART_LEDGER_HEADER = [
+  '# Momentum chart download ledger — one line per downloaded track:',
+  '#   DATE | Artist - Title | SOURCE',
+  '# A track listed here is never downloaded again, even if its mp3 is moved or deleted.',
+  '# To force a re-download, put "#" at the start of its line.',
+  ''
+].join('\n')
 
-const chartKey       = (artist, title) => `${artist || ''} - ${title || ''}`.toLowerCase().replace(/\s+/g, ' ').trim()
-const chartSafeName  = s => (s || '').replace(/[/\\:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim()
-const loadChartIndex = () => { try { return JSON.parse(fs.readFileSync(CHART_INDEX, 'utf8')) } catch(_) { return {} } }
-const saveChartIndex = idx => { try { fs.writeFileSync(CHART_INDEX, JSON.stringify(idx, null, 2)) } catch(e) { console.warn('chart index save failed:', e.message) } }
+const chartSafeName    = s => (s || '').replace(/[/\\:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim()
 const readChartStatus  = () => { try { return JSON.parse(fs.readFileSync(CHART_STATUS_FILE, 'utf8')) } catch(_) { return null } }
 const writeChartStatus = obj => { try { fs.writeFileSync(CHART_STATUS_FILE, JSON.stringify(obj, null, 2)) } catch(e) { console.warn('chart status write failed:', e.message) } }
+
+// Normalized "artist - title" key, so a re-upload with a different YouTube description
+// doesn't look like a new track. Real version distinctions ("(Remix)", "(Acoustic)",
+// "(Live)") are intentionally kept.
+function normalizeTrackKey(artist, title) {
+  const base = s => (s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip diacritics: é → e
+    .replace(/[–—]/g, '-')
+    .toLowerCase()
+
+  // "(feat. X)" / "(w/ X)" etc anywhere mid-string, and a trailing "feat X" with no parens
+  const featParenRe   = /[\(\[]\s*(?:ft\.?|feat\.?|featuring|with|w\/)\s+[^)\]]*[\)\]]/gi
+  const featTrailingRe = /\s+(?:ft\.?|feat\.?|featuring|with|w\/)\s+.+$/i
+  // upload/clip descriptors — not real version distinctions
+  const junkRe     = /[\(\[]\s*(official\s*(?:music\s*)?video|official\s*audio|lyrics?|lyric\s*video|visuali[sz]er|radio\s*edit|sped\s*up|slowed(?:\s*(?:down|\+?\s*reverb))?|remaster(?:ed)?(?:\s*\d{4})?)\s*[\)\]]/gi
+  const catchAllRe = /[\(\[][^)\]]*(?:video|audio|lyric|visuali[sz]er)[^)\]]*[\)\]]/gi
+  const clean = s => s.replace(/\s+/g, ' ').trim().replace(/[\s\-.,:;]+$/, '').trim()
+
+  let a = base(artist), t = base(title)
+  a = clean(a.replace(featParenRe, ' ').replace(featTrailingRe, ''))
+  t = clean(t.replace(featParenRe, ' ').replace(junkRe, ' ').replace(catchAllRe, ' ').replace(featTrailingRe, ''))
+  return `${a} - ${t}`
+}
+
+// Ledger text is "Artist - Title" (or just "Title" when the source has no artist).
+// Both the ledger and live chart entries go through this, so they always key the same way.
+const chartLedgerText = (artist, title) => (artist ? `${artist} - ${title}` : title).replace(/\|/g, '/').replace(/[\r\n]+/g, ' ').trim()
+function chartKeyFromText(text) {
+  const i = text.indexOf(' - ')
+  return i === -1 ? normalizeTrackKey('', text) : normalizeTrackKey(text.slice(0, i), text.slice(i + 3))
+}
+
+function loadChartLedgerKeys() {
+  const keys = new Set()
+  let raw = ''
+  try { raw = fs.readFileSync(CHART_LEDGER, 'utf8') } catch(_) { return keys }
+  for (const line of raw.split('\n')) {
+    if (!line.trim() || line.trimStart().startsWith('#')) continue
+    const parts = line.split('|').map(s => s.trim())
+    const text  = parts.length >= 2 ? parts[1] : parts[0]
+    if (text) keys.add(chartKeyFromText(text))
+  }
+  return keys
+}
+
+function appendChartLedger(date, text, source) {
+  if (!fs.existsSync(CHART_LEDGER)) fs.writeFileSync(CHART_LEDGER, CHART_LEDGER_HEADER)
+  fs.appendFileSync(CHART_LEDGER, `${date} | ${text} | ${source}\n`)
+}
 
 async function fetchLatestInboxMessage(type, songTitle) {
   try {
@@ -1978,12 +2036,11 @@ async function fetchLatestInboxMessage(type, songTitle) {
 
 async function runDailyChartDownload() {
   const execAsync = require('util').promisify(exec)
-  const today  = new Date().toISOString().slice(0, 10)
-  const runDir = path.join(CHART_REFS_DIR, `CHARTS_${today}`)
-  console.log(`📊 Chart download starting → ${runDir}`)
+  const today = new Date().toISOString().slice(0, 10)
+  console.log(`📊 Chart download starting → ${CHART_CURRENT_DIR}`)
   writeChartStatus({ running: true, current: 0, total: 0, date: today, started_at: new Date().toISOString() })
 
-  // 0. Make sure findings.txt can carry today's analysis text.
+  // 0. Make sure the report can carry today's analysis text.
   //    Scout has no other daily schedule, so always refresh it here (its own
   //    delete-then-insert keeps the inbox from accumulating). The morning
   //    briefing runs on its own earlier schedule — only generate it here as a
@@ -2029,7 +2086,7 @@ async function runDailyChartDownload() {
   ])
 
   // UK Official silently returns [] on failure — probe the status so an empty
-  // folder is explained in findings.txt rather than looking like "no chart today".
+  // section is explained in the report rather than looking like "no chart today".
   let ukNote = ''
   if (!Array.isArray(ukTop) || ukTop.length === 0) {
     try {
@@ -2045,52 +2102,53 @@ async function runDailyChartDownload() {
 
   const mapRanked = arr => (arr || []).slice(0, 10).map((t, i) => ({ rank: t.position || i + 1, artist: (t.artist || '').trim(), title: (t.title || '').trim() }))
   const sources = [
-    { folder: 'SPOTIFY_GLOBAL',   label: 'SPOTIFY GLOBAL',   entries: mapRanked(spGlobal) },
-    { folder: 'SPOTIFY_DE',       label: 'SPOTIFY DE',       entries: mapRanked(spDE) },
-    { folder: 'TIKTOK',           label: 'TIKTOK',           entries: mapRanked(tiktok) },
-    { folder: 'YOUTUBE',          label: 'YOUTUBE',          entries: mapRanked(ytTop) },
-    { folder: 'BILLBOARD_HOT100', label: 'BILLBOARD HOT 100', entries: mapRanked(billboard) },
-    { folder: 'UK_OFFICIAL',      label: 'UK OFFICIAL',      entries: mapRanked(ukTop), note: ukNote },
-    { folder: 'ONE_TO_WATCH',     label: 'ONE TO WATCH',     entries: (oneToWatch?.items || []).slice(0, 10).map((t, i) => ({ rank: i + 1, artist: '', title: (t.title || '').trim() })) },
+    { id: 'SPOTIFY_GLOBAL',   label: 'SPOTIFY GLOBAL',    entries: mapRanked(spGlobal) },
+    { id: 'SPOTIFY_DE',       label: 'SPOTIFY DE',        entries: mapRanked(spDE) },
+    { id: 'TIKTOK',           label: 'TIKTOK',            entries: mapRanked(tiktok) },
+    { id: 'YOUTUBE',          label: 'YOUTUBE',           entries: mapRanked(ytTop) },
+    { id: 'BILLBOARD_HOT100', label: 'BILLBOARD HOT 100', entries: mapRanked(billboard) },
+    { id: 'UK_OFFICIAL',      label: 'UK OFFICIAL',       entries: mapRanked(ukTop), note: ukNote },
+    { id: 'ONE_TO_WATCH',     label: 'ONE TO WATCH',      entries: (oneToWatch?.items || []).slice(0, 10).map((t, i) => ({ rank: i + 1, artist: '', title: (t.title || '').trim() })) },
   ]
 
-  fs.mkdirSync(runDir, { recursive: true })
-  for (const s of sources) fs.mkdirSync(path.join(runDir, s.folder), { recursive: true })
+  fs.mkdirSync(CHART_REPORTS_DIR, { recursive: true })
 
-  const index = loadChartIndex()
-  let downloaded = 0, linked = 0, processed = 0
+  // 2. Download — the ledger is the single source of truth for "already have it".
+  //    A key added during this run also covers the same track on a later source today.
+  const ledgerAtStart = loadChartLedgerKeys()
+  const ledger        = new Set(ledgerAtStart)
+  let downloaded = 0, skipped = 0, processed = 0
   const failed = []
+  const newBySource = {}
   const REJECT_TITLE = '.*(live|concert|acoustic|remix|cover|karaoke).*'
   const totalTracks = sources.reduce((n, s) => n + s.entries.filter(e => e.title).length, 0)
   writeChartStatus({ running: true, current: 0, total: totalTracks, date: today, started_at: new Date().toISOString() })
 
   for (const s of sources) {
     for (const entry of s.entries) {
-      const { rank, artist, title } = entry
+      const { artist, title } = entry
       if (!title) continue
       processed++
       writeChartStatus({ running: true, current: processed, total: totalTracks, date: today })
-      const nn       = String(rank).padStart(2, '0')
-      const display  = artist ? `${chartSafeName(artist)} - ${chartSafeName(title)}` : chartSafeName(title)
-      const destName = `${nn}_${display}.mp3`
-      const destPath = path.join(runDir, s.folder, destName)
-      const key      = chartKey(artist, title)
+      const text = chartLedgerText(artist, title)
+      const key  = chartKeyFromText(text)
 
-      // DEDUPE — hardlink an existing copy from a prior run instead of re-downloading
-      const prevRel = index[key]
-      const prevAbs = prevRel ? path.join(CHART_REFS_DIR, prevRel) : null
-      if (prevAbs && fs.existsSync(prevAbs) && !fs.existsSync(destPath)) {
-        try {
-          fs.linkSync(prevAbs, destPath)
-          linked++
-          console.log(`🔗 Linked (already have): ${display}`)
-          continue
-        } catch(_) {
-          try { fs.copyFileSync(prevAbs, destPath); linked++; console.log(`🔗 Linked (already have): ${display}`); continue } catch(_) {}
-        }
+      // ★ NEW = not in the ledger before this run (so a track new today is marked
+      // NEW on every source it appears on, but only downloaded once).
+      entry.isNew = !ledgerAtStart.has(key)
+      if (entry.isNew) newBySource[s.id] = (newBySource[s.id] || 0) + 1
+
+      if (ledger.has(key)) {
+        skipped++
+        console.log(`⏭  Skipped (ledger): ${text}`)
+        continue
       }
 
-      // DOWNLOAD — same yt-dlp approach as /download-reference
+      // Flat "Artist - Title.mp3" at the top level of !Current; never overwrite.
+      const display = artist ? `${chartSafeName(artist)} - ${chartSafeName(title)}` : chartSafeName(title)
+      let destPath = path.join(CHART_CURRENT_DIR, `${display}.mp3`)
+      for (let n = 2; fs.existsSync(destPath); n++) destPath = path.join(CHART_CURRENT_DIR, `${display} (${n}).mp3`)
+
       const query = (artist ? `${artist} ${title} official audio` : `${title} official audio`).replace(/["'`$\\]/g, ' ').replace(/\s+/g, ' ').trim()
       const tag    = `chart_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
       const tmpOut = `/tmp/${tag}_%(id)s.%(ext)s`
@@ -2107,13 +2165,16 @@ async function runDailyChartDownload() {
           if (found.length) break
         }
         if (!found.length) throw new Error('no result')
-        fs.renameSync(path.join('/tmp', found[0]), destPath)
-        for (const extra of found.slice(1)) { try { fs.unlinkSync(path.join('/tmp', extra)) } catch(_) {} }
+        // copy+unlink rather than rename: /tmp and Dropbox can be on different volumes
+        fs.copyFileSync(path.join('/tmp', found[0]), destPath)
+        for (const f of found) { try { fs.unlinkSync(path.join('/tmp', f)) } catch(_) {} }
+        appendChartLedger(today, text, s.id)
+        ledger.add(key)
         downloaded++
-        index[key] = path.join(`CHARTS_${today}`, s.folder, destName)
-        console.log(`⬇️  Downloaded: ${display}`)
+        console.log(`⬇️  Downloaded: ${path.basename(destPath)}`)
       } catch(e) {
         for (const f of fs.readdirSync('/tmp').filter(f => f.startsWith(tag))) { try { fs.unlinkSync(path.join('/tmp', f)) } catch(_) {} }
+        entry.failed = true
         failed.push({ artist, title, reason: (e.message || 'download failed').slice(0, 80) })
         console.warn(`⚠ Chart download failed: ${display} — ${(e.message || '').slice(0, 80)}`)
       }
@@ -2121,9 +2182,7 @@ async function runDailyChartDownload() {
     }
   }
 
-  saveChartIndex(index)
-
-  // 3. findings.txt
+  // 3. Report — full ranked chart per source, ★ NEW marks tracks not in the ledger before today
   const [scoutText, briefingText] = await Promise.all([
     fetchLatestInboxMessage('scout', 'Artist Scout'),
     fetchLatestInboxMessage('briefing', 'Morning Briefing'),
@@ -2131,9 +2190,13 @@ async function runDailyChartDownload() {
   const bar = '═══════════════════════════════'
   const out = [`MOMENTUM CHART REPORT — ${today}`, `Generated ${new Date().toTimeString().slice(0, 5)}`, '']
   for (const s of sources) {
-    out.push(bar, s.label, bar)
+    const withTitle = s.entries.filter(e => e.title)
+    out.push(bar, withTitle.length ? `${s.label} — ${newBySource[s.id] || 0} new of ${withTitle.length}` : s.label, bar)
     if (s.entries.length) {
-      for (const e of s.entries) out.push(`${String(e.rank).padStart(2, '0')}. ${e.artist ? e.artist + ' — ' : ''}${e.title}`)
+      for (const e of s.entries) {
+        const mark = e.isNew ? (e.failed ? '          ★ NEW (download failed)' : '          ★ NEW') : ''
+        out.push(`${String(e.rank).padStart(2, '0')}. ${e.artist ? e.artist + ' — ' : ''}${e.title}${mark}`)
+      }
     } else {
       out.push(s.note || '(no data)')
     }
@@ -2143,46 +2206,40 @@ async function runDailyChartDownload() {
   out.push(bar, 'MORNING BRIEFING', bar, briefingText || '(no briefing available)', '')
   out.push(bar, 'DOWNLOAD SUMMARY', bar)
   out.push(`Downloaded: ${downloaded} new`)
-  out.push(`Linked (already had): ${linked}`)
+  out.push(`Skipped (already in _downloaded.txt): ${skipped}`)
   out.push(`Failed: ${failed.length}`)
   for (const f of failed) out.push(`  - ${f.artist ? f.artist + ' — ' : ''}${f.title} (${f.reason})`)
-  fs.writeFileSync(path.join(runDir, 'findings.txt'), out.join('\n'))
+  const reportPath = path.join(CHART_REPORTS_DIR, `findings_${today}.txt`)
+  fs.writeFileSync(reportPath, out.join('\n'))
 
-  // 4. Retention — drop CHARTS_* folders older than 14 days
+  // 4. Retention — keep 60 days of reports. Downloaded mp3s are never pruned.
   try {
-    const cutoff = Date.now() - 14 * 86400000
-    for (const d of fs.readdirSync(CHART_REFS_DIR)) {
-      const m = d.match(/^CHARTS_(\d{4}-\d{2}-\d{2})$/)
+    const cutoff = Date.now() - 60 * 86400000
+    for (const f of fs.readdirSync(CHART_REPORTS_DIR)) {
+      const m = f.match(/^findings_(\d{4}-\d{2}-\d{2})/)
       if (m && new Date(m[1]).getTime() < cutoff) {
-        fs.rmSync(path.join(CHART_REFS_DIR, d), { recursive: true, force: true })
-        console.log(`🗑  Pruned old chart folder: ${d}`)
+        fs.unlinkSync(path.join(CHART_REPORTS_DIR, f))
+        console.log(`🗑  Pruned old chart report: ${f}`)
       }
     }
-  } catch(e) { console.warn('chart retention error:', e.message) }
+  } catch(e) { console.warn('chart report retention error:', e.message) }
 
-  // Prune index entries whose files no longer exist
-  try {
-    const idx2 = loadChartIndex()
-    let pruned = 0
-    for (const k of Object.keys(idx2)) {
-      if (!fs.existsSync(path.join(CHART_REFS_DIR, idx2[k]))) { delete idx2[k]; pruned++ }
-    }
-    if (pruned) { saveChartIndex(idx2); console.log(`🧹 Pruned ${pruned} stale index entries`) }
-  } catch(e) { console.warn('chart index prune error:', e.message) }
-
-  const perSource = sources.map(s => `${s.label}: ${s.entries.length}`).join(' | ')
+  const perSource = sources.map(s => `${s.label}: ${newBySource[s.id] || 0} new of ${s.entries.filter(e => e.title).length}`).join(' | ')
   const perSourceObj = {}
-  for (const s of sources) perSourceObj[s.folder] = s.entries.filter(e => e.title).length
-  console.log(`📊 Chart download complete — ${downloaded} new, ${linked} linked, ${failed.length} failed`)
+  for (const s of sources) perSourceObj[s.id] = s.entries.filter(e => e.title).length
+  console.log(`📊 Chart download complete — ${downloaded} new, ${skipped} skipped, ${failed.length} failed`)
 
-  // Persistent status the app polls (seen:false = show the banner)
+  // Persistent status the app polls (seen:false = show the banner).
+  // `linked` is kept as the banner's field name for "already had it".
   writeChartStatus({
     date: today,
     finished_at: new Date().toISOString(),
-    downloaded, linked, failed: failed.length,
-    folder: `CHARTS_${today}`,
-    folder_path: runDir,
+    downloaded, linked: skipped, skipped, failed: failed.length,
+    folder: 'References/!Current',
+    folder_path: CHART_CURRENT_DIR,
+    report_path: reportPath,
     per_source: perSourceObj,
+    new_by_source: newBySource,
     seen: false
   })
 
@@ -2190,11 +2247,11 @@ async function runDailyChartDownload() {
   // stray quote in any interpolated string can't break the osascript command.
   try {
     const esc = v => String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, "'\\''").replace(/[\r\n]+/g, ' ')
-    const body = esc(`${downloaded} new, ${linked} linked, ${failed.length} failed`)
+    const body = esc(`${downloaded} new, ${skipped} already had, ${failed.length} failed`)
     exec(`osascript -e 'display notification "${body}" with title "Momentum" subtitle "Chart download complete" sound name "Glass"'`, () => {})
   } catch(_) {}
 
-  return { ok: true, runDir, folder: `References/CHARTS_${today}`, downloaded, linked, failed: failed.length, failures: failed, perSource }
+  return { ok: true, folder: 'References/!Current', report: reportPath, downloaded, skipped, failed: failed.length, failures: failed, perSource }
 }
 
 // ── Agent: Demo Match — match demos to artists ────────────────────────────
@@ -17103,7 +17160,7 @@ Max 150 words. Be specific and actionable.` }]
         body: JSON.stringify({ apiKey: process.env.ANTHROPIC_API_KEY })
       }).catch(e => console.error('tiktok-trends schedule error:', e.message))
     }
-    // 8am daily — chart download to References/CHARTS_YYYY-MM-DD
+    // 8am daily — chart download to References/!Current (flat, _downloaded.txt dedupe)
     // (completion surfaces via macOS notification + the in-app DailyTab banner,
     //  both driven from inside runDailyChartDownload — no Telegram summary)
     if (now.getHours() === 8 && now.getMinutes() === 0) {

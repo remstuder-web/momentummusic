@@ -1,5 +1,5 @@
 {
-  "run": "2026-08-08T06:42:22.824Z",
+  "run": "2026-10-09T09:40:49.530Z",
   "passed": 6,
   "total": 8,
   "results": [
@@ -7,7 +7,7 @@
       "n": 1,
       "label": "Watcher alive",
       "ok": true,
-      "detail": "last_task: Add LYRICS EXTRACTOR helper section (Whisper transcription) to ROUTINE"
+      "detail": "last_task: Chart download — in-app DailyTab banner + macOS notification, drop Telegram summary"
     },
     {
       "n": 2,
@@ -37,19 +37,19 @@
       "n": 6,
       "label": "Notes-to-feedback JSON",
       "ok": true,
-      "detail": "3 items: \"Increase kick punch and impact\""
+      "detail": "3 items: \"Increase kick punch and presence\""
     },
     {
       "n": 7,
       "label": "No brain duplicates",
       "ok": false,
-      "detail": "4 duplicate(s): \"Pricing production and mixing rates\" in [business], \"Collab rules first 5 minutes count\" in [collaboration], \"Melody first lyrics serve melody\" in [creative_process]"
+      "detail": "6 duplicate(s): \"Pricing production and mixing rates\" in [business], \"Collab rules first 5 minutes count\" in [collaboration], \"Melody first lyrics serve melody\" in [creative_process]"
     },
     {
       "n": 8,
       "label": "Git initialized",
       "ok": true,
-      "detail": "4cc707c Add Lyrics Extractor: Whisper transcription to clipboard"
+      "detail": "2dc9a9b Chart download: in-app banner + macOS notification, drop Telegram summary"
     }
   ]
 }

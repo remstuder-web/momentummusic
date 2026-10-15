@@ -1,3 +1,6 @@
+/* Fonts — Space Mono 400/700, DM Sans variable (100–1000). display=swap avoids invisible text while loading. */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@100..1000&family=Space+Mono:wght@400;700&display=swap');
+
 /* Momentum palette — shared tokens.
    Trial: only DemoTab.svelte consumes these so far; other tabs still use hardcoded colors. */
 :root {

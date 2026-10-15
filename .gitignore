@@ -10,3 +10,7 @@ chart_download_index.json
 chart_download_status.json
 MOMENTUM_HANDOFF.md
 chart_source_state.json
+
+# local runtime state — never commit
+.spotify-token.json
+.test-results.json

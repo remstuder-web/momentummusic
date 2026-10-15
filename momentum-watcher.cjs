@@ -62,8 +62,8 @@ const DROPBOX_APP_KEY    = 'd49ij57sk23ukdw'     // e.g. 'abc123xyz'
 const DROPBOX_APP_SECRET = 'h36y7hta8ttmr6e'  // e.g. 'def456uvw'
 
 // Spotify — fill in from https://developer.spotify.com/dashboard
-const SPOTIFY_CLIENT_ID     = '45bb7c8c0553458ca79e0848ea805559'
-const SPOTIFY_CLIENT_SECRET = 'ab5d6290dc404f48b261870262f23a0c'
+const SPOTIFY_CLIENT_ID     = process.env.SPOTIFY_CLIENT_ID || ''
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || ''
 
 // Telegram bot
 const TELEGRAM_TOKEN    = process.env.TELEGRAM_BOT_TOKEN

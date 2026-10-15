@@ -3378,3 +3378,9 @@ TASK: recreate deleted Start Momentum.command
 WHAT: Recreated: pm2 start momentum-dev+momentum-watcher, open -a "Google Chrome" localhost:5173, Terminal tab 1 claude in /Users/remo/momentum, tab 2 Phantom bot (trading/venv + python3 api.py); single-line osascript only, no n8n; Phantom tab falls back to a separate window if Cmd-T keystroke fails (prevents command being typed into the Claude tab)
 RESULT: works — tested: dev 200, watcher /ping ok, Claude Code running, api.py on :8000 returns 200
 BLOCKERS: Cmd-T keystroke did not open a tab when run from Claude's shell, so test used the separate-window fallback; real tab depends on Terminal having Accessibility permission
+
+## 2026-10-15 src/app.css + src/lib/DemoTab.svelte — DONE
+TASK: DemoTab visual refresh trial
+WHAT: New shared src/app.css palette (muted blue accent, 17 accent opacity steps) imported in +layout.svelte; DemoTab styles fully converted to variables, gold sorted by intent (mostly neutral), container borders removed, quieter 11px text-dim headers, borderless chips, flat drop zones
+RESULT: works — vite build passes, screenshots checked; other tabs unchanged
+BLOCKERS: SENT status blue #4a9fd4 sits close in hue to new accent #7aa6c2 — needs a decision before rollout

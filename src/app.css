@@ -1,0 +1,37 @@
+/* Momentum palette — shared tokens.
+   Trial: only DemoTab.svelte consumes these so far; other tabs still use hardcoded colors. */
+:root {
+  --bg:         #0a0a0a;
+  --surface:    #141414;
+  --surface2:   #1c1c1c;
+  --accent:     #7aa6c2;
+  --accent-dim: rgba(122,166,194,.55);
+  --accent-hot: #9cc5de;
+  --text:       #e8e8e8;
+  --text-mid:   #a8a8a8;
+  --text-dim:   #6e6e6e;
+  --border:     #1f1f1f;
+  --border2:    #2a2a2a;
+
+  /* accent opacity steps — the distinct levels DemoTab used for gold */
+  --accent-a04: rgba(122,166,194,.04);
+  --accent-a05: rgba(122,166,194,.05);
+  --accent-a06: rgba(122,166,194,.06);
+  --accent-a08: rgba(122,166,194,.08);
+  --accent-a20: rgba(122,166,194,.2);
+  --accent-a25: rgba(122,166,194,.25);
+  --accent-a30: rgba(122,166,194,.3);
+  --accent-a35: rgba(122,166,194,.35);
+  --accent-a40: rgba(122,166,194,.4);
+  --accent-a45: rgba(122,166,194,.45);
+  --accent-a50: rgba(122,166,194,.5);
+  --accent-a55: rgba(122,166,194,.55);
+  --accent-a60: rgba(122,166,194,.6);
+  --accent-a70: rgba(122,166,194,.7);
+  --accent-a75: rgba(122,166,194,.75);
+  --accent-a80: rgba(122,166,194,.8);
+  --accent-a85: rgba(122,166,194,.85);
+
+  /* neutral chip fill */
+  --chip-bg:    rgba(255,255,255,.04);
+}

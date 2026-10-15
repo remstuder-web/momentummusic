@@ -1,10 +1,10 @@
 {
-  "updated": "2026-10-15T19:23:46Z",
-  "last_task": "recreate Start Momentum.command",
+  "updated": "2026-10-15T19:35:31Z",
+  "last_task": "DemoTab visual refresh trial",
   "status": "done",
-  "working": ["Start Momentum.command: pm2 dev+watcher, Chrome, Claude Code tab, Phantom api.py"],
+  "working": ["src/app.css palette tokens", "DemoTab converted to tokens, blue accent, reduced borders"],
   "broken": [],
-  "partial": ["Phantom opens as separate window if Terminal lacks Accessibility permission for Cmd-T"],
-  "next": "No pending tasks from this session",
-  "notes": "Launcher lives on Desktop, outside the repo"
+  "partial": ["Rollout to other tabs pending user review", "SENT blue vs accent blue collision unresolved"],
+  "next": "User reviews DemoTab trial; decide SENT colour, then roll out tab by tab",
+  "notes": "Only DemoTab consumes app.css; top nav (+page.svelte) still gold"
 }

@@ -1843,8 +1843,10 @@
   .card-head { padding: 0 14px; height: 52px; display: flex; align-items: center; gap: 0; cursor: pointer; background: var(--surface); user-select: none; transition: background .15s; overflow: hidden; position: relative; border-radius: 3px; }
   .card-head:hover { background: var(--surface2); }
   .card.exp .card-head { background: var(--surface2); border-radius: 3px 3px 0 0; }
-  .head-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; overflow: hidden; }
-  .demo-meta-right { position: absolute; left: 415px; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+  /* head-left's 401px basis + 14px padding puts the SAMPLE/@artist column at 415px on wide cards (it used to be
+     position:absolute there and overlapped the buttons on narrow cards); below that, head-left truncates first. */
+  .head-left { display: flex; align-items: center; gap: 10px; flex: 0 1 401px; min-width: 0; overflow: hidden; }
+  .demo-meta-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; pointer-events: none; }
   .head-buttons { display: flex; align-items: center; gap: 6px; flex-shrink: 0; overflow: hidden; margin-left: auto; }
   .type-badge { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 2px; color: var(--text-mid); border: none; background: var(--chip-bg); letter-spacing: .08em; flex-shrink: 0; }
   .at-display { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-dim); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .03em; }

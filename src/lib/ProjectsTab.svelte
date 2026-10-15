@@ -4281,22 +4281,24 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   /* Song cards */
   .song-card { border: 1px solid transparent; border-radius: 4px; overflow: visible; }
   .song-card.exp { border-color: var(--accent-dim); }
-  .song-head { display: flex; align-items: center; gap: 9px; padding: 11px 14px; background: var(--surface); }
+  .song-head { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 11px 14px; background: var(--surface); }
   .song-card.exp .song-head { background: var(--surface2); }
-  .song-head-left { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; cursor: pointer; overflow: hidden; }
-  .song-head-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; width: 460px; justify-content: flex-end; }
-  .mini-player { display: flex; align-items: center; gap: 6px; width: 240px; flex-shrink: 0; }
+  /* Bases are the minimum sizes, so the row only wraps when title (180) + player block (340) can't both fit;
+     wide screens are unchanged: right block grows to its 460px cap and the player stays aligned across songs. */
+  .song-head-left { display: flex; align-items: center; gap: 9px; flex: 1 1 180px; min-width: 0; cursor: pointer; overflow: hidden; }
+  .song-head-right { display: flex; align-items: center; gap: 8px; flex: 1 0 340px; min-width: 0; max-width: 460px; margin-left: auto; justify-content: flex-end; }
+  .mini-player { display: flex; align-items: center; gap: 6px; flex: 0 1 240px; min-width: 0; }
   .mini-player button { background: none; border: none; color: var(--text-mid); cursor: pointer; font-size: 14px; padding: 2px 4px; flex-shrink: 0; }
   .mini-player.active button { color: var(--text); }
   .mini-player .time { font-size: 10px; font-family: 'Space Mono', monospace; color: var(--text-dim); width: 80px; flex-shrink: 0; text-align: right; }
   .mini-player.active .time { color: var(--text-mid); }
   .seek-bar { flex: 1; height: 3px; accent-color: var(--text-mid); cursor: pointer; min-width: 0; }
   .song-head-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-  .song-player-slot { width: 280px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-start; }
+  .song-player-slot { flex: 0 1 280px; min-width: 0; display: flex; align-items: center; justify-content: flex-start; }
   .reorder-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
   .reorder-btn { font-size: 10px; padding: 2px 4px; background: transparent; border: none; color: var(--text-dim); cursor: pointer; }
   .reorder-btn:hover { color: var(--text); }
-  .song-info { display: flex; flex-direction: column; gap: 2px; min-width: 85px; cursor: pointer; }
+  .song-info { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; cursor: pointer; }
   .song-code { font-family: 'Space Mono', monospace; font-size: 16px; font-weight: 500; color: var(--text); }
   .code-stars-row { display: flex; align-items: center; gap: 6px; }
   .stars { display: flex; gap: 1px; }
@@ -4304,7 +4306,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .star.on { color: #4caf82; }
   .star:hover { color: #4caf82; }
   .song-artist-hdr { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--text-dim); letter-spacing: .08em; line-height: 1.2; }
-  .song-title-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-mid); font-size: 16px; font-weight: 400; font-family: 'DM Sans', sans-serif; padding: 1px 0; outline: none; width: 100%; cursor: text; }
+  .song-title-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-mid); font-size: 16px; font-weight: 400; font-family: 'DM Sans', sans-serif; padding: 1px 0; outline: none; width: 100%; cursor: text; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
   .song-title-input:hover { border-bottom-color: var(--border2); }
   .song-title-input:focus { border-bottom-color: var(--accent-dim); color: var(--text-mid); }
   .song-title-input::placeholder { color: var(--text-dim); }

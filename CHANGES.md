@@ -3390,3 +3390,9 @@ TASK: palette rollout + ANALYZER cutoff
 WHAT: Intent-based gold→token conversion in all remaining files (state→accent, hover→neutral, headers→text-dim 11px, container borders transparent, ghost buttons chip fill, bold→500); "sent" moved #4a9fd4→--sent #c4a466 (sand) to separate it from the accent; other old-blue uses → accent; ProjectsTab .stages-row wraps so ANALYZER stays visible below 1200px
 RESULT: works — vite build passes; ANALYZER visible+clickable at 1280/1200/1100/1000
 BLOCKERS: none. Left intentionally: project label palette COLORS, amber warning colors, red/green/violet status
+
+## 2026-10-15 src/lib/ProjectsTab.svelte + src/lib/DemoTab.svelte — DONE
+TASK: fixed-width headers cutting off content below 1200px
+WHAT: ProjectsTab .song-head wraps the player block (min 340, max 460) under the title when both can't fit; inner player slot/mini-player shrink; title input ellipsis. DemoTab .demo-meta-right no longer position:absolute — head-left 401px basis keeps the column at 415px on wide cards, gives way on narrow ones
+RESULT: works — no squashed/outside/overlapping content in Projects/Demos/Submissions headers at 1280/1200/1100/1024 (Demos checked with side panel open and closed)
+BLOCKERS: none

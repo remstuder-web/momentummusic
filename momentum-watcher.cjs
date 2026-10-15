@@ -58,8 +58,8 @@ try { Database = require('better-sqlite3') } catch(e) { console.warn('better-sql
 // ── CONFIG ────────────────────────────────────────────────────────────────
 // Dropbox OAuth2 — fill in App Key and App Secret from your Dropbox App Console
 // https://www.dropbox.com/developers/apps → your app → Settings
-const DROPBOX_APP_KEY    = 'd49ij57sk23ukdw'     // e.g. 'abc123xyz'
-const DROPBOX_APP_SECRET = 'h36y7hta8ttmr6e'  // e.g. 'def456uvw'
+const DROPBOX_APP_KEY    = process.env.DROPBOX_APP_KEY || ''
+const DROPBOX_APP_SECRET = process.env.DROPBOX_APP_SECRET || ''
 
 // Spotify — fill in from https://developer.spotify.com/dashboard
 const SPOTIFY_CLIENT_ID     = process.env.SPOTIFY_CLIENT_ID || ''

@@ -35,6 +35,11 @@
   --accent-a80: rgba(122,166,194,.8);
   --accent-a85: rgba(122,166,194,.85);
 
+  /* status: sent (was #4a9fd4 — moved off the accent hue) */
+  --sent:       #c4a466;
+  --sent-a06:   rgba(196,164,102,.06);
+  --sent-a30:   rgba(196,164,102,.3);
+
   /* neutral chip fill */
   --chip-bg:    rgba(255,255,255,.04);
 }

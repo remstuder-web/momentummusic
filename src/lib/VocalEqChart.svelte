@@ -1,7 +1,7 @@
 <script>
   let { mixCurve = null, refCurves = [], avgCurve = null, mixLabel = '', isMixTab = false, tonalBalance = null } = $props()
 
-  const REF_COLORS = ['#c9a84c', '#4cc9a8', '#c94c4c', '#9a4cc9']
+  const REF_COLORS = ['#7aa6c2', '#4cc9a8', '#c94c4c', '#9a4cc9']
   const MIX_COLOR = 'rgba(255,255,255,0.85)'
   const AVG_COLOR = 'rgba(100,149,237,0.55)'
 
@@ -267,7 +267,7 @@
 
 <style>
   .eq-wrap { position: relative; }
-  .eq-svg { width: 100%; height: auto; display: block; background: #080808; border-radius: 3px; }
+  .eq-svg { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 3px; }
   .eq-controls {
     display: flex;
     justify-content: flex-end;
@@ -276,9 +276,9 @@
   .izotope-toggle {
     font-family: 'Space Mono', monospace;
     font-size: 8px;
-    background: transparent;
-    border: 1px solid #252525;
-    color: #333;
+    background: var(--chip-bg);
+    border: 1px solid transparent;
+    color: var(--text-dim);
     padding: 1px 6px;
     border-radius: 2px;
     cursor: pointer;

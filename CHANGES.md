@@ -3384,3 +3384,9 @@ TASK: DemoTab visual refresh trial
 WHAT: New shared src/app.css palette (muted blue accent, 17 accent opacity steps) imported in +layout.svelte; DemoTab styles fully converted to variables, gold sorted by intent (mostly neutral), container borders removed, quieter 11px text-dim headers, borderless chips, flat drop zones
 RESULT: works — vite build passes, screenshots checked; other tabs unchanged
 BLOCKERS: SENT status blue #4a9fd4 sits close in hue to new accent #7aa6c2 — needs a decision before rollout
+
+## 2026-10-15 all tabs (src/lib/*, +page, sono) + src/app.css — DONE
+TASK: palette rollout + ANALYZER cutoff
+WHAT: Intent-based gold→token conversion in all remaining files (state→accent, hover→neutral, headers→text-dim 11px, container borders transparent, ghost buttons chip fill, bold→500); "sent" moved #4a9fd4→--sent #c4a466 (sand) to separate it from the accent; other old-blue uses → accent; ProjectsTab .stages-row wraps so ANALYZER stays visible below 1200px
+RESULT: works — vite build passes; ANALYZER visible+clickable at 1280/1200/1100/1000
+BLOCKERS: none. Left intentionally: project label palette COLORS, amber warning colors, red/green/violet status

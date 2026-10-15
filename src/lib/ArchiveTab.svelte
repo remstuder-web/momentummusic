@@ -70,19 +70,19 @@
 
 <style>
   .header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-  .sh { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: rgba(201,168,76,.75); }
-  .count { font-family: 'Space Mono', monospace; font-size: 11px; color: #555; }
-  .empty { font-family: 'Space Mono', monospace; font-size: 13px; color: #555; padding: 40px 0; text-align: center; }
+  .sh { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); }
+  .count { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--text-dim); }
+  .empty { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--text-dim); padding: 40px 0; text-align: center; }
   .list { display: flex; flex-direction: column; gap: 6px; }
-  .proj-row { display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: #1c1c1c; border: 1px solid #252525; border-radius: 4px; transition: border-color .15s; }
-  .proj-row:hover { border-color: #303030; }
+  .proj-row { display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: var(--surface); border: 1px solid transparent; border-radius: 4px; transition: border-color .15s; }
+  .proj-row:hover { border-color: var(--border2); }
   .proj-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .proj-info { display: flex; align-items: center; gap: 10px; flex: 1; flex-wrap: wrap; }
-  .proj-name { font-family: 'Space Mono', monospace; font-size: 15px; font-weight: 700; color: #cec9c1; }
-  .proj-artist { font-size: 13px; color: #555; }
-  .proj-date { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; margin-left: auto; }
+  .proj-name { font-family: 'Space Mono', monospace; font-size: 15px; font-weight: 500; color: var(--text-mid); }
+  .proj-artist { font-size: 13px; color: var(--text-dim); }
+  .proj-date { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--text-dim); margin-left: auto; }
   .proj-btns { display: flex; gap: 8px; flex-shrink: 0; }
-  .btn-revive { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .08em; padding: 7px 16px; border: 1px solid rgba(76,175,130,.4); color: #4caf82; background: transparent; cursor: pointer; border-radius: 3px; transition: background .15s; }
+  .btn-revive { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: .08em; padding: 7px 16px; border: 1px solid rgba(76,175,130,.4); color: #4caf82; background: transparent; cursor: pointer; border-radius: 3px; transition: background .15s; }
   .btn-revive:hover { background: rgba(76,175,130,.08); }
   .btn-delete { font-family: 'Space Mono', monospace; font-size: 11px; padding: 7px 12px; border: 1px solid rgba(224,90,74,.25); color: #e05a4a; background: transparent; cursor: pointer; border-radius: 3px; transition: background .15s; }
   .btn-delete:hover { background: rgba(224,90,74,.08); }

@@ -203,7 +203,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #0a0a0a;
+    background: var(--bg);
     position: relative;
     overflow: hidden;
     padding: 32px 16px;
@@ -222,7 +222,7 @@
     position: relative;
     z-index: 1;
     background: rgba(28,28,28,.92);
-    border: 1px solid #2a2a2a;
+    border: 1px solid transparent;
     border-radius: 8px;
     padding: 36px 32px 28px;
     width: 100%;
@@ -237,35 +237,35 @@
   .lp-loading, .lp-no-audio {
     font-family: 'Space Mono', monospace;
     font-size: 12px;
-    color: #555;
+    color: var(--text-dim);
     text-align: center;
     padding: 24px 0;
   }
   .lp-not-found { text-align: center; padding: 24px 0; }
-  .lp-nf-title { font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 700; color: #9e9690; margin-bottom: 8px; }
-  .lp-nf-sub { font-family: 'Space Mono', monospace; font-size: 11px; color: #444; }
+  .lp-nf-title { font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 500; color: var(--text-mid); margin-bottom: 8px; }
+  .lp-nf-sub { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--text-dim); }
 
   /* ── Header ──────────────────────────────────────────────────────────── */
   .lp-header { display: flex; flex-direction: column; gap: 6px; }
   .lp-type-badge {
     font-family: 'Space Mono', monospace;
     font-size: 9px;
-    font-weight: 700;
+    font-weight: 500;
     letter-spacing: .14em;
-    color: rgba(201,168,76,.6);
+    color: var(--text-mid);
     align-self: flex-start;
   }
   .lp-patch-name {
     font-family: 'Space Mono', monospace;
     font-size: 17px;
-    font-weight: 700;
-    color: #c9a84c;
+    font-weight: 500;
+    color: var(--text);
     line-height: 1.3;
   }
   .lp-song-title {
     font-family: 'DM Sans', sans-serif;
     font-size: 13px;
-    color: #9e9690;
+    color: var(--text-mid);
     font-weight: 300;
   }
 
@@ -274,7 +274,7 @@
   .lp-audio {
     width: 100%;
     height: 36px;
-    accent-color: #c9a84c;
+    accent-color: var(--text-mid);
   }
 
   /* Pitch shift row */
@@ -286,9 +286,9 @@
   .lp-pitch-label {
     font-family: 'Space Mono', monospace;
     font-size: 9px;
-    font-weight: 700;
+    font-weight: 500;
     letter-spacing: .12em;
-    color: #555;
+    color: var(--text-dim);
     margin-right: 4px;
   }
   .lp-pitch-btn {
@@ -296,10 +296,10 @@
     height: 26px;
     font-family: 'Space Mono', monospace;
     font-size: 14px;
-    font-weight: 700;
-    background: #1c1c1c;
-    border: 1px solid #303030;
-    color: #c9a84c;
+    font-weight: 500;
+    background: var(--surface);
+    border: 1px solid transparent;
+    color: var(--text-mid);
     border-radius: 3px;
     cursor: pointer;
     line-height: 1;
@@ -307,17 +307,17 @@
     transition: all .1s;
     flex-shrink: 0;
   }
-  .lp-pitch-btn:hover:not(:disabled) { background: #252525; border-color: #c9a84c; }
+  .lp-pitch-btn:hover:not(:disabled) { background: var(--surface2); border-color: var(--border2); }
   .lp-pitch-btn:disabled { opacity: .3; cursor: default; }
   .lp-pitch-val {
     width: 28px;
     height: 26px;
     font-family: 'Space Mono', monospace;
     font-size: 11px;
-    font-weight: 700;
-    background: #1c1c1c;
-    border: 1px solid #303030;
-    color: #c9a84c;
+    font-weight: 500;
+    background: var(--surface);
+    border: 1px solid transparent;
+    color: var(--text);
     border-radius: 3px;
     cursor: pointer;
     text-align: center;
@@ -325,7 +325,7 @@
     transition: all .1s;
     flex-shrink: 0;
   }
-  .lp-pitch-val:hover { border-color: rgba(201,168,76,.5); }
+  .lp-pitch-val:hover { border-color: var(--border2); }
   .lp-pitch-hint {
     font-family: 'Space Mono', monospace;
     font-size: 8px;
@@ -338,15 +338,15 @@
   .lp-feedback-label {
     font-family: 'Space Mono', monospace;
     font-size: 9px;
-    font-weight: 700;
-    letter-spacing: .12em;
-    color: rgba(201,168,76,.5);
+    font-weight: 400;
+    letter-spacing: .08em;
+    color: var(--text-dim);
   }
   .lp-fb-ta {
     width: 100%;
-    background: #0d0d0d;
-    border: 1px solid #252525;
-    color: #f5f1ea;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     font-weight: 300;
@@ -356,15 +356,15 @@
     outline: none;
     line-height: 1.5;
   }
-  .lp-fb-ta:focus { border-color: rgba(201,168,76,.3); }
+  .lp-fb-ta:focus { border-color: var(--accent-dim); }
   .lp-fb-btn {
     align-self: flex-start;
     font-family: 'Space Mono', monospace;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 500;
     padding: 8px 18px;
-    background: #c9a84c;
-    color: #0a0a0a;
+    background: var(--surface2);
+    color: var(--text);
     border: none;
     border-radius: 3px;
     cursor: pointer;
@@ -385,19 +385,19 @@
   .lp-dl-link {
     font-family: 'Space Mono', monospace;
     font-size: 10px;
-    color: #555;
+    color: var(--text-dim);
     text-decoration: none;
     letter-spacing: .06em;
     transition: color .15s;
   }
-  .lp-dl-link:hover { color: #9e9690; }
-  .lp-dl-filename { font-family: 'Space Mono', monospace; font-size: 8px; color: #333; margin-top: 4px; letter-spacing: .04em; word-break: break-all; }
+  .lp-dl-link:hover { color: var(--text-mid); }
+  .lp-dl-filename { font-family: 'Space Mono', monospace; font-size: 8px; color: var(--text-dim); margin-top: 4px; letter-spacing: .04em; word-break: break-all; }
 
   /* ── Footer ──────────────────────────────────────────────────────────── */
   .lp-footer {
     font-family: 'Space Mono', monospace;
     font-size: 8px;
-    color: #2a2a2a;
+    color: var(--border2);
     text-align: center;
     letter-spacing: .14em;
     text-transform: uppercase;

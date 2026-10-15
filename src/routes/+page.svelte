@@ -397,8 +397,8 @@
           <div class="usage-section-label" style="margin-top:14px">BY ENDPOINT (THIS MONTH)</div>
           {#each agentUsage.breakdown.slice(0,10) as item}
             <div class="usage-row">
-              <span class="usage-label" style="font-size:8px;color:#555">{item.endpoint.replace('/','').replace(/-/g,' ')}</span>
-              <span class="usage-cost" style="font-size:9px;color:#666">${item.cost.toFixed(4)}</span>
+              <span class="usage-label" style="font-size: 8px;color: var(--text-dim)">{item.endpoint.replace('/','').replace(/-/g,' ')}</span>
+              <span class="usage-cost" style="font-size: 9px;color: var(--text-dim)">${item.cost.toFixed(4)}</span>
             </div>
           {/each}
         {/if}
@@ -500,7 +500,7 @@
             <button class="settings-save" onclick={saveTasks}>
               {tasksSaved ? 'Saved ✓' : 'Save to TASKS.md'}
             </button>
-            <button class="settings-save" style="background:rgba(201,168,76,.15);color:#c9a84c;" onclick={async () => {
+            <button class="settings-save" style="background: var(--chip-bg);color: var(--text-mid);" onclick={async () => {
               await saveTasks()
               try { await fetch('http://localhost:4242/launch-claude-code', { method: 'POST' }) }
               catch(e) { alert('Watcher not running') }
@@ -527,7 +527,7 @@
             {#if errorLog.length}
               <pre class="changes-log">{errorLog.map(e => `${e.time} · ${e.endpoint} · ${e.message}`).join('\n')}</pre>
             {:else}
-              <pre class="changes-log" style="color:#444">no errors</pre>
+              <pre class="changes-log" style="color: var(--text-dim)">no errors</pre>
             {/if}
           {/if}
         </div>
@@ -535,19 +535,19 @@
           <label>WATCHER</label>
           <div class="watcher-status-row">
             {#if watcherStatus === null}
-              <span class="watcher-dot" style="background:#555"></span>
+              <span class="watcher-dot" style="background: var(--text-dim)"></span>
               <span class="watcher-label">Checking…</span>
             {:else if watcherStatus}
-              <span class="watcher-dot" style="background:#4caf82"></span>
+              <span class="watcher-dot" style="background: #4caf82"></span>
               <span class="watcher-label">Watcher running</span>
               <button class="settings-clear" onclick={stopWatcher}>Stop</button>
             {:else}
-              <span class="watcher-dot" style="background:#e74c3c"></span>
+              <span class="watcher-dot" style="background: #e74c3c"></span>
               <span class="watcher-label">Watcher stopped</span>
             {/if}
           </div>
           {#if watcherStatus === false}
-            <p class="settings-hint" style="color:#e74c3c">Run <code>pm2 start momentum-watcher</code> in terminal to restart</p>
+            <p class="settings-hint" style="color: #e74c3c">Run <code>pm2 start momentum-watcher</code> in terminal to restart</p>
           {/if}
         </div>
         <div class="settings-field">
@@ -635,11 +635,11 @@
       </div>
       {#if iframeBlocked}
         <div class="link-popup-blocked">
-          <div style="color:#9e9690;font-family:'DM Sans',sans-serif;font-size:13px;text-align:center;padding:40px">
+          <div style="color: var(--text-mid);font-family: 'DM Sans',sans-serif;font-size: 13px;text-align: center;padding: 40px">
             This site doesn't allow embedding.<br><br>
             <a href={popupUrl} target="_blank" rel="noopener"
                onclick={e => { e.stopPropagation(); if (originalOpen) window.open = originalOpen }}
-               style="color:#c9a84c">Open in new tab ↗</a>
+               style="color: var(--text-mid)">Open in new tab ↗</a>
           </div>
         </div>
       {:else}
@@ -659,14 +659,14 @@
 
 <style>
   :global(*, *::before, *::after) { box-sizing: border-box; margin: 0; padding: 0; }
-  :global(body) { background: #0a0a0a; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-weight: 300; min-height: 100vh; }
+  :global(body) { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; font-weight: 300; min-height: 100vh; }
 
   .app { display: flex; flex-direction: column; min-height: 100vh; }
 
   nav {
     display: flex;
-    background: #0a0a0a;
-    border-bottom: 1px solid #222;
+    background: var(--bg);
+    border-bottom: 1px solid transparent;
     position: sticky;
     top: 0;
     z-index: 99;
@@ -677,7 +677,7 @@
   .tab {
     font-family: 'Space Mono', monospace;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 500;
     letter-spacing: .12em;
     text-transform: uppercase;
     padding: 15px 22px;
@@ -685,81 +685,81 @@
     color: #a09a94;
     border: none;
     border-bottom: 3px solid transparent;
-    background: transparent;
+    background: var(--chip-bg);
     white-space: nowrap;
     transition: all .2s;
   }
 
-  .tab:hover { color: #c9a84c; }
-  .tab.active { color: #c9a84c; border-bottom-color: #c9a84c; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent-dim); }
 
 
 
   main { flex: 1; padding: 24px 32px; }
 
-  .settings-btn { font-family: 'Space Mono', monospace; font-size: 16px; padding: 10px 14px; background: transparent; border: none; color: #555; cursor: pointer; flex-shrink: 0; }
-  .settings-btn:hover { color: #c9a84c; }
+  .settings-btn { font-family: 'Space Mono', monospace; font-size: 16px; padding: 10px 14px; background: transparent; border: none; color: var(--text-dim); cursor: pointer; flex-shrink: 0; }
+  .settings-btn:hover { color: var(--text); }
   .pizza-btn { font-size: 18px; padding: 6px 10px; text-decoration: none; flex-shrink: 0; cursor: pointer; opacity: .7; transition: opacity .2s; }
   .pizza-btn:hover { opacity: 1; }
-  .cost-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 4px 8px; background: transparent; border: 1px solid #252525; color: #444; cursor: pointer; border-radius: 2px; transition: all .15s; flex-shrink: 0; margin-left: auto; }
+  .cost-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 500; padding: 4px 8px; background: var(--chip-bg); border: 1px solid transparent; color: var(--text-dim); cursor: pointer; border-radius: 2px; transition: all .15s; flex-shrink: 0; margin-left: auto; }
   .cost-btn:hover { color: #4caf82; border-color: #4caf82; }
 
   .settings-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 9999; display: flex; align-items: center; justify-content: center; }
-  .settings-panel { background: #1c1c1c; border: 1px solid #303030; border-radius: 6px; padding: 28px; width: 460px; display: flex; flex-direction: column; gap: 20px; }
-  .cost-panel { background: #1c1c1c; border: 1px solid #303030; border-radius: 6px; padding: 24px; width: 320px; display: flex; flex-direction: column; gap: 6px; }
-  .settings-title { font-family: 'Space Mono', monospace; font-size: 14px; font-weight: 700; letter-spacing: .14em; color: #c9a84c; }
+  .settings-panel { background: var(--surface); border: 1px solid transparent; border-radius: 6px; padding: 28px; width: 460px; display: flex; flex-direction: column; gap: 20px; }
+  .cost-panel { background: var(--surface); border: 1px solid transparent; border-radius: 6px; padding: 24px; width: 320px; display: flex; flex-direction: column; gap: 6px; }
+  .settings-title { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 400; letter-spacing: .08em; color: var(--text-dim); }
   .settings-field { display: flex; flex-direction: column; gap: 8px; }
-  .settings-field label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; color: #9e9690; }
+  .settings-field label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; color: var(--text-mid); }
   .watcher-status-row { display: flex; align-items: center; gap: 8px; }
   .watcher-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .watcher-label { font-family: 'Space Mono', monospace; font-size: 11px; color: #cec9c1; }
+  .watcher-label { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--text-mid); }
   .settings-row { display: flex; gap: 6px; }
-  .settings-inp { flex: 1; background: #0a0a0a; border: 1px solid #303030; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 13px; padding: 8px 12px; outline: none; border-radius: 3px; }
-  .settings-inp:focus { border-color: rgba(201,168,76,.5); }
-  .settings-save { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; padding: 8px 14px; background: #c9a84c; color: #0a0a0a; border: none; border-radius: 3px; cursor: pointer; white-space: nowrap; }
-  .settings-clear { font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px 12px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 3px; cursor: pointer; }
+  .settings-inp { flex: 1; background: var(--bg); border: 1px solid var(--border2); color: var(--text); font-family: 'Space Mono', monospace; font-size: 13px; padding: 8px 12px; outline: none; border-radius: 3px; }
+  .settings-inp:focus { border-color: var(--accent-dim); }
+  .settings-save { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 500; padding: 8px 14px; background: var(--surface2); color: var(--text); border: none; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+  .settings-clear { font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px 12px; background: transparent; border: 1px solid transparent; color: var(--text-dim); border-radius: 3px; cursor: pointer; }
   .settings-clear:hover { border-color: #e05a4a; color: #e05a4a; }
-  .settings-hint { font-family: 'Space Mono', monospace; font-size: 10px; color: #444; line-height: 1.6; }
-  .settings-close { font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px 14px; background: transparent; border: 1px solid #303030; color: #555; border-radius: 3px; cursor: pointer; align-self: flex-end; }
-  .settings-close:hover { color: #9e9690; }
+  .settings-hint { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-dim); line-height: 1.6; }
+  .settings-close { font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px 14px; background: transparent; border: 1px solid transparent; color: var(--text-dim); border-radius: 3px; cursor: pointer; align-self: flex-end; }
+  .settings-close:hover { color: var(--text-mid); }
   .wa-contacts-list { display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto; }
   .wa-contact-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
   .wa-toggle { background: transparent; border: none; font-size: 14px; color: #303030; cursor: pointer; padding: 0; line-height: 1; width: 16px; flex-shrink: 0; }
-  .wa-toggle.on { color: #c9a84c; }
-  .wa-toggle:hover { color: rgba(201,168,76,.6); }
-  .wa-contact-name { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; }
-  .group-badge { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: .08em; color: #4a9fd4; border: 1px solid rgba(74,159,212,.3); padding: 1px 4px; border-radius: 2px; }
-  .contact-search-inp { width: 100%; background: #1c1c1c; border: 1px solid #303030; color: #cec9c1; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 5px 8px; border-radius: 3px; outline: none; margin-bottom: 8px; box-sizing: border-box; }
-  .contact-search-inp:focus { border-color: #3c3c3c; }
-  .wa-section-label { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700; color: #333; letter-spacing: .1em; padding: 8px 0 4px; border-bottom: 1px solid #1a1a1a; margin-bottom: 4px; }
+  .wa-toggle.on { color: var(--accent); }
+  .wa-toggle:hover { color: var(--text); }
+  .wa-contact-name { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-mid); }
+  .group-badge { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 500; letter-spacing: .08em; color: var(--text-mid); border: 1px solid transparent; background: var(--chip-bg); padding: 1px 4px; border-radius: 2px; }
+  .contact-search-inp { width: 100%; background: var(--surface); border: 1px solid var(--border2); color: var(--text-mid); font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 5px 8px; border-radius: 3px; outline: none; margin-bottom: 8px; box-sizing: border-box; }
+  .contact-search-inp:focus { border-color: var(--border2); }
+  .wa-section-label { font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 500; color: var(--text-dim); letter-spacing: .1em; padding: 8px 0 4px; border-bottom: 1px solid transparent; margin-bottom: 4px; }
 
   .usage-header-row { display: flex; align-items: center; justify-content: space-between; }
-  .usage-header-row label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; color: #9e9690; }
-  .tasks-inp { width: 100%; background: #0a0a0a; border: 1px solid #303030; color: #f5f1ea; font-family: 'Space Mono', monospace; font-size: 11px; line-height: 1.7; padding: 10px 12px; outline: none; border-radius: 3px; resize: vertical; }
-  .tasks-inp:focus { border-color: rgba(201,168,76,.5); }
+  .usage-header-row label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: .12em; color: var(--text-mid); }
+  .tasks-inp { width: 100%; background: var(--bg); border: 1px solid var(--border2); color: var(--text); font-family: 'Space Mono', monospace; font-size: 11px; line-height: 1.7; padding: 10px 12px; outline: none; border-radius: 3px; resize: vertical; }
+  .tasks-inp:focus { border-color: var(--accent-dim); }
   .tasks-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-  .tasks-saved-time { font-family: 'Space Mono', monospace; font-size: 9px; color: #444; }
-  .changes-log { font-family: 'Space Mono', monospace; font-size: 10px; color: #9e9690; background: #0a0a0a; border: 1px solid #1c1c1c; border-radius: 3px; padding: 10px 12px; max-height: 160px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; line-height: 1.6; margin: 0; }
-  .error-log-toggle { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; color: rgba(201,168,76,.6); background: transparent; border: none; padding: 0; cursor: pointer; text-transform: uppercase; }
-  .goal-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #1c1c1c; }
-  .goal-title { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #cec9c1; flex: 1; }
-  .goal-meta { font-family: 'Space Mono', monospace; font-size: 10px; color: rgba(201,168,76,.5); white-space: nowrap; }
-  .goal-done-btn { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 7px; background: transparent; border: 1px solid #303030; color: #4caf82; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .tasks-saved-time { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--text-dim); }
+  .changes-log { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-mid); background: var(--bg); border: 1px solid transparent; border-radius: 3px; padding: 10px 12px; max-height: 160px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; line-height: 1.6; margin: 0; }
+  .error-log-toggle { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: .12em; color: var(--text-mid); background: transparent; border: none; padding: 0; cursor: pointer; text-transform: uppercase; }
+  .goal-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid transparent; }
+  .goal-title { font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text-mid); flex: 1; }
+  .goal-meta { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-mid); white-space: nowrap; }
+  .goal-done-btn { font-family: 'Space Mono', monospace; font-size: 10px; padding: 2px 7px; background: var(--chip-bg); border: 1px solid transparent; color: #4caf82; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
   .goal-done-btn:hover { background: rgba(76,175,130,.08); }
   .goal-add-row { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
-  .goal-inp { background: #0a0a0a; border: 1px solid #303030; color: #f5f1ea; font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 8px; outline: none; border-radius: 3px; flex: 1; min-width: 0; }
-  .goal-inp:focus { border-color: rgba(201,168,76,.4); }
+  .goal-inp { background: var(--bg); border: 1px solid var(--border2); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 8px; outline: none; border-radius: 3px; flex: 1; min-width: 0; }
+  .goal-inp:focus { border-color: var(--accent-dim); }
   .goal-inp-sm { flex: 0 0 90px; }
-  .goal-unit-sel { background: #0a0a0a; border: 1px solid #303030; color: #9e9690; font-family: 'Space Mono', monospace; font-size: 11px; padding: 6px 4px; outline: none; border-radius: 3px; flex: 0 0 80px; }
+  .goal-unit-sel { background: var(--bg); border: 1px solid transparent; color: var(--text-mid); font-family: 'Space Mono', monospace; font-size: 11px; padding: 6px 4px; outline: none; border-radius: 3px; flex: 0 0 80px; }
 
   /* Cost panel */
-  .usage-section-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: .14em; color: rgba(201,168,76,.5); text-transform: uppercase; margin-top: 8px; }
+  .usage-section-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 400; letter-spacing: .08em; color: var(--text-dim); text-transform: uppercase; margin-top: 8px; }
   .usage-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
-  .usage-row.total { border-top: 1px solid #252525; margin-top: 4px; padding-top: 6px; }
-  .usage-row.total .usage-label { color: #c9a84c; font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; }
-  .usage-row.total .usage-cost { color: #c9a84c; font-weight: 700; font-size: 13px; }
-  .usage-label { font-family: 'Space Mono', monospace; font-size: 10px; color: #666; }
-  .usage-cost { font-family: 'Space Mono', monospace; font-size: 11px; color: #cec9c1; }
+  .usage-row.total { border-top: 1px solid transparent; margin-top: 4px; padding-top: 6px; }
+  .usage-row.total .usage-label { color: var(--text-mid); font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 500; }
+  .usage-row.total .usage-cost { color: var(--text); font-weight: 500; font-size: 13px; }
+  .usage-label { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-dim); }
+  .usage-cost { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--text-mid); }
   .cost-footer { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
   .cost-footer .settings-hint { flex: 1; }
 
@@ -775,8 +775,8 @@
   .link-popup {
     width: 85vw;
     height: 85vh;
-    background: #0d0d0d;
-    border: 1px solid #303030;
+    background: var(--bg);
+    border: 1px solid var(--border2);
     border-radius: 6px;
     display: flex;
     flex-direction: column;
@@ -788,31 +788,31 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 12px;
-    border-bottom: 1px solid #252525;
-    background: #111;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
     flex-shrink: 0;
   }
   .link-popup-title {
     font-family: 'Space Mono', monospace;
     font-size: 10px;
-    color: #9e9690;
+    color: var(--text-mid);
     letter-spacing: .06em;
   }
   .link-popup-btns { display: flex; gap: 8px; align-items: center; }
   .link-popup-external {
     font-family: 'Space Mono', monospace;
     font-size: 12px;
-    color: #555;
+    color: var(--text-dim);
     text-decoration: none;
     padding: 2px 6px;
-    border: 1px solid #252525;
+    border: 1px solid var(--border);
     border-radius: 2px;
   }
-  .link-popup-external:hover { color: #c9a84c; border-color: #c9a84c; }
+  .link-popup-external:hover { color: var(--text); border-color: var(--border2); }
   .link-popup-close {
     background: transparent;
     border: none;
-    color: #555;
+    color: var(--text-dim);
     font-size: 18px;
     cursor: pointer;
     padding: 0 4px;
@@ -827,7 +827,7 @@
     justify-content: center;
     font-family: 'Space Mono', monospace;
     font-size: 11px;
-    color: #9e9690;
+    color: var(--text-mid);
     text-align: center;
     padding: 40px;
   }

@@ -263,7 +263,10 @@ function fetchJSON(url, options = {}) {
       let data = ''
       res.on('data', chunk => data += chunk)
       res.on('end', () => {
-        console.log(`  HTTP ${res.statusCode} — raw: ${data.slice(0, 300)}`)
+        // Never log tokens: redact token fields before logging the response
+        const safe = data.replace(/("(?:access|refresh|id)_token"\s*:\s*")[^"]*"/g, '$1[REDACTED]"')
+        const gotToken = /"access_token"\s*:/.test(data) ? ' — token received' : ''
+        console.log(`  HTTP ${res.statusCode}${gotToken} — raw: ${safe.slice(0, 300)}`)
         try { resolve(JSON.parse(data)) }
         catch(e) { resolve({ _raw: data, _status: res.statusCode }) }
       })
@@ -650,7 +653,7 @@ async function getSpotifyToken() {
   })
   console.log('Token response status:', r.status)
   const text = await r.text()
-  console.log('Token response:', text.slice(0, 200))
+  console.log('Token response:', r.ok ? 'token received' : text.slice(0, 200))
   if (!r.ok) throw new Error(`Spotify token error: ${r.status} ${text}`)
   const d = JSON.parse(text)
   return d.access_token

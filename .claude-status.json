@@ -1,18 +1,17 @@
 {
-  "updated": "2026-10-16T09:20:00Z",
-  "last_task": "MIDI result UI grouped per idea",
+  "updated": "2026-10-16T09:55:00Z",
+  "last_task": "Audio reference: Demucs + Essentia chord detection into the MIDI pipeline",
   "status": "done",
   "working": [
-    "/generate-midi-from-reference writes per idea a 2-part file (Chords, Lead) and a _merged single-part file",
-    "merged: all notes in one part, tempo kept, same-pitch collisions resolved without touching the lead",
-    "velocity ranges separated: chords 60-75, lead 78-100",
-    "DailyTab MIDI result: one row per idea with '2 Spuren' / '1 Clip' chips"
+    "/generate-midi-from-reference accepts .mid and audio (wav/mp3/aiff/m4a)",
+    "audio: loop-based chord progression with bass-corrected inversions + confidence",
+    "DailyTab: one drop field 'REFERENCE → MIDI IDEEN', detection line, ideas grouped"
   ],
   "broken": [
     "test-system TEST 3: Spotify 403 premium required",
     "test-system TEST 7: duplicate brain entries"
   ],
   "partial": [],
-  "next": "User listens to the MIDI ideas; chips are labels only (files are dragged from the Desktop)",
-  "notes": "Merged collision handling: chord note -12, or dropped if that octave is occupied by another chord note"
+  "next": "Optional: half-bar chord resolution for fast-changing harmony (Levels loses E/B and B at one chord per bar)",
+  "notes": "Audio path: python3.11 (demucs htdemucs --shifts 0, essentia); music21 path: /opt/homebrew/bin/python3. Shared figure_of() holds the minor-key bVI/bVII fix for both."
 }

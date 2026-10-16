@@ -59,6 +59,11 @@
   let midiResult = $state(null)
   let midiDragging = $state(false)
   let midiSteps = $state([])
+  let midiIsAudio = $state(false)
+  const MIDI_REF_RE = /\.(mid|midi|wav|mp3|aif|aiff|m4a)$/i
+  const MIDI_AUDIO_RE = /\.(wav|mp3|aif|aiff|m4a)$/i
+  // audio adds stem separation, chord detection and conversion before the shared steps
+  let midiTotalSteps = $derived(midiIsAudio ? 6 : 4)
 
   let lyricsFile = $state(null)
   let lyricsLoading = $state(false)
@@ -1304,7 +1309,7 @@ ${mozartContext}`
     e.preventDefault()
     midiDragging = false
     const file = e.dataTransfer.files[0]
-    if (file && /\.mid$/i.test(file.name)) { midiFile = file; midiResult = null; midiSteps = [] }
+    if (file && MIDI_REF_RE.test(file.name)) { midiFile = file; midiIsAudio = MIDI_AUDIO_RE.test(file.name); midiResult = null; midiSteps = [] }
   }
 
   async function runMidiGenerate() {
@@ -2064,14 +2069,14 @@ ${mozartContext}`
 
         <!-- MIDI FROM REFERENCE -->
         <div class="helper-block">
-          <div class="normalizer-title">MIDI FROM REFERENCE</div>
-          <div class="helper-sub">Drop a MIDI file to generate 5 new ideas in the same style</div>
+          <div class="normalizer-title">REFERENCE → MIDI IDEEN</div>
+          <div class="helper-sub">Drop a MIDI or audio file to generate 5 new ideas in the same style</div>
           <div class="acapella-drop {midiDragging ? 'dragging' : ''}"
             ondragover={e => { e.preventDefault(); midiDragging = true }}
             ondragleave={() => midiDragging = false}
             ondrop={handleMidiDrop}>
             {#if midiLoading}
-              <div class="acapella-loading">● Generating{midiSteps.length ? ` · step ${midiSteps.length}/4` : '...'}</div>
+              <div class="acapella-loading">● Generating{midiSteps.length ? ` · step ${midiSteps.length}/${midiTotalSteps}` : '...'}</div>
             {:else if midiFile}
               <div class="acapella-ready">
                 📁 {midiFile.name}
@@ -2079,8 +2084,8 @@ ${mozartContext}`
               </div>
             {:else}
               <div class="acapella-placeholder">
-                🎹 Drop a .mid file — chords + melody → 5 new sequences
-                <span style="font-size: 9px;color: var(--text-dim)">analyzed temporarily · never saved</span>
+                🎹 MIDI oder Audio — bei Audio dauert die Analyse 5-10 Min
+                <span style="font-size: 9px;color: var(--text-dim)">.mid · wav · mp3 · aiff · m4a — analyzed temporarily · never saved</span>
               </div>
             {/if}
           </div>
@@ -2089,7 +2094,7 @@ ${mozartContext}`
               {#each midiSteps as step}
                 <div class="midi-step">✓ {step}</div>
               {/each}
-              {#if midiLoading && midiSteps.length < 4}
+              {#if midiLoading && midiSteps.length < midiTotalSteps}
                 <div class="midi-step pending">◌ Processing...</div>
               {/if}
             </div>
@@ -2097,6 +2102,15 @@ ${mozartContext}`
           {#if midiResult}
             <div class="acapella-result">
               {#if midiResult.ok}
+                {#if midiResult.analysis?.keyShort}
+                  {@const a = midiResult.analysis}
+                  <div class="midi-detected">
+                    Erkannt: {a.keyShort} — {(a.progression || []).slice(0, 8).join(' ')}{a.confidence ? ` (Konfidenz: ${a.confidence.level})` : ''}
+                  </div>
+                  {#if a.confidence?.level === 'niedrig'}
+                    <div class="midi-detected-warn">Akkorderkennung unsicher — Tonart und Akkorde können falsch sein</div>
+                  {/if}
+                {/if}
                 {#if midiResult.ideas?.length}
                   {#each midiResult.ideas as idea}
                     <div class="result-row midi-idea-row">
@@ -2801,6 +2815,8 @@ ${mozartContext}`
   .result-label { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--text-dim); letter-spacing: .08em; width: 56px; flex-shrink: 0; }
   .result-val { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-mid); }
   .midi-idea-row { align-items: center; }
+  .midi-detected { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-mid); margin-bottom: 4px; }
+  .midi-detected-warn { font-family: 'Space Mono', monospace; font-size: 9px; color: #e8a838; margin-bottom: 4px; }
   .midi-idea-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .midi-variant { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .06em; padding: 2px 7px; background: var(--chip-bg); color: var(--text-dim); border-radius: 2px; white-space: nowrap; flex-shrink: 0; cursor: default; }
   .midi-progress { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }

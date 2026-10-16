@@ -12046,8 +12046,12 @@ Give specific production direction based on stem balance, loudness levels, and r
     const chunks = []; req.on('data', c => chunks.push(c))
     req.on('end', async () => {
       let tmpFile = null
+      let demucsDir = null
       const MIDI21_PYTHON = '/opt/homebrew/bin/python3'
+      const AUDIO_PYTHON = '/opt/homebrew/bin/python3.11'   // demucs + essentia live here
+      const CONF_HIGH = 0.65, CONF_MID = 0.5
       const analyzeScriptPath = '/tmp/analyze_midi.py'
+      const audioScriptPath = '/tmp/audio_chords.py'
       const renderScriptPath = '/tmp/render_midi.py'
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString())
@@ -12063,68 +12067,392 @@ Give specific production direction based on stem balance, loudness levels, and r
           throw new Error('music21 not installed. Run: pip3 install music21')
         }
 
-        tmpFile = `/tmp/midi_ref_${Date.now()}.mid`
+        // Reference = MIDI or audio, picked by file extension. Audio goes through
+        // Demucs (htdemucs, all 4 stems) + Essentia chord detection on other+bass
+        // first; from the chord list on, both paths share one music21 script
+        // (roman numerals + minor-key fix in one place) and everything after it.
+        const AUDIO_EXT = ['wav', 'mp3', 'aif', 'aiff', 'm4a', 'flac']
+        const ext = String(body.ext || path.extname(filename || '').slice(1) || 'mid').toLowerCase()
+        const isAudio = AUDIO_EXT.includes(ext)
+        if (!isAudio && !['mid', 'midi'].includes(ext)) throw new Error(`Unsupported file type .${ext} — use MIDI (.mid) or audio (wav/mp3/aiff/m4a)`)
+
+        const stamp = Date.now()
+        tmpFile = `/tmp/midi_ref_${stamp}.${isAudio ? ext : 'mid'}`
         fs.writeFileSync(tmpFile, Buffer.from(file_data, 'base64'))
         const baseName = (filename || 'track').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 24)
 
-        sendEvt({ step: 'Analyzing MIDI with music21...' })
-
-        // STEP 1 — analyze the reference MIDI: key, chord progression (roman
-        // numerals via chordify + romanNumeralFromChord), tempo, register, density.
         const analyzeScript = `import sys, json, re
-from music21 import converter, roman
+from music21 import converter, roman, chord, pitch, key as m21key
 
-s = converter.parse(sys.argv[1])
-k = s.analyze('key')
-chords = s.chordify()
+# Two inputs, one output shape:
+#   analyze.py <file.mid>            — chords from the MIDI (chordify)
+#   analyze.py --chords <chords.json> — chords detected from audio (Essentia)
+# From the chord list on, both paths share figure_of(), so the roman
+# numerals (and the minor-key fix) are computed in exactly one place.
 
-progression = []
-for c in chords.recurse().getElementsByClass('Chord'):
-    try:
-        rn = roman.romanNumeralFromChord(c, k)
-        fig = rn.figure
-        # romanNumeralFromChord labels C major in e minor "bVI", but
-        # RomanNumeral("bVI", e minor) parses it as Cb major — in minor,
-        # VI/VII/III already are the lowered degrees, so drop the "b"
-        if k.mode == 'minor':
-            fig = re.sub('^b(?=III|VI|VII)', '', fig)
-        progression.append(fig)
-    except Exception:
-        pass
+def figure_of(c, k):
+    # romanNumeralFromChord labels C major in e minor "bVI", but
+    # RomanNumeral("bVI", e minor) parses it as Cb major — in minor,
+    # VI/VII/III already are the lowered degrees, so drop the "b"
+    fig = roman.romanNumeralFromChord(c, k).figure
+    if k.mode == 'minor':
+        fig = re.sub('^b(?=III|VI|VII)', '', fig)
+    return fig
 
-# dedupe consecutive repeats
-dedup = [p for i, p in enumerate(progression) if i == 0 or p != progression[i-1]]
+def dedupe(seq):
+    return [p for i, p in enumerate(seq) if i == 0 or p != seq[i - 1]]
 
-notes = list(s.recurse().notes)
-pitches = [n.pitch.midi for n in notes if n.isNote]
+if sys.argv[1] == '--chords':
+    data = json.load(open(sys.argv[2]))
+    # conventional spelling for keys Essentia reports with sharps
+    flat_keys = {('A#', 'major'): 'B-', ('D#', 'major'): 'E-', ('G#', 'major'): 'A-', ('C#', 'major'): 'D-',
+                 ('A#', 'minor'): 'B-', ('D#', 'minor'): 'E-'}
+    tonic = flat_keys.get((data['key'], data['scale']), data['key'].replace('b', '-'))
+    k = m21key.Key(tonic, data['scale'])
 
-mmb = s.metronomeMarkBoundaries()
-tempo_val = float(mmb[0][2].number) if mmb and mmb[0][2].number else 120.0
+    def spell(name):
+        # spell a detected pitch class the way the key does (A# -> Bb in F)
+        p = pitch.Pitch(name)
+        for sp in k.pitches:
+            if sp.pitchClass == p.pitchClass:
+                return pitch.Pitch(sp.name)
+        return p
 
-out = {
-  "key": str(k),
-  "mode": k.mode,
-  "tonic": k.tonic.name,
-  "tempo": tempo_val,
-  "progression": dedup[:16] if dedup else ["i"],
-  "note_count": len(notes),
-  "pitch_min": min(pitches) if pitches else 60,
-  "pitch_max": max(pitches) if pitches else 72,
-  "duration_quarters": float(s.duration.quarterLength)
-}
+    progression = []
+    for ch in data['chords']:
+        root = spell(ch['root'])
+        root.octave = 4
+        ps = [root, root.transpose('m3' if ch['minor'] else 'M3'), root.transpose('P5')]
+        if ch.get('bass'):
+            b = spell(ch['bass'])
+            b.octave = 3
+            ps = [b] + ps
+        try:
+            progression.append(figure_of(chord.Chord(ps), k))
+        except Exception:
+            pass
+    prog = dedupe(progression)
+    out = {
+        "key": str(k), "mode": k.mode, "tonic": k.tonic.name,
+        "tempo": float(data['bpm']),
+        "progression": prog[:16] if prog else [('i' if k.mode == 'minor' else 'I')],
+        "note_count": int(data['note_count']),
+        "pitch_min": int(data['pitch_min']), "pitch_max": int(data['pitch_max']),
+        "duration_quarters": float(data['duration_quarters']),
+    }
+else:
+    s = converter.parse(sys.argv[1])
+    k = s.analyze('key')
+    progression = []
+    for c in s.chordify().recurse().getElementsByClass('Chord'):
+        try:
+            progression.append(figure_of(c, k))
+        except Exception:
+            pass
+    prog = dedupe(progression)
+    notes = list(s.recurse().notes)
+    pitches = [n.pitch.midi for n in notes if n.isNote]
+    mmb = s.metronomeMarkBoundaries()
+    tempo_val = float(mmb[0][2].number) if mmb and mmb[0][2].number else 120.0
+    out = {
+        "key": str(k), "mode": k.mode, "tonic": k.tonic.name,
+        "tempo": tempo_val,
+        "progression": prog[:16] if prog else ["i"],
+        "note_count": len(notes),
+        "pitch_min": min(pitches) if pitches else 60,
+        "pitch_max": max(pitches) if pitches else 72,
+        "duration_quarters": float(s.duration.quarterLength),
+    }
 print(json.dumps(out))
 `
         fs.writeFileSync(analyzeScriptPath, analyzeScript)
-        let analysis
-        try {
-          const { stdout, stderr } = await execAsync(
-            `"${MIDI21_PYTHON}" "${analyzeScriptPath}" ${shellEscape(tmpFile)}`,
-            { maxBuffer: 10 * 1024 * 1024, timeout: 60000 }
-          )
-          if (stderr) console.log('MIDI analyze stderr:', stderr)
-          analysis = JSON.parse(stdout.trim())
-        } catch(e) {
-          throw new Error('MIDI analysis failed: ' + e.message.slice(0, 200))
+        const runAnalyze = async (args, label) => {
+          try {
+            const { stdout, stderr } = await execAsync(
+              `"${MIDI21_PYTHON}" "${analyzeScriptPath}" ${args}`,
+              { maxBuffer: 10 * 1024 * 1024, timeout: 60000 }
+            )
+            if (stderr) console.log(label + ' stderr:', stderr)
+            return JSON.parse(stdout.trim())
+          } catch(e) {
+            throw new Error(label + ' failed: ' + e.message.slice(0, 200))
+          }
+        }
+
+        let analysis, detection = null
+        if (isAudio) {
+          demucsDir = `/tmp/demucs_ref_${stamp}`
+          sendEvt({ step: 'Separating stems (Demucs)...' })
+          try {
+            await execAsync(
+              `"${AUDIO_PYTHON}" -m demucs -n htdemucs --shifts 0 -o ${shellEscape(demucsDir)} ${shellEscape(tmpFile)}`,
+              { maxBuffer: 50 * 1024 * 1024, timeout: 25 * 60 * 1000 }
+            )
+          } catch(e) {
+            throw new Error('Demucs failed: ' + e.message.slice(0, 200))
+          }
+          const stemDir = path.join(demucsDir, 'htdemucs', path.basename(tmpFile, path.extname(tmpFile)))
+          if (!fs.existsSync(path.join(stemDir, 'other.wav'))) throw new Error('Demucs produced no stems')
+
+          sendEvt({ step: 'Detecting chords (Essentia)...' })
+          const audioChordsScript = `import sys, json
+import numpy as np
+import essentia
+import essentia.standard as es
+essentia.log.warningActive = False
+essentia.log.infoActive = False
+
+# args: mix.wav other.wav bass.wav
+mix_path, other_path, bass_path = sys.argv[1], sys.argv[2], sys.argv[3]
+SR = 44100
+FRAME, HOP = 4096, 2048
+PCS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+FLAT = {'Db': 'C#', 'Eb': 'D#', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#'}
+
+load = lambda p: es.MonoLoader(filename=p, sampleRate=SR)()
+mix, other, bass = load(mix_path), load(other_path), load(bass_path)
+n = min(len(mix), len(other), len(bass))
+mix, other, bass = mix[:n], other[:n], bass[:n]
+
+# beats from the full mix (drums make the grid reliable)
+_, ticks, beat_conf, _, _ = es.RhythmExtractor2013(method='multifeature')(mix)
+ticks = [float(t) for t in ticks]
+interval = float(np.median(np.diff(ticks))) if len(ticks) > 2 else 0.5
+bpm = 60.0 / interval
+bpm = float(round(bpm)) if abs(bpm - round(bpm)) < 0.35 else round(bpm, 1)
+while ticks and ticks[0] - interval >= -0.05:      # the beat(s) before the first tick
+    ticks.insert(0, max(0.0, ticks[0] - interval))
+
+def hpcp_frames(sig, size, min_f, max_f):
+    w = es.Windowing(type='blackmanharris62')
+    spec = es.Spectrum()
+    peaks = es.SpectralPeaks(orderBy='magnitude', magnitudeThreshold=1e-5,
+                             minFrequency=min_f, maxFrequency=max_f, maxPeaks=60, sampleRate=SR)
+    hpcp = es.HPCP(size=size, referenceFrequency=440, minFrequency=min_f, maxFrequency=max_f,
+                   harmonics=8 if size > 12 else 0, nonLinear=False, normalized='unitMax', sampleRate=SR,
+                   bandPreset=max_f >= 1000)
+    out = []
+    for fr in es.FrameGenerator(sig, frameSize=FRAME, hopSize=HOP, startFromZero=True):
+        f, m = peaks(spec(w(fr)))
+        out.append(hpcp(f, m))
+    return np.array(out, dtype='float32')
+
+# chords per beat from the harmonic material: "other" (keys, pads, guitars)
+# with the bass mixed in, so the HPCP sees the full chord
+harm = other + 0.5 * bass
+pcp = hpcp_frames(harm, 36, 60, 5000)
+chords, strength = es.ChordsDetectionBeats(hopSize=HOP, sampleRate=SR)(essentia.array(pcp), essentia.array(ticks))
+
+# bass note per beat: strongest pitch class of the bass stem in that beat
+bpcp = hpcp_frames(bass, 12, 30, 300)
+brms = np.array([np.sqrt(np.mean(fr ** 2)) for fr in es.FrameGenerator(bass, frameSize=FRAME, hopSize=HOP, startFromZero=True)])
+quiet = 0.1 * np.percentile(brms, 95) if len(brms) else 0   # "no bass" = far below the loud parts
+def bass_pc(t0, t1):
+    a, b = int(t0 * SR / HOP), max(int(t0 * SR / HOP) + 1, int(t1 * SR / HOP))
+    seg, r = bpcp[a:b], brms[a:b]
+    if len(seg) == 0 or np.median(r) <= quiet:
+        return None
+    # HPCP bin 0 = A (referenceFrequency 440): shift to C-based index
+    return (int(np.argmax(np.median(seg, axis=0))) + 9) % 12
+
+def parse(label):
+    minor = label.endswith('m')
+    root = label[:-1] if minor else label
+    root = FLAT.get(root, root)
+    return PCS.index(root), minor
+
+def merge(root, minor, b):
+    # the bass corrects what the HPCP alone misreads: a bass on a chord tone
+    # is an inversion (keep the chord, note the bass); a bass a third below
+    # the root that completes a triad is the real root (e.g. "Em" over C = C)
+    tones = {root, (root + (3 if minor else 4)) % 12, (root + 7) % 12}
+    if b is None or b == root:
+        return root, minor, None
+    if b in tones:
+        return root, minor, b
+    for q_minor in (False, True):
+        tri = {b, (b + (3 if q_minor else 4)) % 12, (b + 7) % 12}
+        if len(tri & tones) >= 2:
+            return b, q_minor, None
+    return root, minor, None
+
+beats = []
+for j, (lab, st) in enumerate(zip(chords, strength)):
+    if j + 1 >= len(ticks):
+        break
+    r, m = parse(lab)
+    r, m, b = merge(r, m, bass_pc(ticks[j], ticks[j + 1]))
+    beats.append({'root': r, 'minor': m, 'bass': b, 'strength': float(st)})
+
+def label_of(x):
+    return PCS[x['root']] + ('m' if x['minor'] else '') + ('/' + PCS[x['bass']] if x['bass'] is not None else '')
+
+# bars of 4 beats; the bar phase is the offset where chord changes line up
+# best with bar starts
+labels = [label_of(x) for x in beats]
+def phase_score(off):
+    return sum(1 for j in range(1, len(labels)) if labels[j] != labels[j - 1] and (j - off) % 4 == 0)
+offset = max(range(4), key=phase_score) if len(labels) > 4 else 0
+
+bars = []
+for s in range(offset, len(beats) - 3, 4):
+    grp = beats[s:s + 4]
+    score = {}
+    for x in grp:
+        score[label_of(x)] = score.get(label_of(x), 0) + x['strength']
+    best = max(score, key=score.get)
+    agree = [x for x in grp if label_of(x) == best]
+    conf = float(np.mean([x['strength'] for x in agree])) * (len(agree) / len(grp)) ** 0.5
+    bars.append({'label': best, 'root': PCS[agree[0]['root']], 'minor': agree[0]['minor'],
+                 'bass': PCS[agree[0]['bass']] if agree[0]['bass'] is not None else None, 'conf': conf})
+
+# key from the harmonic stems (no drums), EDM-tuned profile
+key, scale, key_strength = es.KeyExtractor(profileType='edma', sampleRate=SR)(harm)
+key = FLAT.get(key, key)
+
+# A full track has intro, breakdown, drops: "the first 16 chords" would be the
+# intro. The progression is the most repeated 4/8/16-bar loop — the one that
+# covers most of the track. A repeat counts when >= 75% of its bars match
+# (one misread bar must not break it), and each loop position takes the
+# majority chord over all repeats. A file shorter than any repeat (a single
+# loop) is used as a whole.
+labels = [b['label'] for b in bars]
+total_bars = len(bars)
+def occurrences(gram):
+    hits, j, L = [], 0, len(gram)
+    need = int(np.ceil(0.75 * L))
+    while j + L <= len(labels):
+        if sum(1 for a, b in zip(labels[j:j + L], gram) if a == b) >= need:
+            hits.append(j); j += L
+        else:
+            j += 1
+    return hits
+best, best_cov, best_hits = None, 0.0, []
+for L in (16, 8, 4):
+    seen = set()
+    for j in range(0, len(labels) - L + 1):
+        gram = labels[j:j + L]
+        if tuple(gram) in seen or len(set(gram)) < 2:
+            continue
+        seen.add(tuple(gram))
+        hits = occurrences(gram)
+        if len(hits) < 2:
+            continue
+        # coverage first; among equal coverage the seed that matches its
+        # repeats exactly most often (a slightly wrong seed still fuzzy-matches)
+        exact = sum(1 for h in hits for a, b in zip(labels[h:h + L], gram) if a == b) / (len(hits) * L)
+        cov = len(hits) * L / max(1, total_bars) + 0.01 * exact
+        if cov > best_cov + 1e-9:
+            best, best_cov, best_hits = gram, cov, hits
+if best is None:
+    best, best_hits, best_cov = labels[:16], [0], min(1.0, 16 / max(1, total_bars))
+L = len(best)
+def vote(hits):
+    # majority (strength-weighted) chord per loop position over all repeats
+    out = []
+    for o in range(L):
+        votes = {}
+        for h in hits:
+            if h + o < total_bars:
+                b = bars[h + o]
+                votes[b['label']] = votes.get(b['label'], 0) + b['conf']
+        win = max(votes, key=votes.get)
+        out.append(next(bars[h + o] for h in hits if h + o < total_bars and bars[h + o]['label'] == win))
+    return out
+first = vote(best_hits)
+# refine: search again with the voted loop as seed until it stops changing
+for _ in range(3):
+    seed = [b['label'] for b in first]
+    hits = occurrences(seed)
+    if len(hits) < 2 or seed == best:
+        break
+    best, best_hits = seed, hits
+    first = vote(best_hits)
+best_cov = len(best_hits) * L / max(1, total_bars)
+loop_bars = [bars[h + o] for h in best_hits for o in range(L) if h + o < total_bars]
+# a loop that is a shorter loop played twice collapses to the shorter one
+def halves_equal(seq):
+    h = len(seq) // 2
+    return len(seq) >= 4 and len(seq) % 2 == 0 and [x['label'] for x in seq[:h]] == [x['label'] for x in seq[h:]]
+while halves_equal(first):
+    first = first[:len(first) // 2]
+# start the loop on the tonic chord (or the relative major/minor tonic) if it
+# contains one — same loop, just rotated
+tonic_lab = key + ('m' if scale == 'minor' else '')
+rel_pc = (PCS.index(key) + (3 if scale == 'minor' else 9)) % 12
+rel_lab = PCS[rel_pc] + ('' if scale == 'minor' else 'm')
+rot = next((o for o, b in enumerate(first) if b['label'] == tonic_lab),
+           next((o for o, b in enumerate(first) if b['label'] == rel_lab), 0))
+first = first[rot:] + first[:rot]
+# merge consecutive identical bars, keep at most 16
+prog = []
+for b in first:
+    if not prog or prog[-1]['label'] != b['label']:
+        prog.append(dict(b, bars=1))
+    else:
+        prog[-1]['bars'] += 1
+prog = prog[:16]
+
+# register + density of the harmonic material for the prompt: where the
+# spectral energy of the "other" stem sits (magnitude-weighted peaks)
+w = es.Windowing(type='hann'); spec = es.Spectrum()
+rpk = es.SpectralPeaks(orderBy='magnitude', magnitudeThreshold=1e-4, minFrequency=80,
+                       maxFrequency=2000, maxPeaks=12, sampleRate=SR)
+pm, pw = [], []
+for fr in es.FrameGenerator(other, frameSize=FRAME, hopSize=HOP * 2, startFromZero=True):
+    f, m = rpk(spec(w(fr)))
+    for fi, mi in zip(f, m):
+        pm.append(69 + 12 * np.log2(fi / 440.0)); pw.append(mi)
+def wpct(vals, wts, q):
+    if not vals:
+        return None
+    o = np.argsort(vals); v = np.array(vals)[o]; c = np.cumsum(np.array(wts)[o])
+    return float(v[np.searchsorted(c, q * c[-1])])
+pitches = [wpct(pm, pw, 0.1), wpct(pm, pw, 0.6)] if pm else []   # upper end without the overtones
+if pitches:
+    pitches[1] = min(pitches[1], pitches[0] + 24)
+onsets, onset_rate = es.OnsetRate()(other)
+dur = n / SR
+chord_conf = float(np.mean([b['conf'] for b in loop_bars])) if loop_bars else 0.0
+
+print(json.dumps({
+    'key': key, 'scale': scale, 'key_strength': float(key_strength),
+    'bpm': float(bpm), 'beat_confidence': float(beat_conf),
+    'chords': prog, 'total_bars': total_bars, 'bar_offset': offset,
+    'loop_bars': len(first), 'loop_repeats': len(best_hits), 'loop_coverage': round(best_cov, 2),
+    'chord_confidence': chord_conf,
+    'pitch_min': int(round(pitches[0])) if pitches else 60,
+    'pitch_max': int(round(pitches[1])) if pitches else 72,
+    'note_count': int(len(onsets)),
+    'duration_quarters': float(dur * bpm / 60.0),
+}))
+`
+          fs.writeFileSync(audioScriptPath, audioChordsScript)
+          try {
+            const { stdout } = await execAsync(
+              `"${AUDIO_PYTHON}" "${audioScriptPath}" ${shellEscape(tmpFile)} ${shellEscape(path.join(stemDir, 'other.wav'))} ${shellEscape(path.join(stemDir, 'bass.wav'))} 2>/dev/null`,
+              { maxBuffer: 10 * 1024 * 1024, timeout: 10 * 60 * 1000 }
+            )
+            detection = JSON.parse(stdout.trim())
+          } catch(e) {
+            throw new Error('Chord detection failed: ' + e.message.slice(0, 200))
+          }
+          if (!detection.chords?.length) throw new Error('No chords detected in the audio')
+
+          sendEvt({ step: 'Converting chords to roman numerals...' })
+          const chordsPath = path.join(demucsDir, 'chords.json')
+          fs.writeFileSync(chordsPath, JSON.stringify(detection))
+          analysis = await runAnalyze(`--chords ${shellEscape(chordsPath)}`, 'Chord conversion')
+        } else {
+          sendEvt({ step: 'Analyzing MIDI with music21...' })
+          analysis = await runAnalyze(shellEscape(tmpFile), 'MIDI analysis')
+        }
+
+        // audio only: a rough confidence from chord strength + key strength
+        let confidence = null
+        if (detection) {
+          const score = 0.7 * (detection.chord_confidence || 0) + 0.3 * (detection.key_strength || 0)
+          confidence = { score: Math.round(score * 100) / 100, level: score >= CONF_HIGH ? 'hoch' : score >= CONF_MID ? 'mittel' : 'niedrig' }
         }
 
         const { key: keyStr, mode, tonic, tempo, progression, note_count, pitch_min, pitch_max, duration_quarters } = analysis
@@ -12865,7 +13193,12 @@ print(json.dumps({'files': files}))
         try { fs.unlinkSync(tmpFile); tmpFile = null } catch {}
 
         sendEvt({ step: 'Saved to Desktop' })
-        sendEvt({ done: true, ok: true, files, ideas, stats: rendered.files || [], analysis: { key: keyStr, mode, tempo, progression, noteCount: note_count } })
+        const keyShort = tonic.replace('-', 'b') + (mode === 'minor' ? 'm' : '')
+        sendEvt({ done: true, ok: true, files, ideas, stats: rendered.files || [], analysis: {
+          key: keyStr, keyShort, mode, tempo, progression, noteCount: note_count,
+          source: isAudio ? 'audio' : 'midi', confidence,
+          detectedChords: detection ? detection.chords.map(c => c.label) : null
+        } })
         console.log(`✓ MIDI from MIDI reference (music21): ${files.length} files → Desktop (${baseName})`)
 
       } catch(e) {
@@ -12875,6 +13208,8 @@ print(json.dumps({'files': files}))
         try { if (tmpFile && fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile) } catch {}
         try { if (fs.existsSync(analyzeScriptPath)) fs.unlinkSync(analyzeScriptPath) } catch {}
         try { if (fs.existsSync(renderScriptPath)) fs.unlinkSync(renderScriptPath) } catch {}
+        try { if (fs.existsSync(audioScriptPath)) fs.unlinkSync(audioScriptPath) } catch {}
+        try { if (demucsDir && fs.existsSync(demucsDir)) fs.rmSync(demucsDir, { recursive: true, force: true }) } catch {}
       }
       res.end()
     })

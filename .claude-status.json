@@ -1,11 +1,12 @@
 {
-  "updated": "2026-10-16T09:55:00Z",
-  "last_task": "Audio reference: Demucs + Essentia chord detection into the MIDI pipeline",
+  "updated": "2026-10-16T10:05:00Z",
+  "last_task": "DailyTab: Ableton section removed",
   "status": "done",
   "working": [
     "/generate-midi-from-reference accepts .mid and audio (wav/mp3/aiff/m4a)",
     "audio: loop-based chord progression with bass-corrected inversions + confidence",
-    "DailyTab: one drop field 'REFERENCE → MIDI IDEEN', detection line, ideas grouped"
+    "DailyTab: one drop field 'REFERENCE → MIDI IDEEN', detection line, ideas grouped",
+    "DailyTab without Ableton UI (watcher /ableton-* endpoints kept)"
   ],
   "broken": [
     "test-system TEST 3: Spotify 403 premium required",

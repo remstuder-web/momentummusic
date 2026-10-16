@@ -72,12 +72,6 @@
   let lyricsCopied = $state(false)
   let lyricsSaved = $state(false)
 
-  let abletonConnected = $state(false)
-  let abletonInstruction = $state('')
-  let abletonMode = $state('single')  // 'single' | 'sequence'
-  let abletonLoading = $state(false)
-  let abletonResponse = $state(null)
-  let abletonSteps = $state([])
 
   let chartStatus = $state(null)   // { running, current, total } | { date, downloaded, already_had, failed, folder, folder_path, per_source, seen } | null  (+ last_successful_date)
   // Days since the last successful chart download, in Zurich dates (same as the watcher)
@@ -106,83 +100,6 @@
         body: JSON.stringify({ path: chartStatus.folder_path })
       })
     } catch(_) {}
-  }
-
-  // Ableton AI Chat
-  let abletonChatMsgs = $state([])
-  let abletonChatInput = $state('')
-  let abletonChatBusy = $state(false)
-  let abletonOnline = $state(false)
-  let abletonLastStatus = $state(null) // { ok: bool, text: string } | null
-  let abletonSessionId = $state('')
-  let abletonPreferenceCount = $state(0)
-
-  async function sendAbletonFeedback(originalAction, correction) {
-    if (!abletonSessionId) return
-    try {
-      await fetch('http://localhost:9878/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: abletonSessionId,
-          original_action: originalAction,
-          correction: correction || 'wrong decision'
-        })
-      })
-      abletonChatMsgs = [...abletonChatMsgs, {
-        type: 'correction',
-        text: `Correction logged: "${correction || 'wrong'}". Will not repeat.`
-      }]
-    } catch(e) {
-      console.error('Feedback failed', e)
-    }
-  }
-
-  async function checkAbletonOnline() {
-    try {
-      const r = await fetch('http://localhost:9878/status', { signal: AbortSignal.timeout(2000) })
-      const d = await r.json()
-      abletonOnline = !!d.online
-      if (d.preference_count) abletonPreferenceCount = d.preference_count
-    } catch { abletonOnline = false }
-  }
-
-  async function sendAbletonMsg(e) {
-    if (e?.key && e.key !== 'Enter') return
-    const txt = abletonChatInput.trim()
-    if (!txt || abletonChatBusy) return
-    abletonChatInput = ''
-    abletonChatMsgs = [...abletonChatMsgs, { type: 'user', text: txt }]
-    abletonChatBusy = true
-    try {
-      const r = await fetch('http://localhost:9878/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction: txt })
-      })
-      const d = await r.json()
-      if (d.session_id) abletonSessionId = d.session_id
-      let lastTool = null
-      for (const entry of (d.log || [])) {
-        abletonChatMsgs = [...abletonChatMsgs, entry]
-        if (entry.type === 'tool') lastTool = entry.name
-      }
-      const finalEntry = [...(d.log || [])].reverse().find(e => e.type === 'result' || e.type === 'error')
-      if (finalEntry?.type === 'error') {
-        abletonLastStatus = { ok: false, text: `✗ ${finalEntry.text || 'error'}` }
-      } else {
-        abletonLastStatus = { ok: true, text: lastTool ? `✓ ${lastTool}` : '✓ done' }
-      }
-      abletonOnline = true
-    } catch(err) {
-      abletonChatMsgs = [...abletonChatMsgs, {
-        type: 'error',
-        text: 'PHANTOM MIXER offline. Run: python3 phantom_mixer.py --serve'
-      }]
-      abletonLastStatus = { ok: false, text: '✗ PHANTOM MIXER offline' }
-      abletonOnline = false
-    }
-    abletonChatBusy = false
   }
 
   let refArtist = $state('')
@@ -381,151 +298,6 @@
     } catch(_) {}
   }
 
-  const ABLETON_TOOLS = [
-    { cat: 'SESSION', tools: [
-      { name: 'get_session_info', hint: 'Get info about the current session' },
-      { name: 'get_session_path', hint: 'Get the current session file path' },
-      { name: 'is_session_modified', hint: 'Check if session has unsaved changes' },
-      { name: 'get_current_view', hint: 'Get the current view' },
-      { name: 'focus_view', hint: 'Focus the arrangement view' },
-      { name: 'start_playback', hint: 'Start playback' },
-      { name: 'stop_playback', hint: 'Stop playback' },
-      { name: 'start_recording', hint: 'Start recording' },
-      { name: 'stop_recording', hint: 'Stop recording' },
-      { name: 'toggle_arrangement_record', hint: 'Toggle arrangement recording on' },
-      { name: 'toggle_session_record', hint: 'Toggle session recording on' },
-      { name: 'capture_midi', hint: 'Capture MIDI from last played notes' },
-      { name: 'set_tempo', hint: 'Set tempo to 128 BPM' },
-      { name: 'set_overdub', hint: 'Enable overdub recording' },
-      { name: 'jump_to_time', hint: 'Jump to bar 1 beat 1' },
-      { name: 'get_playback_position', hint: 'Get the current playback position' },
-      { name: 'get_arrangement_length', hint: 'Get the total arrangement length' },
-      { name: 'set_arrangement_loop', hint: 'Set arrangement loop from bar 1 to bar 8' },
-      { name: 'health_check', hint: 'Check AbletonMCP health status' },
-      { name: 'get_cpu_load', hint: 'Get current CPU load' },
-      { name: 'undo', hint: 'Undo the last action' },
-      { name: 'redo', hint: 'Redo the last undone action' },
-    ]},
-    { cat: 'TRACKS', tools: [
-      { name: 'get_track_info', hint: 'Get info about track 1' },
-      { name: 'set_track_name', hint: 'Rename track 1 to Kick' },
-      { name: 'select_track', hint: 'Select track 1' },
-      { name: 'create_midi_track', hint: 'Create a new MIDI track' },
-      { name: 'create_audio_track', hint: 'Create a new audio track' },
-      { name: 'create_group_track', hint: 'Create a group track' },
-      { name: 'duplicate_track', hint: 'Duplicate track 1' },
-      { name: 'delete_track', hint: 'Delete track 1' },
-      { name: 'freeze_track', hint: 'Freeze track 1' },
-      { name: 'flatten_track', hint: 'Flatten track 1' },
-      { name: 'fold_track', hint: 'Fold track 1' },
-      { name: 'unfold_track', hint: 'Unfold track 1' },
-      { name: 'unarm_all', hint: 'Unarm all tracks' },
-      { name: 'set_track_volume', hint: 'Set track 1 volume to 0 dB' },
-      { name: 'set_track_pan', hint: 'Set track 1 pan to center' },
-      { name: 'set_track_mute', hint: 'Mute track 1' },
-      { name: 'set_track_solo', hint: 'Solo track 1' },
-      { name: 'set_track_arm', hint: 'Arm track 1 for recording' },
-      { name: 'set_track_color', hint: 'Set track 1 color to blue' },
-      { name: 'set_track_monitoring', hint: 'Set track 1 monitoring to auto' },
-      { name: 'get_track_monitoring', hint: 'Get monitoring mode of track 1' },
-      { name: 'set_track_input_routing', hint: 'Set track 1 input routing' },
-      { name: 'get_track_input_routing', hint: 'Get input routing of track 1' },
-      { name: 'set_track_output_routing', hint: 'Set track 1 output routing' },
-      { name: 'get_track_output_routing', hint: 'Get output routing of track 1' },
-      { name: 'get_available_inputs', hint: 'Get all available audio inputs' },
-      { name: 'get_available_outputs', hint: 'Get all available audio outputs' },
-      { name: 'get_send_level', hint: 'Get send A level on track 1' },
-      { name: 'set_send_level', hint: 'Set send A level on track 1 to 0.5' },
-    ]},
-    { cat: 'RETURN/MASTER', tools: [
-      { name: 'get_return_tracks', hint: 'Get all return tracks' },
-      { name: 'get_return_track_info', hint: 'Get info about return track A' },
-      { name: 'set_return_volume', hint: 'Set return track A volume to 0 dB' },
-      { name: 'set_return_pan', hint: 'Set return track A pan to center' },
-      { name: 'get_master_info', hint: 'Get master track info' },
-      { name: 'set_master_volume', hint: 'Set master volume to 0 dB' },
-      { name: 'set_master_pan', hint: 'Set master pan to center' },
-    ]},
-    { cat: 'CLIPS', tools: [
-      { name: 'create_clip', hint: 'Create a 4-bar MIDI clip on track 1 slot 0' },
-      { name: 'delete_clip', hint: 'Delete clip on track 1 slot 0' },
-      { name: 'duplicate_clip', hint: 'Duplicate clip on track 1 slot 0' },
-      { name: 'select_clip', hint: 'Select clip on track 1 slot 0' },
-      { name: 'fire_clip', hint: 'Fire clip on track 1 slot 0' },
-      { name: 'stop_clip', hint: 'Stop clip on track 1 slot 0' },
-      { name: 'set_clip_name', hint: 'Rename clip on track 1 slot 0 to Intro' },
-      { name: 'set_clip_color', hint: 'Set clip color to red' },
-      { name: 'get_clip_color', hint: 'Get color of clip on track 1 slot 0' },
-      { name: 'get_clip_loop', hint: 'Get loop settings of clip on track 1 slot 0' },
-      { name: 'set_clip_loop', hint: 'Set clip loop to 4 bars' },
-      { name: 'get_clip_notes', hint: 'Get notes in clip on track 1 slot 0' },
-      { name: 'add_notes_to_clip', hint: 'Add a C3 note at beat 1 for 1 bar to clip' },
-      { name: 'remove_notes', hint: 'Remove notes from beat 1 to 2 in clip' },
-      { name: 'remove_all_notes', hint: 'Remove all notes from clip on track 1 slot 0' },
-      { name: 'transpose_notes', hint: 'Transpose all notes up by 12 semitones' },
-      { name: 'quantize_clip_notes', hint: 'Quantize notes to 1/16 note grid' },
-      { name: 'humanize_clip_velocity', hint: 'Humanize note velocities by 20%' },
-      { name: 'humanize_clip_timing', hint: 'Humanize note timing by 10ms' },
-      { name: 'get_clip_automation', hint: 'Get automation data from clip' },
-      { name: 'set_clip_automation', hint: 'Set volume automation in clip' },
-      { name: 'clear_clip_automation', hint: 'Clear all automation from clip' },
-      { name: 'get_clip_gain', hint: 'Get gain of clip on track 1 slot 0' },
-      { name: 'set_clip_gain', hint: 'Set clip gain to 0 dB' },
-      { name: 'get_clip_pitch', hint: 'Get pitch of clip on track 1 slot 0' },
-      { name: 'set_clip_pitch', hint: 'Pitch clip up 2 semitones' },
-      { name: 'get_clip_warp_info', hint: 'Get warp info of clip on track 1 slot 0' },
-      { name: 'set_clip_warp_mode', hint: 'Set clip warp mode to Complex' },
-      { name: 'get_warp_markers', hint: 'Get warp markers of clip' },
-      { name: 'add_warp_marker', hint: 'Add a warp marker at beat 1' },
-      { name: 'delete_warp_marker', hint: 'Delete warp marker at beat 1' },
-      { name: 'commit_groove', hint: 'Commit groove to clip' },
-      { name: 'apply_groove', hint: 'Apply MPC groove to clip' },
-    ]},
-    { cat: 'SCENES', tools: [
-      { name: 'get_all_scenes', hint: 'Get all scenes' },
-      { name: 'fire_scene', hint: 'Fire scene 1' },
-      { name: 'stop_scene', hint: 'Stop scene 1' },
-      { name: 'select_scene', hint: 'Select scene 1' },
-      { name: 'create_scene', hint: 'Create a new scene' },
-      { name: 'duplicate_scene', hint: 'Duplicate scene 1' },
-      { name: 'delete_scene', hint: 'Delete scene 1' },
-      { name: 'set_scene_name', hint: 'Rename scene 1 to Drop' },
-      { name: 'get_scene_color', hint: 'Get color of scene 1' },
-      { name: 'set_scene_color', hint: 'Set scene 1 color to green' },
-    ]},
-    { cat: 'DEVICES', tools: [
-      { name: 'get_device_parameters', hint: 'Get all parameters of device on track 1' },
-      { name: 'get_device_by_name', hint: 'Get Compressor device on track 1' },
-      { name: 'set_device_parameter', hint: 'Set attack on Compressor to 10ms' },
-      { name: 'toggle_device', hint: 'Toggle device on/off on track 1' },
-      { name: 'delete_device', hint: 'Delete device 0 from track 1' },
-      { name: 'move_device_left', hint: 'Move device left in chain on track 1' },
-      { name: 'move_device_right', hint: 'Move device right in chain on track 1' },
-      { name: 'get_rack_chains', hint: 'Get chains of rack on track 1' },
-      { name: 'select_rack_chain', hint: 'Select chain 0 in rack on track 1' },
-      { name: 'load_browser_item', hint: 'Load API 2500 plugin on master track' },
-    ]},
-    { cat: 'LOCATORS', tools: [
-      { name: 'get_locators', hint: 'Get all locators in the arrangement' },
-      { name: 'create_locator', hint: 'Create a locator called Drop at bar 33' },
-      { name: 'delete_locator', hint: 'Delete the locator at bar 33' },
-    ]},
-    { cat: 'MUSIC', tools: [
-      { name: 'get_scale_notes', hint: 'Get notes in A minor scale' },
-      { name: 'generate_bassline', hint: 'Generate a bassline in A minor at 128 BPM' },
-      { name: 'generate_drum_pattern', hint: 'Generate a drum pattern at 128 BPM' },
-    ]},
-    { cat: 'BROWSER', tools: [
-      { name: 'search_browser', hint: 'Search browser for reverb plugins' },
-      { name: 'get_browser_items_at_path', hint: 'Get browser items at Instruments/Analog' },
-      { name: 'browse_path', hint: 'Browse to Drums/808 folder in browser' },
-    ]},
-    { cat: 'METRONOME/GROOVE', tools: [
-      { name: 'get_metronome_state', hint: 'Get metronome on/off state' },
-      { name: 'set_metronome', hint: 'Turn metronome on' },
-      { name: 'get_groove_pool', hint: 'Get all grooves in the groove pool' },
-    ]},
-  ]
   let newCustom = $state(''), newCustomUrl = $state(''), newHealth = $state('')
 
   // Mozart
@@ -1411,48 +1183,6 @@ ${mozartContext}`
     else alert('Error: ' + error.message)
   }
 
-  async function checkAbletonStatus() {
-    try {
-      const r = await fetch('http://localhost:4242/ableton-status')
-      const d = await r.json()
-      abletonConnected = !!d.connected
-    } catch { abletonConnected = false }
-  }
-
-  async function sendToAbleton() {
-    const text = abletonInstruction.trim()
-    if (!text || abletonLoading) return
-    const apiKey = localStorage.getItem('mm_api_key') || ''
-    if (!apiKey) { alert('Add your Anthropic API key in Settings first.'); return }
-    abletonLoading = true
-    abletonResponse = null
-    abletonSteps = []
-    try {
-      if (abletonMode === 'sequence') {
-        const r = await fetch('http://localhost:4242/ableton-sequence', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instruction: text, apiKey })
-        })
-        const data = await r.json()
-        abletonSteps = data.steps || []
-        abletonResponse = { ok: data.ok, _mode: 'sequence' }
-        if (!data.ok && !data.steps) abletonResponse.error = data.error
-      } else {
-        const r = await fetch('http://localhost:4242/ableton-command', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instruction: text, apiKey })
-        })
-        abletonResponse = await r.json()
-      }
-    } catch(e) {
-      abletonResponse = { ok: false, error: e.message }
-    } finally {
-      abletonLoading = false
-    }
-  }
-
   // loadStaticData MUST complete before load() so customs/helpers aren't lost to the state spread
   ;(async () => { await loadStaticData(); load() })()
   ;(async () => { await loadInbox() })()
@@ -1498,9 +1228,6 @@ ${mozartContext}`
     }
     document.addEventListener('click', onInlineClick)
 
-    checkAbletonStatus()
-    const abletonPoll = setInterval(checkAbletonStatus, 30000)
-
     pollChartStatus()
     const chartPoll = setInterval(pollChartStatus, 30000)
 
@@ -1508,7 +1235,6 @@ ${mozartContext}`
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisible)
       document.removeEventListener('click', onInlineClick)
-      clearInterval(abletonPoll)
       clearInterval(chartPoll)
     }
   })
@@ -1802,7 +1528,7 @@ ${mozartContext}`
         <div class="helper-block">
           <div class="normalizer-title">YOUTUBE → BRAIN</div>
           <textarea
-            class="ableton-textarea"
+            class="helper-textarea"
             rows="3"
             placeholder="Paste YouTube URLs, one per line..."
             bind:value={youtubeIngestUrls}
@@ -2173,165 +1899,9 @@ ${mozartContext}`
           {/if}
         </div>
 
-
-        <!-- ABLETON CONTROL — hidden, re-enable by removing {#if false} -->
-        {#if false}
-        <div class="helper-block">
-        <div class="normalizer-title">ABLETON CONTROL</div>
-        <div class="ableton-status-row">
-          <span class="ableton-dot {abletonConnected ? 'on' : 'off'}"></span>
-          <span class="ableton-status-text {abletonConnected ? 'on' : 'off'}">{abletonConnected ? 'Ableton connected' : 'Ableton offline'}</span>
-        </div>
-        <details class="ableton-tools-details">
-          <summary class="ableton-tools-summary">📋 Browse tools</summary>
-          <div class="ableton-tools-panel">
-            {#each ABLETON_TOOLS as cat}
-              <div class="ableton-cat-label">{cat.cat}</div>
-              <div class="ableton-chips">
-                {#each cat.tools as tool}
-                  <button class="ableton-chip" onclick={() => { abletonInstruction = tool.hint }}>{tool.name}</button>
-                {/each}
-              </div>
-            {/each}
-          </div>
-        </details>
-        <textarea
-          class="ableton-textarea"
-          rows="4"
-          placeholder={abletonMode === 'sequence' ? 'e.g. Set tempo to 140, create a MIDI track, generate a drum pattern, arm it for recording...' : 'e.g. Set tempo to 128 BPM, create a MIDI track, generate a drum pattern...'}
-          bind:value={abletonInstruction}
-        ></textarea>
-        <div class="ableton-mode-row">
-          <button class="ableton-mode-btn {abletonMode === 'single' ? 'active' : ''}" onclick={() => { abletonMode = 'single'; abletonResponse = null; abletonSteps = [] }}>Single Command</button>
-          <button class="ableton-mode-btn {abletonMode === 'sequence' ? 'active' : ''}" onclick={() => { abletonMode = 'sequence'; abletonResponse = null; abletonSteps = [] }}>🎵 Full Sequence</button>
-          <button class="ableton-send-btn {abletonLoading ? 'loading' : ''}" onclick={sendToAbleton} disabled={abletonLoading}>
-            {#if abletonLoading}<span class="ableton-spinner"></span>{abletonMode === 'sequence' ? 'Planning...' : 'Sending...'}{:else}Send{/if}
-          </button>
-        </div>
-        {#if abletonResponse && abletonResponse._mode !== 'sequence'}
-          <div class="ableton-response {abletonResponse.ok ? 'ok' : 'err'}">
-            {#if abletonResponse.ok}
-              <div class="ableton-response-cmd">→ {abletonResponse.command?.type}</div>
-              <pre class="ableton-response-pre">{JSON.stringify(abletonResponse.response, null, 2)}</pre>
-            {:else}
-              <div class="ableton-response-error">✗ {abletonResponse.error}</div>
-            {/if}
-          </div>
-        {/if}
-        {#if abletonSteps.length > 0}
-          <div class="ableton-seq-results">
-            {#each abletonSteps as step, i}
-              <div class="ableton-seq-step {step.ok ? 'ok' : 'err'}">
-                <span class="ableton-seq-icon">{step.ok ? '✓' : '✗'}</span>
-                <span class="ableton-seq-type">{step.command?.type}</span>
-                {#if !step.ok && step.error}
-                  <span class="ableton-seq-err">{step.error}</span>
-                {:else if step.response !== null && step.response !== undefined}
-                  <span class="ableton-seq-peek">{typeof step.response === 'object' ? JSON.stringify(step.response).slice(0, 60) : String(step.response).slice(0, 60)}</span>
-                {/if}
-              </div>
-            {/each}
-            <div class="ableton-seq-summary {abletonSteps.every(s=>s.ok) ? 'ok' : 'partial'}">
-              {abletonSteps.filter(s=>s.ok).length}/{abletonSteps.length} steps completed
-            </div>
-          </div>
-        {/if}
-        {#if abletonResponse && abletonResponse._mode === 'sequence' && abletonResponse.error}
-          <div class="ableton-response err"><div class="ableton-response-error">✗ {abletonResponse.error}</div></div>
-        {/if}
-        </div><!-- /helper-block ableton -->
-        {/if}<!-- /ableton hidden -->
-
       </div><!-- /helpers-built-in routine -->
       {/if}
 
-    </div>
-
-    <!-- ── ABLETON CHAT ─────────────────────────────────── -->
-    <div class="abl-chat-section">
-      <div class="abl-chat-header">
-        <span class="abl-chat-title">ABLETON</span>
-        <button class="abl-status-btn" onclick={checkAbletonOnline}>
-          <span class="abl-dot" class:online={abletonOnline} class:offline={!abletonOnline}></span>
-          {abletonOnline ? 'CONNECTED' : 'CHECK'}
-          {#if abletonPreferenceCount > 0}
-            <span class="abl-pref-badge">{abletonPreferenceCount} prefs</span>
-          {/if}
-        </button>
-        {#if abletonChatMsgs.length > 0}
-          <button class="abl-clear-btn" onclick={() => abletonChatMsgs = []}>CLEAR</button>
-        {/if}
-      </div>
-
-      {#if abletonChatMsgs.length > 0 || abletonChatBusy}
-      <div class="abl-chat-log">
-        {#each abletonChatMsgs as msg}
-          {#if msg.type === 'user'}
-            <div class="abl-msg abl-msg-user">
-              <span class="abl-who">YOU</span>
-              <span class="abl-text">{msg.text}</span>
-            </div>
-          {:else if msg.type === 'ai'}
-            <div class="abl-msg abl-msg-ai">
-              <span class="abl-who">AI</span>
-              <span class="abl-text">{msg.text}</span>
-              <button class="abl-wrong-btn" title="Wrong — log correction"
-                onclick={() => {
-                  const fix = prompt('What was wrong?', '')
-                  if (fix) sendAbletonFeedback(msg.text, fix)
-                }}>✕</button>
-            </div>
-          {:else if msg.type === 'correction'}
-            <div class="abl-msg abl-msg-correction">
-              <span class="abl-who">✓</span>
-              <span class="abl-text">{msg.text}</span>
-            </div>
-          {:else if msg.type === 'tool'}
-            <div class="abl-msg abl-msg-tool">
-              <span class="abl-who">FX</span>
-              <span class="abl-tool-name">{msg.name}</span>
-              <span class="abl-tool-args">{JSON.stringify(msg.input || {})}</span>
-            </div>
-          {:else if msg.type === 'result'}
-            <div class="abl-msg abl-msg-result">
-              <span class="abl-who">OK</span>
-              <span class="abl-result-text">{(msg.text || '').slice(0, 120)}{(msg.text?.length || 0) > 120 ? '…' : ''}</span>
-            </div>
-          {:else if msg.type === 'error'}
-            <div class="abl-msg abl-msg-error">
-              <span class="abl-who">ERR</span>
-              <span class="abl-text">{msg.text}</span>
-            </div>
-          {/if}
-        {/each}
-        {#if abletonChatBusy}
-          <div class="abl-msg abl-msg-ai">
-            <span class="abl-who">AI</span>
-            <span class="abl-thinking"><span></span><span></span><span></span></span>
-          </div>
-        {/if}
-      </div>
-      {/if}
-
-      <div class="abl-input-row">
-        <input
-          class="abl-input"
-          placeholder="mixing instruction..."
-          bind:value={abletonChatInput}
-          onkeydown={sendAbletonMsg}
-          disabled={abletonChatBusy}
-        />
-        <button class="abl-send-btn" onclick={sendAbletonMsg} disabled={abletonChatBusy || !abletonChatInput.trim()}>
-          {#if abletonChatBusy}
-            <span class="abl-spinner"></span>
-          {:else}
-            SEND
-          {/if}
-        </button>
-      </div>
-      <div class="abl-status-line" class:ok={abletonLastStatus?.ok === true} class:err={abletonLastStatus?.ok === false}>
-        {abletonLastStatus ? abletonLastStatus.text : '—'}
-      </div>
     </div>
 
   </div>
@@ -2824,54 +2394,9 @@ ${mozartContext}`
   .midi-step.pending { color: var(--text-dim); }
   .lyrics-textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 8px 10px; resize: vertical; outline: none; box-sizing: border-box; }
   .lyrics-btn-row { display: flex; gap: 8px; margin-top: 6px; }
-  .ableton-status-row { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; }
-  .ableton-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .ableton-dot.on { background: #4caf82; box-shadow: 0 0 4px rgba(76,175,130,.6); }
-  .ableton-dot.off { background: var(--text-dim); }
-  .ableton-status-text { font-family: 'Space Mono', monospace; font-size: 10px; }
-  .ableton-status-text.on { color: #4caf82; }
-  .ableton-status-text.off { color: var(--text-dim); }
-  .ableton-tools-details { margin-bottom: 8px; }
-  .ableton-tools-summary { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-mid); cursor: pointer; padding: 4px 0; user-select: none; }
-  .ableton-tools-summary::-webkit-details-marker { color: var(--text-mid); }
-  .ableton-tools-panel { background: var(--surface); border: 1px solid transparent; border-radius: 3px; padding: 10px; margin-top: 6px; max-height: 280px; overflow-y: auto; }
-  .ableton-cat-label { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .08em; margin: 8px 0 4px; }
-  .ableton-cat-label:first-child { margin-top: 0; }
-  .ableton-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .ableton-chip { font-family: 'Space Mono', monospace; font-size: 9px; background: var(--chip-bg); border: 1px solid transparent; color: var(--text-mid); padding: 3px 7px; border-radius: 2px; cursor: pointer; line-height: 1.4; }
-  .ableton-chip:hover { background: rgba(255,255,255,.06); border-color: var(--border2); }
-  .ableton-textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 8px 10px; resize: vertical; outline: none; box-sizing: border-box; }
-  .ableton-textarea:focus { border-color: var(--accent-dim); }
-  .ableton-textarea::placeholder { color: var(--text-dim); }
-  .ableton-mode-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
-  .ableton-mode-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 500; background: var(--chip-bg); border: 1px solid transparent; color: var(--text-dim); padding: 5px 10px; border-radius: 2px; cursor: pointer; white-space: nowrap; }
-  .ableton-mode-btn.active { background: rgba(122,166,194,.12); border-color: var(--accent-dim); color: var(--accent); }
-  .ableton-mode-btn:hover:not(.active) { border-color: var(--border2); color: var(--text-mid); }
-  .ableton-send-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 500; background: var(--chip-bg); border: 1px solid transparent; color: var(--text-mid); padding: 5px 14px; border-radius: 2px; cursor: pointer; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-  .ableton-send-btn:hover:not(:disabled) { background: rgba(255,255,255,.06); }
-  .ableton-send-btn:disabled { opacity: .6; cursor: not-allowed; }
-  .ableton-spinner { width: 10px; height: 10px; border: 2px solid transparent; border-top-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .ableton-response { margin-top: 8px; border-radius: 3px; font-family: 'Space Mono', monospace; font-size: 10px; overflow: hidden; }
-  .ableton-response.ok { border: 1px solid rgba(76,175,130,.3); }
-  .ableton-response.err { border: 1px solid rgba(229,115,115,.3); }
-  .ableton-response-cmd { padding: 5px 8px; color: #4caf82; background: rgba(76,175,130,.06); border-bottom: 1px solid rgba(76,175,130,.15); }
-  .ableton-response-pre { margin: 0; padding: 8px; color: var(--text-mid); background: var(--bg); font-size: 9.5px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
-  .ableton-response-error { padding: 8px; color: #e57373; background: rgba(229,115,115,.06); }
-  .ableton-seq-results { margin-top: 8px; border: 1px solid transparent; border-radius: 3px; overflow: hidden; }
-  .ableton-seq-step { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; border-bottom: 1px solid transparent; font-family: 'Space Mono', monospace; font-size: 9.5px; }
-  .ableton-seq-step:last-of-type { border-bottom: none; }
-  .ableton-seq-step.ok { background: rgba(76,175,130,.03); }
-  .ableton-seq-step.err { background: rgba(229,115,115,.04); }
-  .ableton-seq-icon { flex-shrink: 0; width: 12px; }
-  .ableton-seq-step.ok .ableton-seq-icon { color: #4caf82; }
-  .ableton-seq-step.err .ableton-seq-icon { color: #e57373; }
-  .ableton-seq-type { color: var(--text-mid); flex-shrink: 0; }
-  .ableton-seq-peek { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-  .ableton-seq-err { color: #e57373; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ableton-seq-summary { padding: 5px 8px; font-family: 'Space Mono', monospace; font-size: 9px; border-top: 1px solid transparent; }
-  .ableton-seq-summary.ok { color: #4caf82; background: rgba(76,175,130,.05); }
-  .ableton-seq-summary.partial { color: #e57373; background: rgba(229,115,115,.04); }
+  .helper-textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 8px 10px; resize: vertical; outline: none; box-sizing: border-box; }
+  .helper-textarea:focus { border-color: var(--accent-dim); }
+  .helper-textarea::placeholder { color: var(--text-dim); }
   .add-inp::placeholder { color: var(--text-dim); }
   .add-inp.url { flex: 2; min-width: 120px; }
   .add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 500; padding: 5px 12px; background: var(--chip-bg); color: var(--text-mid); border: 1px solid transparent; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
@@ -2983,56 +2508,4 @@ ${mozartContext}`
   .btn-gold-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 500; padding: 7px 12px; background: var(--surface2); color: var(--text); border: none; border-radius: 3px; cursor: pointer; }
   /* References tab */
 
-  /* ── Ableton Chat ──────────────────────────────────── */
-  .abl-chat-section { }
-  .abl-chat-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .abl-chat-title { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 400; letter-spacing: .08em; color: var(--text-dim); }
-  .abl-status-btn { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 500; background: var(--chip-bg); border: 1px solid transparent; color: var(--text-dim); padding: 3px 8px; border-radius: 2px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
-  .abl-status-btn:hover { border-color: var(--border2); color: var(--text-mid); }
-  .abl-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border2); flex-shrink: 0; }
-  .abl-dot.online { background: #4caf82; }
-  .abl-dot.offline { background: var(--border2); }
-  .abl-clear-btn { font-family: 'Space Mono', monospace; font-size: 9px; background: var(--chip-bg); border: 1px solid transparent; color: var(--text-dim); padding: 3px 8px; border-radius: 2px; cursor: pointer; margin-left: auto; }
-  .abl-clear-btn:hover { border-color: var(--text-dim); color: var(--text-mid); }
-  .abl-chat-log { background: var(--bg); border: 1px solid transparent; border-radius: 3px; padding: 10px; max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; scroll-behavior: smooth; }
-  .abl-empty { font-family: 'DM Sans', sans-serif; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
-  .abl-msg { display: flex; align-items: baseline; gap: 8px; }
-  .abl-who { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 500; flex-shrink: 0; width: 26px; }
-  .abl-text { font-family: 'DM Sans', sans-serif; font-size: 12px; line-height: 1.5; flex: 1; }
-  .abl-msg-user .abl-who { color: var(--text-dim); }
-  .abl-msg-user .abl-text { color: var(--text); }
-  .abl-msg-ai .abl-who { color: var(--text-mid); }
-  .abl-msg-ai .abl-text { color: var(--text-mid); }
-  .abl-msg-tool { background: var(--chip-bg); border-radius: 2px; padding: 2px 4px; }
-  .abl-msg-tool .abl-who { color: rgba(100,160,220,.7); }
-  .abl-tool-name { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text); flex-shrink: 0; }
-  .abl-tool-args { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-  .abl-msg-result .abl-who { color: #4caf82; }
-  .abl-result-text { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--text-dim); }
-  .abl-msg-error .abl-who { color: #e57373; }
-  .abl-msg-error .abl-text { color: #e57373; font-size: 11px; }
-  .abl-thinking { display: flex; gap: 3px; align-items: center; padding: 4px 0; }
-  .abl-thinking span { width: 4px; height: 4px; border-radius: 50%; background: var(--chip-bg); animation: abl-pulse 1.2s infinite; }
-  .abl-thinking span:nth-child(2) { animation-delay: .2s; }
-  .abl-thinking span:nth-child(3) { animation-delay: .4s; }
-  @keyframes abl-pulse { 0%,80%,100% { opacity: .2; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
-  .abl-input-row { display: flex; gap: 6px; }
-  .abl-input { flex: 1; background: var(--surface); border: 1px solid var(--border2); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 10px; outline: none; border-radius: 3px; }
-  .abl-input:focus { border-color: var(--accent-dim); }
-  .abl-input::placeholder { color: var(--text-dim); }
-  .abl-input:disabled { opacity: .5; }
-  .abl-send-btn { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 500; background: var(--chip-bg); border: 1px solid transparent; color: var(--text-mid); padding: 7px 14px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-  .abl-send-btn:hover:not(:disabled) { background: rgba(255,255,255,.06); }
-  .abl-send-btn:disabled { opacity: .4; cursor: not-allowed; }
-  .abl-spinner { width: 10px; height: 10px; border: 2px solid transparent; border-top-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
-  .abl-status-line { font-family: 'Space Mono', monospace; font-size: 9px; margin-top: 6px; color: var(--text-dim); letter-spacing: .04em; }
-  .abl-status-line.ok { color: var(--text-mid); }
-  .abl-status-line.err { color: #e57373; }
-  .abl-pref-badge { font-family: 'Space Mono', monospace; font-size: 8px; background: var(--chip-bg); border: 1px solid transparent; color: var(--text-mid); padding: 2px 5px; border-radius: 2px; }
-  .abl-wrong-btn { background: transparent; border: none; color: var(--text-dim); font-size: 10px; cursor: pointer; padding: 0 4px; opacity: 0; transition: opacity .15s; flex-shrink: 0; }
-  .abl-msg-ai:hover .abl-wrong-btn { opacity: 1; }
-  .abl-wrong-btn:hover { color: #e57373; }
-  .abl-msg-correction { background: rgba(76,175,130,.06); border-radius: 2px; padding: 2px 4px; }
-  .abl-msg-correction .abl-who { color: #4caf82; }
-  .abl-msg-correction .abl-text { font-size: 11px; color: #4caf82; }
 </style>

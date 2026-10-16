@@ -1,10 +1,10 @@
 {
-  "updated": "2026-10-16T08:10:00Z",
-  "last_task": "MIDI from Reference: phrasing, rests, note-length variation",
+  "updated": "2026-10-16T08:30:00Z",
+  "last_task": "MIDI: chord voicing spread, playful lead (leaps, syncopation, pickups, ornaments)",
   "status": "done",
-  "working": ["/generate-midi-from-reference: 4x2-bar phrases, 25-35% rest time, varied lengths, phrase_feel spec field", "minor-key bVI/bVII roman numeral bug fixed (was rendering Cb/Db chords)", "full test with Claude call: 5 files, 0 out-of-scale melody notes"],
-  "broken": ["test-system TEST 3: Spotify 403 premium required", "test-system TEST 7: 6 duplicate brain entries"],
+  "working": ["/generate-midi-from-reference: broken/spread chord voicing with low bass, tracks named Chords/Lead", "lead: planned leaps with stepwise recovery, anticipations, pickups, no strong-beat repeats, appoggiaturas, ornaments — dosed by phrase_feel", "full test with Claude call on Em reference: 5 files, 0 out-of-key lead notes"],
+  "broken": ["test-system TEST 3: Spotify 403 premium required", "test-system TEST 7: duplicate brain entries"],
   "partial": [],
-  "next": "User listens to ~/Desktop/MIDI_NotGivingUp_*.mid and gives feedback; tempo is 120 whenever the reference MIDI has no tempo event",
-  "notes": "Analysis of single-line melodic MIDIs (no chords) gives unreliable keys/progressions via chordify"
+  "next": "User listens to ~/Desktop/MIDI_NotGivingUp_*.mid; possible tuning: syncopation dose ordering (breathing can land above driving because dotted rhythms add syncopation)",
+  "notes": "MIDI round-trip splits barline-crossing notes into ties — use stripTies() when analysing output"
 }

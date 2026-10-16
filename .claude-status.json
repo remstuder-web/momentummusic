@@ -1,10 +1,10 @@
 {
-  "updated": "2026-10-16T08:45:00Z",
-  "last_task": "MIDI: motif engine (sequence, inversion, augmentation/diminution, extension, recognisable repeat)",
+  "updated": "2026-10-16T09:15:00Z",
+  "last_task": "MIDI: additional merged single-clip variant",
   "status": "done",
-  "working": ["/generate-midi-from-reference: generated motif from motif_shape/motif_length, phrase 2 variation by phrase_feel, phrase 3 = exact repeat, phrase 4 resolves to tonic", "phrase 1 vs 3: 100% interval + rhythm identity (5 Claude files + 40 fuzz files)", "0 out-of-key lead notes, all durations on 16th grid"],
+  "working": ["/generate-midi-from-reference writes per idea a 2-part file (Chords, Lead) and a _merged single-part file", "merged: all notes in one part, tempo kept, same-pitch collisions resolved without touching the lead", "velocity ranges separated: chords 60-75, lead 78-100"],
   "broken": ["test-system TEST 3: Spotify 403 premium required", "test-system TEST 7: duplicate brain entries"],
   "partial": [],
-  "next": "User listens to ~/Desktop/MIDI_NotGivingUp_*.mid; possible next layer: motif-derived counter-line or bass movement",
-  "notes": "Measure phrases from the downbeat (pickups belong to the next phrase); stripTies() when parsing output"
+  "next": "If 10 files per run is too cluttered: UI switch (2-part / merged / both) instead of always both; DailyTab currently lists 10 rows numbered 01-10",
+  "notes": "Merged collision handling: chord note -12, or dropped if that octave is occupied by another chord note"
 }

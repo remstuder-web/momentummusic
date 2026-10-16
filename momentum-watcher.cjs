@@ -12204,7 +12204,7 @@ Rules:
         // (sequence/inversion/augmentation/diminution/extension per
         // phrase_feel), phrase 3 repeats phrase 1 unchanged, phrase 4 resolves
         // to the tonic. Tracks are named "Chords" and "Lead".
-        const renderScript = `import sys, json, os, random, math, re
+        const renderScript = `import sys, json, os, random, math, re, copy
 from music21 import stream, note, chord, roman, key as m21key, tempo as m21tempo, pitch, instrument
 
 data = json.loads(sys.argv[1])
@@ -12729,7 +12729,7 @@ for i, spec in enumerate(specs[:5]):
             vel -= 10
         elif e['kind'] == 'orn':
             vel -= 12
-        n.volume.velocity = vel
+        n.volume.velocity = max(78, vel)  # lead stays above the chords' 60-75
         melody_part.insert(e['on'], n)
         t = e['on'] + e['dur']
     if t < TOTAL_QUARTERS - 1e-6:
@@ -12745,6 +12745,61 @@ for i, spec in enumerate(specs[:5]):
     fname = f'MIDI_{base}_{i + 1}_{safe}.mid'
     score.write('midi', fp=os.path.join(out_dir, fname))
 
+    # merged variant: chords + lead as one part (one clip in the DAW). The
+    # velocity ranges (chords 60-75, lead 78-100) keep them distinguishable.
+    # In one track, two overlapping notes of the same pitch would cut each
+    # other off (the first note-off ends both): a chord note colliding with
+    # the lead moves an octave down (same chord tone, lead untouched), or is
+    # dropped if that octave is taken too (the lead is sounding that pitch).
+    # Anything left after that shortens the earlier note or drops a duplicate.
+    def copies(src):
+        out = []
+        for n in src.notes:
+            c = copy.deepcopy(n)
+            c.offset = n.offset
+            out.append(c)
+        return out
+    chord_notes, lead_notes = copies(chord_part), copies(melody_part)
+    def overlaps(a, b):
+        return (float(a.offset) < float(b.offset) + float(b.quarterLength) - 1e-6 and
+                float(b.offset) < float(a.offset) + float(a.quarterLength) - 1e-6)
+    n_moved, n_dropped = 0, 0
+    kept_chords = []
+    for c in chord_notes:
+        if any(l.pitch.midi == c.pitch.midi and overlaps(c, l) for l in lead_notes):
+            down = c.pitch.midi - 12
+            if any(o is not c and o.pitch.midi == down and overlaps(c, o) for o in chord_notes):
+                n_dropped += 1
+                continue
+            c.pitch.midi = down
+            n_moved += 1
+        kept_chords.append(c)
+    all_notes = kept_chords + lead_notes
+    all_notes.sort(key=lambda n: (n.pitch.midi, float(n.offset), -n.volume.velocity))
+    keep_notes, n_trimmed = [], 0
+    for n in all_notes:
+        if keep_notes and keep_notes[-1].pitch.midi == n.pitch.midi:
+            a = keep_notes[-1]
+            gap = float(n.offset) - float(a.offset)
+            if gap < 0.25:
+                n_dropped += 1
+                continue
+            if float(a.offset) + float(a.quarterLength) > float(n.offset) + 1e-6:
+                a.quarterLength = gap
+                n_trimmed += 1
+        keep_notes.append(n)
+    merged_part = stream.Part()
+    merged_inst = instrument.Piano()
+    merged_inst.partName = 'Chords + Lead'
+    merged_part.insert(0, merged_inst)
+    merged_part.insert(0, m21tempo.MetronomeMark(number=tempo_bpm))
+    for n in keep_notes:
+        merged_part.insert(n.offset, n)
+    merged_score = stream.Score()
+    merged_score.insert(0, merged_part)
+    merged_name = f'MIDI_{base}_{i + 1}_{safe}_merged.mid'
+    merged_score.write('midi', fp=os.path.join(out_dir, merged_name))
+
     # stats over the written lead line
     mel = sorted((float(n.offset), float(n.quarterLength), n.pitch.midi) for n in melody_part.notes)
     iv = {'repeat': 0, 'step': 0, 'third': 0, 'fourth_fifth': 0, 'sixth': 0, 'larger': 0}
@@ -12755,6 +12810,11 @@ for i, spec in enumerate(specs[:5]):
     motif_notes = [e for e in p1 if e['kind'] == 'motif']
     files.append({
         'filename': fname,
+        'merged_filename': merged_name,
+        'merged_notes': len(keep_notes),
+        'merged_octave_moved': n_moved,
+        'merged_trimmed': n_trimmed,
+        'merged_dropped': n_dropped,
         'phrase_feel': feel,
         'chord_rhythm': chord_rhythm,
         'motif_shape': shape,
@@ -12794,7 +12854,8 @@ print(json.dumps({'files': files}))
 
         let rendered
         try { rendered = JSON.parse(renderOut) } catch { throw new Error('Render script error: ' + renderOut.slice(0, 300)) }
-        const files = (rendered.files || []).map(f => f.filename)
+        // per idea: 2-part file (Chords + Lead tracks) and a merged one-clip file
+        const files = (rendered.files || []).flatMap(f => [f.filename, f.merged_filename].filter(Boolean))
 
         // STEP 4 — cleanup: never write to Supabase, this stays temporary.
         try { fs.unlinkSync(tmpFile); tmpFile = null } catch {}

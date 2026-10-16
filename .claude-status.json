@@ -1,10 +1,10 @@
 {
-  "updated": "2026-10-16T08:30:00Z",
-  "last_task": "MIDI: chord voicing spread, playful lead (leaps, syncopation, pickups, ornaments)",
+  "updated": "2026-10-16T08:45:00Z",
+  "last_task": "MIDI: motif engine (sequence, inversion, augmentation/diminution, extension, recognisable repeat)",
   "status": "done",
-  "working": ["/generate-midi-from-reference: broken/spread chord voicing with low bass, tracks named Chords/Lead", "lead: planned leaps with stepwise recovery, anticipations, pickups, no strong-beat repeats, appoggiaturas, ornaments — dosed by phrase_feel", "full test with Claude call on Em reference: 5 files, 0 out-of-key lead notes"],
+  "working": ["/generate-midi-from-reference: generated motif from motif_shape/motif_length, phrase 2 variation by phrase_feel, phrase 3 = exact repeat, phrase 4 resolves to tonic", "phrase 1 vs 3: 100% interval + rhythm identity (5 Claude files + 40 fuzz files)", "0 out-of-key lead notes, all durations on 16th grid"],
   "broken": ["test-system TEST 3: Spotify 403 premium required", "test-system TEST 7: duplicate brain entries"],
   "partial": [],
-  "next": "User listens to ~/Desktop/MIDI_NotGivingUp_*.mid; possible tuning: syncopation dose ordering (breathing can land above driving because dotted rhythms add syncopation)",
-  "notes": "MIDI round-trip splits barline-crossing notes into ties — use stripTies() when analysing output"
+  "next": "User listens to ~/Desktop/MIDI_NotGivingUp_*.mid; possible next layer: motif-derived counter-line or bass movement",
+  "notes": "Measure phrases from the downbeat (pickups belong to the next phrase); stripTies() when parsing output"
 }

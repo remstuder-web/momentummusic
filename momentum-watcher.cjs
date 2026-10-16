@@ -12149,13 +12149,16 @@ Return ONLY a JSON array of 5 objects:
   "melody_density": "sparse|medium|busy",
   "melody_register": "low|mid|high",
   "chord_register": "low|mid",
-  "phrase_feel": "driving|breathing|sparse|call_response"
+  "phrase_feel": "driving|breathing|sparse|call_response",
+  "motif_shape": "rising|falling|arch|zigzag|static",
+  "motif_length": 3
 }]
 
 Rules:
 - Use roman numerals valid in ${keyStr} ${mode}
 - 4 or 8 chords per progression
 - Make the 5 ideas genuinely different from each other
+- motif_shape and motif_length (3, 4 or 5 notes) describe the core figure the whole lead is built from; you do not write it, it is generated and developed (sequence, inversion, augmentation...) from these two values
 - phrase_feel shapes rests and note lengths: driving = short notes, few rests; breathing = long notes, a breath after every 2-bar phrase; sparse = few long notes, lots of space; call_response = a phrase answered by a phrase with clear gaps
 - Stay in the emotional world of the reference
 - No explanation, no markdown, JSON array only`
@@ -12196,10 +12199,11 @@ Rules:
         // STEP 3 — music21 renders each spec: roman.RomanNumeral(fig, k) gives
         // scale-correct chords (one per bar), voiced bass low + upper tones
         // around octave 4, broken for whole/half, held bass + stabs otherwise.
-        // The lead is 4 x 2-bar phrases (A, A', A, A-resolve) with rests,
-        // varied lengths, leaps resolved stepwise, anticipations, pickups,
-        // appoggiaturas and sparse ornaments — phrase_feel sets the dose.
-        // Tracks are named "Chords" and "Lead".
+        // The lead is built from one generated motif (motif_shape/_length,
+        // diatonic steps + lengths): phrase 1 states it, phrase 2 varies it
+        // (sequence/inversion/augmentation/diminution/extension per
+        // phrase_feel), phrase 3 repeats phrase 1 unchanged, phrase 4 resolves
+        // to the tonic. Tracks are named "Chords" and "Lead".
         const renderScript = `import sys, json, os, random, math, re
 from music21 import stream, note, chord, roman, key as m21key, tempo as m21tempo, pitch, instrument
 
@@ -12227,23 +12231,33 @@ BROKEN_STAGGER = {'whole': 0.5, 'half': 0.25}  # delay between rolled-in upper t
 BASS_OCTAVE = {'low': 2, 'mid': 3}
 UPPER_OCTAVE = 4
 MELODY_REG_OCTAVE = {'low': 4, 'mid': 5, 'high': 6}
-# melody_density sets the base slot length (sparse=2, medium=4, busy=8 per bar)
-SLOT_LEN = {'sparse': 2.0, 'medium': 1.0, 'busy': 0.5}
-# phrase_feel sets the dose of everything: share of phrase time that is rest
-# (min, max), rest closing each 2-bar phrase, chance to merge two slots into a
-# long note / dot a pair, leaps per phrase (min, max), chance an on-beat note
-# is anticipated, chance a phrase gets a pickup, chance of an ornament before
-# a long note
+
+# The lead is built from ONE motif (3-5 notes: scale steps + lengths) that
+# music21 generates and develops: phrase 1 states it, phrase 2 varies it,
+# phrase 3 brings it back unchanged (the recognition moment), phrase 4
+# resolves it to the tonic. Steps are diatonic, so every transposition,
+# sequence and inversion stays in the key by construction.
+#
+# phrase_feel sets the dose: share of phrase time that is rest (min, max),
+# chance of a dotted pair / an anticipated landing note in the motif rhythm,
+# chance of a pickup into phrases 2-4, chance of an ornament in a tail,
+# biggest leap in scale steps (2 = third ... 5 = sixth), and the variation
+# techniques phrase 2 may use.
 FEEL = {
-    'driving':       {'rest': (0.28, 0.32), 'end_rest': 1.0, 'merge': 0.10, 'dot': 0.35,
-                      'leaps': (2, 2), 'sync': 0.65, 'pickup': 0.70, 'orn': 0.30},
-    'breathing':     {'rest': (0.29, 0.34), 'end_rest': 2.0, 'merge': 0.25, 'dot': 0.25,
-                      'leaps': (1, 2), 'sync': 0.30, 'pickup': 0.50, 'orn': 0.25},
-    'sparse':        {'rest': (0.30, 0.35), 'end_rest': 2.0, 'merge': 0.40, 'dot': 0.15,
-                      'leaps': (0, 1), 'sync': 0.15, 'pickup': 0.25, 'orn': 0.10},
-    'call_response': {'rest': (0.30, 0.35), 'end_rest': 2.5, 'merge': 0.20, 'dot': 0.25,
-                      'leaps': (1, 2), 'sync': 0.25, 'pickup': 0.50, 'orn': 0.20},
+    'driving':       {'rest': (0.28, 0.32), 'dot': 0.45, 'sync': 0.65, 'pickup': 0.70, 'orn': 0.30,
+                      'max_leap': 5, 'p2': ['sequence', 'diminution']},
+    'breathing':     {'rest': (0.28, 0.33), 'dot': 0.30, 'sync': 0.30, 'pickup': 0.50, 'orn': 0.25,
+                      'max_leap': 4, 'p2': ['sequence', 'inversion', 'extension', 'augmentation']},
+    'sparse':        {'rest': (0.30, 0.35), 'dot': 0.15, 'sync': 0.15, 'pickup': 0.25, 'orn': 0.10,
+                      'max_leap': 3, 'p2': ['sequence']},
+    'call_response': {'rest': (0.30, 0.35), 'dot': 0.25, 'sync': 0.25, 'pickup': 0.50, 'orn': 0.20,
+                      'max_leap': 4, 'p2': ['inversion']},
 }
+# note lengths for the motif's leading notes and its landing note
+LEAD_UNITS = {'busy': [0.5, 0.5, 0.25], 'medium': [0.5, 1.0], 'sparse': [1.0, 1.0, 2.0]}
+LANDING = {'busy': [1.0, 1.5], 'medium': [1.5, 2.0], 'sparse': [2.0, 3.0]}
+SHAPE_FROM_CONTOUR = {'ascending': 'rising', 'descending': 'falling', 'arch': 'arch',
+                      'valley': 'falling', 'wandering': 'zigzag', 'static': 'static'}
 
 BAR_LEN = 4.0
 TOTAL_BARS = 8
@@ -12290,59 +12304,9 @@ def pitches_in_range(names, center_octave, span=1):
             pool.append(p.midi)
     return sorted(set(pool))
 
-def onsets(events):
-    t, out = 0.0, []
-    for d, _ in events:
-        out.append(t)
-        t += d
-    return out
-
 def is_weak(onset):
     # beats 1 and 3 of a bar are strong, everything else weak
     return (onset % 2.0) > 1e-6
-
-def add_rests(rnd, events, cfg, n_fixed_end):
-    # turn body notes into rests (weak beats first, never adjacent to another
-    # rest, never the long phrase-ending note) until the rest share of the
-    # phrase time reaches the feel's range without overshooting it
-    lo, hi = cfg['rest']
-    target = rnd.uniform(lo, hi)
-    body = len(events) - n_fixed_end
-    ons = onsets(events)
-    cand = [i for i in range(1, body)]
-    rnd.shuffle(cand)
-    cand.sort(key=lambda i: 0 if is_weak(ons[i]) else 1)
-    for i in cand:
-        rest_time = sum(d for d, r in events if r)
-        notes = sum(1 for _, r in events if not r)
-        if rest_time / PHRASE_LEN >= target or notes <= 3:
-            break
-        if events[i - 1][1] or events[i + 1][1]:
-            continue
-        if (rest_time + events[i][0]) / PHRASE_LEN > hi:
-            continue
-        events[i] = [events[i][0], True]
-    return events
-
-def syncopate(rnd, events, prob, grid):
-    # anticipate notes on the grid (beats; also 8ths in busy lines) by an 8th
-    # or a 16th: the previous note gives up the time, the note lands before
-    # the beat. Rests are left alone — their time is kept for pickups.
-    # prob is a fixed dose of the eligible notes, not a coin flip
-    ons = onsets(events)
-    cand = [j for j in range(1, len(events))
-            if not events[j][1] and not events[j - 1][1] and ons[j] % grid < 1e-6]
-    want = int(round(prob * len(cand)))
-    if prob >= 0.25 and cand and not want:
-        want = 1
-    for j in sorted(rnd.sample(cand, min(want, len(cand)))):
-        pd, pr = events[j - 1]
-        shift = 0.5 if pd >= 1.0 and grid >= 1.0 else 0.25
-        if pd - shift < 0.25:
-            continue
-        events[j - 1] = [pd - shift, pr]
-        events[j] = [events[j][0] + shift, events[j][1]]
-    return events
 
 def is_syncopated(onset, dur):
     # starts on a weaker subdivision and is held over a stronger one
@@ -12352,61 +12316,59 @@ def is_syncopated(onset, dur):
         return True
     return onset % 1.0 > 1e-6 and end > math.floor(onset) + 1.0
 
-def phrase_rhythm(rnd, slot, cfg):
-    # one 2-bar phrase: body of slot-based notes with merged (long) and
-    # dotted variations, a long note before the closing rest, then the rest
-    end_rest = max(cfg['end_rest'], slot)
-    body_len = PHRASE_LEN - end_rest
-    events, t = [], 0.0
-    while t < body_len - 1e-6:
-        remaining = body_len - t
-        r = rnd.random()
-        if r < cfg['merge'] and remaining >= 2 * slot:
-            d = min(2 * slot, 3.0)
-            events.append([d, False])
-        elif r < cfg['merge'] + cfg['dot'] and remaining >= 2 * slot:
-            events.append([1.5 * slot, False])
-            events.append([0.5 * slot, False])
-            d = 2 * slot
-        else:
-            d = min(slot, remaining)
-            events.append([d, False])
+def q(x):
+    # quantize to 16ths
+    return round(x * 4) / 4
+
+def motif_steps(rnd, shape, length, max_leap):
+    # scale-step intervals between the motif's notes
+    n = length - 1
+    if shape == 'static':
+        s0 = rnd.choice([1, -1])
+        return [s0 * (-1) ** j for j in range(n)]          # neighbour figure
+    if shape == 'zigzag':
+        s0 = rnd.choice([1, -1])
+        return [s0 * (-1) ** j * (rnd.randint(2, min(3, max_leap)) if j % 2 == 0 else 1) for j in range(n)]
+    if shape in ('rising', 'falling'):
+        steps = [1] * n
+        j = rnd.randrange(n)
+        steps[j] = rnd.randint(2, max_leap)
+        if steps[j] >= 3 and j < n - 1:
+            steps[j + 1] = -1                                # step back after a 4th or more
+        return steps if shape == 'rising' else [-x for x in steps]
+    # arch: up (with one leap), then down
+    h = max(1, (n + 1) // 2)
+    up = [1] * h
+    up[rnd.randrange(h)] = rnd.randint(2, max_leap)
+    down = [-rnd.choice([1, 1, 2]) for _ in range(n - h)] or [-1]
+    return (up + down)[:n]
+
+def motif_rhythm(rnd, length, density, cfg):
+    # short leading notes into a longer landing note
+    durs = [rnd.choice(LEAD_UNITS[density]) for _ in range(length - 1)]
+    if length >= 3 and rnd.random() < cfg['dot']:
+        j = rnd.randrange(0, length - 2)
+        pair = durs[j] + durs[j + 1]
+        if pair >= 1.0:
+            durs[j] = q(pair * 0.75)                        # dotted pair, on the 16th grid
+            durs[j + 1] = pair - durs[j]
+    durs.append(rnd.choice(LANDING[density]))
+    if rnd.random() < cfg['sync'] and durs[-2] >= 0.5:
+        # the landing note is anticipated: it arrives before the beat
+        shift = 0.5 if durs[-2] >= 1.0 else 0.25
+        durs[-2] -= shift
+        durs[-1] += shift
+    return durs
+
+def figure(steps, durs, start_t=0.0):
+    # relative notes: [onset in phrase, length, scale degree relative to start]
+    out, t, deg = [], start_t, 0
+    for j, d in enumerate(durs):
+        out.append([t, d, deg])
         t += d
-    # long note on the phrase ending: merge trailing notes until >= LONG
-    tail = 0.0
-    while events and tail < LONG and len(events) > 2:
-        tail += events.pop()[0]
-    if tail:
-        events.append([tail, False])
-    events.append([end_rest, True])
-    events = add_rests(rnd, events, cfg, 2)
-    return syncopate(rnd, events, cfg['sync'], 0.5 if slot <= 0.5 else 1.0)
-
-def vary_rhythm(rnd, events):
-    # motif variation: 1-2 mutations inside the body (not the long ending)
-    ev = [list(e) for e in events]
-    for _ in range(rnd.randint(1, 2)):
-        body = len(ev) - 2
-        if body < 2:
-            break
-        i = rnd.randrange(0, body - 1)
-        a, b = ev[i], ev[i + 1]
-        m = rnd.random()
-        if m < 0.4 and not a[1] and not b[1]:
-            ev[i:i + 2] = [[a[0] + b[0], False]]          # merge -> longer note
-        elif m < 0.8 and not a[1] and a[0] >= 1.0:
-            ev[i:i + 1] = [[a[0] / 2, False], [a[0] / 2, False]]  # split
-        else:
-            ev[i], ev[i + 1] = b, a                          # shift a rest/length
-    return ev
-
-def resolve_rhythm(events):
-    # phrase 4: motif rhythm but with a longer final note before the rest
-    ev = [list(e) for e in events]
-    if len(ev) >= 3 and not ev[-3][1]:
-        last = ev.pop(-2)
-        ev[-2] = [ev[-2][0] + last[0], False]
-    return ev
+        if j < len(steps):
+            deg += steps[j]
+    return out
 
 files = []
 
@@ -12418,6 +12380,8 @@ for i, spec in enumerate(specs[:5]):
     chord_rhythm = spec.get('chord_rhythm', 'whole')
     contour = spec.get('melody_contour', 'static')
     density = spec.get('melody_density', 'medium')
+    if density not in LEAD_UNITS:
+        density = 'medium'
     melody_register = spec.get('melody_register', 'mid')
     chord_register = spec.get('chord_register', 'low')
     feel = spec.get('phrase_feel', 'breathing')
@@ -12426,10 +12390,16 @@ for i, spec in enumerate(specs[:5]):
     cfg = FEEL[feel]
     if chord_rhythm not in CHORD_RHYTHM_DUR:
         chord_rhythm = 'whole'
+    shape = spec.get('motif_shape') or SHAPE_FROM_CONTOUR.get(contour, 'arch')
+    if shape not in ('rising', 'falling', 'arch', 'zigzag', 'static'):
+        shape = 'arch'
+    try:
+        motif_len = max(3, min(5, int(spec.get('motif_length', 4))))
+    except Exception:
+        motif_len = 4
 
     bass_octave = BASS_OCTAVE.get(chord_register, 2)
     melody_octave = MELODY_REG_OCTAVE.get(melody_register, 5)
-    slot = SLOT_LEN.get(density, 1.0)
     bar_pattern = CHORD_RHYTHM_DUR[chord_rhythm]
 
     rnd = random.Random(name + str(i))
@@ -12486,50 +12456,16 @@ for i, spec in enumerate(specs[:5]):
                 break
         return active
 
-    # ── melody rhythm: 4 x 2-bar phrases — A, A' (variation), A, A-resolve ──
-    r1 = phrase_rhythm(rnd, slot, cfg)
-    phrase_rhythms = [r1, vary_rhythm(rnd, r1), [list(e) for e in r1], resolve_rhythm(r1)]
-
-    timeline = []
-    for ph, events in enumerate(phrase_rhythms):
-        for (d, r), o in zip(events, onsets(events)):
-            timeline.append({'onset': ph * PHRASE_LEN + o, 'dur': d, 'rest': r, 'ph': ph, 'pickup': False})
-
-    # pickups: phrases 2-4 may start before their bar, taking the tail of the
-    # previous phrase's closing rest
-    n_pickups = 0
-    pick_len = 0.25 if slot <= 0.5 else 0.5
-    for ph in (1, 2, 3):
-        if rnd.random() >= cfg['pickup']:
-            continue
-        idx = max(j for j, e in enumerate(timeline) if e['onset'] < ph * PHRASE_LEN - 1e-6)
-        rest_ev = timeline[idx]
-        if not rest_ev['rest']:
-            continue
-        count = 2 if feel == 'driving' else 1
-        while count and rest_ev['dur'] - count * pick_len < 0.5:
-            count -= 1
-        total_rest = sum(e['dur'] for e in timeline if e['rest'])
-        while count and (total_rest - count * pick_len) / TOTAL_QUARTERS < 0.25:
-            count -= 1
-        if not count:
-            continue
-        rest_ev['dur'] -= count * pick_len
-        for c in range(count):
-            timeline.insert(idx + 1 + c, {'onset': ph * PHRASE_LEN - (count - c) * pick_len,
-                                          'dur': pick_len, 'rest': False, 'ph': ph, 'pickup': True})
-        n_pickups += count
-
-    # ── melody pitch ──
+    # ── lead: scale degrees ──
+    scale7 = [pitch.Pitch(p.name) for p in list(k.pitches)[:7]]
+    scale_names = {p.name for p in scale7}
+    scale_all = pitches_in_range(scale7, 4, 4)       # every scale tone, octaves 0-8
     base_pitch = pitch.Pitch(tonic)
     base_pitch.octave = melody_octave
     base_midi = base_pitch.midi
-    scale7 = [pitch.Pitch(p.name) for p in list(k.pitches)[:7]]
-    scale_pool = pitches_in_range(scale7, melody_octave)
-    scale_all = pitches_in_range(scale7, 4, 4)
-    contour_range = 7
-    phase = rnd.uniform(0, 2 * math.pi)
     lo_midi, hi_midi = base_midi - 8, base_midi + 10
+    contour_range = 5
+    phase = rnd.uniform(0, 2 * math.pi)
 
     def curve(t):
         u = t / TOTAL_QUARTERS
@@ -12543,160 +12479,263 @@ for i, spec in enumerate(specs[:5]):
             return -(contour_range * (1 - abs(2 * u - 1)) * 2 - contour_range)
         if contour == 'wandering':
             return contour_range * math.sin(2 * math.pi * 1.5 * u + phase)
-        return 0.0  # static
+        return 0.0
 
-    def step_from(m, n):
-        # n scale steps up (n > 0) or down from m
-        j = min(range(len(scale_all)), key=lambda x: abs(scale_all[x] - m))
-        return scale_all[max(0, min(len(scale_all) - 1, j + n))]
+    def deg_of(m):
+        return min(range(len(scale_all)), key=lambda x: abs(scale_all[x] - m))
 
-    def cost(m, target, prev, prev2):
-        # near the contour target, mostly stepwise, few repeats, no big leaps
-        return (abs(m - target) + 0.25 * abs(m - prev)
-                + (3 if m == prev else 0) + (10 if m == prev == prev2 else 0)
-                + (3 if abs(m - prev) > 9 else 0))
+    def midi_of(d):
+        return scale_all[max(0, min(len(scale_all) - 1, d))]
 
-    def pick(onset, dur, target, prev, prev2, resolve=False, exclude=None):
-        rn = chord_at(onset)
-        chord_names = {p.name for p in rn.pitches}
-        if resolve:
-            # phrase 4 ends on the tonic, or on the chord root if the tonic
-            # isn't in the final chord
-            goal = k.tonic if k.tonic.name in chord_names else rn.root()
-            pool = pitches_in_range([goal], melody_octave)
-        elif dur >= LONG or not is_weak(onset):
-            pool = pitches_in_range(list(rn.pitches), melody_octave)
+    def in_key(m):
+        # safety net: anything outside the scale moves to the nearest scale tone
+        return m if pitch.Pitch(midi=m).name in scale_names else scale_all[deg_of(m)]
+
+    def place_score(notes, s, p_start, target, prev_midi, open_end=False):
+        # how well a figure sits at start degree s: chord tones on strong
+        # beats / long notes, near the contour target, inside the register,
+        # no repeated tone at the join; open_end keeps the tonic for phrase 4
+        sc = 0.0
+        if open_end and pitch.Pitch(midi=midi_of(s + notes[-1][2])).name == k.tonic.name:
+            sc -= 4
+        for on, d, r in notes:
+            m = midi_of(s + r)
+            if not (lo_midi <= m <= hi_midi):
+                sc -= 10
+            if not is_weak(p_start + on) or d >= LONG:
+                names = {p.name for p in chord_at(p_start + on).pitches}
+                sc += 2 if pitch.Pitch(midi=m).name in names else -1
+        sc -= 0.3 * abs(midi_of(s) - target)
+        if prev_midi is not None and midi_of(s) == prev_midi:
+            sc -= 3
+        return sc
+
+    def best_start(notes, p_start, prev_midi, exclude=None, want_last_pc=None, open_end=False):
+        target = base_midi + curve(p_start)
+        t = deg_of(target)
+        cands = [s for s in range(t - 5, t + 6) if s != exclude]
+        if want_last_pc is not None:
+            hit = [s for s in cands if pitch.Pitch(midi=midi_of(s + notes[-1][2])).name == want_last_pc]
+            cands = hit or cands
+        return max(cands, key=lambda s: place_score(notes, s, p_start, target, prev_midi, open_end))
+
+    # ── the motif ──
+    steps = motif_steps(rnd, shape, motif_len, cfg['max_leap'])
+    durs = motif_rhythm(rnd, motif_len, density, cfg)
+    rest_per_phrase = q(PHRASE_LEN * rnd.uniform(*cfg['rest']))
+    max_core = PHRASE_LEN - rest_per_phrase
+    while sum(durs) > max_core:                      # never longer than the phrase allows
+        durs[-1] = max(1.0, durs[-1] - 0.5)
+        if sum(durs) > max_core:
+            durs = [max(0.25, d / 2) if j < len(durs) - 1 else d for j, d in enumerate(durs)]
+    motif = figure(steps, durs)
+
+    def with_tail(core, final_pc=None):
+        # core figure + short rest + tail (fragment of the core's last steps,
+        # sequenced a step away, landing long on a chord tone) + closing rest.
+        # No room for a tail: the landing note absorbs the time instead.
+        core = [list(n) for n in core]
+        core_len = core[-1][0] + core[-1][1]
+        room = PHRASE_LEN - core_len - rest_per_phrase
+        if room < 1.5:
+            core[-1][1] = q(core[-1][1] + max(0.0, room))
+            return core, []
+        gap = 0.5
+        lead_durs = [n[1] for n in core[:-1]][-2:] or [0.5]
+        n_tail = 3 if room >= 2.5 and len(lead_durs) >= 2 else 2
+        lead = lead_durs[-(n_tail - 1):]
+        while sum(lead) > room - 0.5 and len(lead) > 1:
+            lead = lead[1:]
+        if sum(lead) > room - 0.5:
+            lead = [0.5]
+        last = room - sum(lead)
+        core_steps = [b[2] - a[2] for a, b in zip(core, core[1:])]
+        frag = core_steps[-len(lead):] if core_steps else [1]
+        d0 = core[-1][2] + (-1 if (core_steps and core_steps[-1] > 0) else 1)
+        tail_durs = lead + [last]
+        if len(tail_durs) >= 2 and tail_durs[-2] >= 0.5 and rnd.random() < cfg['sync']:
+            # the tail's landing note arrives early too
+            shift = 0.5 if tail_durs[-2] >= 1.0 else 0.25
+            tail_durs[-2] -= shift
+            tail_durs[-1] += shift
+        tail, t, deg = [], core_len + gap, d0
+        for j, d in enumerate(tail_durs):
+            tail.append([t, q(d), deg])
+            t += d
+            if j < len(frag):
+                deg += frag[j]
+        return core, tail
+
+    def realize(core, tail, s, p_start, final_pc=None, open_end=False):
+        # absolute notes for a phrase; the tail's last note snaps to a chord
+        # tone (or to the tonic in phrase 4) by the smallest step change
+        evs = [{'on': p_start + on, 'dur': d, 'midi': midi_of(s + r), 'kind': 'motif'} for on, d, r in core]
+        if tail:
+            for on, d, r in tail:
+                evs.append({'on': p_start + on, 'dur': d, 'midi': midi_of(s + r), 'kind': 'tail'})
+            last = evs[-1]
+            names = {p.name for p in chord_at(last['on']).pitches}
+            goals = {final_pc} if final_pc else names
+            if open_end and len(goals - {k.tonic.name}) > 0:
+                goals = goals - {k.tonic.name}   # keep the tonic for phrase 4
+            goal = lambda m: pitch.Pitch(midi=m).name in goals
+            d = deg_of(last['midi'])
+            for adj in (0, -1, 1, -2, 2, -3, 3):
+                m = midi_of(d + adj)
+                if goal(m) and m != evs[-2]['midi']:
+                    last['midi'] = m
+                    break
+        return evs
+
+    # phrase 1 — the motif as it is
+    core1, tail1 = with_tail(motif)
+    s1 = best_start(core1, 0.0, None, open_end=True)
+    p1 = realize(core1, tail1, s1, 0.0, open_end=True)
+
+    # phrase 2 — one variation technique, picked from what phrase_feel allows
+    # (only techniques that fit into the phrase)
+    motif_len_q = sum(durs)
+    options = []
+    for tech in cfg['p2']:
+        if tech == 'augmentation' and 2 * motif_len_q > max_core:
+            continue
+        if tech == 'extension' and motif_len_q + 1.0 > max_core:
+            continue
+        options.append(tech)
+    tech = rnd.choice(options or ['sequence'])
+    if tech == 'inversion':
+        core2 = figure([-x for x in steps], durs)
+    elif tech == 'augmentation':
+        core2 = figure(steps, [d * 2 for d in durs])
+    elif tech == 'diminution':
+        # motif at double speed, twice: the second time a step higher
+        dim = [max(0.25, q(d / 2)) for d in durs]
+        link = 1 - sum(steps)
+        core2 = figure(steps + [link] + steps, dim + dim)
+    elif tech == 'extension':
+        # motif plus two notes continuing its last direction, landing long
+        direction = 1 if steps[-1] > 0 else -1
+        ext_durs = durs[:-1] + [durs[-2] if len(durs) > 1 else 0.5, 0.5, durs[-1]]
+        core2 = figure(steps + [direction, direction], ext_durs)
+    else:
+        core2 = motif
+    core2, tail2 = with_tail(core2)
+    prev_last = p1[-1]['midi']
+    s2 = best_start(core2, PHRASE_LEN, prev_last, exclude=s1 if tech == 'sequence' else None)
+    p2 = realize(core2, tail2, s2, PHRASE_LEN)
+
+    # phrase 3 — phrase 1 again, unchanged: the recognition moment. Only if it
+    # clashes clearly with a different chord here is it moved by scale steps
+    # (the step sequence stays identical).
+    # (the contour target is phrase 1's own pitch here, so only harmony counts)
+    t3 = midi_of(s1)
+    keep = place_score(core1, s1, 2 * PHRASE_LEN, t3, None)
+    s3 = max(range(s1 - 5, s1 + 6), key=lambda s: place_score(core1, s, 2 * PHRASE_LEN, t3, None))
+    best3 = place_score(core1, s3, 2 * PHRASE_LEN, t3, None)
+    p3_shift = 0 if keep >= best3 - 3 else s3 - s1
+    p3 = []
+    for e in p1:
+        m = midi_of(deg_of(e['midi']) + p3_shift)
+        p3.append({'on': e['on'] + 2 * PHRASE_LEN, 'dur': e['dur'], 'midi': m, 'kind': e['kind']})
+
+    # phrase 4 — the motif, resolving to the tonic (tail lands on it; without
+    # a tail the motif is placed so that its own landing note is the tonic)
+    core4, tail4 = with_tail(motif)
+    if tail4:
+        s4 = best_start(core4, 3 * PHRASE_LEN, p3[-1]['midi'])
+    else:
+        s4 = best_start(core4, 3 * PHRASE_LEN, p3[-1]['midi'], want_last_pc=k.tonic.name)
+    p4 = realize(core4, tail4, s4, 3 * PHRASE_LEN, final_pc=k.tonic.name if tail4 else None)
+
+    phrases = [p1, p2, p3, p4]
+
+    # ornaments: a quick passing/neighbour note before a tail's landing note
+    # (decided once for phrase 1 and copied into phrase 3, so it stays a repeat)
+    n_orn = 0
+    def ornament(evs):
+        global n_orn
+        tails = [e for e in evs if e['kind'] == 'tail']
+        if len(tails) < 2 or tails[-2]['dur'] < 0.5:
+            return None
+        a, b = tails[-2], tails[-1]
+        between = [x for x in scale_all if min(a['midi'], b['midi']) < x < max(a['midi'], b['midi'])]
+        if between and abs(b['midi'] - a['midi']) <= 4:
+            m = between[len(between) // 2]
         else:
-            pool = scale_pool
-        pool = [m for m in pool if lo_midi <= m <= hi_midi] or pool
-        if exclude is not None:
-            pool = [m for m in pool if m != exclude] or pool
-        return min(pool, key=lambda m: cost(m, target, prev, prev2))
+            m = midi_of(deg_of(b['midi']) + (1 if a['midi'] < b['midi'] else -1) * -1)
+            if m == a['midi']:
+                m = midi_of(deg_of(b['midi']) + 1)
+        a['dur'] -= 0.25
+        return {'on': b['on'] - 0.25, 'dur': 0.25, 'midi': m, 'kind': 'orn'}
+    for ph in (0, 1, 3):
+        if rnd.random() < cfg['orn']:
+            o = ornament(phrases[ph])
+            if o:
+                phrases[ph].append(o)
+                n_orn += 1
+                if ph == 0:
+                    # same ornament in the phrase-3 repeat
+                    tails3 = [e for e in p3 if e['kind'] == 'tail']
+                    if len(tails3) >= 2:
+                        tails3[-2]['dur'] -= 0.25
+                        p3.append({'on': o['on'] + 2 * PHRASE_LEN, 'dur': 0.25,
+                                   'midi': midi_of(deg_of(o['midi']) + p3_shift), 'kind': 'orn'})
+                        n_orn += 1
 
-    # leaps (3rd to 6th onto a chord tone) are planned in phrases 1 and 2;
-    # phrases 3 and 4 inherit them through the motif
-    phrase_notes = [sum(1 for e in timeline if e['ph'] == ph and not e['rest'] and not e['pickup']) for ph in range(4)]
-    leap_slots = {}
-    for ph in (0, 1):
-        cand = list(range(1, phrase_notes[ph] - 1))
-        rnd.shuffle(cand)
-        want = rnd.randint(*cfg['leaps'])
-        chosen = []
-        for c in cand:
-            if len(chosen) >= want:
-                break
-            if all(abs(c - x) > 1 for x in chosen):  # room for the resolving step
-                chosen.append(c)
-        leap_slots[ph] = set(chosen)
+    # pickups: phrases 2-4 may start before their bar — scale steps climbing
+    # into the phrase's first note, taken from the previous closing rest
+    events = sorted((e for p in phrases for e in p), key=lambda e: e['on'])
+    n_pickups = 0
+    pick_len = 0.25 if density == 'busy' else 0.5
+    for ph in (1, 2, 3):
+        if rnd.random() >= cfg['pickup']:
+            continue
+        start = ph * PHRASE_LEN
+        before = [e for e in events if e['on'] < start]
+        gap = start - max(e['on'] + e['dur'] for e in before)
+        count = 2 if feel == 'driving' else 1
+        while count and gap - count * pick_len < 0.5:
+            count -= 1
+        note_time = sum(e['dur'] for e in events)
+        while count and (TOTAL_QUARTERS - note_time - count * pick_len) / TOTAL_QUARTERS < 0.25:
+            count -= 1
+        if not count:
+            continue
+        first = min((e for e in events if e['on'] >= start), key=lambda e: e['on'])
+        d = deg_of(first['midi'])
+        for c in range(count):
+            events.append({'on': start - (count - c) * pick_len, 'dur': pick_len,
+                           'midi': midi_of(d - (count - c)), 'kind': 'pickup'})
+        n_pickups += count
+        events.sort(key=lambda e: e['on'])
 
-    final_idx = max(j for j, e in enumerate(timeline) if e['ph'] == 3 and not e['rest'] and not e['pickup'])
-
+    # ── write the lead, rests in the gaps ──
     melody_part = stream.Part()
     lead_inst = instrument.Piano()
     lead_inst.partName = 'Lead'
     melody_part.insert(0, lead_inst)
-
-    def place(m, onset, dur, vel):
-        n = note.Note()
-        n.pitch.midi = m
-        n.quarterLength = dur
-        n.volume.velocity = max(1, min(127, vel))
-        melody_part.insert(onset, n)
-        return n
-
-    motif = []  # phrase 1 pitches, reused (shifted) in phrases 3 and 4
-    prev = prev2 = base_midi
-    last_note = None  # (note, onset) directly before the current event
-    pending_pickups = []
-    leap_dir = 0
-    note_idx = [0, 0, 0, 0]
-    n_rests, rest_time = 0, 0.0
-    n_leaps, n_orn, n_appog = 0, 0, 0
-    for ti, ev in enumerate(timeline):
-        onset, dur, ph = ev['onset'], ev['dur'], ev['ph']
-        if ev['rest']:
-            melody_part.insert(onset, note.Rest(quarterLength=dur))
+    t = 0.0
+    rest_time, n_rests = 0.0, 0
+    for e in events:
+        if e['on'] > t + 1e-6:
+            melody_part.insert(t, note.Rest(quarterLength=e['on'] - t))
+            rest_time += e['on'] - t
             n_rests += 1
-            rest_time += dur
-            last_note = None
-            continue
-        if ev['pickup']:
-            pending_pickups.append(ev)
-            continue
-        idx = note_idx[ph]
-        note_idx[ph] += 1
-        strong = not is_weak(onset) or dur >= LONG
-        inner = 4 * math.sin(math.pi * (onset - ph * PHRASE_LEN) / PHRASE_LEN) * (-1 if ph == 1 else 1)
-        target = base_midi + curve(onset) + inner
-        if ph in (2, 3) and idx < len(motif):
-            target = motif[idx] + curve(onset) - curve(onset - ph * PHRASE_LEN)
-        appoggiatura = False
-
-        if ti == final_idx:
-            m = pick(onset, dur, target, prev, prev2, resolve=True)
-            appoggiatura = (m == prev and dur >= 1.0)
-            leap_dir = 0
-        elif leap_dir:
-            # after a leap: step back against its direction
-            steps = [x for x in scale_all if 1 <= abs(x - prev) <= 2 and (x - prev) * leap_dir < 0]
-            m = min(steps, key=lambda x: abs(x - target)) if steps else pick(onset, dur, target, prev, prev2)
-            leap_dir = 0
-        elif idx in leap_slots.get(ph, ()):
-            rn = chord_at(onset)
-            jumps = [x for x in pitches_in_range(list(rn.pitches), melody_octave)
-                     if 3 <= abs(x - prev) <= 9 and lo_midi <= x <= hi_midi]
-            if jumps:
-                up = target >= prev
-                same_dir = [x for x in jumps if (x > prev) == up] or jumps
-                m = min(same_dir, key=lambda x: abs(x - target))
-                leap_dir = 1 if m > prev else -1
-                n_leaps += 1
-            else:
-                m = pick(onset, dur, target, prev, prev2)
-        else:
-            m = pick(onset, dur, target, prev, prev2)
-            if m == prev and strong:
-                # no repeated tone on a strong beat: appoggiatura (step above,
-                # resolving onto it) or another chord tone
-                if dur >= 1.0 and rnd.random() < 0.4:
-                    appoggiatura = True
-                else:
-                    m = pick(onset, dur, target, prev, prev2, exclude=prev)
-
-        vel = rnd.randint(85, 100) if not is_weak(onset) else rnd.randint(78, 92)
-
-        if pending_pickups:
-            # pickup notes climb by scale step into the phrase's first note
-            for c, pev in enumerate(pending_pickups):
-                pm = step_from(m, -(len(pending_pickups) - c))
-                last_note = (place(pm, pev['onset'], pev['dur'], vel - 10), pev['onset'])
-            pending_pickups = []
-        elif (dur >= 1.0 and not appoggiatura and last_note is not None
-              and last_note[0].quarterLength >= 0.5 and rnd.random() < cfg['orn']):
-            # ornament: a quick passing / neighbour note stolen from the
-            # previous note, leading into a longer note
-            ln = last_note[0]
-            between = [x for x in scale_all if min(prev, m) < x < max(prev, m)]
-            if between and abs(m - prev) <= 4:
-                orn = between[len(between) // 2]
-            else:
-                orn = step_from(m, 1 if rnd.random() < 0.5 else -1)
-                if orn == prev:
-                    orn = step_from(m, -1 if orn > m else 1)
-            ln.quarterLength = ln.quarterLength - 0.25
-            place(orn, onset - 0.25, 0.25, vel - 12)
-            n_orn += 1
-
-        if appoggiatura:
-            half = max(0.25, round(dur / 2 * 4) / 4)
-            place(step_from(m, 1), onset, half, vel)
-            last_note = (place(m, onset + half, dur - half, vel - 8), onset + half)
-            n_appog += 1
-        else:
-            last_note = (place(m, onset, dur, vel), onset)
-        if ph == 0:
-            motif.append(m)
-        prev2, prev = prev, m
+        n = note.Note()
+        n.pitch.midi = in_key(e['midi'])
+        n.quarterLength = e['dur']
+        vel = rnd.randint(85, 100) if not is_weak(e['on']) else rnd.randint(78, 92)
+        if e['kind'] == 'pickup':
+            vel -= 10
+        elif e['kind'] == 'orn':
+            vel -= 12
+        n.volume.velocity = vel
+        melody_part.insert(e['on'], n)
+        t = e['on'] + e['dur']
+    if t < TOTAL_QUARTERS - 1e-6:
+        melody_part.insert(t, note.Rest(quarterLength=TOTAL_QUARTERS - t))
+        rest_time += TOTAL_QUARTERS - t
+        n_rests += 1
 
     score = stream.Score()
     score.insert(0, chord_part)
@@ -12709,38 +12748,29 @@ for i, spec in enumerate(specs[:5]):
     # stats over the written lead line
     mel = sorted((float(n.offset), float(n.quarterLength), n.pitch.midi) for n in melody_part.notes)
     iv = {'repeat': 0, 'step': 0, 'third': 0, 'fourth_fifth': 0, 'sixth': 0, 'larger': 0}
-    rep_strong = 0
     for (o1, d1, a), (o2, d2, b) in zip(mel, mel[1:]):
         s = abs(b - a)
-        key_ = 'repeat' if s == 0 else 'step' if s <= 2 else 'third' if s <= 4 else 'fourth_fifth' if s <= 7 else 'sixth' if s <= 9 else 'larger'
-        iv[key_] += 1
-        if s == 0 and not is_weak(o2):
-            rep_strong += 1
-    offbeat = [x for x in mel if x[0] % 1.0 > 1e-6]
-    synced = [x for x in mel if is_syncopated(x[0], x[1])]
-    dist = {}
-    for _, d, _ in mel:
-        dist[str(d)] = dist.get(str(d), 0) + 1
+        iv['repeat' if s == 0 else 'step' if s <= 2 else 'third' if s <= 4 else
+           'fourth_fifth' if s <= 7 else 'sixth' if s <= 9 else 'larger'] += 1
+    motif_notes = [e for e in p1 if e['kind'] == 'motif']
     files.append({
         'filename': fname,
         'phrase_feel': feel,
         'chord_rhythm': chord_rhythm,
-        'chord_changes': TOTAL_BARS,
-        'chord_notes': n_chord_notes,
+        'motif_shape': shape,
+        'motif_length': motif_len,
+        'motif_steps': steps,
+        'motif_semitones': [b['midi'] - a['midi'] for a, b in zip(motif_notes, motif_notes[1:])],
+        'motif_durations': durs,
+        'phrase2_technique': tech,
+        'phrase3': 'original' if p3_shift == 0 else f'moved {p3_shift:+d} scale steps',
         'melody_notes': len(mel),
-        'rests': n_rests,
         'rest_share_time': round(rest_time / TOTAL_QUARTERS, 2),
         'intervals': iv,
-        'leaps_planned': n_leaps,
-        'syncopated': len(synced),
-        'syncopated_share': round(len(synced) / max(1, len(mel)), 2),
-        'offbeat_share': round(len(offbeat) / max(1, len(mel)), 2),
-        'repeats': iv['repeat'],
-        'repeats_on_strong_beat': rep_strong,
+        'syncopated_share': round(sum(1 for o, d, _ in mel if is_syncopated(o, d)) / max(1, len(mel)), 2),
+        'out_of_key': sum(1 for _, _, m in mel if pitch.Pitch(midi=m).name not in scale_names),
         'pickups': n_pickups,
         'ornaments': n_orn,
-        'appoggiaturas': n_appog,
-        'length_dist': dict(sorted(dist.items(), key=lambda x: float(x[0]))),
     })
 
 print(json.dumps({'files': files}))

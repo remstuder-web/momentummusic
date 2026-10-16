@@ -3396,3 +3396,9 @@ TASK: fixed-width headers cutting off content below 1200px
 WHAT: ProjectsTab .song-head wraps the player block (min 340, max 460) under the title when both can't fit; inner player slot/mini-player shrink; title input ellipsis. DemoTab .demo-meta-right no longer position:absolute — head-left 401px basis keeps the column at 415px on wide cards, gives way on narrow ones
 RESULT: works — no squashed/outside/overlapping content in Projects/Demos/Submissions headers at 1280/1200/1100/1024 (Demos checked with side panel open and closed)
 BLOCKERS: none
+
+## 2026-10-16 momentum-watcher.cjs (/generate-midi-from-reference) — DONE
+TASK: MIDI from Reference — Phrasierung, Pausen, Notenlängen
+WHAT: Melodie als 4×2-Takt-Phrasen (A, A' variiert, A, A-Auflösung auf Tonika/Akkordgrundton), 25–35% Pausenzeit (schwache Zählzeiten + Pause am Phrasenende), gemischte Notenlängen mit langer Note vor der Phrasenpause, neues Spec-Feld phrase_feel (driving|breathing|sparse|call_response); Akkord wechselt 1× pro Takt, chord_rhythm steuert nur Anschläge (quarter=1+1+2, syncopated=1.5+2.5); max. 2 gleiche Töne in Folge, Register auf Grundton −8/+10 begrenzt; Bugfix: in Moll wurden bVI/bVII (music21 romanNumeralFromChord) als Cb/Db-Akkorde gerendert → "b" vor III/VI/VII in Moll wird jetzt in Analyse und Rendering entfernt; SSE done-Event enthält stats pro Datei
+RESULT: works — voller Test mit Claude-Call (Referenz: Armin van Buuren "Not Giving Up On Love" [Em]): 5 Dateien auf Desktop, 0 tonartfremde Melodienoten, Pausenanteil 25–31%
+BLOCKERS: none. test-system.cjs: 2 Fehler unabhängig davon (TEST 3 Spotify 403 premium, TEST 7 Brain-Duplikate)

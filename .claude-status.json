@@ -1,10 +1,10 @@
 {
-  "updated": "2026-10-15T19:35:31Z",
-  "last_task": "DemoTab visual refresh trial",
+  "updated": "2026-10-16T08:10:00Z",
+  "last_task": "MIDI from Reference: phrasing, rests, note-length variation",
   "status": "done",
-  "working": ["src/app.css palette tokens", "DemoTab converted to tokens, blue accent, reduced borders"],
-  "broken": [],
-  "partial": ["Rollout to other tabs pending user review", "SENT blue vs accent blue collision unresolved"],
-  "next": "User reviews DemoTab trial; decide SENT colour, then roll out tab by tab",
-  "notes": "Only DemoTab consumes app.css; top nav (+page.svelte) still gold"
+  "working": ["/generate-midi-from-reference: 4x2-bar phrases, 25-35% rest time, varied lengths, phrase_feel spec field", "minor-key bVI/bVII roman numeral bug fixed (was rendering Cb/Db chords)", "full test with Claude call: 5 files, 0 out-of-scale melody notes"],
+  "broken": ["test-system TEST 3: Spotify 403 premium required", "test-system TEST 7: 6 duplicate brain entries"],
+  "partial": [],
+  "next": "User listens to ~/Desktop/MIDI_NotGivingUp_*.mid and gives feedback; tempo is 120 whenever the reference MIDI has no tempo event",
+  "notes": "Analysis of single-line melodic MIDIs (no chords) gives unreliable keys/progressions via chordify"
 }

@@ -12071,7 +12071,7 @@ Give specific production direction based on stem balance, loudness levels, and r
 
         // STEP 1 — analyze the reference MIDI: key, chord progression (roman
         // numerals via chordify + romanNumeralFromChord), tempo, register, density.
-        const analyzeScript = `import sys, json
+        const analyzeScript = `import sys, json, re
 from music21 import converter, roman
 
 s = converter.parse(sys.argv[1])
@@ -12082,7 +12082,13 @@ progression = []
 for c in chords.recurse().getElementsByClass('Chord'):
     try:
         rn = roman.romanNumeralFromChord(c, k)
-        progression.append(rn.figure)
+        fig = rn.figure
+        # romanNumeralFromChord labels C major in e minor "bVI", but
+        # RomanNumeral("bVI", e minor) parses it as Cb major — in minor,
+        # VI/VII/III already are the lowered degrees, so drop the "b"
+        if k.mode == 'minor':
+            fig = re.sub('^b(?=III|VI|VII)', '', fig)
+        progression.append(fig)
     except Exception:
         pass
 
@@ -12142,13 +12148,15 @@ Return ONLY a JSON array of 5 objects:
   "melody_contour": "ascending|descending|arch|valley|static|wandering",
   "melody_density": "sparse|medium|busy",
   "melody_register": "low|mid|high",
-  "chord_register": "low|mid"
+  "chord_register": "low|mid",
+  "phrase_feel": "driving|breathing|sparse|call_response"
 }]
 
 Rules:
 - Use roman numerals valid in ${keyStr} ${mode}
 - 4 or 8 chords per progression
 - Make the 5 ideas genuinely different from each other
+- phrase_feel shapes rests and note lengths: driving = short notes, few rests; breathing = long notes, a breath after every 2-bar phrase; sparse = few long notes, lots of space; call_response = a phrase answered by a phrase with clear gaps
 - Stay in the emotional world of the reference
 - No explanation, no markdown, JSON array only`
 
@@ -12186,10 +12194,11 @@ Rules:
         sendEvt({ step: 'Rendering 1/5...' })
 
         // STEP 3 — music21 renders each spec: roman.RomanNumeral(fig, k) gives
-        // correctly voiced, scale-correct chords; melody notes are drawn from
-        // k.pitches (scale tones) and chord tones on strong beats, shaped by
-        // melody_contour. No random/raw pitch numbers anywhere.
-        const renderScript = `import sys, json, os, random
+        // correctly voiced, scale-correct chords (one per bar, restruck per
+        // chord_rhythm); the melody is built as 4 x 2-bar phrases (A, A', A,
+        // A-resolve) with rests and varied note lengths per phrase_feel, chord
+        // tones on strong beats / long notes and k.pitches scale tones between.
+        const renderScript = `import sys, json, os, random, math, re
 from music21 import stream, note, chord, roman, key as m21key, tempo as m21tempo, pitch
 
 data = json.loads(sys.argv[1])
@@ -12203,21 +12212,39 @@ out_dir = data['out_dir']
 k = m21key.Key(tonic, mode)
 DEFAULT_FIG = 'i' if mode == 'minor' else 'I'
 
+# Chords change once per bar; chord_rhythm only sets how the bar's chord is
+# struck (held / restruck), never more than 2 different chords per bar.
 CHORD_RHYTHM_DUR = {
     'whole': [4.0],
     'half': [2.0, 2.0],
-    'quarter': [1.0, 1.0, 1.0, 1.0],
-    'syncopated': [1.5, 0.5, 1.5, 0.5],
+    'quarter': [1.0, 1.0, 2.0],   # stab, stab, hold
+    'syncopated': [1.5, 2.5],     # pushed hit, then hold
 }
 CHORD_REG_OCTAVE = {'low': 3, 'mid': 4}
 MELODY_REG_OCTAVE = {'low': 4, 'mid': 5, 'high': 6}
-MELODY_DENSITY_COUNT = {'sparse': 2, 'medium': 4, 'busy': 8}
+# melody_density sets the base slot length (sparse=2, medium=4, busy=8 per bar)
+SLOT_LEN = {'sparse': 2.0, 'medium': 1.0, 'busy': 0.5}
+# phrase_feel: share of phrase time that is rest (min, max), rest length
+# closing each 2-bar phrase, chance to merge two slots into a long note,
+# chance to dot a pair
+FEEL = {
+    'driving':       {'rest': (0.25, 0.29), 'end_rest': 1.0, 'merge': 0.10, 'dot': 0.35},
+    'breathing':     {'rest': (0.28, 0.33), 'end_rest': 1.5, 'merge': 0.25, 'dot': 0.25},
+    'sparse':        {'rest': (0.30, 0.35), 'end_rest': 2.0, 'merge': 0.40, 'dot': 0.15},
+    'call_response': {'rest': (0.30, 0.35), 'end_rest': 2.0, 'merge': 0.20, 'dot': 0.25},
+}
 
 BAR_LEN = 4.0
 TOTAL_BARS = 8
 TOTAL_QUARTERS = BAR_LEN * TOTAL_BARS
+PHRASE_LEN = 8.0  # 4 phrases x 2 bars
+LONG = 1.5
 
 def roman_numeral(fig):
+    # in minor, music21's VI/VII/III already are the lowered degrees:
+    # "bVI" would give a double-flat chord (Cb major in e minor)
+    if mode == 'minor':
+        fig = re.sub('^b(?=III|VI|VII)', '', str(fig))
     try:
         return roman.RomanNumeral(fig, k)
     except Exception:
@@ -12231,6 +12258,104 @@ def chord_pitches_at_octave(rn, target_octave):
         pitches.append(np_)
     return pitches
 
+def pitches_in_range(names, center_octave, span=1):
+    pool = []
+    for octv in range(center_octave - span, center_octave + span + 1):
+        for pn in names:
+            p = pitch.Pitch(pn.name)
+            p.octave = octv
+            pool.append(p.midi)
+    return sorted(set(pool))
+
+def onsets(events):
+    t, out = 0.0, []
+    for d, _ in events:
+        out.append(t)
+        t += d
+    return out
+
+def is_weak(onset):
+    # beats 1 and 3 of a bar are strong, everything else weak
+    return (onset % 2.0) > 1e-6
+
+def add_rests(rnd, events, cfg, n_fixed_end):
+    # turn body notes into rests (weak beats first, never adjacent to another
+    # rest, never the long phrase-ending note) until the rest share of the
+    # phrase time reaches the feel's range without overshooting it
+    lo, hi = cfg['rest']
+    target = rnd.uniform(lo, hi)
+    body = len(events) - n_fixed_end
+    ons = onsets(events)
+    cand = [i for i in range(1, body)]
+    rnd.shuffle(cand)
+    cand.sort(key=lambda i: 0 if is_weak(ons[i]) else 1)
+    for i in cand:
+        rest_time = sum(d for d, r in events if r)
+        notes = sum(1 for _, r in events if not r)
+        if rest_time / PHRASE_LEN >= target or notes <= 3:
+            break
+        if events[i - 1][1] or events[i + 1][1]:
+            continue
+        if (rest_time + events[i][0]) / PHRASE_LEN > hi:
+            continue
+        events[i] = [events[i][0], True]
+    return events
+
+def phrase_rhythm(rnd, slot, cfg):
+    # one 2-bar phrase: body of slot-based notes with merged (long) and
+    # dotted variations, a long note before the closing rest, then the rest
+    end_rest = max(cfg['end_rest'], slot)
+    body_len = PHRASE_LEN - end_rest
+    events, t = [], 0.0
+    while t < body_len - 1e-6:
+        remaining = body_len - t
+        r = rnd.random()
+        if r < cfg['merge'] and remaining >= 2 * slot:
+            d = min(2 * slot, 3.0)
+            events.append([d, False])
+        elif r < cfg['merge'] + cfg['dot'] and remaining >= 2 * slot:
+            events.append([1.5 * slot, False])
+            events.append([0.5 * slot, False])
+            d = 2 * slot
+        else:
+            d = min(slot, remaining)
+            events.append([d, False])
+        t += d
+    # long note on the phrase ending: merge trailing notes until >= LONG
+    tail = 0.0
+    while events and tail < LONG and len(events) > 2:
+        tail += events.pop()[0]
+    if tail:
+        events.append([tail, False])
+    events.append([end_rest, True])
+    return add_rests(rnd, events, cfg, 2)
+
+def vary_rhythm(rnd, events):
+    # motif variation: 1-2 mutations inside the body (not the long ending)
+    ev = [list(e) for e in events]
+    for _ in range(rnd.randint(1, 2)):
+        body = len(ev) - 2
+        if body < 2:
+            break
+        i = rnd.randrange(0, body - 1)
+        a, b = ev[i], ev[i + 1]
+        m = rnd.random()
+        if m < 0.4 and not a[1] and not b[1]:
+            ev[i:i + 2] = [[a[0] + b[0], False]]          # merge -> longer note
+        elif m < 0.8 and not a[1] and a[0] >= 1.0:
+            ev[i:i + 1] = [[a[0] / 2, False], [a[0] / 2, False]]  # split
+        else:
+            ev[i], ev[i + 1] = b, a                          # shift a rest/length
+    return ev
+
+def resolve_rhythm(events):
+    # phrase 4: motif rhythm but with a longer final note before the rest
+    ev = [list(e) for e in events]
+    if len(ev) >= 3 and not ev[-3][1]:
+        last = ev.pop(-2)
+        ev[-2] = [ev[-2][0] + last[0], False]
+    return ev
+
 files = []
 
 for i, spec in enumerate(specs[:5]):
@@ -12243,105 +12368,126 @@ for i, spec in enumerate(specs[:5]):
     density = spec.get('melody_density', 'medium')
     melody_register = spec.get('melody_register', 'mid')
     chord_register = spec.get('chord_register', 'low')
+    feel = spec.get('phrase_feel', 'breathing')
+    if feel not in FEEL:
+        feel = 'breathing'
+    cfg = FEEL[feel]
 
     chord_octave = CHORD_REG_OCTAVE.get(chord_register, 3)
     melody_octave = MELODY_REG_OCTAVE.get(melody_register, 5)
-    notes_per_bar = MELODY_DENSITY_COUNT.get(density, 4)
+    slot = SLOT_LEN.get(density, 1.0)
     bar_pattern = CHORD_RHYTHM_DUR.get(chord_rhythm, CHORD_RHYTHM_DUR['whole'])
 
     rnd = random.Random(name + str(i))
 
-    # chord timeline: cycle the progression's roman numerals through
-    # bar_pattern durations until 8 bars (32 quarters) are filled
+    # chord timeline: one chord per bar, struck per bar_pattern
     chord_events = []  # (start, duration, roman_numeral)
-    elapsed = 0.0
-    chord_idx = 0
-    pattern_idx = 0
-    while elapsed < TOTAL_QUARTERS - 1e-6:
-        fig = progression[chord_idx % len(progression)]
-        dur = bar_pattern[pattern_idx % len(bar_pattern)]
-        dur = min(dur, TOTAL_QUARTERS - elapsed)
-        rn = roman_numeral(fig)
-        chord_events.append((elapsed, dur, rn))
-        elapsed += dur
-        pattern_idx += 1
-        if pattern_idx % len(bar_pattern) == 0:
-            chord_idx += 1
+    for bar in range(TOTAL_BARS):
+        rn = roman_numeral(progression[bar % len(progression)])
+        t = bar * BAR_LEN
+        for dur in bar_pattern:
+            chord_events.append((t, dur, rn))
+            t += dur
 
     chord_part = stream.Part()
     chord_part.insert(0, m21tempo.MetronomeMark(number=tempo_bpm))
     for start, dur, rn in chord_events:
-        pitches = chord_pitches_at_octave(rn, chord_octave)
-        c = chord.Chord(pitches, quarterLength=dur)
+        c = chord.Chord(chord_pitches_at_octave(rn, chord_octave), quarterLength=dur)
         c.volume.velocity = rnd.randint(60, 75)
         chord_part.insert(start, c)
 
-    # melody: notes_per_bar notes per bar, shaped by contour, chord tones on
-    # strong beats (start of each bar), scale passing tones in between
+    def chord_at(onset):
+        active = chord_events[0][2]
+        for start, dur, rn in chord_events:
+            if start <= onset + 1e-6:
+                active = rn
+            else:
+                break
+        return active
+
+    # rhythm: 4 x 2-bar phrases — A, A' (variation), A, A-resolve
+    r1 = phrase_rhythm(rnd, slot, cfg)
+    phrase_rhythms = [r1, vary_rhythm(rnd, r1), [list(e) for e in r1], resolve_rhythm(r1)]
+
+    # pitch: global contour over 8 bars plus an arch inside each phrase
     base_pitch = pitch.Pitch(tonic)
     base_pitch.octave = melody_octave
     base_midi = base_pitch.midi
-
     scale7 = [pitch.Pitch(p.name) for p in list(k.pitches)[:7]]
-
-    def pitches_in_range(names, center_octave, span=1):
-        pool = []
-        for octv in range(center_octave - span, center_octave + span + 1):
-            for pn in names:
-                p = pitch.Pitch(pn.name)
-                p.octave = octv
-                pool.append(p.midi)
-        return sorted(set(pool))
-
     scale_pool = pitches_in_range(scale7, melody_octave)
+    contour_range = 7
+    phase = rnd.uniform(0, 2 * math.pi)
 
-    total_notes = notes_per_bar * TOTAL_BARS
-    contour_range = 9  # semitones of drift around the register center
-
-    def curve_offset(idx):
-        t = idx / max(1, total_notes - 1)
+    def curve(t):
+        u = t / TOTAL_QUARTERS
         if contour == 'ascending':
-            return -contour_range + 2 * contour_range * t
+            return -contour_range + 2 * contour_range * u
         if contour == 'descending':
-            return contour_range - 2 * contour_range * t
+            return contour_range - 2 * contour_range * u
         if contour == 'arch':
-            return contour_range * (1 - abs(2 * t - 1)) * 2 - contour_range
+            return contour_range * (1 - abs(2 * u - 1)) * 2 - contour_range
         if contour == 'valley':
-            return -(contour_range * (1 - abs(2 * t - 1)) * 2 - contour_range)
+            return -(contour_range * (1 - abs(2 * u - 1)) * 2 - contour_range)
         if contour == 'wandering':
-            return rnd.uniform(-contour_range, contour_range)
-        return rnd.uniform(-2, 2)  # static
+            return contour_range * math.sin(2 * math.pi * 1.5 * u + phase)
+        return 0.0  # static
 
-    def chord_tone_pool(rn, center_octave, span=1):
-        return pitches_in_range(list(rn.pitches), center_octave, span)
+    lo_midi, hi_midi = base_midi - 8, base_midi + 10
+
+    def cost(m, target, prev, prev2):
+        # near the contour target, mostly stepwise, few repeats, no big leaps
+        return (abs(m - target) + 0.25 * abs(m - prev)
+                + (3 if m == prev else 0) + (10 if m == prev == prev2 else 0)
+                + (3 if abs(m - prev) > 9 else 0))
+
+    def pick(onset, dur, target, prev, prev2, resolve=False):
+        rn = chord_at(onset)
+        chord_names = {p.name for p in rn.pitches}
+        if resolve:
+            # phrase 4 ends on the tonic, or on the chord root if the tonic
+            # isn't in the final chord
+            goal = k.tonic if k.tonic.name in chord_names else rn.root()
+            pool = pitches_in_range([goal], melody_octave)
+        elif dur >= LONG or not is_weak(onset):
+            pool = pitches_in_range(list(rn.pitches), melody_octave)
+        else:
+            pool = scale_pool
+        pool = [m for m in pool if lo_midi <= m <= hi_midi] or pool
+        return min(pool, key=lambda m: cost(m, target, prev, prev2))
 
     melody_part = stream.Part()
-    prev_midi = base_midi
-    note_i = 0
-    for bar in range(TOTAL_BARS):
-        bar_start = bar * BAR_LEN
-        step = BAR_LEN / notes_per_bar
-        for j in range(notes_per_bar):
-            onset = bar_start + j * step
-            active_rn = chord_events[0][2]
-            for start, dur, rn in chord_events:
-                if start <= onset + 1e-6:
-                    active_rn = rn
-                else:
-                    break
-            target = base_midi + curve_offset(note_i)
-            strong_beat = (j == 0)
-            pool = chord_tone_pool(active_rn, melody_octave) if strong_beat else scale_pool
-            if not pool:
-                pool = scale_pool
-            pick = min(pool, key=lambda m: abs(m - target) + 0.35 * abs(m - prev_midi))
+    motif = []  # phrase 1 pitches, reused (shifted) in phrases 3 and 4
+    prev = prev2 = base_midi
+    stats_durs, n_notes, n_rests, rest_time = [], 0, 0, 0.0
+    for ph, events in enumerate(phrase_rhythms):
+        p_start = ph * PHRASE_LEN
+        shape_sign = -1 if ph == 1 else 1   # phrase 2 inverts the inner arch
+        ons = onsets(events)
+        note_idx = 0
+        last_note = max(j for j, (_, r) in enumerate(events) if not r)
+        for j, (dur, is_rest) in enumerate(events):
+            onset = p_start + ons[j]
+            if is_rest:
+                melody_part.insert(onset, note.Rest(quarterLength=dur))
+                n_rests += 1
+                rest_time += dur
+                continue
+            inner = 4 * math.sin(math.pi * ons[j] / PHRASE_LEN) * shape_sign
+            target = base_midi + curve(onset) + inner
+            if ph in (2, 3) and note_idx < len(motif):
+                target = motif[note_idx] + curve(onset) - curve(onset - ph * PHRASE_LEN)
+            m = pick(onset, dur, target, prev, prev2, resolve=(ph == 3 and j == last_note))
+            if ph == 0:
+                motif.append(m)
             n = note.Note()
-            n.pitch.midi = pick
-            n.quarterLength = step
-            n.volume.velocity = rnd.randint(85, 100)
+            n.pitch.midi = m
+            n.quarterLength = dur
+            n.volume.velocity = rnd.randint(85, 100) if not is_weak(onset) else rnd.randint(78, 92)
             melody_part.insert(onset, n)
-            prev_midi = pick
-            note_i += 1
+            prev2, prev = prev, m
+            note_idx += 1
+            n_notes += 1
+            stats_durs.append(dur)
 
     score = stream.Score()
     score.insert(0, chord_part)
@@ -12349,12 +12495,20 @@ for i, spec in enumerate(specs[:5]):
 
     safe = ''.join(c if c.isalnum() or c in '-_' else '_' for c in name)[:24]
     fname = f'MIDI_{base}_{i + 1}_{safe}.mid'
-    out_path = os.path.join(out_dir, fname)
-    score.write('midi', fp=out_path)
+    score.write('midi', fp=os.path.join(out_dir, fname))
+    dist = {}
+    for d in stats_durs:
+        dist[str(d)] = dist.get(str(d), 0) + 1
     files.append({
         'filename': fname,
-        'chord_count': len(chord_events),
-        'note_count': len(chord_events) + total_notes,
+        'phrase_feel': feel,
+        'chord_changes': TOTAL_BARS,
+        'chord_hits': len(chord_events),
+        'melody_notes': n_notes,
+        'rests': n_rests,
+        'rest_share_events': round(n_rests / max(1, n_notes + n_rests), 2),
+        'rest_share_time': round(rest_time / TOTAL_QUARTERS, 2),
+        'length_dist': dict(sorted(dist.items(), key=lambda x: float(x[0]))),
     })
 
 print(json.dumps({'files': files}))
@@ -12384,7 +12538,7 @@ print(json.dumps({'files': files}))
         try { fs.unlinkSync(tmpFile); tmpFile = null } catch {}
 
         sendEvt({ step: 'Saved to Desktop' })
-        sendEvt({ done: true, ok: true, files, analysis: { key: keyStr, mode, tempo, progression, noteCount: note_count } })
+        sendEvt({ done: true, ok: true, files, stats: rendered.files || [], analysis: { key: keyStr, mode, tempo, progression, noteCount: note_count } })
         console.log(`✓ MIDI from MIDI reference (music21): ${files.length} files → Desktop (${baseName})`)
 
       } catch(e) {

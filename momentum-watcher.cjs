@@ -12856,12 +12856,16 @@ print(json.dumps({'files': files}))
         try { rendered = JSON.parse(renderOut) } catch { throw new Error('Render script error: ' + renderOut.slice(0, 300)) }
         // per idea: 2-part file (Chords + Lead tracks) and a merged one-clip file
         const files = (rendered.files || []).flatMap(f => [f.filename, f.merged_filename].filter(Boolean))
+        // grouped per idea for the UI: one row with both variants
+        const ideas = (rendered.files || []).map((f, i) => ({
+          n: i + 1, name: String(specs[i]?.name || `idea${i + 1}`), tracks: f.filename, clip: f.merged_filename || null
+        }))
 
         // STEP 4 — cleanup: never write to Supabase, this stays temporary.
         try { fs.unlinkSync(tmpFile); tmpFile = null } catch {}
 
         sendEvt({ step: 'Saved to Desktop' })
-        sendEvt({ done: true, ok: true, files, stats: rendered.files || [], analysis: { key: keyStr, mode, tempo, progression, noteCount: note_count } })
+        sendEvt({ done: true, ok: true, files, ideas, stats: rendered.files || [], analysis: { key: keyStr, mode, tempo, progression, noteCount: note_count } })
         console.log(`✓ MIDI from MIDI reference (music21): ${files.length} files → Desktop (${baseName})`)
 
       } catch(e) {

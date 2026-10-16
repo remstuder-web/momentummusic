@@ -2097,12 +2097,23 @@ ${mozartContext}`
           {#if midiResult}
             <div class="acapella-result">
               {#if midiResult.ok}
-                {#each (midiResult.files || []) as fname, i}
-                  <div class="result-row">
-                    <span class="result-label">{String(i+1).padStart(2,'0')}</span>
-                    <span class="result-val">{fname}</span>
-                  </div>
-                {/each}
+                {#if midiResult.ideas?.length}
+                  {#each midiResult.ideas as idea}
+                    <div class="result-row midi-idea-row">
+                      <span class="result-label">{String(idea.n).padStart(2,'0')}</span>
+                      <span class="result-val midi-idea-name" title={idea.name}>{idea.name}</span>
+                      <span class="midi-variant" title={idea.tracks}>2 Spuren</span>
+                      {#if idea.clip}<span class="midi-variant" title={idea.clip}>1 Clip</span>{/if}
+                    </div>
+                  {/each}
+                {:else}
+                  {#each (midiResult.files || []) as fname, i}
+                    <div class="result-row">
+                      <span class="result-label">{String(i+1).padStart(2,'0')}</span>
+                      <span class="result-val">{fname}</span>
+                    </div>
+                  {/each}
+                {/if}
                 <div style="font-family: 'Space Mono',monospace;font-size: 9px;color: #4caf82;margin-top: 6px">✓ Saved to Desktop</div>
               {:else}
                 <div style="color: #e57373;font-size: 11px">{midiResult.error}</div>
@@ -2789,6 +2800,9 @@ ${mozartContext}`
   .result-row { display: flex; gap: 8px; align-items: baseline; }
   .result-label { font-family: 'Space Mono', monospace; font-size: 9px; color: var(--text-dim); letter-spacing: .08em; width: 56px; flex-shrink: 0; }
   .result-val { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-mid); }
+  .midi-idea-row { align-items: center; }
+  .midi-idea-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .midi-variant { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: .06em; padding: 2px 7px; background: var(--chip-bg); color: var(--text-dim); border-radius: 2px; white-space: nowrap; flex-shrink: 0; cursor: default; }
   .midi-progress { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
   .midi-step { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; }
   .midi-step.pending { color: var(--text-dim); }

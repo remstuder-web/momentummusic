@@ -3420,3 +3420,9 @@ TASK: MIDI — zusätzlich merged-Variante mit beiden Parts in einem Clip
 WHAT: Pro Idee zusätzlich MIDI_<ref>_<n>_<name>_merged.mid: Akkorde + Lead in einem Part ("Chords + Lead") mit Tempo-Event, Offsets unverändert. Gleiche Tonhöhe gleichzeitig in Akkord und Lead würde sich in einer Spur abschneiden → Akkordton eine Oktave tiefer, bzw. weggelassen wenn diese Oktave belegt ist (Lead klingt den Ton ja); Lead bleibt immer unverändert. Lead-Velocity mindestens 78 (Auftakte/Ornamente rutschten vorher in den Akkordbereich), Akkorde 60–75. SSE files enthält beide Dateinamen (10 pro Lauf)
 RESULT: works — Testlauf mit Claude-Call: 10 Dateien auf Desktop; jede merged-Datei 1 Part mit allen Noten (Akkorde + Lead), Lead 100% unverändert, 0 Überlappungen, Tempo 120 erhalten
 BLOCKERS: none. UI (DailyTab) listet jetzt 10 Zeilen 01–10. test-system.cjs: TEST 3 / TEST 7 unverändert
+
+## 2026-10-16 src/lib/DailyTab.svelte + momentum-watcher.cjs — DONE
+TASK: MIDI from Reference — Ergebnis pro Idee gruppiert
+WHAT: done-Event enthält zusätzlich ideas [{n, name, tracks, clip}]; DailyTab zeigt eine Zeile pro Idee: Nummer, Name, Chips "2 Spuren" / "1 Clip" (Tooltip = Dateiname). Fallback auf flache files-Liste, falls ideas fehlt. Rendering unverändert, beide Varianten werden weiter erzeugt
+RESULT: works — im Browser getestet (localhost:5173, MIDI gedroppt, generiert): 5 Zeilen 01–05 mit je beiden Chips; svelte-check 0 Fehler
+BLOCKERS: none

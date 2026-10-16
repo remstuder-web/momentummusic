@@ -1,10 +1,18 @@
 {
-  "updated": "2026-10-16T09:15:00Z",
-  "last_task": "MIDI: additional merged single-clip variant",
+  "updated": "2026-10-16T09:20:00Z",
+  "last_task": "MIDI result UI grouped per idea",
   "status": "done",
-  "working": ["/generate-midi-from-reference writes per idea a 2-part file (Chords, Lead) and a _merged single-part file", "merged: all notes in one part, tempo kept, same-pitch collisions resolved without touching the lead", "velocity ranges separated: chords 60-75, lead 78-100"],
-  "broken": ["test-system TEST 3: Spotify 403 premium required", "test-system TEST 7: duplicate brain entries"],
+  "working": [
+    "/generate-midi-from-reference writes per idea a 2-part file (Chords, Lead) and a _merged single-part file",
+    "merged: all notes in one part, tempo kept, same-pitch collisions resolved without touching the lead",
+    "velocity ranges separated: chords 60-75, lead 78-100",
+    "DailyTab MIDI result: one row per idea with '2 Spuren' / '1 Clip' chips"
+  ],
+  "broken": [
+    "test-system TEST 3: Spotify 403 premium required",
+    "test-system TEST 7: duplicate brain entries"
+  ],
   "partial": [],
-  "next": "If 10 files per run is too cluttered: UI switch (2-part / merged / both) instead of always both; DailyTab currently lists 10 rows numbered 01-10",
+  "next": "User listens to the MIDI ideas; chips are labels only (files are dragged from the Desktop)",
   "notes": "Merged collision handling: chord note -12, or dropped if that octave is occupied by another chord note"
 }

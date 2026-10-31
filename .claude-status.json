@@ -1,21 +1,20 @@
 {
-  "updated": "2026-10-31T13:41:05Z",
-  "last_task": "Feedback: WAV-Download-Button, lesbarere Textstufen",
+  "updated": "2026-10-31T13:45:56Z",
+  "last_task": "Feedback: Löschen von Songs, Projekten und eigenen Feedback-Items",
   "status": "done",
   "working": [
     "FEEDBACK tab standalone on feedback_projects / feedback_songs (create project/song, drop row = new version, drop free area = new songs, multi-file progress, drag sort, deadline free text)",
     "watcher POST /feedback-upload → Feedback/<folder>/, mp3 192k + Dropbox links, startup backfill",
     "/feedback artist page: password gate, player via Dropbox mp3, WAV download, feedback add/toggle, shared notes",
     "ProjectsTab saveWorkData fresh-read + idempotent updaters; workData keeps unknown keys",
-    "text tokens: --text-dim #8a8a8a, --text-mid #a4a4a4, --text-faint #6e6e6e for placeholders"
+    "text tokens: --text-dim #8a8a8a, --text-mid #a4a4a4, --text-faint #6e6e6e for placeholders",
+    "Feedback delete: song/project (DB only, files stay, dialog names the folder), own open feedback items only"
   ],
   "broken": [
     "test-system TEST 3: Spotify 403 premium required",
     "test-system TEST 7: 6 duplicate brain entries"
   ],
-  "partial": [
-    "/feedback live only after Vercel deploy (git push)"
-  ],
-  "next": "git push for Vercel; delete test project 'ZZ TEST' (feedback_projects + Dropbox Feedback/ZZ TEST) when no longer needed",
+  "partial": [],
+  "next": "Rotate Spotify + Dropbox app secrets (were hardcoded in pushed history before the env-var commits)",
   "notes": "Large WAVs: Dropbox link appears only after Dropbox finished syncing (57 MB ≈ 100 s)."
 }

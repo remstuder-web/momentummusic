@@ -59,6 +59,17 @@
     projects = projects.map(x => x.id === p.id ? data : x)
   }
 
+  // Deletes the project row (songs via cascade) — audio files stay in Dropbox
+  async function deleteProject() {
+    const p = selected
+    if (!p) return
+    if (!confirm(`Projekt „${p.name}" mit allen Songs löschen? Die Audiodateien bleiben in Dropbox/!MOMENTUM MUSIC/Feedback/${p.folder}/ liegen und müssen dort von Hand entfernt werden.`)) return
+    const { error } = await supabase.from('feedback_projects').delete().eq('id', p.id)
+    if (error) { alert('Error: ' + error.message); return }
+    projects = projects.filter(x => x.id !== p.id)
+    selectProject(projects.at(-1)?.id ?? null)
+  }
+
   async function copyArtistLink() {
     if (!selected) return
     await navigator.clipboard.writeText(`${ARTIST_PAGE}?p=${selected.id}\nPasswort: ${selected.password}`).catch(() => {})
@@ -95,6 +106,7 @@
         <input value={selected.password} onblur={e => saveProjectField(selected, 'password', e.target.value.trim())} />
       </label>
       <button class="btn" onclick={copyArtistLink}>{copied ? '✓ Kopiert' : 'Artist-Link kopieren'}</button>
+      <button class="btn del" onclick={deleteProject}>Projekt löschen</button>
     {/if}
   </div>
 
@@ -121,5 +133,7 @@
   .btn { font-family: 'Space Mono', monospace; font-size: 11px; padding: 6px 12px; background: var(--surface2); border: 1px solid var(--border2); color: var(--text); border-radius: 3px; cursor: pointer; }
   .btn:hover { border-color: var(--accent-dim); }
   .btn.ghost { background: transparent; }
+  .btn.del { background: transparent; border-color: transparent; color: var(--text-dim); }
+  .btn.del:hover { color: #e05a4a; border-color: rgba(224,90,74,.4); }
   .empty { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--text-dim); text-align: center; padding: 40px 0; }
 </style>

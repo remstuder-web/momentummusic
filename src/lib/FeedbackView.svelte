@@ -107,6 +107,15 @@
     })
   }
 
+  // Own, open items only — checked-off items stay as the record of what was done
+  const canDelete = fb => fb.author === author && !fb.done
+  async function deleteFeedback(song, vId, fId) {
+    await mutateVersions(song.id, vs => {
+      const v = vs.find(v => v.id === vId)
+      if (v) v.feedback = (v.feedback || []).filter(f => !(f.id === fId && canDelete(f)))
+    })
+  }
+
   // ── producer: songs, uploads, ordering ─────────────────────────────────────
   let busy        = $state(false)
   let progress    = $state({ done: 0, total: 0 })
@@ -192,6 +201,15 @@
     busy = false
     songs = await fetchSongs()
     if (errors.length) alert('Upload-Fehler:\n' + errors.join('\n'))
+  }
+
+  // Deletes the DB row only — audio files stay in Dropbox (no silent audio deletion)
+  async function deleteSong(song) {
+    if (!confirm(`Song „${song.title}" löschen? Die Audiodateien bleiben in Dropbox/!MOMENTUM MUSIC/Feedback/${project.folder}/ liegen und müssen dort von Hand entfernt werden.`)) return
+    const { error } = await supabase.from('feedback_songs').delete().eq('id', song.id)
+    if (error) { alert('Error: ' + error.message); return }
+    songs = songs.filter(s => s.id !== song.id)
+    if (expandedId === song.id) expandedId = null
   }
 
   const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files')
@@ -355,6 +373,9 @@
                       <button class="ckb" onclick={() => toggleFeedback(song, shown.id, fb.id)}>{fb.done ? '✓' : ''}</button>
                       <span class="fb-text">{fb.text}</span>
                       <span class="fb-meta">— {fb.author}{fb.created_at ? ' · ' + fmtDate(fb.created_at) : ''}</span>
+                      {#if canDelete(fb)}
+                        <button class="fb-del" title="Löschen" onclick={() => deleteFeedback(song, shown.id, fb.id)}>×</button>
+                      {/if}
                     </div>
                   {/each}
                   {#if !(shown.feedback || []).length}<p class="empty-sm">Noch kein Feedback.</p>{/if}
@@ -369,6 +390,9 @@
               <textarea class="notes" rows="4" value={song.shared_notes || ''}
                 placeholder="Gemeinsame Notizen…"
                 onblur={e => saveField(song, 'shared_notes', e.target.value)}></textarea>
+              {#if isProducer}
+                <button class="del-song" onclick={() => deleteSong(song)}>Song löschen</button>
+              {/if}
             </div>
           {/if}
         </div>
@@ -454,6 +478,10 @@
   .fb-add, .notes, .ns-inp { background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; line-height: 1.5; font-weight: 300; padding: 7px 10px; border-radius: 3px; outline: none; }
   .fb-add:focus, .notes:focus, .ns-inp:focus { border-color: var(--border2); }
   .notes { resize: vertical; min-height: 80px; }
+  .fb-del { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; align-self: center; }
+  .fb-del:hover { color: #e05a4a; }
+  .del-song { align-self: flex-end; background: none; border: 1px solid transparent; color: var(--text-dim); font-family: 'Space Mono', monospace; font-size: 10px; padding: 3px 8px; border-radius: 2px; cursor: pointer; }
+  .del-song:hover { color: #e05a4a; border-color: rgba(224,90,74,.4); }
   .fb-add::placeholder, .notes::placeholder, .ns-inp::placeholder, .tt-deadline::placeholder { color: var(--text-faint); }
 
   .free-area { padding: 22px 14px; text-align: center; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--text-dim); }

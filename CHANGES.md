@@ -3456,3 +3456,9 @@ TASK: Feedback: WAV-Download-Button, lesbarere Textstufen
 WHAT: --text-dim #6e6e6e → #8a8a8a, --text-mid #9a9a9a → #a4a4a4, --text unverändert. Neue Stufe --text-faint #6e6e6e nur für Platzhalter (24 ::placeholder-Regeln in Daily/Demo/Work/Projects/Brain/Connections/SONO umgestellt), weil Platzhalter mit #8a8a8a fast so hell wären wie Eingaben in --text-mid und leere Felder ausgefüllt aussähen. Feedback-Tab/Artist-Seite: ↓ WAV als Akzent-Outline-Button, 24 px wie die Player-Buttons, nur mit wav_url; Feedback-Items, Notizen, Eingaben 14px / Zeilenhöhe 1.5, Song-Titel 15px; Kopfzeile/Labels klein
 RESULT: works — Build ok, im Browser geprüft (Feedback-Tab, Artist-Seite, Daily, Feedback-Tab-Übersicht); übrige Tabs per Code-Durchsicht der zurückgenommenen Stellen (Platzhalter, deaktiviert, erledigt/durchgestrichen)
 BLOCKERS: none
+
+## 2026-10-31 src/lib/FeedbackView.svelte + src/lib/FeedbackTab.svelte — DONE
+TASK: Feedback: Löschen von Songs, Projekten und eigenen Feedback-Items
+WHAT: Tab: "Song löschen" im aufgeklappten Song und "Projekt löschen" oben; löscht nur die DB-Zeile (Projekt per cascade inkl. Songs), Audio bleibt in Dropbox; Bestätigung nennt den Pfad Dropbox/!MOMENTUM MUSIC/Feedback/<Ordner>/ und dass dort von Hand entfernt werden muss. Feedback-Items: × nur für eigene (author) und nicht abgehakte Items — gilt für Remo im Tab und den Artist auf /feedback. Artist-Seite ohne Song-/Projekt-Löschen. Testprojekt "ZZ TEST" über den neuen Button gelöscht, danach Ordner Feedback/ZZ TEST/ von Hand entfernt
+RESULT: works — im Browser: Item-Löschen nur bei eigenem offenem Item (abgehakte ohne ×), Artist löscht eigenes Item, sieht keine Lösch-Buttons für Songs/Projekte; Song- und Projekt-Dialogtexte mit Pfad; nach Projekt-Löschen 0 Songs in feedback_songs, Dateien noch im Ordner (dann gelöscht)
+BLOCKERS: none

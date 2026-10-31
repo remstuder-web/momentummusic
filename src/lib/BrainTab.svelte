@@ -2071,7 +2071,7 @@ Return ONLY JSON (single item array):
     line-height: 1.6;
   }
   .brain-textarea:focus { border-color: var(--accent-dim); }
-  .brain-textarea::placeholder { color: var(--text-dim); }
+  .brain-textarea::placeholder { color: var(--text-faint); }
   .brain-textarea.drag-image { border-color: #4caf82; background: rgba(76,175,130,.04); }
   .brain-spotify-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; margin: 4px 0 0; letter-spacing: .04em; }
   .brain-image-drop-hint { font-family: 'Space Mono', monospace; font-size: 9px; color: #4caf82; margin: 4px 0 0; letter-spacing: .04em; }
@@ -2382,7 +2382,7 @@ Return ONLY JSON (single item array):
   }
   .brain-reftrack-promote:hover { color: #4caf82; border-color: #4caf82; }
   .brain-reftrack-notes { width: 100%; background: transparent; border: none; border-top: 1px solid transparent; color: var(--text-dim); font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 300; line-height: 1.4; padding: 3px 0 0; resize: none; outline: none; margin-top: 2px; }
-  .brain-reftrack-notes::placeholder { color: var(--text-dim); }
+  .brain-reftrack-notes::placeholder { color: var(--text-faint); }
   .brain-reftrack-notes:focus { color: var(--text-mid); }
 
   .dump-collection-inp {
@@ -2400,7 +2400,7 @@ Return ONLY JSON (single item array):
     box-sizing: border-box;
   }
   .dump-collection-inp:focus { border-color: var(--border2); color: var(--text); }
-  .dump-collection-inp::placeholder { color: var(--text-dim); }
+  .dump-collection-inp::placeholder { color: var(--text-faint); }
 
   .brain-priority-filter-btn {
     background: var(--surface);
@@ -2641,7 +2641,7 @@ Return ONLY JSON (single item array):
     outline: none;
   }
   .brain-spotify-inp:focus { border-color: var(--accent-dim); }
-  .brain-spotify-inp::placeholder { color: var(--text-dim); }
+  .brain-spotify-inp::placeholder { color: var(--text-faint); }
   .brain-import-result {
     margin-top: 10px;
     padding: 10px;
@@ -2785,7 +2785,7 @@ Return ONLY JSON (single item array):
     font-size: 13px;
     padding: 5px 8px;
   }
-  .brain-search-inp::placeholder { color: var(--text-dim); }
+  .brain-search-inp::placeholder { color: var(--text-faint); }
   .brain-search-inp:focus { outline: none; border-color: var(--border2); }
   .brain-search-clear {
     background: transparent; border: none; color: var(--text-dim); font-size: 14px;

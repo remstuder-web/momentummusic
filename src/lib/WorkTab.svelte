@@ -681,7 +681,7 @@
   .fb-add-row { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid transparent; }
   .add-inp { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 9px; outline: none; border-radius: 3px; flex: 1; }
   .add-inp:focus { border-color: var(--accent-dim); }
-  .add-inp::placeholder { color: var(--text-dim); }
+  .add-inp::placeholder { color: var(--text-faint); }
   .add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 500; padding: 5px 12px; background: var(--surface2); color: var(--text); border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
   .all-done-hint { font-family: 'Space Mono', monospace; font-size: 10px; color: #4caf82; padding: 6px 12px; text-align: center; opacity: .7; border-top: 1px solid transparent; }
   .right-col { display: flex; flex-direction: column; gap: 16px; border-left: 1px solid transparent; padding-left: 24px; position: sticky; top: 80px; height: calc(100vh - 100px); overflow-y: auto; }

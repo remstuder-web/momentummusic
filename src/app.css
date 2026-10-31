@@ -11,8 +11,9 @@
   --accent-dim: rgba(122,166,194,.55);
   --accent-hot: #9cc5de;
   --text:       #d4d4d4;
-  --text-mid:   #9a9a9a;
-  --text-dim:   #6e6e6e;
+  --text-mid:   #a4a4a4;
+  --text-dim:   #8a8a8a;
+  --text-faint: #6e6e6e;   /* placeholders only — must stay below --text-dim/--text-mid values */
   --border:     #1f1f1f;
   --border2:    #2a2a2a;
 

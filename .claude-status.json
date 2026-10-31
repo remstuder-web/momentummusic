@@ -1,21 +1,21 @@
 {
-  "updated": "2026-10-31T12:42:24Z",
-  "last_task": "Feedback-Tab mit Artist-Login, Timetable, versionsbezogenem Feedback und geteilten Notizen",
-  "status": "partial",
+  "updated": "2026-10-31T13:41:05Z",
+  "last_task": "Feedback: WAV-Download-Button, lesbarere Textstufen",
+  "status": "done",
   "working": [
-    "npm run build ok incl. new FeedbackTab, FeedbackView, /feedback route",
-    "watcher restarted, /ping ok, POST /version-dropbox-link registered",
-    "ffmpeg mp3 192k transcode command verified"
+    "FEEDBACK tab standalone on feedback_projects / feedback_songs (create project/song, drop row = new version, drop free area = new songs, multi-file progress, drag sort, deadline free text)",
+    "watcher POST /feedback-upload → Feedback/<folder>/, mp3 192k + Dropbox links, startup backfill",
+    "/feedback artist page: password gate, player via Dropbox mp3, WAV download, feedback add/toggle, shared notes",
+    "ProjectsTab saveWorkData fresh-read + idempotent updaters; workData keeps unknown keys",
+    "text tokens: --text-dim #8a8a8a, --text-mid #a4a4a4, --text-faint #6e6e6e for placeholders"
   ],
   "broken": [
-    "Supabase host ukqpnjgvjeduipmdaczn.supabase.co NXDOMAIN — app, watcher DB calls and tests 4/7 fail (project probably paused)",
-    "test-system TEST 3: Spotify 403 premium required"
+    "test-system TEST 3: Spotify 403 premium required",
+    "test-system TEST 7: 6 duplicate brain entries"
   ],
   "partial": [
-    "Feedback tab + /feedback untested end-to-end (needs Supabase back)",
-    "feedback_password not yet set — generated on first 'Artist-Link kopieren'",
     "/feedback live only after Vercel deploy (git push)"
   ],
-  "next": "Restore Supabase project, restart watcher (backfills version mp3 + Dropbox links), open FEEDBACK tab, copy artist link, test /feedback on a second device",
-  "notes": "Feedback stays in songs.work_data.versions[].feedback (author, created_at, done_by added). deadline_text + shared_notes in work_data, password in projects.project_meta.feedback_password. ProjectsTab.saveWorkData now re-applies updates to a fresh DB copy (chained per song)."
+  "next": "git push for Vercel; delete test project 'ZZ TEST' (feedback_projects + Dropbox Feedback/ZZ TEST) when no longer needed",
+  "notes": "Large WAVs: Dropbox link appears only after Dropbox finished syncing (57 MB ≈ 100 s)."
 }

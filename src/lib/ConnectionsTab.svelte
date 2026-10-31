@@ -584,7 +584,7 @@
   .add-row { display: flex; gap: 8px; margin-bottom: 18px; align-items: center; }
   .add-inp { background: var(--surface); border: 1px solid var(--border2); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 6px 10px; outline: none; border-radius: 3px; flex: 1; transition: border-color .2s; }
   .add-inp:focus { border-color: var(--accent-dim); }
-  .add-inp::placeholder { color: var(--text-dim); }
+  .add-inp::placeholder { color: var(--text-faint); }
   .add-btn { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: .1em; padding: 7px 14px; background: var(--surface2); color: var(--text); border: none; border-radius: 3px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
   .enrich-all-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: .05em; padding: 7px 12px; background: var(--chip-bg); border: 1px solid transparent; color: var(--text-mid); border-radius: 3px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
   .enrich-all-btn:hover:not(:disabled) { border-color: var(--border2); color: var(--text); }

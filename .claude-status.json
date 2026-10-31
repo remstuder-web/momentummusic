@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-31T13:45:56Z",
-  "last_task": "Feedback: Löschen von Songs, Projekten und eigenen Feedback-Items",
+  "updated": "2026-10-31T14:15:33Z",
+  "last_task": "Feedback: Songtitel umbenennbar, eigener Dropbox-Ordner pro Song",
   "status": "done",
   "working": [
     "FEEDBACK tab standalone on feedback_projects / feedback_songs (create project/song, drop row = new version, drop free area = new songs, multi-file progress, drag sort, deadline free text)",
@@ -8,13 +8,16 @@
     "/feedback artist page: password gate, player via Dropbox mp3, WAV download, feedback add/toggle, shared notes",
     "ProjectsTab saveWorkData fresh-read + idempotent updaters; workData keeps unknown keys",
     "text tokens: --text-dim #8a8a8a, --text-mid #a4a4a4, --text-faint #6e6e6e for placeholders",
-    "Feedback delete: song/project (DB only, files stay, dialog names the folder), own open feedback items only"
+    "Feedback delete: song/project (DB only, files stay, dialog names the folder), own open feedback items only",
+    "OVERVIEW work log + billing per feedback project (artist read-only)",
+    "Feedback: LINK / PASSWORT copy buttons (bare values)",
+    "Feedback song folders Feedback/<project>/<song>/Vxx.wav, title rename display-only, ALBUM/SONG 1 migrated"
   ],
   "broken": [
     "test-system TEST 3: Spotify 403 premium required",
     "test-system TEST 7: 6 duplicate brain entries"
   ],
   "partial": [],
-  "next": "Rotate Spotify + Dropbox app secrets (were hardcoded in pushed history before the env-var commits)",
+  "next": "Check Vercel deployment of /feedback (was 404 after push); rotate Spotify + Dropbox app secrets if repo is public",
   "notes": "Large WAVs: Dropbox link appears only after Dropbox finished syncing (57 MB ≈ 100 s)."
 }

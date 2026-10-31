@@ -49,16 +49,23 @@
     songs = songs.some(s => s.id === row.id) ? songs.map(s => s.id === row.id ? row : s) : [...songs, row]
   }
 
-  // Read-modify-write of versions on a fresh copy, so producer and artist can edit at the same time
-  async function mutateVersions(songId, fn) {
-    const { data, error } = await supabase.from('feedback_songs').select('versions').eq('id', songId).single()
-    if (error) throw new Error(error.message)
-    const versions = data.versions || []
-    fn(versions)
-    const { data: row, error: upErr } = await supabase.from('feedback_songs')
-      .update({ versions }).eq('id', songId).select('*').single()
-    if (upErr) throw new Error(upErr.message)
-    replaceSong(row)
+  // Read-modify-write of versions on a fresh copy, so producer and artist can edit at the same time.
+  // Chained per song, so overlapping saves from this page never overwrite each other.
+  const versionChains = {}
+  function mutateVersions(songId, fn) {
+    const run = async () => {
+      const { data, error } = await supabase.from('feedback_songs').select('versions').eq('id', songId).single()
+      if (error) throw new Error(error.message)
+      const versions = data.versions || []
+      fn(versions)
+      const { data: row, error: upErr } = await supabase.from('feedback_songs')
+        .update({ versions }).eq('id', songId).select('*').single()
+      if (upErr) throw new Error(upErr.message)
+      replaceSong(row)
+    }
+    const p = (versionChains[songId] || Promise.resolve()).then(run, run)
+    versionChains[songId] = p.catch(() => {})
+    return p
   }
 
   async function saveField(song, field, value) {
@@ -124,10 +131,32 @@
   let newSongOpen = $state(false)
   let newTitle    = $state('')
 
+  // Song folder = cleaned title, "-2", "-3" if taken; fixed at creation (renaming the title never moves files)
+  function cleanFolderName(name) {
+    return String(name || '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/^\.+/, '').trim()
+  }
+  async function songFolderFor(title) {
+    const taken = songs.map(s => s.folder).filter(Boolean)
+    try {
+      const r = await fetch(`${WATCHER}/feedback-song-folder`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_folder: project.folder, title, taken })
+      }).then(r => r.json())
+      if (r.ok) return r.folder
+    } catch (e) {}
+    // Watcher offline: unique within the DB only (the upload needs the watcher anyway)
+    const base = cleanFolderName(title) || 'Song'
+    const used = new Set(taken.map(t => t.toLowerCase()))
+    let folder = base, n = 2
+    while (used.has(folder.toLowerCase())) folder = `${base}-${n++}`
+    return folder
+  }
+
   async function createSong(title) {
     const position = songs.reduce((m, s) => Math.max(m, s.position ?? 0), -1) + 1
+    const folder = await songFolderFor(title)
     const { data, error } = await supabase.from('feedback_songs')
-      .insert({ project_id: project.id, title, position, versions: [] }).select('*').single()
+      .insert({ project_id: project.id, title, folder, position, versions: [] }).select('*').single()
     if (error) throw new Error(error.message)
     replaceSong(data)
     return data
@@ -158,9 +187,11 @@
                 is_current: true, uploaded_at: new Date().toISOString(), feedback: [] })
     })
     const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'wav'
-    const filename = `${fileBase(song.title)}_${label}.${ext}`
+    // In the song's own folder the file name is just the version; legacy songs without folder stay flat
+    const filename = song.folder ? `${label}.${ext}` : `${fileBase(song.title)}_${label}.${ext}`
+    const songFolderParam = song.folder ? `&song_folder=${encodeURIComponent(song.folder)}` : ''
     try {
-      const r = await fetch(`${WATCHER}/feedback-upload?song_id=${song.id}&version_id=${vId}&folder=${encodeURIComponent(project.folder)}&filename=${encodeURIComponent(filename)}`,
+      const r = await fetch(`${WATCHER}/feedback-upload?song_id=${song.id}&version_id=${vId}&folder=${encodeURIComponent(project.folder)}${songFolderParam}&filename=${encodeURIComponent(filename)}`,
         { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: await file.arrayBuffer() })
         .then(r => r.json())
       if (!r.ok) throw new Error(r.error || 'upload failed')
@@ -310,7 +341,15 @@
                 ondragstart={e => { dragSongId = song.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(song.id)) }}
                 ondragend={() => { dragSongId = null; dropRowId = null }}>⋮⋮</span>
             {/if}
-            <span class="tt-title"><span class="arr {open ? 'open' : ''}">▶</span>{song.title}</span>
+            <span class="tt-title"><span class="arr {open ? 'open' : ''}">▶</span>
+              {#if isProducer}
+                <!-- Title is display only: song folder and file names never change -->
+                <input class="title-inp" value={song.title}
+                  onclick={e => e.stopPropagation()}
+                  onkeydown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { e.target.value = song.title; e.target.blur() } }}
+                  onblur={e => { const t = e.target.value.trim(); if (t) saveField(song, 'title', t); else e.target.value = song.title }} />
+              {:else}{song.title}{/if}
+            </span>
             {#if isProducer}
               <input class="tt-deadline" value={song.deadline_text || ''} placeholder="—"
                 onclick={e => e.stopPropagation()}
@@ -441,6 +480,9 @@
   .tt-row:hover { background: var(--surface); }
   .handle { color: var(--text-dim); cursor: grab; font-size: 11px; letter-spacing: -2px; user-select: none; }
   .tt-title { color: var(--text); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+  .title-inp { flex: 1; min-width: 0; background: transparent; border: 1px solid transparent; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 300; padding: 2px 6px; margin-left: -6px; border-radius: 2px; outline: none; text-overflow: ellipsis; }
+  .title-inp:hover { border-color: var(--border2); }
+  .title-inp:focus { border-color: var(--border2); background: var(--surface2); }
   .arr { font-size: 9px; color: var(--text-dim); transition: transform .15s; display: inline-block; }
   .arr.open { transform: rotate(90deg); }
   .tt-deadline { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--text-mid); text-transform: uppercase; background: transparent; border: 1px solid transparent; padding: 3px 6px; border-radius: 2px; outline: none; min-width: 0; }

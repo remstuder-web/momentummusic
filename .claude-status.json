@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-31T14:15:33Z",
-  "last_task": "Feedback: Songtitel umbenennbar, eigener Dropbox-Ordner pro Song",
+  "updated": "2026-10-31T14:34:35Z",
+  "last_task": "Vercel build fix: ANTHROPIC_API_KEY via $env/dynamic/private",
   "status": "done",
   "working": [
     "FEEDBACK tab standalone on feedback_projects / feedback_songs (create project/song, drop row = new version, drop free area = new songs, multi-file progress, drag sort, deadline free text)",
@@ -11,13 +11,15 @@
     "Feedback delete: song/project (DB only, files stay, dialog names the folder), own open feedback items only",
     "OVERVIEW work log + billing per feedback project (artist read-only)",
     "Feedback: LINK / PASSWORT copy buttons (bare values)",
-    "Feedback song folders Feedback/<project>/<song>/Vxx.wav, title rename display-only, ALBUM/SONG 1 migrated"
+    "Feedback song folders Feedback/<project>/<song>/Vxx.wav, title rename display-only, ALBUM/SONG 1 migrated",
+    "momentummusic.vercel.app/feedback live: password gate, songs, V01/V02 mp3 via Dropbox, WAV download, OVERVIEW read-only"
   ],
   "broken": [
     "test-system TEST 3: Spotify 403 premium required",
-    "test-system TEST 7: 6 duplicate brain entries"
+    "test-system TEST 7: 6 duplicate brain entries",
+    "SECURITY: Spotify + Dropbox secrets in public git history — not rotated yet"
   ],
   "partial": [],
-  "next": "Check Vercel deployment of /feedback (was 404 after push); rotate Spotify + Dropbox app secrets if repo is public",
-  "notes": "Large WAVs: Dropbox link appears only after Dropbox finished syncing (57 MB ≈ 100 s)."
+  "next": "ROTATE Spotify client secret + refresh token and Dropbox app secret — public repo history contains them",
+  "notes": "Vercel production deploys again (616b569). /feedback live. ANTHROPIC_API_KEY intentionally not set on Vercel; YouTube→Brain reports 503 there."
 }

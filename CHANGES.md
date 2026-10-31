@@ -3493,3 +3493,9 @@ WHAT: Commit ohne Co-Author-Trailer (e53d249) scheiterte ebenfalls sofort → Tr
 RESULT: untested — siehe nächster Eintrag
 BLOCKERS: Vercel-Logs nur mit Login einsehbar
 RESULT (2. Versuch): failed — 839293d mit verknüpftem Autor scheiterte ebenfalls sofort (dpl_4h83…). Damit scheitert seit Mitte Juni jedes Deployment beim Anlegen, unabhängig von Autor/Trailer/Inhalt; Konfigurationsdateien seit be98041 unverändert (nur .gitignore + "start"-Script). Ursache liegt sehr wahrscheinlich in den Vercel-Projekt-/Kontoeinstellungen (Kandidat: im Projekt eingestellte, inzwischen nicht mehr unterstützte Node.js-Version — package.json hat kein "engines"). Echte Fehlermeldung nötig (Vercel-Dashboard, Login)
+
+## 2026-10-31 src/lib/server/youtubeBrain.js + src/routes/api/brain/youtube-ingest/+server.js — DONE
+TASK: momentummusic.vercel.app/feedback gibt 404 — echte Ursache + Fix
+WHAT: Vercel-Build scheiterte seit 14.6. an `"ANTHROPIC_API_KEY" is not exported by "virtual:env/static/private"` (youtubeBrain.js). $env/static/private verlangt die Variable zur Build-Zeit; auf Vercel ist sie (bewusst) nicht gesetzt → Production blieb auf be98041 ohne /feedback. Umgestellt auf $env/dynamic/private (Laufzeit); fehlender Key → klare Fehlermeldung statt Crash (ingest-Route 503 "only runs locally", Einzel-Ingest liefert Fehler im Resultat). Einziger $env/static/private-Import in src/ ($env/static/public in supabase.js ist auf Vercel gesetzt). Key NICHT in Vercel eingetragen. Die beiden vorherigen Hypothesen (Co-Author-Trailer, Commit-Autor) waren falsch; mein früherer lokaler Test "baut ohne Key" war ungültig, weil ANTHROPIC_API_KEY in der Shell-Umgebung gesetzt war
+RESULT: works lokal — sauberer Checkout ohne .env und mit `env -u ANTHROPIC_API_KEY`: alter Stand scheitert mit exakt dem Vercel-Fehler, neuer Stand baut (exit 0). Vercel: siehe Status nach Push
+BLOCKERS: none

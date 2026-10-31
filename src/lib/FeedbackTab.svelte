@@ -10,7 +10,7 @@
 
   let projects   = $state([])
   let selectedId = $state(null)
-  let copied     = $state(false)
+  let copied     = $state(null)   // 'link' | 'password' — brief confirmation
   let newOpen    = $state(false)
   let newName    = $state('')
   let newArtist  = $state('')
@@ -72,11 +72,14 @@
     selectProject(projects.at(-1)?.id ?? null)
   }
 
-  async function copyArtistLink() {
+  // Link and password are copied separately: exactly the bare value, nothing before or after,
+  // so a pasted link opens as-is (a joined "URL Passwort: …" string breaks into %20 when pasted)
+  async function copyValue(kind) {
     if (!selected) return
-    await navigator.clipboard.writeText(`${ARTIST_PAGE}?p=${selected.id}\nPasswort: ${selected.password}`).catch(() => {})
-    copied = true
-    setTimeout(() => copied = false, 2000)
+    const value = kind === 'link' ? `${ARTIST_PAGE}?p=${selected.id}` : selected.password
+    await navigator.clipboard.writeText(value).catch(() => {})
+    copied = kind
+    setTimeout(() => { if (copied === kind) copied = null }, 2000)
   }
 
   onMount(load)
@@ -107,7 +110,8 @@
         <span>PASSWORT</span>
         <input value={selected.password} onblur={e => saveProjectField(selected, 'password', e.target.value.trim())} />
       </label>
-      <button class="btn" onclick={copyArtistLink}>{copied ? '✓ Kopiert' : 'Artist-Link kopieren'}</button>
+      <button class="btn" onclick={() => copyValue('link')}>{copied === 'link' ? '✓ kopiert' : 'LINK'}</button>
+      <button class="btn" onclick={() => copyValue('password')}>{copied === 'password' ? '✓ kopiert' : 'PASSWORT'}</button>
       <button class="btn del" onclick={deleteProject}>Projekt löschen</button>
     {/if}
   </div>

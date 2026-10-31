@@ -4,6 +4,7 @@
   import { onMount } from 'svelte'
   import { supabase } from './supabase.js'
   import FeedbackView from './FeedbackView.svelte'
+  import WorkOverview from './WorkOverview.svelte'
 
   const ARTIST_PAGE = 'https://momentummusic.vercel.app/feedback'
 
@@ -14,6 +15,7 @@
   let newName    = $state('')
   let newArtist  = $state('')
   let selected   = $derived(projects.find(p => p.id === selectedId) || null)
+  let view       = $state('songs')   // 'songs' | 'overview'
 
   async function load() {
     const { data, error } = await supabase.from('feedback_projects').select('*').order('created_at')
@@ -112,7 +114,17 @@
 
   {#if selected}
     {#key selected.id}
-      <FeedbackView {supabase} project={selected} mode="producer" author="Remo" />
+      <div>
+        <div class="view-sw">
+          <button class={view === 'songs' ? 'on' : ''} onclick={() => view = 'songs'}>SONGS</button>
+          <button class={view === 'overview' ? 'on' : ''} onclick={() => view = 'overview'}>OVERVIEW</button>
+        </div>
+        {#if view === 'songs'}
+          <FeedbackView {supabase} project={selected} mode="producer" author="Remo" />
+        {:else}
+          <WorkOverview {supabase} project={selected} mode="producer" />
+        {/if}
+      </div>
     {/key}
   {:else}
     <p class="empty">Noch kein Projekt — „+ Neues Projekt".</p>
@@ -135,5 +147,13 @@
   .btn.ghost { background: transparent; }
   .btn.del { background: transparent; border-color: transparent; color: var(--text-dim); }
   .btn.del:hover { color: #e05a4a; border-color: rgba(224,90,74,.4); }
+  .view-sw { display: flex; gap: 0; margin-bottom: 14px; }
+  .view-sw button { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .08em; padding: 5px 14px; background: transparent; border: 1px solid var(--border2); color: var(--text-dim); cursor: pointer; }
+  .view-sw button + button { border-left: none; }
+  .view-sw button:first-child { border-radius: 3px 0 0 3px; }
+  .view-sw button:last-child { border-radius: 0 3px 3px 0; }
+  .view-sw button.on { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-a06); }
+  .view-sw button.on + button { border-left: 1px solid var(--accent-dim); }
+  .view-sw button:has(+ button.on) { border-right: none; }
   .empty { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--text-dim); text-align: center; padding: 40px 0; }
 </style>

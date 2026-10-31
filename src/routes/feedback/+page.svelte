@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { createClient } from '@supabase/supabase-js'
   import FeedbackView from '$lib/FeedbackView.svelte'
+  import WorkOverview from '$lib/WorkOverview.svelte'
 
   // Same pattern as /sono: CSR only, Supabase direct, no watcher — audio via Dropbox links
   const SUPABASE_URL      = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
@@ -14,6 +15,7 @@
   let password  = $state('')
   let authError = $state('')
   let ready     = $state(false)
+  let view      = $state('songs')   // 'songs' | 'overview'
 
   const storageKey = () => `feedback_auth_${projectId}`
 
@@ -65,7 +67,15 @@
       <span class="page-title">{project.artist_name || project.name}</span>
       {#if project.artist_name && project.name}<span class="page-sub">{project.name}</span>{/if}
     </div>
-    <FeedbackView {supabase} {project} mode="artist" author={project.artist_name || 'Artist'} />
+    <div class="view-sw">
+      <button class={view === 'songs' ? 'on' : ''} onclick={() => view = 'songs'}>SONGS</button>
+      <button class={view === 'overview' ? 'on' : ''} onclick={() => view = 'overview'}>OVERVIEW</button>
+    </div>
+    {#if view === 'songs'}
+      <FeedbackView {supabase} {project} mode="artist" author={project.artist_name || 'Artist'} />
+    {:else}
+      <WorkOverview {supabase} {project} mode="artist" />
+    {/if}
   </div>
 {/if}
 
@@ -83,6 +93,14 @@
   .login-btn   { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: .1em; padding: 10px; background: var(--surface2); color: var(--text); border: none; border-radius: 3px; cursor: pointer; }
   .login-btn:hover { background: var(--border2); }
 
+  .view-sw { display: flex; gap: 0; margin-bottom: 14px; }
+  .view-sw button { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: .08em; padding: 5px 14px; background: transparent; border: 1px solid var(--border2); color: var(--text-dim); cursor: pointer; }
+  .view-sw button + button { border-left: none; }
+  .view-sw button:first-child { border-radius: 3px 0 0 3px; }
+  .view-sw button:last-child { border-radius: 0 3px 3px 0; }
+  .view-sw button.on { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-a06); }
+  .view-sw button.on + button { border-left: 1px solid var(--accent-dim); }
+  .view-sw button:has(+ button.on) { border-right: none; }
   .page        { max-width: 900px; margin: 0 auto; padding: 40px 16px 80px; }
   .page-header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
   .page-title  { font-family: 'Space Mono', monospace; font-size: 22px; font-weight: 500; color: var(--text); letter-spacing: .12em; text-transform: uppercase; }

@@ -1,7 +1,8 @@
 <script>
   // OVERVIEW — work log + billing per feedback project (Feedback tab and artist page).
   // Stored on feedback_projects: hourly_rate (numeric, default 100) and work_log (jsonb):
-  //   rows:        { id, kind: 'row', date, type: 'SESSION'|'DIV', what, hours }   hours = decimal
+  //   rows:        { id, kind: 'row', date, type: 'SESSION'|'DIV', what, time, hours }
+//                time = free text ("12-7", never calculated), hours = billed decimal hours
   //   settlements: { id, kind: 'settlement', rate, closed_at }
   // A settlement closes all rows since the previous one; its rate is frozen at closing time so a later
   // rate change does not alter what was already billed. Amount = hours × rate for SESSION, none for DIV.
@@ -122,7 +123,7 @@
     await saveCell(id, 'hours', h)
   }
   async function addRow() {
-    const row = { id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6), kind: 'row', date: '', type: 'SESSION', what: '', hours: null }
+    const row = { id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6), kind: 'row', date: '', type: 'SESSION', what: '', time: '', hours: null }
     await mutate(l => { if (!l.some(e => e.id === row.id)) l.push(row) })
     await tick()
     rootEl?.querySelector(`[data-id="${row.id}"][data-col="date"]`)?.focus()
@@ -173,7 +174,7 @@
     </div>
 
     <div class="ov-head {isProducer ? 'prod' : ''}">
-      <span>DATUM</span><span>TYP</span><span>WAS</span><span class="num">STUNDEN</span><span class="num">BETRAG</span>
+      <span>DATUM</span><span>TYP</span><span>WAS</span><span>ZEIT</span><span class="num">STUNDEN</span><span class="num">BETRAG</span>
       {#if isProducer}<span></span>{/if}
     </div>
 
@@ -188,7 +189,7 @@
         </div>
       {:else if isProducer}
         <div class="row prod">
-          <input class="cell" data-id={it.e.id} data-col="date" value={it.e.date} placeholder="21.8"
+          <input class="cell" data-id={it.e.id} data-col="date" value={it.e.date} placeholder="—"
             onblur={e => saveCell(it.e.id, 'date', e.target.value.trim())} onkeydown={e => onEnter(e, it.e.id, 'date')} />
           <select class="cell" data-id={it.e.id} data-col="type" value={it.e.type}
             onchange={e => saveCell(it.e.id, 'type', e.target.value)} onkeydown={e => onEnter(e, it.e.id, 'type')}>
@@ -196,7 +197,9 @@
           </select>
           <input class="cell" data-id={it.e.id} data-col="what" value={it.e.what} placeholder="—"
             onblur={e => saveCell(it.e.id, 'what', e.target.value.trim())} onkeydown={e => onEnter(e, it.e.id, 'what')} />
-          <input class="cell num" data-id={it.e.id} data-col="hours" value={fmtHours(it.e.hours)} placeholder="0:30"
+          <input class="cell" data-id={it.e.id} data-col="time" value={it.e.time || ''} placeholder=""
+            onblur={e => saveCell(it.e.id, 'time', e.target.value.trim())} onkeydown={e => onEnter(e, it.e.id, 'time')} />
+          <input class="cell num" data-id={it.e.id} data-col="hours" value={fmtHours(it.e.hours)} placeholder=""
             onblur={e => saveHours(it.e.id, e.target)} onkeydown={e => onEnter(e, it.e.id, 'hours')} />
           <span class="amount">{fmtMoney(it.amount)}</span>
           <button class="x" title="Zeile löschen" onclick={() => deleteEntry(it.e.id)}>×</button>
@@ -206,6 +209,7 @@
           <span class="ro">{it.e.date}</span>
           <span class="ro type">{it.e.type}</span>
           <span class="ro">{it.e.what}</span>
+          <span class="ro time">{it.e.time || ''}</span>
           <span class="ro num">{fmtHours(it.e.hours)}</span>
           <span class="amount">{fmtMoney(it.amount)}</span>
         </div>
@@ -213,6 +217,14 @@
     {/each}
 
     {#if !view.items.length}<p class="empty">Noch keine Einträge.</p>{/if}
+
+    <!-- Running total of everything not yet settled — what the next settlement would bill -->
+    <div class="total {isProducer ? 'prod' : ''}">
+      <span class="total-label">TOTAL OFFEN</span>
+      <span class="num total-hours">{fmtHours(view.openHours) || '0'} Std</span>
+      <span class="total-amount">{fmtMoney(view.openAmount)}</span>
+      {#if isProducer}<span></span>{/if}
+    </div>
 
     {#if isProducer}
       <div class="ov-actions">
@@ -233,8 +245,13 @@
   .rate-inp:hover, .rate-inp:focus { border-color: var(--border2); background: var(--surface2); }
   .open-sum { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--accent); }
 
-  .ov-head, .row { display: grid; grid-template-columns: 80px 100px minmax(0, 1fr) 80px 90px; gap: 10px; align-items: center; }
-  .ov-head.prod, .row.prod { grid-template-columns: 80px 100px minmax(0, 1fr) 80px 90px 18px; }
+  .ov-head, .row { display: grid; grid-template-columns: 70px 100px minmax(0, 1fr) 80px 80px 90px; gap: 10px; align-items: center; }
+  .ov-head.prod, .row.prod { grid-template-columns: 70px 100px minmax(0, 1fr) 80px 80px 90px 18px; }
+  .total { display: grid; grid-template-columns: minmax(0, 1fr) 80px 90px; gap: 10px; align-items: center; padding: 10px; border-top: 1px solid var(--border2); border-bottom: 1px solid var(--border2); margin-top: -1px; background: var(--surface); }
+  .total.prod { grid-template-columns: minmax(0, 1fr) 80px 90px 18px; }
+  .total-label { font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: .08em; color: var(--text-mid); }
+  .total-hours { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--text); }
+  .total-amount { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--accent); text-align: right; }
   .ov-head { padding: 0 10px 8px; border-bottom: 1px solid var(--border); font-family: 'Space Mono', monospace; font-size: 13px; text-transform: uppercase; color: var(--accent-a75); letter-spacing: .06em; }
   .row { padding: 3px 10px; border-bottom: 1px solid var(--border); min-height: 34px; }
   .num { text-align: right; }
@@ -247,7 +264,7 @@
   select.cell option { background: var(--surface); color: var(--text); }
   :global(.cell.bad) { border-color: #e05a4a !important; }
   .ro { font-size: 14px; line-height: 1.5; color: var(--text-mid); padding: 3px 0; overflow-wrap: anywhere; }
-  .ro.type { font-family: 'Space Mono', monospace; font-size: 11px; }
+  .ro.type, .ro.time { font-family: 'Space Mono', monospace; font-size: 11px; }
   .amount { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--text-mid); text-align: right; }
   .x { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
   .x:hover { color: #e05a4a; }
@@ -265,8 +282,10 @@
   .btn:disabled { opacity: .4; cursor: default; }
 
   @media (max-width: 640px) {
-    .ov-head, .row { grid-template-columns: 44px 62px minmax(0, 1fr) 44px 62px; gap: 6px; padding-left: 4px; padding-right: 4px; }
-    .ov-head.prod, .row.prod { grid-template-columns: 44px 62px minmax(0, 1fr) 44px 62px 14px; }
+    .ov-head, .row { grid-template-columns: 40px 58px minmax(0, 1fr) 40px 38px 56px; gap: 5px; padding-left: 4px; padding-right: 4px; }
+    .ov-head.prod, .row.prod { grid-template-columns: 40px 58px minmax(0, 1fr) 40px 38px 56px 14px; }
+    .total { grid-template-columns: minmax(0, 1fr) 60px 70px; padding-left: 4px; padding-right: 4px; }
+    .total.prod { grid-template-columns: minmax(0, 1fr) 60px 70px 14px; }
     .ov-head { font-size: 10px; }
   }
 </style>

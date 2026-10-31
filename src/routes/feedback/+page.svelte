@@ -3,6 +3,7 @@
   import { createClient } from '@supabase/supabase-js'
   import FeedbackView from '$lib/FeedbackView.svelte'
   import WorkOverview from '$lib/WorkOverview.svelte'
+  import Timeline from '$lib/Timeline.svelte'
 
   // Same pattern as /sono: CSR only, Supabase direct, no watcher — audio via Dropbox links
   const SUPABASE_URL      = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
@@ -15,7 +16,7 @@
   let password  = $state('')
   let authError = $state('')
   let ready     = $state(false)
-  let view      = $state('songs')   // 'songs' | 'overview'
+  let view      = $state('songs')   // 'songs' | 'overview' | 'timeline'
 
   const storageKey = () => `feedback_auth_${projectId}`
 
@@ -70,11 +71,14 @@
     <div class="view-sw">
       <button class={view === 'songs' ? 'on' : ''} onclick={() => view = 'songs'}>SONGS</button>
       <button class={view === 'overview' ? 'on' : ''} onclick={() => view = 'overview'}>OVERVIEW</button>
+      <button class={view === 'timeline' ? 'on' : ''} onclick={() => view = 'timeline'}>TIMELINE</button>
     </div>
     {#if view === 'songs'}
       <FeedbackView {supabase} {project} mode="artist" author={project.artist_name || 'Artist'} />
-    {:else}
+    {:else if view === 'overview'}
       <WorkOverview {supabase} {project} mode="artist" />
+    {:else}
+      <Timeline {supabase} {project} mode="artist" />
     {/if}
   </div>
 {/if}

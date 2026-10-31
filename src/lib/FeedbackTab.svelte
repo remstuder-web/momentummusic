@@ -5,6 +5,7 @@
   import { supabase } from './supabase.js'
   import FeedbackView from './FeedbackView.svelte'
   import WorkOverview from './WorkOverview.svelte'
+  import Timeline from './Timeline.svelte'
 
   const ARTIST_PAGE = 'https://momentummusic.vercel.app/feedback'
 
@@ -15,7 +16,7 @@
   let newName    = $state('')
   let newArtist  = $state('')
   let selected   = $derived(projects.find(p => p.id === selectedId) || null)
-  let view       = $state('songs')   // 'songs' | 'overview'
+  let view       = $state('songs')   // 'songs' | 'overview' | 'timeline'
 
   async function load() {
     const { data, error } = await supabase.from('feedback_projects').select('*').order('created_at')
@@ -122,11 +123,14 @@
         <div class="view-sw">
           <button class={view === 'songs' ? 'on' : ''} onclick={() => view = 'songs'}>SONGS</button>
           <button class={view === 'overview' ? 'on' : ''} onclick={() => view = 'overview'}>OVERVIEW</button>
+          <button class={view === 'timeline' ? 'on' : ''} onclick={() => view = 'timeline'}>TIMELINE</button>
         </div>
         {#if view === 'songs'}
           <FeedbackView {supabase} project={selected} mode="producer" author="Remo" />
-        {:else}
+        {:else if view === 'overview'}
           <WorkOverview {supabase} project={selected} mode="producer" />
+        {:else}
+          <Timeline {supabase} project={selected} mode="producer" />
         {/if}
       </div>
     {/key}

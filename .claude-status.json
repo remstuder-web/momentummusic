@@ -1,18 +1,21 @@
 {
-  "updated": "2026-10-16T10:05:00Z",
-  "last_task": "DailyTab: Ableton section removed",
-  "status": "done",
+  "updated": "2026-10-31T12:42:24Z",
+  "last_task": "Feedback-Tab mit Artist-Login, Timetable, versionsbezogenem Feedback und geteilten Notizen",
+  "status": "partial",
   "working": [
-    "/generate-midi-from-reference accepts .mid and audio (wav/mp3/aiff/m4a)",
-    "audio: loop-based chord progression with bass-corrected inversions + confidence",
-    "DailyTab: one drop field 'REFERENCE → MIDI IDEEN', detection line, ideas grouped",
-    "DailyTab without Ableton UI (watcher /ableton-* endpoints kept)"
+    "npm run build ok incl. new FeedbackTab, FeedbackView, /feedback route",
+    "watcher restarted, /ping ok, POST /version-dropbox-link registered",
+    "ffmpeg mp3 192k transcode command verified"
   ],
   "broken": [
-    "test-system TEST 3: Spotify 403 premium required",
-    "test-system TEST 7: duplicate brain entries"
+    "Supabase host ukqpnjgvjeduipmdaczn.supabase.co NXDOMAIN — app, watcher DB calls and tests 4/7 fail (project probably paused)",
+    "test-system TEST 3: Spotify 403 premium required"
   ],
-  "partial": [],
-  "next": "Optional: half-bar chord resolution for fast-changing harmony (Levels loses E/B and B at one chord per bar)",
-  "notes": "Audio path: python3.11 (demucs htdemucs --shifts 0, essentia); music21 path: /opt/homebrew/bin/python3. Shared figure_of() holds the minor-key bVI/bVII fix for both."
+  "partial": [
+    "Feedback tab + /feedback untested end-to-end (needs Supabase back)",
+    "feedback_password not yet set — generated on first 'Artist-Link kopieren'",
+    "/feedback live only after Vercel deploy (git push)"
+  ],
+  "next": "Restore Supabase project, restart watcher (backfills version mp3 + Dropbox links), open FEEDBACK tab, copy artist link, test /feedback on a second device",
+  "notes": "Feedback stays in songs.work_data.versions[].feedback (author, created_at, done_by added). deadline_text + shared_notes in work_data, password in projects.project_meta.feedback_password. ProjectsTab.saveWorkData now re-applies updates to a fresh DB copy (chained per song)."
 }

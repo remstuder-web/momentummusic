@@ -224,3 +224,9 @@ FIXED THIS SESSION: 23C (Promise.allSettled + JSON.parse try/catch + console.log
 ALSO FIXED (debug pass): BrainTab Spotify intl regex for playlist/album/artist; Discard panel not clearing dumpText; CLAUDE.md watcher command updated to .cjs
 FAILED: task 16 code is done; needs OPENAI_API_KEY=sk-... added to .env manually by user
 NEXT SESSION SHOULD START WITH: TASKS.md is clear — add new tasks or run /morning-briefing to test agent pipeline
+
+## HANDOFF — 2026-10-31
+COMPLETED: none fully verified
+PARTIAL: Feedback-Tab + /feedback Artist-Seite + Version-mp3/Dropbox-Links — Code fertig, Build ok; End-to-End-Test fehlt (Supabase NXDOMAIN)
+FAILED: none
+NEXT: Supabase wieder erreichbar machen, Watcher-Restart (Backfill), Artist-Link kopieren, /feedback nach Vercel-Deploy testen

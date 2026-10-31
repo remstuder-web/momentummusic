@@ -5,6 +5,7 @@
   import DemoTab from '$lib/DemoTab.svelte'
   import ProjectsTab from '$lib/ProjectsTab.svelte'
   import ConnectionsTab from '$lib/ConnectionsTab.svelte'
+  import FeedbackTab from '$lib/FeedbackTab.svelte'
   import ReleaseTab from '$lib/ReleaseTab.svelte'
   import BrainTab from '$lib/BrainTab.svelte'
   import ListenPage from '$lib/ListenPage.svelte'
@@ -139,6 +140,7 @@
     { id: 'demo',        label: 'DEMOS' },
     { id: 'submissions', label: 'SUBMISSIONS' },
     { id: 'projects',    label: 'PROJECTS' },
+    { id: 'feedback',    label: 'FEEDBACK' },
     { id: 'connections', label: 'CONNECTIONS' },
     { id: 'releases',    label: 'RELEASES' },
     { id: 'brain',       label: 'BRAIN' },
@@ -610,6 +612,8 @@
       <DemoTab initialView="patches" />
     {:else if activeTab === 'projects'}
       <ProjectsTab />
+    {:else if activeTab === 'feedback'}
+      <FeedbackTab />
     {:else if activeTab === 'connections'}
       <ConnectionsTab />
     {:else if activeTab === 'releases'}

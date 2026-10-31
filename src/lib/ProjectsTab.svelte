@@ -387,6 +387,22 @@
     }
   }
 
+  // mp3 (192k) + Dropbox links for the active version — used by the FEEDBACK tab and /feedback page
+  async function linkVersionDropbox(song, dir, filename) {
+    const vId = workData(song).active_version_id
+    try {
+      const r = await fetch('http://localhost:4242/version-dropbox-link', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ song_id: song.id, dir, filename, version_id: vId })
+      }).then(r => r.json())
+      if (!r.ok) return
+      await saveWorkData(song, wd => {
+        const v = wd.versions.find(v => v.id === vId)
+        if (v) { v.mp3_path = r.mp3_path; v.dropbox_mp3_url = r.dropbox_mp3_url; v.dropbox_wav_url = r.dropbox_wav_url }
+      })
+    } catch(e) { console.warn('[ProjectsTab] version Dropbox link failed:', e.message) }
+  }
+
   async function handleProdDrop(e, song) {
     e.preventDefault()
     const file = e.dataTransfer.files[0]; if (!file) return
@@ -394,6 +410,7 @@
     uploadingSongs = { ...uploadingSongs, [song.id]: 'prod' }
     try {
       const filename = await saveSongAudio(file, song, 'production', altKey)
+      linkVersionDropbox(song, 'production', filename)
       console.log('[ProjectsTab] prod drop saved:', filename, 'prodBlobUrl:', prodBlobUrls[song.id])
       const wd = workData(song)
       const vLabel = wd.versions?.find(v => v.id === wd.active_version_id)?.name || 'prod'
@@ -414,6 +431,7 @@
     uploadingSongs = { ...uploadingSongs, [song.id]: 'mix' }
     try {
       const filename = await saveSongAudio(file, song, 'mixing', altKey)
+      linkVersionDropbox(song, 'mixing', filename)
       console.log('[ProjectsTab] mix drop saved:', filename, 'mixBlobUrl:', mixBlobUrls[song.id])
       const wd = workData(song)
       const vLabel = wd.versions?.find(v => v.id === wd.active_version_id)?.name || 'mix'
@@ -972,7 +990,9 @@
                 id: 'lnk_' + session.id + '_' + Date.now() + Math.random().toString(36).slice(2),
                 text: `[${fmtSec(fb.ts)}] ${fb.text}`,
                 done: false,
-                from_listen: true
+                from_listen: true,
+                author: projects.find(p => p.id === song.project_id)?.artist || 'Artist',
+                created_at: new Date().toISOString()
               })
             })
             if (!wd2.feedback_sync) wd2.feedback_sync = {}
@@ -1001,6 +1021,7 @@
   function workData(song) {
     const wd = song.work_data || {}
     return {
+      ...wd,  // keep keys not normalized below (release_checklist, fields set by the watcher, …)
       project_info:    wd.project_info    || '',
       current_stage:   wd.current_stage   || 'production',
       archived:        wd.archived        || false,
@@ -1032,15 +1053,31 @@
       session_log:       wd.session_log        || [],
       released:          wd.released           || false,
       feedback_sync:     wd.feedback_sync      || {},  // tracks imported listen-link feedback counts
+      deadline_text:     wd.deadline_text      || '',  // FEEDBACK tab: free-text deadline ("ENDE NOVEMBER")
+      shared_notes:      wd.shared_notes       || '',  // FEEDBACK tab: notes shared with the artist
     }
   }
 
-  async function saveWorkData(song, updater) {
+  // Saves are chained per song and re-applied to a fresh DB copy, so feedback/notes
+  // written meanwhile by the artist (/feedback page) are not overwritten by a stale local copy.
+  const workDataSaveChain = {}
+  function saveWorkData(song, updater) {
     const wd = workData(song)
     updater(wd)
     song.work_data = { ...wd }  // new reference forces Svelte reactivity
     songs = [...songs]
-    await supabase.from('songs').update({ work_data: song.work_data }).eq('id', song.id)
+    const run = async () => {
+      const { data, error } = await supabase.from('songs').select('work_data').eq('id', song.id).single()
+      if (!error && data) {
+        const fresh = workData({ work_data: data.work_data || {} })
+        updater(fresh)
+        song.work_data = { ...fresh }
+        songs = [...songs]
+      }
+      await supabase.from('songs').update({ work_data: song.work_data }).eq('id', song.id)
+    }
+    workDataSaveChain[song.id] = (workDataSaveChain[song.id] || Promise.resolve()).then(run, run)
+    return workDataSaveChain[song.id]
   }
 
   function setStage(song, stageId) {
@@ -1617,7 +1654,7 @@
     pushUndo('Added feedback item', song.id, JSON.parse(JSON.stringify(workData(song))))
     saveWorkData(song, wd => {
       const v = wd.versions.find(v => v.id === vId)
-      if (v) v.feedback.push({ id: 'f'+Date.now(), text: text.trim(), done: false })
+      if (v) v.feedback.push({ id: 'f'+Date.now(), text: text.trim(), done: false, author: 'Remo', created_at: new Date().toISOString() })
     })
   }
   function toggleFeedback(song, vId, fId) {
@@ -1627,13 +1664,14 @@
       if (!v) return
       const f = v.feedback.find(f => f.id === fId)
       if (f) f.done = !f.done
-      if (v.feedback.length && v.feedback.every(f => f.done)) {
-        const text = v.name + ' Changes:\n' + v.feedback.map(f => '✓ ' + f.text).join('\n')
-        navigator.clipboard.writeText(text).catch(() => {})
-        song._copied = v.id; songs = [...songs]
-        setTimeout(() => { song._copied = null; songs = [...songs] }, 2500)
-      }
     })
+    const v = workData(song).versions.find(v => v.id === vId)
+    if (v?.feedback.length && v.feedback.every(f => f.done)) {
+      const text = v.name + ' Changes:\n' + v.feedback.map(f => '✓ ' + f.text).join('\n')
+      navigator.clipboard.writeText(text).catch(() => {})
+      song._copied = v.id; songs = [...songs]
+      setTimeout(() => { song._copied = null; songs = [...songs] }, 2500)
+    }
   }
   function deleteFeedback(song, vId, fId) {
     pushUndo('Deleted feedback item', song.id, JSON.parse(JSON.stringify(workData(song))))
@@ -3680,6 +3718,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                             <div class="fb-row {fb.done?'fb-done':''}">
                               <button class="ckb-sm" onclick={() => toggleFeedback(song,activeVfilt.id,fb.id)}>{fb.done?'✓':''}</button>
                               <span class="fb-text">{fb.text}</span>
+                              {#if fb.author}<span class="fb-author">— {fb.author}{fb.created_at ? ' · ' + new Date(fb.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : ''}</span>{/if}
                               <button class="del-btn" onclick={() => deleteFeedback(song,activeVfilt.id,fb.id)}>×</button>
                             </div>
                           {/each}
@@ -4427,6 +4466,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .sent-flash { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--sent); padding: 8px 14px; background: rgba(196,164,102,.08); border-bottom: 1px solid rgba(196,164,102,.2); }
   .copied-banner { font-family: 'Space Mono', monospace; font-size: 13px; color: #4caf82; padding: 8px 14px; background: rgba(76,175,130,.08); border-bottom: 1px solid rgba(76,175,130,.2); }
   .feedback-list { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; }
+  .fb-author { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-dim); white-space: nowrap; flex-shrink: 0; }
   .fb-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #0f0f0f; }
   .fb-row.fb-done { opacity: .38; }
   .ckb-sm { width: 15px; height: 15px; border: 1px solid var(--border2); border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #4caf82; cursor: pointer; flex-shrink: 0; background: transparent; padding: 0; }

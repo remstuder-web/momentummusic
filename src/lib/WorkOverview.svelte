@@ -2,10 +2,12 @@
   // OVERVIEW — work log + billing per feedback project (Feedback tab and artist page).
   // Stored on feedback_projects: hourly_rate (numeric, default 100) and work_log (jsonb):
   //   rows:        { id, kind: 'row', date, type: 'SESSION'|'DIV', what, time, hours }
-//                time = free text ("12-7", never calculated), hours = billed decimal hours
+//                time = free text ("7-12", never calculated), hours = billed decimal hours,
+//                amount = optional manual amount (null = hours × rate; cleared whenever hours change)
   //   settlements: { id, kind: 'settlement', rate, closed_at }
   // A settlement closes all rows since the previous one; its rate is frozen at closing time so a later
-  // rate change does not alter what was already billed. Amount = hours × rate for SESSION, none for DIV.
+  // rate change does not alter what was already billed. Amount = manual amount if set, else hours × rate for
+// SESSION, none for DIV. All sums (blocks, total) are always derived from the rows — nothing is stored frozen.
   import { onMount, onDestroy, tick } from 'svelte'
 
   let { supabase, project, mode = 'artist' } = $props()
@@ -80,6 +82,11 @@
     return Number.isInteger(r) ? r + '.-' : r.toFixed(2)
   }
 
+  function rowAmount(e, r) {
+    if (e.amount != null) return e.amount
+    return e.type === 'SESSION' && e.hours != null ? e.hours * r : null
+  }
+
   // ── blocks: rows between settlements, each with its rate and totals ────────
   const view = $derived.by(() => {
     const out = []
@@ -87,7 +94,7 @@
     for (const e of log) {
       if (e.kind === 'settlement') {
         const r = Number(e.rate ?? rate)
-        for (const it of block) it.amount = it.e.type === 'SESSION' && it.e.hours != null ? it.e.hours * r : null
+        for (const it of block) { it.rate = r; it.amount = rowAmount(it.e, r) }
         out.push(...block)
         n++
         out.push({ e, n, rate: r,
@@ -96,7 +103,7 @@
         block = []
       } else block.push({ e, amount: null })
     }
-    for (const it of block) it.amount = it.e.type === 'SESSION' && it.e.hours != null ? it.e.hours * rate : null
+    for (const it of block) { it.rate = rate; it.amount = rowAmount(it.e, rate) }
     out.push(...block)
     return {
       items: out,
@@ -120,7 +127,34 @@
       return
     }
     input.value = fmtHours(h)
-    await saveCell(id, 'hours', h)
+    const cur = log.find(e => e.id === id)
+    if (!cur || cur.hours === h) return
+    // New hours → back to the calculated amount
+    await mutate(l => { const e = l.find(e => e.id === id); if (e) { e.hours = h; e.amount = null } })
+  }
+  // Manual amount: "400", "400.-", "62.50", "62,50"; empty = calculate again
+  function parseAmount(raw) {
+    const s = String(raw ?? '').trim().replace(/\.-$/, '').replace(/['’\s]/g, '').replace(',', '.')
+    if (!s) return null
+    return /^\d+(\.\d+)?$/.test(s) ? +s : NaN
+  }
+  function amountInputValue(it) {
+    if (it.amount == null) return ''
+    const r = Math.round(it.amount * 100) / 100
+    return Number.isInteger(r) ? String(r) : r.toFixed(2)
+  }
+  async function saveAmount(it, input) {
+    const a = parseAmount(input.value)
+    if (Number.isNaN(a)) {
+      input.value = amountInputValue(it)
+      input.classList.add('bad'); setTimeout(() => input.classList.remove('bad'), 1200)
+      return
+    }
+    // Typing exactly the calculated value (or clearing the field) keeps the row on "calculated"
+    const calc = rowAmount({ ...it.e, amount: null }, it.rate)
+    const next = a == null || (calc != null && Math.abs(a - calc) < 0.005) ? null : a
+    if ((it.e.amount ?? null) === next) { input.value = amountInputValue(it); return }
+    await mutate(l => { const e = l.find(e => e.id === it.e.id); if (e) e.amount = next })
   }
   async function addRow() {
     const row = { id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6), kind: 'row', date: '', type: 'SESSION', what: '', time: '', hours: null }
@@ -201,7 +235,10 @@
             onblur={e => saveCell(it.e.id, 'time', e.target.value.trim())} onkeydown={e => onEnter(e, it.e.id, 'time')} />
           <input class="cell num" data-id={it.e.id} data-col="hours" value={fmtHours(it.e.hours)} placeholder=""
             onblur={e => saveHours(it.e.id, e.target)} onkeydown={e => onEnter(e, it.e.id, 'hours')} />
-          <span class="amount">{fmtMoney(it.amount)}</span>
+          <span class="amount-cell {it.e.amount != null ? 'manual' : ''}" title={it.e.amount != null ? 'Betrag von Hand — ändert sich die Stundenzahl, wird wieder gerechnet' : ''}>
+            <input class="cell num" data-id={it.e.id} data-col="amount" value={amountInputValue(it)}
+              onblur={e => saveAmount(it, e.target)} onkeydown={e => onEnter(e, it.e.id, 'amount')} /><span class="suffix">{it.amount != null && Number.isInteger(Math.round(it.amount * 100) / 100) ? '.-' : ''}</span>
+          </span>
           <button class="x" title="Zeile löschen" onclick={() => deleteEntry(it.e.id)}>×</button>
         </div>
       {:else}
@@ -266,6 +303,11 @@
   .ro { font-size: 14px; line-height: 1.5; color: var(--text-mid); padding: 3px 0; overflow-wrap: anywhere; }
   .ro.type, .ro.time { font-family: 'Space Mono', monospace; font-size: 11px; }
   .amount { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--text-mid); text-align: right; }
+  .amount-cell { display: flex; align-items: center; justify-content: flex-end; min-width: 0; }
+  .amount-cell .cell { width: 100%; text-align: right; font-family: 'Space Mono', monospace; font-size: 12px; padding-right: 0; }
+  .amount-cell .suffix { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--text-mid); width: 16px; flex-shrink: 0; margin-left: -1px; }
+  .amount-cell:focus-within .suffix { visibility: hidden; }
+  .amount-cell.manual .cell { color: var(--sent); }
   .x { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
   .x:hover { color: #e05a4a; }
 

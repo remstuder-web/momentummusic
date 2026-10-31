@@ -3486,3 +3486,9 @@ TASK: momentummusic.vercel.app/feedback gibt 404
 WHAT: Ursache: Vercel-Deployment für 3aadad1 ist sofort gescheitert (GitHub-Deployment-Status "failure" in derselben Sekunde wie die Erstellung, kein Build) → Production blieb auf be98041 (Juni) ohne /feedback. Einziger Unterschied zu den erfolgreichen Juni-Deployments (gleicher lokaler Autor): Trailer "Co-Authored-By: Claude … <noreply@anthropic.com>" im obersten Commit; Vercel Hobby blockiert Commits mit Autoren/Co-Autoren ausserhalb des Teams. Fix: dieser Commit ohne Trailer als oberster Commit, Push
 RESULT: untested — siehe nächster Eintrag
 BLOCKERS: Vercel-Logs nur mit Login einsehbar
+
+## 2026-10-31 (Deployment, 2. Versuch) — PARTIAL
+TASK: momentummusic.vercel.app/feedback gibt 404
+WHAT: Commit ohne Co-Author-Trailer (e53d249) scheiterte ebenfalls sofort → Trailer allein ist nicht die Ursache. Auswertung aller GitHub-Deployments: bis 4.6. bauten auch Commits mit unverknüpftem Autor remo@Laptop-von-Remo.local; der letzte Erfolg be98041 (14.6.) ist der einzige mit GitHub-verknüpftem Autor (rem.studer@gmail.com → remstuder-web); seither scheitern alle mit unverknüpftem Autor sofort. Hypothese: Vercel prüft den Commit-Autor gegen das Konto. Test: dieser Commit mit --author rem.studer@gmail.com
+RESULT: untested — siehe nächster Eintrag
+BLOCKERS: Vercel-Logs nur mit Login einsehbar

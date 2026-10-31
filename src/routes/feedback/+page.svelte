@@ -18,13 +18,13 @@
   const storageKey = () => `feedback_auth_${projectId}`
 
   async function fetchProject() {
-    const { data } = await supabase.from('projects').select('id,name,artist,project_meta').eq('id', projectId).single()
+    const { data } = await supabase.from('feedback_projects').select('*').eq('id', projectId).maybeSingle()
     return data || null
   }
 
   async function login() {
     const p = await fetchProject()
-    const pw = p?.project_meta?.feedback_password
+    const pw = p?.password
     if (p && pw && password.trim() === pw) {
       localStorage.setItem(storageKey(), pw)
       project = p; authed = true; authError = ''
@@ -36,13 +36,13 @@
     if (projectId) {
       const p = await fetchProject()
       const saved = localStorage.getItem(storageKey())
-      if (p && saved && saved === p.project_meta?.feedback_password) { project = p; authed = true }
+      if (p && saved && saved === p.password) { project = p; authed = true }
     }
     ready = true
   })
 </script>
 
-<svelte:head><title>{project ? `${project.artist || project.name} — Feedback` : 'Feedback'}</title></svelte:head>
+<svelte:head><title>{project ? `${project.artist_name || project.name} — Feedback` : 'Feedback'}</title></svelte:head>
 
 {#if !ready}
   <div></div>
@@ -62,10 +62,10 @@
 {:else}
   <div class="page">
     <div class="page-header">
-      <span class="page-title">{project.artist || project.name}</span>
-      {#if project.artist && project.name}<span class="page-sub">{project.name}</span>{/if}
+      <span class="page-title">{project.artist_name || project.name}</span>
+      {#if project.artist_name && project.name}<span class="page-sub">{project.name}</span>{/if}
     </div>
-    <FeedbackView {supabase} {project} mode="artist" author={project.artist || 'Artist'} />
+    <FeedbackView {supabase} {project} mode="artist" author={project.artist_name || 'Artist'} />
   </div>
 {/if}
 
@@ -78,6 +78,7 @@
   .login-sub   { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--text-dim); text-align: center; letter-spacing: .1em; margin-bottom: 4px; }
   .login-inp   { background: var(--surface); border: 1px solid var(--border2); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 15px; padding: 10px 14px; outline: none; border-radius: 3px; }
   .login-inp:focus { border-color: var(--accent-dim); }
+  .login-inp::placeholder { color: var(--text-faint); }
   .login-err   { font-family: 'Space Mono', monospace; font-size: 11px; color: #e05a4a; }
   .login-btn   { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 500; letter-spacing: .1em; padding: 10px; background: var(--surface2); color: var(--text); border: none; border-radius: 3px; cursor: pointer; }
   .login-btn:hover { background: var(--border2); }

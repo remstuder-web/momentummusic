@@ -292,43 +292,53 @@
     if (dir === 'production') {
       if (prodBlobUrls[song.id]) URL.revokeObjectURL(prodBlobUrls[song.id])
       prodBlobUrls[song.id] = URL.createObjectURL(file)
+      const vName = ver
+      const newV = { id: 'v'+Date.now(), name: vName, version_type: 'production', created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: filename, sent_to_artist: false }
+      {
+        const cur = workData(song).versions
+        const existingIndex = cur.findIndex(v => v.version_type === 'production' && v.name === vName)
+        if (existingIndex >= 0) {
+          for (const v of cur.filter((v, i) => i > existingIndex && v.version_type === 'production')) {
+            if (v.audio_path) fetch(`http://localhost:4242/delete-audio?dir=production&filename=${encodeURIComponent(v.audio_path)}`, { method: 'POST' })
+          }
+        }
+      }
       await saveWorkData(song, wd => {
         wd.prod_audio = filename
-        const vName = ver
         const existing = wd.versions.find(v => v.version_type === 'production' && v.name === vName)
         if (existing) {
           existing.audio_path = filename; existing.sent_to_artist = false
           wd.active_version_id = existing.id
           const existingIndex = wd.versions.indexOf(existing)
-          const toDelete = wd.versions.filter((v, i) => i > existingIndex && v.version_type === 'production')
-          for (const v of toDelete) {
-            if (v.audio_path) fetch(`http://localhost:4242/delete-audio?dir=production&filename=${encodeURIComponent(v.audio_path)}`, { method: 'POST' })
-          }
           wd.versions = wd.versions.filter((v, i) => !(i > existingIndex && v.version_type === 'production'))
         } else {
-          const v = { id: 'v'+Date.now(), name: vName, version_type: 'production', created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: filename, sent_to_artist: false }
-          wd.versions.push(v); wd.active_version_id = v.id
+          wd.versions.push({ ...newV, feedback: [] }); wd.active_version_id = newV.id
         }
       })
     } else {
       if (mixBlobUrls[song.id]) URL.revokeObjectURL(mixBlobUrls[song.id])
       mixBlobUrls[song.id] = URL.createObjectURL(file)
+      const vName = 'MIX_' + ver
+      const newV = { id: 'v'+Date.now(), name: vName, version_type: 'mixing', created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: filename, sent_to_artist: false }
+      {
+        const cur = workData(song).versions
+        const existingIndex = cur.findIndex(v => v.version_type === 'mixing' && v.name === vName)
+        if (existingIndex >= 0) {
+          for (const v of cur.filter((v, i) => i > existingIndex && v.version_type === 'mixing')) {
+            if (v.audio_path) fetch(`http://localhost:4242/delete-audio?dir=mixing&filename=${encodeURIComponent(v.audio_path)}`, { method: 'POST' })
+          }
+        }
+      }
       await saveWorkData(song, wd => {
         wd.mix_audio = filename
-        const vName = 'MIX_' + ver
         const existing = wd.versions.find(v => v.version_type === 'mixing' && v.name === vName)
         if (existing) {
           existing.audio_path = filename; existing.sent_to_artist = false
           wd.active_version_id = existing.id
           const existingIndex = wd.versions.indexOf(existing)
-          const toDelete = wd.versions.filter((v, i) => i > existingIndex && v.version_type === 'mixing')
-          for (const v of toDelete) {
-            if (v.audio_path) fetch(`http://localhost:4242/delete-audio?dir=mixing&filename=${encodeURIComponent(v.audio_path)}`, { method: 'POST' })
-          }
           wd.versions = wd.versions.filter((v, i) => !(i > existingIndex && v.version_type === 'mixing'))
         } else {
-          const v = { id: 'v'+Date.now(), name: vName, version_type: 'mixing', created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: filename, sent_to_artist: false }
-          wd.versions.push(v); wd.active_version_id = v.id
+          wd.versions.push({ ...newV, feedback: [] }); wd.active_version_id = newV.id
         }
       })
     }
@@ -387,22 +397,6 @@
     }
   }
 
-  // mp3 (192k) + Dropbox links for the active version — used by the FEEDBACK tab and /feedback page
-  async function linkVersionDropbox(song, dir, filename) {
-    const vId = workData(song).active_version_id
-    try {
-      const r = await fetch('http://localhost:4242/version-dropbox-link', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ song_id: song.id, dir, filename, version_id: vId })
-      }).then(r => r.json())
-      if (!r.ok) return
-      await saveWorkData(song, wd => {
-        const v = wd.versions.find(v => v.id === vId)
-        if (v) { v.mp3_path = r.mp3_path; v.dropbox_mp3_url = r.dropbox_mp3_url; v.dropbox_wav_url = r.dropbox_wav_url }
-      })
-    } catch(e) { console.warn('[ProjectsTab] version Dropbox link failed:', e.message) }
-  }
-
   async function handleProdDrop(e, song) {
     e.preventDefault()
     const file = e.dataTransfer.files[0]; if (!file) return
@@ -410,7 +404,6 @@
     uploadingSongs = { ...uploadingSongs, [song.id]: 'prod' }
     try {
       const filename = await saveSongAudio(file, song, 'production', altKey)
-      linkVersionDropbox(song, 'production', filename)
       console.log('[ProjectsTab] prod drop saved:', filename, 'prodBlobUrl:', prodBlobUrls[song.id])
       const wd = workData(song)
       const vLabel = wd.versions?.find(v => v.id === wd.active_version_id)?.name || 'prod'
@@ -431,7 +424,6 @@
     uploadingSongs = { ...uploadingSongs, [song.id]: 'mix' }
     try {
       const filename = await saveSongAudio(file, song, 'mixing', altKey)
-      linkVersionDropbox(song, 'mixing', filename)
       console.log('[ProjectsTab] mix drop saved:', filename, 'mixBlobUrl:', mixBlobUrls[song.id])
       const wd = workData(song)
       const vLabel = wd.versions?.find(v => v.id === wd.active_version_id)?.name || 'mix'
@@ -981,20 +973,17 @@
 
           const isFirst = alreadyImported === 0
 
+          const items = newItems.map((fb, i) => ({
+            id: 'lnk_' + session.id + '_' + (alreadyImported + i) + '_' + Date.now(),
+            text: `[${fmtSec(fb.ts)}] ${fb.text}`,
+            done: false,
+            from_listen: true
+          }))
           await saveWorkData(song, wd2 => {
             const v = wd2.versions?.[wd2.versions.length - 1]
             if (!v) return
             if (!v.feedback) v.feedback = []
-            newItems.forEach(fb => {
-              v.feedback.push({
-                id: 'lnk_' + session.id + '_' + Date.now() + Math.random().toString(36).slice(2),
-                text: `[${fmtSec(fb.ts)}] ${fb.text}`,
-                done: false,
-                from_listen: true,
-                author: projects.find(p => p.id === song.project_id)?.artist || 'Artist',
-                created_at: new Date().toISOString()
-              })
-            })
+            for (const it of items) if (!v.feedback.some(f => f.id === it.id)) v.feedback.push({ ...it })
             if (!wd2.feedback_sync) wd2.feedback_sync = {}
             wd2.feedback_sync[importKey] = fbItems.length
           })
@@ -1053,28 +1042,39 @@
       session_log:       wd.session_log        || [],
       released:          wd.released           || false,
       feedback_sync:     wd.feedback_sync      || {},  // tracks imported listen-link feedback counts
-      deadline_text:     wd.deadline_text      || '',  // FEEDBACK tab: free-text deadline ("ENDE NOVEMBER")
-      shared_notes:      wd.shared_notes       || '',  // FEEDBACK tab: notes shared with the artist
     }
   }
 
-  // Saves are chained per song and re-applied to a fresh DB copy, so feedback/notes
-  // written meanwhile by the artist (/feedback page) are not overwritten by a stale local copy.
+  // Each save re-reads work_data from the DB and applies the updater to that fresh copy, so fields
+  // written meanwhile by the watcher (Essentia analysis, Dropbox links, …) are not overwritten by a
+  // stale local copy. Saves are chained per song. An updater can therefore run more than once
+  // (optimistic local copy, fresh DB copy, display copy while queued) — it MUST be idempotent:
+  // no toggles (compute the target value outside), ids/timestamps created outside, pushes guarded
+  // by id, no side effects (fetch, clipboard, timers).
   const workDataSaveChain = {}
+  const workDataPending = {}  // song.id → updaters not yet written
   function saveWorkData(song, updater) {
     const wd = workData(song)
     updater(wd)
     song.work_data = { ...wd }  // new reference forces Svelte reactivity
     songs = [...songs]
+    const pending = (workDataPending[song.id] ||= [])
+    pending.push(updater)
     const run = async () => {
+      let written = song.work_data
       const { data, error } = await supabase.from('songs').select('work_data').eq('id', song.id).single()
       if (!error && data) {
-        const fresh = workData({ work_data: data.work_data || {} })
+        const fresh = workData({ work_data: JSON.parse(JSON.stringify(data.work_data || {})) })
         updater(fresh)
-        song.work_data = { ...fresh }
-        songs = [...songs]
+        written = { ...fresh }
       }
-      await supabase.from('songs').update({ work_data: song.work_data }).eq('id', song.id)
+      await supabase.from('songs').update({ work_data: written }).eq('id', song.id)
+      pending.shift()
+      // Show what was written plus the saves still queued behind it
+      const shown = workData({ work_data: JSON.parse(JSON.stringify(written)) })
+      for (const u of pending) u(shown)
+      song.work_data = { ...shown }
+      songs = [...songs]
     }
     workDataSaveChain[song.id] = (workDataSaveChain[song.id] || Promise.resolve()).then(run, run)
     return workDataSaveChain[song.id]
@@ -1084,13 +1084,15 @@
     saveWorkData(song, wd => { wd.current_stage = stageId })
   }
   function toggleStageDone(song, stageId) {
+    const done = !workData(song).stages[stageId]?.done
     saveWorkData(song, wd => {
       if (!wd.stages[stageId]) wd.stages[stageId] = { done: false }
-      wd.stages[stageId].done = !wd.stages[stageId].done
+      wd.stages[stageId].done = done
     })
   }
   function toggleSent(song, stageId) {
-    saveWorkData(song, wd => { wd.stages[stageId].sent = !wd.stages[stageId].sent })
+    const sent = !workData(song).stages[stageId].sent
+    saveWorkData(song, wd => { wd.stages[stageId].sent = sent })
   }
   function saveLyrics(song, text) {
     saveWorkData(song, wd => { wd.stages.lyrics.text = text })
@@ -1508,9 +1510,10 @@
       const wd = workData(song)
       const activeV = wd.versions?.find(v => v.id === wd.active_version_id) || wd.versions?.[wd.versions.length - 1]
       if (activeV) {
+        const addition = '\n\n[DAW Capture ' + new Date().toLocaleDateString('de-CH') + ']\n' + d.analysis
         await saveWorkData(song, wd2 => {
           const v = wd2.versions.find(v => v.id === activeV.id)
-          if (v) v.notes = (v.notes || '') + '\n\n[DAW Capture ' + new Date().toLocaleDateString('de-CH') + ']\n' + d.analysis
+          if (v && !(v.notes || '').endsWith(addition)) v.notes = (v.notes || '') + addition
         })
       }
     } catch(e) {
@@ -1632,11 +1635,13 @@
   }
 
   function addVersion(song, versionType) {
+    const id = 'v'+Date.now(), created_at = new Date().toISOString()
     saveWorkData(song, wd => {
-      const name = generateVersionName(wd.versions, versionType)
-      const v = { id: 'v'+Date.now(), name, version_type: versionType, created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: '', sent_to_artist: false }
-      wd.versions.push(v)
-      wd.active_version_id = v.id
+      if (!wd.versions.some(v => v.id === id)) {
+        const name = generateVersionName(wd.versions, versionType)
+        wd.versions.push({ id, name, version_type: versionType, created_at, feedback: [], notes: '', audio_path: '', sent_to_artist: false })
+      }
+      wd.active_version_id = id
     })
   }
   function setActiveVersion(song, vId) {
@@ -1652,18 +1657,18 @@
   function addFeedback(song, vId, text) {
     if (!text.trim()) return
     pushUndo('Added feedback item', song.id, JSON.parse(JSON.stringify(workData(song))))
+    const item = { id: 'f'+Date.now(), text: text.trim(), done: false }
     saveWorkData(song, wd => {
       const v = wd.versions.find(v => v.id === vId)
-      if (v) v.feedback.push({ id: 'f'+Date.now(), text: text.trim(), done: false, author: 'Remo', created_at: new Date().toISOString() })
+      if (v && !v.feedback.some(f => f.id === item.id)) v.feedback.push({ ...item })
     })
   }
   function toggleFeedback(song, vId, fId) {
     pushUndo('Toggled feedback item', song.id, JSON.parse(JSON.stringify(workData(song))))
+    const done = !workData(song).versions.find(v => v.id === vId)?.feedback.find(f => f.id === fId)?.done
     saveWorkData(song, wd => {
-      const v = wd.versions.find(v => v.id === vId)
-      if (!v) return
-      const f = v.feedback.find(f => f.id === fId)
-      if (f) f.done = !f.done
+      const f = wd.versions.find(v => v.id === vId)?.feedback.find(f => f.id === fId)
+      if (f) f.done = done
     })
     const v = workData(song).versions.find(v => v.id === vId)
     if (v?.feedback.length && v.feedback.every(f => f.done)) {
@@ -1713,9 +1718,10 @@
       const match = raw.match(/\[[\s\S]*\]/)
       const points = match ? JSON.parse(match[0]) : []
       if (!points.length) throw new Error('No feedback points extracted — Claude returned: ' + raw.slice(0, 200))
+      const items = points.map((p, i) => ({ id: 'f'+Date.now()+'_'+i, text: p, done: false }))
       saveWorkData(song, wd2 => {
         const v2 = wd2.versions.find(v => v.id === vId)
-        if (v2) v2.feedback = [...(v2.feedback||[]), ...points.map(p => ({ id: 'f'+Date.now()+Math.random(), text: p, done: false }))]
+        if (v2) v2.feedback = [...(v2.feedback||[]), ...items.filter(it => !(v2.feedback||[]).some(f => f.id === it.id))]
       })
     } catch(e) { alert('Claude error: ' + e.message) }
     v._processingNotes = false; songs = [...songs]
@@ -1756,9 +1762,10 @@
       const match = (rawText).match(/\[[\s\S]*\]/)
       const points = match ? JSON.parse(match[0]) : []
       if (!points.length) throw new Error('No feedback points extracted')
+      const items = points.map((p, i) => ({ id: 'f'+Date.now()+'_'+i, text: p, done: false }))
       saveWorkData(song, wd2 => {
         const v2 = wd2.versions.find(v => v.id === vId)
-        if (v2) v2.feedback = [...(v2.feedback||[]), ...points.map(p => ({ id: 'f'+Date.now()+Math.random(), text: p, done: false }))]
+        if (v2) v2.feedback = [...(v2.feedback||[]), ...items.filter(it => !(v2.feedback||[]).some(f => f.id === it.id))]
       })
     } catch(e) {
       console.error('PDF processing error:', e)
@@ -1884,11 +1891,13 @@
     const nextExists = versionsOfType[sentIndex + 1] !== undefined
 
     if (isLatest && !nextExists) {
+      const newId = 'v'+Date.now(), created_at = new Date().toISOString()
       await saveWorkData(song, wd3 => {
-        const nextName = generateVersionName(wd3.versions, v_type)
-        const newV = { id: 'v'+Date.now(), name: nextName, version_type: v_type, created_at: new Date().toISOString(), feedback: [], notes: '', audio_path: '', sent_to_artist: false }
-        wd3.versions.push(newV)
-        wd3.active_version_id = newV.id
+        if (!wd3.versions.some(v => v.id === newId)) {
+          const nextName = generateVersionName(wd3.versions, v_type)
+          wd3.versions.push({ id: newId, name: nextName, version_type: v_type, created_at, feedback: [], notes: '', audio_path: '', sent_to_artist: false })
+        }
+        wd3.active_version_id = newId
       })
     } else if (!isLatest) {
       await saveWorkData(song, wd3 => {
@@ -3397,7 +3406,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                   {/each}
                   <!-- STEMS — appears after mastering, looks identical to a stage box -->
                   <div class="stage-box {wd.stems_received?'done':''} {wd.current_stage==='stems'?'active':''}">
-                    <button class="stage-ckb" onclick={() => saveWorkData(song, wd => { wd.stems_received = !wd.stems_received })}>{wd.stems_received?'✓':''}</button>
+                    <button class="stage-ckb" onclick={() => { const v = !wd.stems_received; saveWorkData(song, wd2 => { wd2.stems_received = v }) }}>{wd.stems_received?'✓':''}</button>
                     <button class="stage-name-btn" onclick={() => setStage(song, 'stems')}>STEMS</button>
                   </div>
                   <!-- Tab buttons — inline, gap to the left -->
@@ -3718,7 +3727,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
                             <div class="fb-row {fb.done?'fb-done':''}">
                               <button class="ckb-sm" onclick={() => toggleFeedback(song,activeVfilt.id,fb.id)}>{fb.done?'✓':''}</button>
                               <span class="fb-text">{fb.text}</span>
-                              {#if fb.author}<span class="fb-author">— {fb.author}{fb.created_at ? ' · ' + new Date(fb.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : ''}</span>{/if}
                               <button class="del-btn" onclick={() => deleteFeedback(song,activeVfilt.id,fb.id)}>×</button>
                             </div>
                           {/each}
@@ -4195,17 +4203,17 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .mid-title-input { font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 500; letter-spacing: .1em; color: var(--text); background: transparent; border: none; border-bottom: 1px solid transparent; outline: none; padding: 1px 0; cursor: text; width: 200px; }
   .mid-title-input:hover { border-bottom-color: var(--border2); }
   .mid-title-input:focus { border-bottom-color: var(--accent-dim); }
-  .mid-title-input::placeholder { color: var(--text-dim); }
+  .mid-title-input::placeholder { color: var(--text-faint); }
   .mid-artist-input { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--text-dim); background: transparent; border: none; border-bottom: 1px solid transparent; outline: none; padding: 1px 0; cursor: text; width: 200px; }
   .mid-artist-input:hover { border-bottom-color: var(--border2); }
   .mid-artist-input:focus { border-bottom-color: var(--accent-dim); }
-  .mid-artist-input::placeholder { color: var(--text-dim); }
+  .mid-artist-input::placeholder { color: var(--text-faint); }
 
   .ref-manager { padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
   .ref-add-row { display: flex; gap: 8px; align-items: center; padding: 2px 8px; border: 1px solid transparent; border-radius: 3px; transition: border-color .15s; background: var(--bg); }
   .ref-add-row.drag-over { border-color: var(--accent-dim); background: var(--accent-a04); }
   .ref-inp { flex: 1; background: transparent; border: none; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 3px 4px; outline: none; }
-  .ref-inp::placeholder { color: var(--text-dim); }
+  .ref-inp::placeholder { color: var(--text-faint); }
   .refs-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; background: var(--surface); border: 1px solid transparent; border-radius: 3px; cursor: pointer; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--text-dim); width: 100%; }
   .refs-toggle:hover { border-color: var(--border2); color: var(--text-mid); }
   .refs-arr { font-size: 9px; transition: transform .2s; }
@@ -4348,7 +4356,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .song-title-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-mid); font-size: 16px; font-weight: 400; font-family: 'DM Sans', sans-serif; padding: 1px 0; outline: none; width: 100%; cursor: text; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
   .song-title-input:hover { border-bottom-color: var(--border2); }
   .song-title-input:focus { border-bottom-color: var(--accent-dim); color: var(--text-mid); }
-  .song-title-input::placeholder { color: var(--text-dim); }
+  .song-title-input::placeholder { color: var(--text-faint); }
   .stage-pills { display: flex; gap: 3px; align-items: center; flex-shrink: 0; }
   .stage-pill { width: 22px; height: 6px; border-radius: 2px; background: var(--surface2); border: 1px solid transparent; flex-shrink: 0; transition: background .2s, border-color .2s; }
   .stage-pill.seg-done { background: var(--chip-bg); border-color: transparent; }
@@ -4466,7 +4474,6 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .sent-flash { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--sent); padding: 8px 14px; background: rgba(196,164,102,.08); border-bottom: 1px solid rgba(196,164,102,.2); }
   .copied-banner { font-family: 'Space Mono', monospace; font-size: 13px; color: #4caf82; padding: 8px 14px; background: rgba(76,175,130,.08); border-bottom: 1px solid rgba(76,175,130,.2); }
   .feedback-list { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; }
-  .fb-author { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-dim); white-space: nowrap; flex-shrink: 0; }
   .fb-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #0f0f0f; }
   .fb-row.fb-done { opacity: .38; }
   .ckb-sm { width: 15px; height: 15px; border: 1px solid var(--border2); border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #4caf82; cursor: pointer; flex-shrink: 0; background: transparent; padding: 0; }
@@ -4479,7 +4486,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .fb-add-row { display: flex; gap: 7px; padding: 10px 14px; border-top: 1px solid transparent; }
   .add-inp { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 7px 11px; outline: none; border-radius: 3px; flex: 1; }
   .add-inp:focus { border-color: var(--accent-dim); }
-  .add-inp::placeholder { color: var(--text-dim); }
+  .add-inp::placeholder { color: var(--text-faint); }
   .add-btn { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 500; padding: 7px 14px; background: var(--surface2); color: var(--text); border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
   .all-done-hint { font-family: 'Space Mono', monospace; font-size: 12px; color: #4caf82; padding: 7px 14px; text-align: center; opacity: .7; border-top: 1px solid transparent; }
   .version-notes-block { padding: 10px 14px; border-top: 1px solid transparent; display: flex; flex-direction: column; gap: 6px; }
@@ -4623,7 +4630,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .task-add-row { display: flex; gap: 5px; margin-top: 5px; width: 100%; }
   .add-inp-sm { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-family: 'Space Mono', monospace; font-size: 12px; padding: 6px 9px; outline: none; border-radius: 3px; flex: 1; min-width: 0; }
   .add-inp-sm:focus { border-color: var(--accent-dim); }
-  .add-inp-sm::placeholder { color: var(--text-dim); }
+  .add-inp-sm::placeholder { color: var(--text-faint); }
   .date-inp { width: 115px; flex: none; }
   .time-inp { width: 78px; flex: none; }
   .add-btn-sm { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 500; padding: 6px 10px; background: var(--surface2); color: var(--text); border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
@@ -4687,7 +4694,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .vocal-mozart-err { font-size: 9px; color: #c44; }
   .vocal-ref-inp { flex: 1; background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 5px 9px; border-radius: 3px; outline: none; min-width: 0; }
   .vocal-ref-inp:focus { border-color: var(--accent-dim); }
-  .vocal-ref-inp::placeholder { color: var(--text-dim); }
+  .vocal-ref-inp::placeholder { color: var(--text-faint); }
   .vocal-btn { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: .07em; padding: 5px 12px; background: var(--chip-bg); border: 1px solid transparent; color: var(--text-mid); border-radius: 2px; cursor: pointer; white-space: nowrap; }
   .vocal-btn:hover:not(:disabled) { border-color: var(--border2); color: var(--text); }
   .vocal-btn:disabled { opacity: .4; cursor: default; }
@@ -4737,7 +4744,7 @@ Focus on: energy match, tonal balance, arrangement density, commercial positioni
   .ref-picker-input-row { display: flex; gap: 6px; align-items: center; }
   .ref-search-input { flex: 1; background: var(--surface); border: 1px solid var(--border2); color: var(--text-mid); font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 5px 9px; border-radius: 3px; outline: none; min-width: 0; }
   .ref-search-input:focus { border-color: var(--accent-dim); }
-  .ref-search-input::placeholder { color: var(--text-dim); }
+  .ref-search-input::placeholder { color: var(--text-faint); }
   .ref-selected-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
   .ref-selected-tag { font-family: 'Space Mono', monospace; font-size: 8px; color: var(--text-mid); border: 1px solid var(--border2); padding: 2px 6px 2px 4px; border-radius: 2px; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
   .ref-selected-tag button { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 0 0 0 2px; font-size: 11px; line-height: 1; }

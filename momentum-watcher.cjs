@@ -180,6 +180,7 @@ const INSTRUMENTALS_DIR = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSI
 const MIXING_DIR      = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Mixing')
 const RELEASES_DIR    = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Releases')
 const STEMS_DIR       = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Stems')
+const FEEDBACK_DIR    = path.join(process.env.HOME, 'Dropbox', '!MOMENTUM MUSIC', 'Feedback')
 const ARCHIVE_29TH    = path.join(process.env.HOME, 'Dropbox', 'P2P', '29TH AVENUE', '!ARCHIVE')
 const SENT_DIR        = path.join(process.env.HOME, 'Dropbox', 'P2P', '29TH AVENUE', 'SENT')
 const REFERENCES_CURRENT_DIR = '/Users/remo/Dropbox/!MOMENTUM MUSIC/References/!Current'
@@ -208,7 +209,7 @@ function transcodeToMp3(inputPath, outputPath) {
   })
 }
 
-;[DEMOS_DIR, SUBMISSIONS_DIR, PRODUCTION_DIR, INSTRUMENTALS_DIR, MIXING_DIR, RELEASES_DIR, STEMS_DIR].forEach(d => {
+;[DEMOS_DIR, SUBMISSIONS_DIR, PRODUCTION_DIR, INSTRUMENTALS_DIR, MIXING_DIR, RELEASES_DIR, STEMS_DIR, FEEDBACK_DIR].forEach(d => {
   if (!fs.existsSync(d)) { fs.mkdirSync(d, { recursive: true }); console.log('Created:', d) }
 })
 
@@ -425,52 +426,47 @@ async function getFileDropboxLinks(localPath, retries = 3, delayMs = 2000) {
   return { dropbox_stream_url: toDropboxStreamUrl(shareUrl), dropbox_download_url: toDropboxDownloadUrl(shareUrl) }
 }
 
-// Production/mixing version: mp3 (192k, next to the WAV) for the player + Dropbox links for both.
-// Result is merged into songs.work_data.versions[] so the /feedback page works without the watcher.
-function versionDir(dir) { return dir === 'mixing' ? MIXING_DIR : PRODUCTION_DIR }
-function transcodeToMp3_192(inputPath, outputPath) {
-  return new Promise((resolve, reject) => {
-    exec(`/opt/homebrew/bin/ffmpeg -i ${shellEscape(inputPath)} -codec:a libmp3lame -b:a 192k -y ${shellEscape(outputPath)}`,
-      (err) => { if (err) reject(err); else resolve(outputPath) })
-  })
+// ── FEEDBACK tab: files in Feedback/<folder>/, versions in feedback_songs.versions (jsonb) ──
+function feedbackFolderPath(folder) {
+  const safe = String(folder || '').replace(/[<>:"/\\|?*]/g, '').trim()
+  if (!safe || safe.startsWith('.')) throw new Error('invalid folder')
+  return path.join(FEEDBACK_DIR, safe)
 }
-async function generateVersionDropboxLinks(songId, dir, filename, versionId = null, { forceMp3 = false } = {}) {
-  try {
-    const wavPath = path.join(versionDir(dir), filename)
-    if (!fs.existsSync(wavPath)) { console.log(`  ⚠ Version link skip — file not found: ${dir}/${filename}`); return null }
-    let mp3Path = wavPath
-    let mp3_created = false
-    if (!/\.mp3$/i.test(filename)) {
-      mp3Path = wavPath.replace(/\.[^.]+$/, '.mp3')
-      if (forceMp3 || !fs.existsSync(mp3Path) || fs.statSync(mp3Path).mtimeMs < fs.statSync(wavPath).mtimeMs) {
-        await transcodeToMp3_192(wavPath, mp3Path)
-        mp3_created = true
-        console.log(`  ✓ mp3 192k: ${path.basename(mp3Path)}`)
-      }
+// Read-modify-write one version so concurrent edits (artist feedback) survive
+async function patchFeedbackVersion(songId, versionId, fields) {
+  const { data, error } = await supabase.from('feedback_songs').select('versions').eq('id', songId).single()
+  if (error) throw new Error(error.message)
+  const versions = data?.versions || []
+  const v = versions.find(v => v.id === versionId)
+  if (!v) return false
+  Object.assign(v, fields)
+  const { error: upErr } = await supabase.from('feedback_songs').update({ versions }).eq('id', songId)
+  if (upErr) throw new Error(upErr.message)
+  return true
+}
+// mp3 192k next to the original + Dropbox links for both (mp3 = stream, original = download)
+async function processFeedbackVersion(songId, versionId, folder, filename) {
+  const dir = feedbackFolderPath(folder)
+  const srcPath = path.join(dir, filename)
+  if (!fs.existsSync(srcPath)) throw new Error('file not found: ' + filename)
+  let mp3Path = srcPath
+  if (!/\.mp3$/i.test(filename)) {
+    mp3Path = srcPath.replace(/\.[^.]+$/, '') + '.mp3'
+    if (!fs.existsSync(mp3Path)) {
+      await new Promise((resolve, reject) => exec(
+        `/opt/homebrew/bin/ffmpeg -i ${shellEscape(srcPath)} -vn -codec:a libmp3lame -b:a 192k -y ${shellEscape(mp3Path)}`,
+        err => err ? reject(err) : resolve()))
+      console.log(`  ✓ Feedback mp3 192k: ${path.basename(mp3Path)}`)
     }
-    const wav = await getFileDropboxLinks(wavPath, 8, 3000)
-    const mp3 = mp3Path === wavPath ? wav : await getFileDropboxLinks(mp3Path, 8, 3000)
-    if (!wav || !mp3) return null
-    const links = {
-      mp3_path: path.basename(mp3Path),
-      dropbox_mp3_url: mp3.dropbox_stream_url,
-      dropbox_wav_url: wav.dropbox_download_url,
-    }
-    // Fresh read-modify-write so concurrent app edits to other fields survive
-    const { data: row } = await supabase.from('songs').select('work_data').eq('id', songId).single()
-    const wd = row?.work_data || {}
-    const versions = wd.versions || []
-    const v = versions.find(v => versionId && v.id === versionId) || versions.find(v => v.audio_path === filename)
-    if (v) {
-      Object.assign(v, links)
-      await supabase.from('songs').update({ work_data: { ...wd, versions } }).eq('id', songId)
-    }
-    console.log(`  ✓ Version Dropbox links saved: ${filename}`)
-    return { ...links, mp3_created }
-  } catch(e) {
-    console.warn(`  Version Dropbox links failed for ${filename}:`, e.message)
-    return null
   }
+  await patchFeedbackVersion(songId, versionId, { filename, mp3_filename: path.basename(mp3Path) })
+  // Dropbox must finish syncing before a link exists — large WAVs get more retries
+  const mp3 = await getFileDropboxLinks(mp3Path, 20, 5000)
+  if (mp3) await patchFeedbackVersion(songId, versionId, { mp3_url: mp3.dropbox_stream_url })
+  const orig = mp3Path === srcPath ? mp3 : await getFileDropboxLinks(srcPath, 40, 5000)
+  if (orig) await patchFeedbackVersion(songId, versionId, { wav_url: orig.dropbox_download_url })
+  console.log(`  ${mp3 && orig ? '✓' : '⚠'} Feedback links: ${folder}/${filename}`)
+  return !!(mp3 && orig)
 }
 
 async function getDropboxShareLink(dbxPath, retries = 8, delayMs = 3000) {
@@ -3989,7 +3985,7 @@ async function buildStatusResponse() {
     'POST /share-link', 'POST /delete-submission-folder', 'POST /delete-from-submission',
     'POST /create-release-folder', 'POST /copy-demo-to-production',
     'POST /delete-release-folder', 'POST /copy-to-release',
-    'POST /save-audio', 'POST /version-dropbox-link', 'POST /save-stems-zip', 'GET /test-dropbox',
+    'POST /save-audio', 'POST /feedback-upload', 'POST /save-stems-zip', 'GET /test-dropbox',
     'POST /get-share-links', 'POST /morning-briefing', 'POST /agent-scout',
     'POST /agent-demo-match', 'POST /agent-feedback', 'POST /analyze-spotify-track', 'POST /import-spotify-playlist', 'POST /import-all-my-playlists',
     'POST /agent-import-spotify', 'GET /get-page-title', 'POST /create-submission',
@@ -7445,11 +7441,6 @@ async function restore(input) {
         const previewPath = path.join(targetDir, previewName)
         if (fs.existsSync(previewPath)) { fs.unlinkSync(previewPath); console.log('  🗑 Deleted preview:', previewName) }
       }
-      // Also delete the player mp3 next to a production/mixing WAV
-      if ((dir === 'production' || dir === 'mixing') && !/\.mp3$/i.test(filename)) {
-        const mp3Path = path.join(targetDir, filename.replace(/\.[^.]+$/, '.mp3'))
-        if (fs.existsSync(mp3Path)) { fs.unlinkSync(mp3Path); console.log('  🗑 Deleted mp3:', path.basename(mp3Path)) }
-      }
       res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }))
     } catch(err) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: err.message })) }
     return
@@ -7858,17 +7849,31 @@ async function restore(input) {
     return
   }
   // Query: ?dir=production|mixing|demo&filename=...&oldfile=...
-  // ── POST /version-dropbox-link {song_id, dir, filename, version_id} — mp3 192k + Dropbox links ──
-  if (req.method === 'POST' && req.url === '/version-dropbox-link') {
-    let body = ''
-    req.on('data', c => body += c)
-    req.on('end', async () => {
+  // ── POST /feedback-upload?song_id=&version_id=&folder=&filename= — FEEDBACK tab version upload ──
+  // Saves to Feedback/<folder>/, never overwrites (old versions stay), answers immediately;
+  // mp3 + Dropbox links are written into feedback_songs.versions in the background.
+  if (req.method === 'POST' && req.url.startsWith('/feedback-upload')) {
+    const u = new URL(req.url, 'http://localhost')
+    const songId = u.searchParams.get('song_id'), versionId = u.searchParams.get('version_id')
+    const folder = u.searchParams.get('folder'), rawName = u.searchParams.get('filename') || ''
+    const chunks = []
+    req.on('data', c => chunks.push(c))
+    req.on('end', () => {
       try {
-        const { song_id, dir, filename, version_id } = JSON.parse(body || '{}')
-        if (!song_id || !filename || filename.includes('/') || filename.includes('..')) throw new Error('missing song_id/filename')
-        const r = await generateVersionDropboxLinks(song_id, dir, filename, version_id || null, { forceMp3: true })
-        res.writeHead(r ? 200 : 500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
-        res.end(JSON.stringify(r ? { ok: true, ...r } : { ok: false, error: 'Dropbox link failed' }))
+        if (!songId || !versionId || !rawName) throw new Error('missing song_id/version_id/filename')
+        const dir = feedbackFolderPath(folder)
+        fs.mkdirSync(dir, { recursive: true })
+        const clean = path.basename(rawName).replace(/[<>:"/\\|?*]/g, '').trim()
+        const ext = path.extname(clean), base = clean.slice(0, clean.length - ext.length)
+        let filename = clean, n = 2
+        const taken = f => fs.existsSync(path.join(dir, f)) || fs.existsSync(path.join(dir, f.replace(/\.[^.]+$/, '') + '.mp3'))
+        while (taken(filename)) filename = `${base}_${n++}${ext}`
+        fs.writeFileSync(path.join(dir, filename), Buffer.concat(chunks))
+        console.log(`  ✓ Feedback upload: ${folder}/${filename}`)
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
+        res.end(JSON.stringify({ ok: true, filename }))
+        processFeedbackVersion(songId, versionId, folder, filename)
+          .catch(e => console.warn('  Feedback version processing failed:', e.message))
       } catch(e) {
         res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
         res.end(JSON.stringify({ ok: false, error: e.message }))
@@ -7894,12 +7899,6 @@ async function restore(input) {
         if (oldfile && oldfile !== fname) {
           const oldPath = path.join(targetDir, oldfile)
           if (fs.existsSync(oldPath)) { fs.unlinkSync(oldPath); console.log(`  🗑 Deleted: ${oldfile}`) }
-        }
-        // Stale mp3 siblings (player copies) of the old and the overwritten file
-        for (const f of [oldfile, fname]) {
-          if (!f || /\.mp3$/i.test(f)) continue
-          const mp3Sib = path.join(targetDir, f.replace(/\.[^.]+$/, '.mp3'))
-          if (dir !== 'demo' && fs.existsSync(mp3Sib)) { try { fs.unlinkSync(mp3Sib) } catch(e) {} }
         }
         const buf = Buffer.concat(chunks)
         const destPath = path.join(targetDir, fname)
@@ -18395,35 +18394,30 @@ Max 150 words. Be specific and actionable.` }]
     } catch(e) { console.warn('ensureAllDemoDropboxLinks error:', e.message) }
   }
 
-  // ── Startup: mp3 + Dropbox links for production/mixing versions missing them ──
-  async function ensureAllVersionDropboxLinks() {
+  // ── Startup: mp3 + Dropbox links for FEEDBACK versions that are missing them ──
+  async function ensureAllFeedbackLinks() {
     try {
-      const { data, error } = await supabase.from('songs').select('id, work_data').not('project_id', 'is', null)
-      if (error) throw new Error(error.message)
+      const [{ data: projs, error: e1 }, { data: fsongs, error: e2 }] = await Promise.all([
+        supabase.from('feedback_projects').select('id, folder'),
+        supabase.from('feedback_songs').select('id, project_id, versions')
+      ])
+      if (e1 || e2) throw new Error((e1 || e2).message)
+      const folderOf = Object.fromEntries((projs || []).map(p => [p.id, p.folder]))
       const jobs = []
-      for (const song of (data || [])) {
-        for (const v of (song.work_data?.versions || [])) {
-          if (!['production', 'mixing'].includes(v.version_type) || !v.audio_path || v.dropbox_mp3_url) continue
-          if (!fs.existsSync(path.join(versionDir(v.version_type), v.audio_path))) continue
-          jobs.push({ songId: song.id, dir: v.version_type, filename: v.audio_path, versionId: v.id })
-        }
+      for (const s of (fsongs || [])) for (const v of (s.versions || [])) {
+        if (!v.filename || (v.mp3_url && v.wav_url)) continue
+        jobs.push({ songId: s.id, versionId: v.id, folder: folderOf[s.project_id], filename: v.filename })
       }
-      if (!jobs.length) { console.log('✓ All versions have Dropbox links'); return }
-      console.log(`🔗 Generating mp3 + Dropbox links for ${jobs.length} versions...`)
-      let mp3s = 0
-      for (const j of jobs) {
-        const r = await generateVersionDropboxLinks(j.songId, j.dir, j.filename, j.versionId)
-        if (r?.mp3_created) mp3s++
-        await new Promise(r => setTimeout(r, 800))
-      }
-      console.log(`✓ Version Dropbox links ready (${mp3s} mp3 created)`)
-    } catch(e) { console.warn('ensureAllVersionDropboxLinks error:', e.message) }
+      if (!jobs.length) { console.log('✓ All feedback versions have Dropbox links'); return }
+      console.log(`🔗 Feedback: generating links for ${jobs.length} versions...`)
+      for (const j of jobs) await processFeedbackVersion(j.songId, j.versionId, j.folder, j.filename).catch(e => console.warn('  ', e.message))
+    } catch(e) { console.warn('ensureAllFeedbackLinks error:', e.message) }
   }
 
   // Run startup integrity checks after a short delay so chokidar watchers are ready
   setTimeout(() => {
     restoreMissingSonoTracks().catch(() => {})
-    ensureAllDemoDropboxLinks().then(() => ensureAllVersionDropboxLinks()).catch(() => {})
+    ensureAllDemoDropboxLinks().then(() => ensureAllFeedbackLinks()).catch(() => {})
   }, 5000)
 
   ;(async () => {

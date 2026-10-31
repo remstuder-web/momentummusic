@@ -4,7 +4,8 @@
 // suggestion -> (user picks topic) -> Brain entry
 //
 // Assumes yt-dlp is installed on the server/VPS (already used in the audio reference pipeline).
-// Assumes ANTHROPIC_API_KEY is set as an env var.
+// Needs ANTHROPIC_API_KEY at runtime (local .env). Read via $env/dynamic/private so the build
+// does not require it — on Vercel it is deliberately not set and this pipeline reports itself unavailable.
 //
 // Brain writes go through the same `brain_knowledge` table and anon-key client
 // that every other write path in this app uses (momentum-watcher.cjs's
@@ -17,7 +18,16 @@ import { readFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { supabase } from '$lib/supabase.js';
-import { ANTHROPIC_API_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
+
+export function youtubeBrainAvailable() {
+    return !!env.ANTHROPIC_API_KEY;
+}
+
+function anthropicKey() {
+    if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set — YouTube → Brain only runs locally');
+    return env.ANTHROPIC_API_KEY;
+}
 
 /**
  * Runs a shell command and resolves with stdout, rejects on non-zero exit.
@@ -135,7 +145,7 @@ Respond in this exact format, nothing else:
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': ANTHROPIC_API_KEY,
+            'x-api-key': anthropicKey(),
             'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
@@ -195,7 +205,7 @@ async function suggestCategory(text) {
     const res = await fetch('http://localhost:4242/suggest-category', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, apiKey: ANTHROPIC_API_KEY })
+        body: JSON.stringify({ text, apiKey: anthropicKey() })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'suggest-category failed');

@@ -4,13 +4,17 @@
 // Wire the DailyTab textarea/input to POST here.
 
 import { json } from '@sveltejs/kit';
-import { ingestYoutubeVideos } from '$lib/server/youtubeBrain.js';
+import { ingestYoutubeVideos, youtubeBrainAvailable } from '$lib/server/youtubeBrain.js';
 
 export async function POST({ request }) {
     const { urls, personalNote } = await request.json();
 
     if (!Array.isArray(urls) || urls.length === 0) {
         return json({ error: 'Provide at least one YouTube URL' }, { status: 400 });
+    }
+
+    if (!youtubeBrainAvailable()) {
+        return json({ error: 'ANTHROPIC_API_KEY is not set — YouTube → Brain only runs locally' }, { status: 503 });
     }
 
     // Fire and let it run — for a handful of links this finishes in

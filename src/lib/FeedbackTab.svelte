@@ -6,6 +6,7 @@
   import FeedbackView from './FeedbackView.svelte'
   import WorkOverview from './WorkOverview.svelte'
   import Timeline from './Timeline.svelte'
+  import Lyrics from './Lyrics.svelte'
 
   const ARTIST_PAGE = 'https://momentummusic.vercel.app/feedback'
 
@@ -124,13 +125,16 @@
           <button class={view === 'songs' ? 'on' : ''} onclick={() => view = 'songs'}>SONGS</button>
           <button class={view === 'overview' ? 'on' : ''} onclick={() => view = 'overview'}>OVERVIEW</button>
           <button class={view === 'timeline' ? 'on' : ''} onclick={() => view = 'timeline'}>TIMELINE</button>
+          <button class={view === 'lyrics' ? 'on' : ''} onclick={() => view = 'lyrics'}>LYRICS</button>
         </div>
         {#if view === 'songs'}
           <FeedbackView {supabase} project={selected} mode="producer" author="Remo" />
         {:else if view === 'overview'}
           <WorkOverview {supabase} project={selected} mode="producer" />
-        {:else}
+        {:else if view === 'timeline'}
           <Timeline {supabase} project={selected} mode="producer" />
+        {:else}
+          <Lyrics {supabase} project={selected} mode="producer" author="Remo" />
         {/if}
       </div>
     {/key}

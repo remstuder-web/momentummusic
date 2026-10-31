@@ -4,6 +4,7 @@
   import FeedbackView from '$lib/FeedbackView.svelte'
   import WorkOverview from '$lib/WorkOverview.svelte'
   import Timeline from '$lib/Timeline.svelte'
+  import Lyrics from '$lib/Lyrics.svelte'
 
   // Same pattern as /sono: CSR only, Supabase direct, no watcher — audio via Dropbox links
   const SUPABASE_URL      = 'https://ukqpnjgvjeduipmdaczn.supabase.co'
@@ -72,13 +73,16 @@
       <button class={view === 'songs' ? 'on' : ''} onclick={() => view = 'songs'}>SONGS</button>
       <button class={view === 'overview' ? 'on' : ''} onclick={() => view = 'overview'}>OVERVIEW</button>
       <button class={view === 'timeline' ? 'on' : ''} onclick={() => view = 'timeline'}>TIMELINE</button>
+      <button class={view === 'lyrics' ? 'on' : ''} onclick={() => view = 'lyrics'}>LYRICS</button>
     </div>
     {#if view === 'songs'}
       <FeedbackView {supabase} {project} mode="artist" author={project.artist_name || 'Artist'} />
     {:else if view === 'overview'}
       <WorkOverview {supabase} {project} mode="artist" />
-    {:else}
+    {:else if view === 'timeline'}
       <Timeline {supabase} {project} mode="artist" />
+    {:else}
+      <Lyrics {supabase} {project} mode="artist" author={project.artist_name || 'Artist'} />
     {/if}
   </div>
 {/if}
